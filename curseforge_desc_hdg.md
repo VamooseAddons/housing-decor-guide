@@ -107,3 +107,4 @@ A companion window injects into Blizzard's House Editor so you can **place decor
 **Version:** 3.0.0
 **Game Version:** 12.0.5+ (Midnight)
 **Source / Issues:** https://github.com/VamooseAddons/housing-decor-guide
+**Discord:** https://discord.gg/RWZaxJaHFP
