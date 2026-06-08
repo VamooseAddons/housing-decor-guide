@@ -1,0 +1,229 @@
+## Interface: 120005, 120007
+## Title: Vamoose's Housing Decor Guide
+## Notes: Track, craft, preview, and acquire housing decorations across all professions
+## Author: Vamoose
+## Version: 3.0.0
+## SavedVariables: HDG_DB
+## SavedVariablesPerCharacter: HDG_DB_CURRENT_PROFILE
+## IconTexture: Interface\Icons\INV_Misc_Coin_02
+## Category-enUS: Vamoose
+## DefaultState: enabled
+## AddonCompartmentFunc: HDGR_OnAddonCompartmentClick
+## AddonCompartmentFuncOnEnter: HDGR_OnAddonCompartmentEnter
+## AddonCompartmentFuncOnLeave: HDGR_OnAddonCompartmentLeave
+
+# Phase 1: full VFN engine ported via namespace rename (VFN -> HDG).
+# VFN-specific feature code (libraries/sets/waypoints + per-tab Controller_*
+# files + Minimap + Audio + NotificationCenter + FlowRunner + locale) is
+# NOT carried over -- Phase 2+ designs HDG's own state shape + features.
+
+# ===== Shared libraries (LibStub + LibDataBroker + LibDBIcon) ================
+# Required by HDGR_MinimapButton. Load before Core engines so LibStub is
+# available for the other libs to self-register.
+Libs\LibStub.lua
+Libs\CallbackHandler-1.0\CallbackHandler-1.0.lua
+Libs\LibDataBroker-1.1\LibDataBroker-1.1.lua
+Libs\LibDBIcon-1.0\LibDBIcon-1.0.lua
+
+# ===== Core engines (ported from VFN) =====
+Core\HDGR_SchemeConstants.lua
+Core\HDGR_Constants.lua
+Core\HDGR_Format.lua
+Core\HDGR_TableUtils.lua
+Core\HDGR_Memo.lua
+Core\HDGR_Paths.lua
+Core\HDGR_Log.lua
+Core\HDGR_Locale.lua
+Locale\enUS.lua
+Core\HDGR_TagData.lua
+Core\HDGR_Expansion.lua
+
+# Projects feature -- pure core (Phase 1; no engine deps; Capture after Fingerprint)
+Core\HDGR_ProjectsIDs.lua
+Core\HDGR_ProjectsShapeAtlas.lua
+Core\HDGR_ProjectsFloorMap.lua
+Core\HDGR_ProjectsFingerprint.lua
+Core\HDGR_ProjectsAutoLayout.lua
+Core\HDGR_ProjectsCapture.lua
+Core\HDGR_Codec.lua
+Core\HDGR_ProjectsCrateCodec.lua
+Core\HDGR_ProjectsLayoutCodec.lua
+
+Core\HDGR_BlizzardEvents.lua
+Core\HDGR_Environment.lua
+Core\HDGR_WidgetTypes.lua
+Core\HDGR_TooltipEngine.lua
+Core\HDGR_TooltipRecipes.lua
+Core\HDGR_Modules.lua
+Core\HDGR_Middleware.lua
+# Migration module: in-place HDG_DB -> HDG account.* transform.
+# Loads before Store so HDG.Migration:Run is available at LoadFromSavedVariables time.
+Core\HDGR_Migration.lua
+Core\HDGR_Store.lua
+# HDG.Config layer (Baganator-style settings facade over the Store).
+# Loads after Store so Config:Initialize can call Store:GetState; the
+# schema must come first because Config indexes it by name at file-load.
+Core\HDGR_ConfigSchema.lua
+Core\HDGR_Config.lua
+
+# ===== UI engines + spec stubs =====
+UI\HDGR_Theme.lua
+UI\HDGR_Palette.lua
+# Decor item display formatters (consumes Theme + Palette + Constants).
+UI\HDGR_DecorFormat.lua
+UI\HDGR_LayoutConfig.lua
+UI\HDGR_Window.lua
+UI\LayoutConfig\HDGR_LayoutConfig_Decor.lua
+UI\LayoutConfig\HDGR_LayoutConfig_Acquisition.lua
+UI\LayoutConfig\HDGR_LayoutConfig_Recipes.lua
+UI\LayoutConfig\HDGR_LayoutConfig_Warehouse.lua
+UI\LayoutConfig\HDGR_LayoutConfig_Alts.lua
+UI\LayoutConfig\HDGR_LayoutConfig_Mogul.lua
+UI\LayoutConfig\HDGR_LayoutConfig_Styles.lua
+UI\LayoutConfig\HDGR_LayoutConfig_Trainers.lua
+UI\LayoutConfig\HDGR_LayoutConfig_HouseTab.lua
+UI\LayoutConfig\HDGR_LayoutConfig_Debug.lua
+UI\LayoutConfig\HDGR_LayoutConfig_Config.lua
+UI\LayoutConfig\HDGR_LayoutConfig_Data.lua
+UI\LayoutConfig\HDGR_LayoutConfig_Shopping.lua
+UI\LayoutConfig\HDGR_LayoutConfig_Companion.lua
+UI\LayoutConfig\HDGR_LayoutConfig_Zone.lua
+UI\LayoutConfig\HDGR_LayoutConfig_Lumber.lua
+UI\LayoutConfig\HDGR_LayoutConfig_Removalist.lua
+UI\LayoutConfig\HDGR_LayoutConfig_Projects.lua
+UI\LayoutConfig\HDGR_LayoutConfig_Nav.lua
+UI\HDGR_Components.lua
+UI\HDGR_Panels.lua
+UI\HDGR_Layout.lua
+UI\HDGR_BindingEngine.lua
+UI\HDGR_Selectors.lua
+# Shared pure builder for the Blizzard category/subcategory icon nav (Curator + picker).
+UI\HDGR_CategoryNav.lua
+# Debug instrumentation: runtime selector call-count logger.
+# Inert when not enabled (/hdgrsl start) -- safe to leave loaded.
+# Validates the audit's "dead selectors" list against real runtime usage.
+Modules\HDGR_SelectorCallLog.lua
+UI\HDGR_Selectors_Status.lua
+UI\HDGR_Selectors_Decor.lua
+UI\HDGR_Selectors_Acquisition.lua
+UI\HDGR_Selectors_Catalog.lua
+UI\HDGR_Selectors_Recipes.lua
+UI\HDGR_Selectors_Alts.lua
+UI\HDGR_Selectors_Trainers.lua
+UI\HDGR_Selectors_Companion.lua
+UI\HDGR_Selectors_House.lua
+UI\HDGR_Selectors_Mogul.lua
+UI\HDGR_Selectors_Config.lua
+UI\HDGR_Selectors_Data.lua
+UI\HDGR_Selectors_Styles.lua
+UI\HDGR_Selectors_Shopping.lua
+UI\HDGR_Selectors_Zone.lua
+UI\HDGR_Selectors_Lumber.lua
+UI\HDGR_Selectors_Removalist.lua
+UI\HDGR_Selectors_Projects.lua
+UI\HDGR_Controllers.lua
+UI\HDGR_Controller_Helpers_Mechanics.lua
+UI\HDGR_Controller_Helpers_UI.lua
+UI\HDGR_RowRegistry.lua
+
+# ===== Data (loaded only when a consumer needs it) =====
+data\HDGR_DecorDB.lua
+data\HDGR_VendorAugment.lua
+data\HDGR_FacetDB.lua
+data\HDGR_ReagentsDB.lua
+data\HDGR_ProfessionsDB.lua
+data\HDGR_ProfessionThresholds.lua
+data\HDGR_TrainersDB.lua
+data\HDGR_NeighborhoodDB.lua
+data\HDGR_HouseTab_TitleTiers.lua
+data\HDGR_HouseTab_WidgetDefaults.lua
+data\HDGR_HouseTab_DailyTitles.lua
+data\HDGR_ItemAugment.lua
+data\HDGR_CatalogOverrides.lua
+data\HDGR_StyleDefinitions.lua
+data\HDGR_CollectionDefinitions.lua
+
+# ===== Modules (logic ports / resolvers) =====
+# UI primitive libraries -- LOAD BEFORE any module that registers cell kinds
+# against them (HouseEditorCompanion uses CardGrid; future consumers may
+# register at file-load too).
+Modules\HDGR_CardGrid.lua
+Modules\HDGR_ChipStrip.lua
+Modules\HDGR_TreeList.lua
+Modules\HDGR_MapRenderer.lua
+# StaticData facade -- ADR-003c. Load before any module that reads it.
+Modules\HDGR_StaticData.lua
+# Logic ports / resolvers
+Modules\HDGR_HousingCatalogObserver.lua
+Modules\HDGR_RepObserver.lua
+Modules\HDGR_AchievementObserver.lua
+Modules\HDGR_RecipeKnowledgeScanner.lua
+Modules\HDGR_Waypoints.lua
+# Shopping list codec (export/import). Pure module; no Blizzard API surface.
+Modules\HDGR_ShoppingCodec.lua
+Modules\HDGR_NPCNameResolver.lua
+Modules\HDGR_ZoneNameResolver.lua
+Modules\HDGR_SessionIdentity.lua
+# SessionIdentity dispatches SESSION_IDENTITY_SET at onEnable; consumers
+# (Mogul, RecipeKnowledgeScanner, ProfessionScanner, StyleSerializer,
+#  Selectors_Alts, Selectors_Trainers) read state.session.identity.
+Modules\HDGR_HouseAggregator.lua
+Modules\HDGR_HouseEditorCompanion.lua
+Modules\HDGR_BagObserver.lua
+Modules\HDGR_LumberObserver.lua
+Modules\HDGR_LumberRadar.lua
+Modules\HDGR_ZoneObserver.lua
+Modules\HDGR_ZoneAlertEngine.lua
+Modules\HDGR_ItemNameResolver.lua
+Modules\HDGR_QuestNameResolver.lua
+Modules\HDGR_PowerCrafter.lua
+Modules\HDGR_CraftEventCollector.lua
+Modules\HDGR_TooltipDecorator.lua
+Modules\HDGR_MinimapButton.lua
+Modules\HDGR_ProfessionButtons.lua
+Modules\HDGR_ProfessionScanner.lua
+Modules\HDGR_PriceSource.lua
+Modules\HDGR_Mogul.lua
+Modules\HDGR_Goblin.lua
+Modules\HDGR_StyleEngine.lua
+Modules\HDGR_StyleSerializer.lua
+Modules\HDGR_Parsers.lua
+Modules\HDGR_HousingObserver.lua
+Modules\HDGR_Vamoose.lua
+
+# ===== Tab controllers =====
+UI\HDGR_SettingsPanel.lua
+UI\HDGR_SettingsPanel.xml
+UI\HDGR_Controller_Chrome.lua
+UI\HDGR_Controller_Nav.lua
+UI\HDGR_Controller_Decor.lua
+UI\HDGR_Controller_Acquisition.lua
+UI\HDGR_AcqMapWidget.lua
+UI\HDGR_Controller_Recipes.lua
+UI\HDGR_Controller_Warehouse.lua
+UI\HDGR_Controller_Alts.lua
+UI\HDGR_Controller_Trainers.lua
+UI\HDGR_HT_LevelRing.xml
+UI\HDGR_Controller_HouseTab.lua
+UI\HDGR_Controller_Mogul.lua
+UI\HDGR_Controller_Styles.lua
+UI\HDGR_Controller_Debug.lua
+UI\HDGR_Controller_Config.lua
+UI\HDGR_Controller_Data.lua
+UI\HDGR_Controller_Shopping.lua
+UI\HDGR_Controller_Companion.lua
+UI\HDGR_Controller_Zone.lua
+UI\HDGR_Controller_Lumber.lua
+UI\HDGR_Controller_Removalist.lua
+UI\HDGR_Controller_ProjectsCanvas.lua
+UI\HDGR_Controller_Projects.lua
+UI\HDGR_Controller_Layouts.lua
+
+# ===== Developer diagnostic commands (the /hdgr dev REPL, out of Init) =====
+Core\HDGR_Debug.lua
+
+# ===== Lifecycle bootstrap + main window =====
+Core\HDGR_Init.lua
+UI\HDGR_MainFrame.lua
+
+Modules\HDGR_Perf.lua

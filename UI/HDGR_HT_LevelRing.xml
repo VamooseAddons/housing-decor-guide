@@ -1,0 +1,136 @@
+<Ui xmlns="http://www.blizzard.com/wow/ui/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.blizzard.com/wow/ui/
+..\FrameXML\UI.xsd">
+    <!--
+        HDGR_HT_LevelRing.xml
+        Verbatim port of Blizzard_HousingDashboardHouseUpgrade.xml's
+        CurrentLevelFrame (the laurel-wreath level ring with the radial
+        XP sweep). Preserves every native size + offset so the windowframe
+        and progress sweep overlay pixel-perfect. The wrapper Lua code
+        (HDGR_Controller_HouseTab.lua _adoptLevelRing) adds the SetLevel,
+        SetProgress, UpdateFill, ResetForReplay methods that drive
+        the animation.
+
+        Atlases used here are Blizzard 12.0.5 housing-dashboard assets,
+        all verified in HDG shipped 2.41.0.
+        Source: Blizzard_HousingDashboard/Blizzard_HousingDashboardHouseUpgrade.xml
+    -->
+    <Frame name="HDGRHousingLevelRingTemplate" virtual="true">
+        <Size x="256" y="158"/>
+        <Layers>
+            <Layer level="OVERLAY">
+                <FontString parentKey="HouseLevelText" inherits="Game48Font" text="0">
+                    <Anchors>
+                        <Anchor point="CENTER" x="6" y="-10"/>
+                    </Anchors>
+                </FontString>
+            </Layer>
+        </Layers>
+        <Frames>
+            <Frame parentKey="HouseBarFrame">
+                <Anchors>
+                    <Anchor point="CENTER"/>
+                </Anchors>
+                <Size x="128" y="128"/>
+                <Frames>
+                    <Frame parentKey="Bar">
+                        <Size x="128" y="128"/>
+                        <Anchors>
+                            <Anchor point="CENTER"/>
+                        </Anchors>
+                        <Frames>
+                            <Cooldown parentKey="BarFill" reverse="true" hideCountdownNumbers="true" rotation="180">
+                                <Size x="130" y="130"/>
+                                <Anchors>
+                                    <Anchor point="CENTER" x="8" y="-8"/>
+                                </Anchors>
+                                <SwipeTexture file="Interface\Housing\house-upgrade-radial-bar-fill"/>
+                                <Layers>
+                                    <Layer level="ARTWORK">
+                                        <Texture parentKey="Threshold" alpha="0.6" alphaMode="ADD" atlas="house-upgrade-radial-bar-threshold" texelSnappingBias="0.0" snapToPixelGrid="false">
+                                            <Size x="112" y="112"/>
+                                            <Anchors>
+                                                <Anchor point="CENTER"/>
+                                            </Anchors>
+                                        </Texture>
+                                        <Texture parentKey="Flipbook" atlas="housing-level-fillbar-threshold-flipbook" texelSnappingBias="0.0" snapToPixelGrid="false">
+                                            <Size x="112" y="112"/>
+                                            <Anchors>
+                                                <Anchor point="CENTER"/>
+                                            </Anchors>
+                                        </Texture>
+                                        <Texture parentKey="LeadEdge" atlas="house-upgrade-radial-bar-edge" texelSnappingBias="0.0" snapToPixelGrid="false">
+                                            <Size x="112" y="112"/>
+                                            <Anchors>
+                                                <Anchor point="CENTER"/>
+                                            </Anchors>
+                                        </Texture>
+                                        <MaskTexture parentKey="BarMask" file="Interface\Housing\HouseUpgradePanelBarMask.png" hWrapMode="CLAMPTOBLACKADDITIVE" vWrapMode="CLAMPTOBLACKADDITIVE" texelSnappingBias="0.0" snapToPixelGrid="false">
+                                            <Size x="128" y="128"/>
+                                            <Anchors>
+                                                <Anchor point="CENTER"/>
+                                            </Anchors>
+                                            <MaskedTextures>
+                                                <MaskedTexture childKey="Threshold"/>
+                                                <MaskedTexture childKey="Flipbook"/>
+                                                <MaskedTexture childKey="LeadEdge"/>
+                                            </MaskedTextures>
+                                        </MaskTexture>
+                                    </Layer>
+                                </Layers>
+                                <Animations>
+                                    <AnimationGroup parentKey="BarAnimation">
+                                        <FlipBook childKey="Flipbook" duration="1" order="1" flipBookRows="5" flipBookColumns="6" flipBookFrames="30" flipBookFrameWidth="0" flipBookFrameHeight="0"/>
+                                        <Alpha childKey="Flipbook" duration="0.1" order="1" startDelay="0.9" fromAlpha="1" toAlpha="0"/>
+                                    </AnimationGroup>
+                                </Animations>
+                            </Cooldown>
+                        </Frames>
+                    </Frame>
+                </Frames>
+                <Layers>
+                    <Layer level="ARTWORK" textureSubLevel="1">
+                        <Texture parentKey="leaf2" atlas="house-upgrade-radial-leaf02" useAtlasSize="true" texelSnappingBias="0.0" snapToPixelGrid="false">
+                            <Anchors>
+                                <Anchor point="BOTTOMRIGHT" relativePoint="CENTER" x="-84" y="-64"/>
+                            </Anchors>
+                        </Texture>
+                        <Texture parentKey="leaf5" atlas="house-upgrade-radial-leaf05" useAtlasSize="true" texelSnappingBias="0.0" snapToPixelGrid="false">
+                            <Anchors>
+                                <Anchor point="BOTTOMLEFT" relativePoint="CENTER" x="98" y="-64"/>
+                            </Anchors>
+                        </Texture>
+                    </Layer>
+                    <Layer level="ARTWORK" textureSubLevel="2">
+                        <Texture parentKey="frame" atlas="house-upgrade-radial-windowframe" useAtlasSize="true" texelSnappingBias="0.0" snapToPixelGrid="false">
+                            <Anchors>
+                                <Anchor point="CENTER"/>
+                            </Anchors>
+                        </Texture>
+                    </Layer>
+                    <Layer level="ARTWORK" textureSubLevel="3">
+                        <Texture parentKey="leaf1" atlas="house-upgrade-radial-leaf01" useAtlasSize="true" texelSnappingBias="0.0" snapToPixelGrid="false">
+                            <Anchors>
+                                <Anchor point="TOPRIGHT" relativePoint="CENTER" x="-106" y="-56"/>
+                            </Anchors>
+                        </Texture>
+                        <Texture parentKey="leaf3" atlas="house-upgrade-radial-leaf03" useAtlasSize="true" texelSnappingBias="0.0" snapToPixelGrid="false">
+                            <Anchors>
+                                <Anchor point="TOP" relativePoint="CENTER" x="-69" y="-31"/>
+                            </Anchors>
+                        </Texture>
+                        <Texture parentKey="leaf4" atlas="house-upgrade-radial-leaf04" useAtlasSize="true" texelSnappingBias="0.0" snapToPixelGrid="false">
+                            <Anchors>
+                                <Anchor point="RIGHT" relativePoint="CENTER" x="82" y="-39"/>
+                            </Anchors>
+                        </Texture>
+                        <Texture parentKey="leaf6" atlas="house-upgrade-radial-leaf06" useAtlasSize="true" texelSnappingBias="0.0" snapToPixelGrid="false">
+                            <Anchors>
+                                <Anchor point="TOP" relativePoint="CENTER" x="122" y="-56"/>
+                            </Anchors>
+                        </Texture>
+                    </Layer>
+                </Layers>
+            </Frame>
+        </Frames>
+    </Frame>
+</Ui>

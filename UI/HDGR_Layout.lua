@@ -1,0 +1,1871 @@
+-- HDG.Layout
+--
+-- Pure layout engine. Reads HDG.LayoutConfig + a ctx state table, produces a
+-- flat placement map keyed by panel/section/widget id. Also builds the frame
+-- tree by walking the same spec data via HDG.WidgetTypes.
+--
+-- Concepts (in order of containment):
+--   window           outer frame; rendered in modes (collapsed | expanded)
+--   panel            top-level container with an optional chrome (slots)
+--   slot             named region inside a panel: "header" | "body" | "footer"
+--   section          virtual layout box. Stacks (vertical | horizontal | fill)
+--                    its children. May contain other sections or widgets.
+--   widget           leaf node. kind names a registered WidgetType (HDG.WidgetTypes).
+--
+-- Routing: a section / widget declares
+--     in   = "<parentPanelOrSectionId>"
+--     slot = "header" | "body" | "footer"   (default "body"; ignored when
+--                                            the parent is a section, not a panel)
+-- which tells the engine where it lives. Slots only exist on panels.
+--
+-- Public API:
+--   Layout:Compute(config, ctx)          -> placements
+--   Layout:Apply(rootFrame, placements)
+--   Layout:BuildAll(rootFrame, config)
+--   Layout:Validate(config)              -> { errors }
+
+HDG = HDG or {}
+HDG.Layout = HDG.Layout or {}
+
+local Layout = HDG.Layout
+
+local DEFAULT_HEADER_HEIGHT = 34
+local DEFAULT_FOOTER_HEIGHT = 28
+
+-- Templates for chromed sections. Sections opt in via spec.chrome = "<name>".
+--   card    -> Tooltip-style NineSlice border (matches InputScrollFrameTemplate)
+--   inset   -> Flat sunken sub-panel, NO Blizzard template chrome. Just a
+--              themed bg texture (surface.sunken) + 1px border drawn by us.
+--              We avoid InsetFrameTemplate here because its NineSlice fights
+--              custom bg tints and leaves a brown/lit edge no matter what.
+--   tooltip -> Same as card, alias
+-- A `false` value means "create a plain Frame with no inheritsFrom" and rely
+-- on the bg-tint texture + optional border textures for visuals.
+local CHROME_TEMPLATES = {
+    -- card: flat detail box. `false` = plain Frame;
+    -- _attachChromeBgTint paints the fill + accent bar.
+    card       = false,
+    -- cardBorder: same fill as card, but a 1px border.default edge all round and NO
+    -- accent stripe -- a self-contained bordered card.
+    cardBorder = false,
+    inset      = false,
+    tooltip    = "TooltipBorderedFrameTemplate",
+}
+Layout.CHROME_TEMPLATES = CHROME_TEMPLATES
+
+-- Helpers --------------------------------------------------------------------
+
+local function clamp(value)
+    if not value or value < 0 then return 0 end
+    return value
+end
+
+local function rect(x, y, w, h)
+    return { x = x, y = y, width = clamp(w), height = clamp(h) }
+end
+
+-- Resolve a spacing value to a number. Accepts:
+--   number          -> returned as-is (one-off geometry escape hatch)
+--   "lg" / "md"...  -> looked up via Theme:GetMetric("spacing.<name>")
+--   nil             -> 0
+-- Unknown tokens fail loud so a typo doesn't silently render zero.
+local function resolveSpacing(value)
+    if value == nil then return 0 end
+    if type(value) == "number" then return value end
+    if type(value) == "string" then
+        local n = HDG.Theme:GetMetric("spacing." .. value) or nil
+        if not n then
+            error(("Layout: unknown spacing token %q (expected one of: xs/sm/md/lg/xl/xxl/huge)"):format(value), 3)
+        end
+        return n
+    end
+    return 0
+end
+Layout._resolveSpacing = resolveSpacing  -- exported for tests
+
+-- Sum padding along one axis. Pad shape is the normalized
+-- { top, right, bottom, left } table from normalizePadding.
+local function _padHorizontal(pad) return pad.left + pad.right end
+local function _padVertical(pad)   return pad.top  + pad.bottom end
+
+local function normalizePadding(p)
+    if p == nil then
+        return { top = 0, right = 0, bottom = 0, left = 0 }
+    end
+    if type(p) == "number" or type(p) == "string" then
+        local n = resolveSpacing(p)
+        return { top = n, right = n, bottom = n, left = n }
+    end
+    if type(p) == "table" then
+        return {
+            top    = resolveSpacing(p.top),
+            right  = resolveSpacing(p.right),
+            bottom = resolveSpacing(p.bottom),
+            left   = resolveSpacing(p.left),
+        }
+    end
+    -- Unexpected type (e.g. `padding = true` typo) -> loud-fail rather than silently
+    -- rendering with no padding. nil is already handled above (legit "no padding").
+    error(("normalizePadding: unexpected padding type %s (want nil / number / spacing-string / table)"):format(type(p)), 3)
+end
+
+local function specFor(config, id)
+    return (config.sections and config.sections[id])
+        or (config.widgets and config.widgets[id])
+        or (config.panels and config.panels[id])
+end
+
+-- getAlong returns the spec's primary-axis size. Three forms:
+--   number    -> fixed
+--   "fill"    -> flex (shares slack with siblings)
+--   "auto"    -> resolve from runtime intrinsics (see Layout._intrinsics);
+--                falls back to "fill" if the widget hasn't reported one yet.
+--   "content" -> sum descendants (handled in measureContent caller path)
+--   nil       -> treated as "fill"
+local function getAlong(spec, axis, id)
+    local val = (axis == "vertical") and spec.height or spec.width
+    if val == "auto" then
+        local intrinsics = Layout._intrinsics
+        local entry = id and intrinsics and intrinsics[id]
+        if entry then
+            local v = (axis == "vertical") and entry.height or entry.width
+            if type(v) == "number" then return v end
+        end
+        return "fill"  -- intrinsic not (yet) reported -> behave as flex
+    end
+    return val
+end
+
+local function getCross(spec, axis)
+    if axis == "vertical" then return spec.width end
+    return spec.height
+end
+
+-- Window grid ----------------------------------------------------------------
+
+-- Resolve dynamic columns/rows for a view. A view may declare
+-- `dynamicColumns = "selector.name"` (and/or `dynamicRows`) to override the
+-- static `columns`/`rows` array based on Store state. Selector returning
+-- a table replaces the array; nil/false/non-table falls back to the spec.
+-- Used by both GetViewDimensions and computeWindowCells so the dynamic
+-- value drives both the window's outer size AND the inner cell layout
+-- consistently. Lets a tab grow/shrink based on which sub-view is active
+-- (Mogul/Goblin TSM column expansion is the seed use case).
+function Layout:ResolveViewTracks(viewSpec, dimName)
+    local dynKey
+    if dimName == "columns" then dynKey = viewSpec.dynamicColumns
+    elseif dimName == "rows" then dynKey = viewSpec.dynamicRows end
+    if not dynKey then return viewSpec[dimName] end
+    -- Strict reads -- selector errors propagate to the layout pipeline's
+    -- per-stage pcall (see MainFrame:runPipeline) where they get logged
+    -- loudly via HDG.Log:Warn. Earlier this site swallowed the error
+    -- silently and fell back to static spec, hiding selector bugs.
+    local result = HDG.Selectors:Call(dynKey, HDG.Store:GetState())  -- exception(false-positive): layout engine pipeline, not a row factory
+    if type(result) == "table" then return result end
+    -- Selector returned non-table (nil or non-array) -- fall back to spec.
+    -- Loud fail would error here; the static fallback is part of the
+    -- documented contract for dynamicColumns/dynamicRows ("optional
+    -- override").
+    return viewSpec[dimName]
+end
+
+-- Resolve a view's width/height. When the spec value is "auto", sum the
+-- numeric column/row tracks + outer padding + inter-track gaps. Otherwise
+-- the literal number is used. "fill" tracks are incompatible with "auto"
+-- dimensions -- error loudly so the inconsistency surfaces at startup, not
+-- as silent off-by-N-px drift.
+--
+-- Returns (width, height) -- both numeric, never "auto" or "fill".
+function Layout:GetViewDimensions(config, view)
+    local windowCfg = config.window
+    local viewSpec = windowCfg.views[view]
+    if not viewSpec then
+        error(("Layout:GetViewDimensions: unknown view %q"):format(tostring(view)), 2)
+    end
+    local pad = clamp(resolveSpacing(windowCfg.padding))
+    local gap = clamp(resolveSpacing(windowCfg.gap))
+    local cols = self:ResolveViewTracks(viewSpec, "columns")
+    local rows = self:ResolveViewTracks(viewSpec, "rows")
+
+    local function sumTracks(tracks, dimName)
+        if type(tracks) ~= "table" or #tracks == 0 then return 0, 0 end
+        local sum, occupied = 0, 0
+        for i, t in ipairs(tracks) do
+            local n = tonumber(t)
+            if not n then
+                error(("Layout:GetViewDimensions: view %q has non-numeric %s[%d] = %q; \"fill\" is incompatible with %s = \"auto\""):format(
+                    view, dimName, i, tostring(t), dimName == "columns" and "width" or "height"), 2)
+            end
+            sum = sum + n
+            if n > 0 then occupied = occupied + 1 end   -- 0-size tracks (collapsed dynamic rows/cols) take no space -> no inter-track gap
+        end
+        return sum, occupied
+    end
+
+    local function resolveDim(value, tracks, dimName)
+        if value == "auto" then
+            local sum, count = sumTracks(tracks, dimName)
+            return pad * 2 + sum + math.max(0, count - 1) * gap
+        elseif type(value) == "number" then
+            return value
+        else
+            error(("Layout:GetViewDimensions: view %q has invalid width/height %q (expected number or \"auto\")"):format(
+                view, tostring(value)), 2)
+        end
+    end
+
+    local w = resolveDim(viewSpec.width,  cols, "columns")
+    local h = resolveDim(viewSpec.height, rows, "rows")
+    return w, h
+end
+
+-- ===== Window composition (per ADR-025) =====================================
+-- A window owns placement via a `slots` map. `fill` resolves to a view via
+-- ResolveFillView; edge slots are literal view names. layout.lua never reads
+-- the Store; state arrives via the caller (ctx.state).
+
+-- Resolve which view a window's `fill` slot renders.
+--   "@view"          -> the active view (state.account.ui.view; defaultView
+--                       fallback when unset or naming a retired view -- a real
+--                       boundary, same resolution as MainFrame:PrepareContext)
+--   any other string -> a fixed view name (a satellite's content)
+function Layout:ResolveFillView(config, windowName, state)
+    config = config or HDG.LayoutConfig
+    local win = config.windows and config.windows[windowName]
+    if not win then
+        error(("Layout:ResolveFillView: no window %q in config.windows"):format(tostring(windowName)), 2)
+    end
+    local fill = win.slots and win.slots.fill
+    if not fill then
+        error(("Layout:ResolveFillView: window %q has no fill slot"):format(tostring(windowName)), 2)
+    end
+    if fill ~= "@view" then
+        return fill
+    end
+    local v = state.account.ui.view   -- strict: caller passes a live state
+    if v and config.window.views[v] then return v end
+    return config.window.defaultView   -- exception(boundary): unset / retired view
+end
+
+-- Resolve a window's slot map into view names. Edge slots (top/bottom/left/
+-- right/corner) are literal config/view names; `fill` resolves via
+-- ResolveFillView (the only @view-capable slot). Returns a table keyed by
+-- slot kind; absent slots are nil.
+local function resolveWindowSlots(config, windowName, state)
+    local win = config.windows and config.windows[windowName]
+    if not win then
+        error(("Layout: no window %q in config.windows"):format(tostring(windowName)), 2)
+    end
+    if not win.slots then
+        error(("Layout: window %q has no slots"):format(tostring(windowName)), 2)
+    end
+    local s = win.slots
+    return {
+        top    = s.top,
+        bottom = s.bottom,
+        left   = s.left,
+        right  = s.right,
+        corner = s.corner,
+        fill   = Layout:ResolveFillView(config, windowName, state),  -- reads win.slots.fill + state
+    }
+end
+
+-- A slot-view's natural (w, h) -- 0,0 when the slot is absent.
+local function slotDims(config, view)
+    if not view then return 0, 0 end
+    return Layout:GetViewDimensions(config, view)
+end
+
+-- The composed window's natural size from its slot extents:
+--   W = left + fill + right     H = top + fill + bottom
+-- `fill` drives the body on both axes; edge slots add their fixed extent.
+-- `corner` is an overlay (no grid cell), so it doesn't affect the size.
+function Layout:ComposeWindowDimensions(config, windowName, state)
+    config = config or HDG.LayoutConfig
+    local slots = resolveWindowSlots(config, windowName, state)
+    local fw, fh = slotDims(config, slots.fill)
+    local lw     = (slotDims(config, slots.left))     -- width  (1st return)
+    local rw     = (slotDims(config, slots.right))
+    local _, th  = slotDims(config, slots.top)        -- height (2nd return)
+    local _, bh  = slotDims(config, slots.bottom)
+    return lw + fw + rw, th + fh + bh
+end
+
+-- Compose a window into one merged placements table from its slot map. Each
+-- slot is itself a layout config (view); Compute resolves its placements
+-- relative to its own origin, and we translate them into the slot's region
+-- within the window grid. Slots stack flush (each slot-view carries its own
+-- internal padding). `corner` overlays the window's top-right (close button).
+-- When only `fill` is present this collapses to a single un-offset Compute --
+-- identical to the pre-slot behavior.
+function Layout:ComposeWindow(config, windowName, ctx)
+    config = config or HDG.LayoutConfig
+    ctx = ctx or {}
+    local slots = resolveWindowSlots(config, windowName, ctx.state)
+
+    local fw, fh = slotDims(config, slots.fill)
+    local lw     = (slotDims(config, slots.left))
+    local rw     = (slotDims(config, slots.right))
+    local _, th  = slotDims(config, slots.top)
+    local _, bh  = slotDims(config, slots.bottom)
+    local W      = lw + fw + rw
+    local bodyY  = th  -- body row sits below the top slot
+
+    -- (view, originX, originY, spanW, spanH) per grid slot, in paint order.
+    -- Edge slots span: top/bottom take the full window width W; left/right
+    -- cross-fill the body height fh. fill + corner use their natural size
+    -- (spanW/spanH nil). spanW/spanH thread to computeWindowCells via
+    -- ctx.frameW/frameH so the slot-view's "fill" tracks stretch to the span.
+    local placed = {}
+    local function add(view, x, y, spanW, spanH)
+        if view then placed[#placed + 1] = { view = view, x = x, y = y, spanW = spanW, spanH = spanH } end
+    end
+    add(slots.top,    0,           0,            W,   th)
+    add(slots.left,   0,           bodyY,        lw,  fh)
+    add(slots.fill,   lw,          bodyY,        nil, nil)
+    add(slots.right,  lw + fw,     bodyY,        rw,  fh)
+    add(slots.bottom, 0,           bodyY + fh,   W,   bh)
+    if slots.corner then
+        local cw = (slotDims(config, slots.corner))
+        add(slots.corner, W - cw, 0, nil, nil)  -- overlay, window top-right
+    end
+
+    local placements = {}
+    for _, s in ipairs(placed) do
+        local sub = {}
+        for k, v in pairs(ctx) do sub[k] = v end
+        sub.view    = s.view
+        sub.frameW  = s.spanW   -- nil -> natural size in computeWindowCells
+        sub.frameH  = s.spanH
+        sub.originX = s.x       -- offsets the slot's CELLS (panel positions);
+        sub.originY = s.y       -- sections/widgets follow via parent-relative coords
+        local p = self:Compute(config, sub)
+        -- Merge directly -- the origin already moved the panels; offsetting
+        -- placements again here would double-shift parent-relative children.
+        for id, r in pairs(p) do
+            placements[id] = r
+        end
+    end
+    return placements
+end
+
+-- ===== computeWindowCells helpers =========================================
+
+-- Resolve the cell-name a panel occupies in the named view. Panels have
+-- `cell = { viewA = "cellName", viewB = "otherCell", ... }`. Returns nil
+-- if the panel has no cell mapping for that view.
+--
+-- Named "resolve" (not "panel...") because it's an accessor -- returns a
+-- value, not a predicate. Sister helpers _panelTargetsView /
+-- _panelIsStandaloneOnly are bool predicates and use the _panel* prefix.
+local function _resolvePanelCell(panelSpec, view)
+    return panelSpec.cell and panelSpec.cell[view] or nil
+end
+
+-- Determine which row + col indices have at least one VISIBLE panel.
+-- Spanned tracks must stay live even when neighbors are hidden (a colSpan'd
+-- panel must keep its sibling track alive or width collapses).
+local function _computeLiveRowsCols(panels, view, viewSpec, ctx)
+    local liveRows, liveCols = {}, {}
+    for panelId, panelSpec in pairs(panels) do
+        local visible = ctx == nil or ctx.panelVisible == nil
+            or ctx.panelVisible[panelId] ~= false  -- exception(false-positive): sparse map; absent entry = visible; only panels with visible-selector appear in the map
+        local cellName = _resolvePanelCell(panelSpec, view)
+        local cellSpec = cellName and (viewSpec.cells or {})[cellName] or nil
+        if visible and cellSpec then
+            local rowStart, rowSpan = cellSpec.row, cellSpec.rowSpan
+            local colStart, colSpan = cellSpec.col, cellSpec.colSpan
+            for r = rowStart, rowStart + rowSpan - 1 do liveRows[r] = true end
+            for c = colStart, colStart + colSpan - 1 do liveCols[c] = true end
+        end
+    end
+    return liveRows, liveCols
+end
+
+-- Given a track template (e.g. { 200, "fill", 150 }) + total along-axis
+-- length + per-track live-mask, return (sizes[], offsets[]) -- the
+-- per-track size and absolute offset from origin. "fill" entries split
+-- the remaining slack equally. Dead tracks (not in liveMask) get size=0
+-- and the previous offset (zero-width gap; downstream knows to skip).
+local function _resolveTracks(template, total, gap, liveMask)
+    -- A track contributes an inter-track gap only if it actually takes space:
+    -- a "fill" track or a fixed track with size > 0. Fixed 0-size tracks (a
+    -- dynamicRows/Columns collapse -- e.g. lumber session-only mode zeros the
+    -- counter + action rows) add NO gap, else the window gains phantom padding
+    -- where the collapsed track used to be. Must stay in lockstep with
+    -- GetViewDimensions:sumTracks (same 0-size-excluded gap count).
+    local fixedSum, flex, gapCount = 0, 0, 0
+    for i, t in ipairs(template) do
+        local live = not liveMask or liveMask[i]
+        if live then
+            if t == "fill" then
+                flex = flex + 1
+                gapCount = gapCount + 1
+            else
+                local n = tonumber(t) or 0
+                fixedSum = fixedSum + n
+                if n > 0 then gapCount = gapCount + 1 end
+            end
+        end
+    end
+    local gapTotal = math.max(0, gapCount - 1) * gap
+    local flexSize = flex > 0 and math.max(0, (total - fixedSum - gapTotal) / flex) or 0
+    local sizes, offsets = {}, {}
+    local cursor = 0
+    for i, t in ipairs(template) do
+        local live = not liveMask or liveMask[i]
+        if live then
+            sizes[i]   = (t == "fill") and flexSize or (tonumber(t) or 0)
+            offsets[i] = cursor
+            cursor = cursor + sizes[i]
+            if t == "fill" or sizes[i] > 0 then cursor = cursor + gap end
+        else
+            sizes[i]   = 0
+            offsets[i] = cursor
+        end
+    end
+    return sizes, offsets
+end
+
+-- Primitive: sum N consecutive track sizes starting at `start`, including
+-- gap separators between consecutive non-zero entries. Skips dead tracks
+-- (size 0) without consuming a gap. Returns the total along-axis size
+-- for a (start, span) cell into a track array.
+--
+-- This is the canonical "spanned cell along one axis" math -- replaces
+-- the col/row dedup that lived twice inside computeWindowCells.
+local function _sumSpannedTracks(start, span, sizes, gap, nTracks)
+    local total, hasAny = 0, false
+    local stop = math.min(start + span - 1, nTracks)
+    for i = start, stop do
+        local s = sizes[i]
+        if s > 0 then
+            if hasAny then total = total + gap end
+            total = total + s
+            hasAny = true
+        end
+    end
+    return total
+end
+
+local function computeWindowCells(config, view, ctx)
+    local windowCfg = config.window
+    local viewSpec  = windowCfg.views[view]
+    -- Per-view padding override (HDG-ADR-025): chrome slot-views (status/chrome)
+    -- set padding=0 so their content fills the slot flush -- the window's "sm"
+    -- padding would otherwise inset + overflow a fixed-height bar (the rail sat
+    -- 4px low and spilled past the window bottom). nil -> the window default.
+    local vpad = viewSpec.padding
+    if vpad == nil then vpad = windowCfg.padding end
+    -- Per-side padding: normalizePadding handles a scalar ("sm" -> all sides
+    -- equal, the common case) OR a { left/right/top/bottom } table for
+    -- asymmetric insets -- e.g. the nav slot sets right=0 so its seam to the
+    -- content is a single gap (the content's own left pad), not a doubled one.
+    local pads = normalizePadding(vpad)
+    local padL, padR = clamp(pads.left), clamp(pads.right)
+    local padT, padB = clamp(pads.top),  clamp(pads.bottom)
+    local gap = clamp(resolveSpacing(windowCfg.gap))
+    -- Slot composition (HDG-ADR-025): an edge slot (top/bottom/left/right)
+    -- spans the window's body extent, not the view's own natural size.
+    -- ComposeWindow passes the spanned width/height via ctx.frameW/frameH so
+    -- the slot-view's "fill" tracks stretch to the window. nil (every non-slot
+    -- caller, and the `fill` slot) -> the view's natural GetViewDimensions size.
+    local nw, nh = Layout:GetViewDimensions(config, view)
+    local frameW = (ctx and ctx.frameW) or nw
+    local frameH = (ctx and ctx.frameH) or nh
+    local contentW = clamp(frameW - padL - padR)
+    local contentH = clamp(frameH - padT - padB)
+    -- Slot composition (HDG-ADR-025): ComposeWindow offsets a slot's CELLS
+    -- (panel positions -- the only root-anchored placements) by the slot's
+    -- region origin. Sections/widgets are parent-relative, so they inherit the
+    -- shift via their moved panel -- offsetting them too would double-count
+    -- (the dead-band bug). 0 for every non-slot caller.
+    local originX = (ctx and ctx.originX) or 0
+    local originY = (ctx and ctx.originY) or 0
+
+    -- Honor dynamic columns/rows override (declared via dynamicColumns /
+    -- dynamicRows on the view spec). Dynamic resolution drives both the
+    -- outer window dimensions (GetViewDimensions above) and these inner
+    -- cell tracks so layout stays internally consistent.
+    local cols = Layout:ResolveViewTracks(viewSpec, "columns") or { "fill" }
+    local rows = Layout:ResolveViewTracks(viewSpec, "rows")    or { "fill" }
+
+    local liveRows, liveCols = _computeLiveRowsCols(config.panels or {}, view, viewSpec, ctx)
+    local colSizes, colOffsets = _resolveTracks(cols, contentW, gap, liveCols)
+    local rowSizes, rowOffsets = _resolveTracks(rows, contentH, gap, liveRows)
+
+    -- Runtime track resolution. dynamicColumns/dynamicRows can return
+    -- fewer tracks than the static spec declares (e.g. HouseTab's picker
+    -- cell sits at col=2, but house.viewColumns drops col 2 when picker
+    -- is closed). When the cell's anchor track is out-of-range at the
+    -- current runtime resolution, skip rect emission entirely --
+    -- panel-iteration in Layout:Compute treats `cells[cellName] == nil`
+    -- as hidden.
+    local nCols, nRows = #colSizes, #rowSizes
+    local cells = {}
+    for cellName, cellSpec in pairs(viewSpec.cells or {}) do
+        local col, row = cellSpec.col, cellSpec.row
+        if col <= nCols and row <= nRows then
+            cells[cellName] = rect(
+                originX + padL + colOffsets[col],
+                originY + padT + rowOffsets[row],
+                _sumSpannedTracks(col, cellSpec.colSpan, colSizes, gap, nCols),
+                _sumSpannedTracks(row, cellSpec.rowSpan, rowSizes, gap, nRows)
+            )
+        end
+    end
+
+    return cells, frameW, frameH
+end
+
+-- Child indexing -- routed by (parentId, slot). Default slot = "body". -------
+
+-- Single visibility gate: combines `visibleInViews` (static view-list) AND
+-- `visible` (selector / bool / function) into one yes-or-no. If either says
+-- "no", the spec is excluded from the index.
+--
+-- Cascade falls out for free: a hidden parent doesn't appear in its
+-- grandparent's child list, so layoutContainer never recurses into it.
+-- Children of a hidden parent may still get index entries (under the
+-- hidden parent's id) but no one reaches those entries, so no placements
+-- are computed and Apply auto-hides the orphans.
+local function shouldRender(spec, view, state, ctx)
+    local vv = spec.visibleInViews
+    if vv ~= nil then
+        local found = false
+        for _, m in ipairs(vv) do if m == view then found = true; break end end
+        if not found then return false end
+    end
+    local v = spec.visible
+    if v == nil then return true end   -- no `visible` directive at all -> visible
+    if type(v) == "boolean" then return v end
+    -- Selector / function form: treat both `false` AND `nil` as hidden.
+    -- Earlier code only checked `~= false`, so a selector returning `nil`
+    -- (common when `a and a.x ~= nil` short-circuits) was treated as
+    -- visible. That caused widgets to render when their visible selector
+    -- returned nil (no selection) instead of being hidden.
+    local result
+    if type(v) == "string" then
+        -- Selector form. state is required; a nil state here is a caller bug, so let the
+        -- selector strict-read + loud-fail rather than silently defaulting to visible
+        -- (the old `and state` fell through to `return true` = render-everything).
+        result = HDG.Selectors:Call(v, state, ctx)
+    elseif type(v) == "function" then
+        result = v(state, ctx)
+    else
+        return true   -- unknown form: default visible (validator should flag instead)
+    end
+    return result ~= false and result ~= nil
+end
+
+local function buildChildIndex(config, view, state, ctx)
+    local index = {}
+    local function add(parentId, childId, order, slot)
+        if not parentId then return end
+        slot = slot or "body"
+        index[parentId] = index[parentId] or {}
+        index[parentId][slot] = index[parentId][slot] or {}
+        local bucket = index[parentId][slot]
+        bucket[#bucket + 1] = { id = childId, order = order }
+    end
+
+    for id, spec in pairs(config.sections or {}) do
+        if shouldRender(spec, view, state, ctx) then add(spec["in"], id, spec.order, spec.slot) end
+    end
+    for id, spec in pairs(config.widgets or {}) do
+        if shouldRender(spec, view, state, ctx) then add(spec["in"], id, spec.order, spec.slot) end
+    end
+
+    for _, slots in pairs(index) do
+        for slotName, children in pairs(slots) do
+            table.sort(children, function(a, b) return a.order < b.order end)
+            local ordered = {}
+            for _, e in ipairs(children) do ordered[#ordered + 1] = e.id end
+            slots[slotName] = ordered
+        end
+    end
+
+    return index
+end
+
+-- Slots ----------------------------------------------------------------------
+
+-- Resolve the layout direction for a (slotName, declaredLayout) pair.
+-- Returns the declared value if set; otherwise header/footer default
+-- horizontal (read direction matches "by-row toolbar"), all others
+-- default vertical (column of stacked widgets). Shared by getPanelSlots
+-- (at build-time, writes resolved value into slot table) and
+-- _resolveContainerLayout (at validate-time, reads on demand).
+local function _defaultSlotLayout(slotName, declaredLayout)
+    return declaredLayout
+        or ((slotName == "header" or slotName == "footer") and "horizontal")
+        or "vertical"
+end
+
+local function getPanelSlots(panelSpec)
+    local declared = panelSpec.slots
+    if not declared then
+        return { body = { layout = panelSpec.bodyLayout or "vertical" } }
+    end
+
+    -- Default each slot's layout if missing; default header/footer heights.
+    local slots = {}
+    for name, slotSpec in pairs(declared) do
+        local merged = {}
+        for k, v in pairs(slotSpec) do merged[k] = v end
+        merged.layout = _defaultSlotLayout(name, merged.layout)
+        if name == "header" and not merged.height then merged.height = DEFAULT_HEADER_HEIGHT end
+        if name == "footer" and not merged.height then merged.height = DEFAULT_FOOTER_HEIGHT end
+        slots[name] = merged
+    end
+    if not slots.body then
+        slots.body = { layout = panelSpec.bodyLayout or "vertical" }
+    end
+    return slots
+end
+
+local function computeSlotRects(panelRect, slots)
+    local headerH = slots.header and clamp(slots.header.height) or 0
+    local footerH = slots.footer and clamp(slots.footer.height) or 0
+    local bodyH = clamp(panelRect.height - headerH - footerH)
+
+    local out = {}
+    if slots.header then
+        out.header = rect(0, 0, panelRect.width, headerH)
+    end
+    out.body = rect(0, headerH, panelRect.width, bodyH)
+    if slots.footer then
+        out.footer = rect(0, headerH + bodyH, panelRect.width, footerH)
+    end
+    return out
+end
+
+-- Stack / fill layout (used by sections AND panel slots) ---------------------
+
+local layoutContainer  -- forward
+
+local function applyPadding(r, paddingSpec)
+    local pad = normalizePadding(paddingSpec)
+    return rect(r.x + pad.left, r.y + pad.top,
+                r.width  - _padHorizontal(pad),
+                r.height - _padVertical(pad))
+end
+
+-- Pre-pass: sum descendants for "content" sized children. Walks the spec tree
+-- (sections + widgets) under the given id, summing fixed sizes and gaps along
+-- the parent's axis. Returns nil if any descendant is "fill"/nil (indeterminate).
+local function measureContent(id, axis, config, index)
+    local spec = specFor(config, id)
+    if not spec then return 0 end
+
+    local own = getAlong(spec, axis, id)
+    if type(own) == "number" then return own end
+
+    local slots = index[id] or {}
+    -- Sections store all children under "body" key (slots only matter on panels).
+    local children = slots.body
+    if not children or #children == 0 then return 0 end
+
+    local localAxis = spec.layout == "horizontal" and "horizontal"
+        or spec.layout == "vertical" and "vertical"
+        or axis  -- inherit from parent for "fill" sections
+    local total = 0
+    for _, childId in ipairs(children) do
+        local cspec = specFor(config, childId)
+        if not cspec then return nil end
+        local s = getAlong(cspec, localAxis, childId)
+        if s == "content" then
+            s = measureContent(childId, localAxis, config, index)
+        end
+        if type(s) ~= "number" then return nil end
+        total = total + s
+    end
+    local gap = clamp(resolveSpacing(spec.gap))
+    total = total + math.max(0, #children - 1) * gap
+
+    -- Pad contributes to the parent-axis only when the section's own
+    -- layout matches that axis (mismatched axes are absorbed by the
+    -- recursive measure of the children, not by this padding sum).
+    if localAxis == axis then
+        local pad = normalizePadding(spec.padding)
+        total = total + (axis == "vertical" and _padVertical(pad) or _padHorizontal(pad))
+    end
+    return total
+end
+
+-- Measure children for axis layout. Walks each child once, resolves its
+-- along-axis size via spec (number / "fill" / "content"). "content" sizes
+-- recurse through measureContent. Returns parallel arrays + totals.
+local function _measureStackChildren(children, config, axis, index)
+    local sizes = {}
+    local fixedSum, flexCount, contentSum = 0, 0, 0
+    for _, childId in ipairs(children) do
+        local cspec = specFor(config, childId)
+        local s = cspec and getAlong(cspec, axis, childId)
+        if s == "content" then
+            s = measureContent(childId, axis, config, index) or "fill"
+        end
+        if s == nil or s == "fill" then
+            flexCount = flexCount + 1
+            sizes[#sizes + 1] = "fill"
+        else
+            sizes[#sizes + 1] = s
+            fixedSum = fixedSum + s
+            contentSum = contentSum + s
+        end
+    end
+    return sizes, fixedSum, flexCount, contentSum
+end
+
+-- Children's fixed sizes + gap budget exceed the available along-axis
+-- length: container will overflow. Dedupe per (containerId, axis, along)
+-- so a single bad row only warns once. Routes through Log:Warn so it
+-- lands in the debug tab + auto-chat-prints via the trace consumer.
+local function _warnOverSpec(containerId, axis, along, fixedSum, gapTotal, flexCount)
+    if (fixedSum + gapTotal) <= along + 1 then return end
+    Layout._overSpecWarned = Layout._overSpecWarned or {}
+    local key = (containerId or "?") .. "|" .. axis .. "|" .. tostring(along)
+    if Layout._overSpecWarned[key] then return end
+    Layout._overSpecWarned[key] = true
+    local text = string.format(
+        "over-spec in %q (%s): %dpx available but children need %dpx "
+        .. "(fixed=%d, gap=%d, %d flex). Drop a fixed %s or split the container.",
+        containerId or "(unknown)", axis, math.floor(along + 0.5),
+        math.floor(fixedSum + gapTotal + 0.5), math.floor(fixedSum + 0.5),
+        math.floor(gapTotal + 0.5), flexCount,
+        axis == "vertical" and "height" or "width")
+    HDG.Log:Warn("layout", text)
+end
+
+-- Compute one child's rect for stack-axis positioning. Centers across the
+-- cross-axis when the child declares a fixed cross-size; otherwise the
+-- child fills the cross-axis fully.
+local function _computeStackChildRect(axis, inner, cursor, size, crossSize)
+    if axis == "vertical" then
+        if type(crossSize) == "number" then
+            local x = inner.x + (inner.width - crossSize) / 2
+            return rect(x, cursor, crossSize, size)
+        end
+        return rect(inner.x, cursor, inner.width, size)
+    end
+    -- horizontal
+    if type(crossSize) == "number" then
+        local y = inner.y + (inner.height - crossSize) / 2
+        return rect(cursor, y, size, crossSize)
+    end
+    return rect(cursor, inner.y, size, inner.height)
+end
+
+-- Resolve the starting cursor for an axis layout. Normal layouts start
+-- at the inner edge; right-aligned horizontal layouts WITHOUT flex children
+-- start past the fixed cluster (flex children absorb slack so the shift
+-- would overflow if any are present).
+local function _stackStartCursor(specOrSlot, axis, inner, flexCount, contentSum, gapTotal)
+    local cursor = (axis == "vertical") and inner.y or inner.x
+    if specOrSlot.align == "right" and axis == "horizontal" and flexCount == 0 then
+        cursor = inner.x + inner.width - (contentSum + gapTotal)
+        -- Overflow (content wider than the container): clamp to the left edge so children
+        -- clip INSIDE the container instead of rendering at a negative x off its left.
+        -- (_warnOverSpec already fires for this case in layoutStack.)
+        if cursor < inner.x then cursor = inner.x end
+    end
+    return cursor
+end
+
+local function layoutStack(specOrSlot, parentRect, children, placements, config, index, containerId)
+    local inner = applyPadding(parentRect, specOrSlot.padding)
+    local layout = specOrSlot.layout or "vertical"
+    local axis = (layout == "horizontal") and "horizontal" or (layout == "fill" and "fill" or "vertical")
+
+    -- Fill axis: every child gets the full inner rect (overlay layout).
+    if axis == "fill" then
+        for _, childId in ipairs(children) do
+            layoutContainer(childId, inner, placements, config, index, false)
+        end
+        return
+    end
+
+    local along    = (axis == "vertical") and inner.height or inner.width
+    local gap      = clamp(resolveSpacing(specOrSlot.gap))
+    local sizes, fixedSum, flexCount, contentSum = _measureStackChildren(children, config, axis, index)
+    local gapTotal = math.max(0, #children - 1) * gap
+    local flexAvail = math.max(0, along - fixedSum - gapTotal)
+    _warnOverSpec(containerId, axis, along, fixedSum, gapTotal, flexCount)
+
+    local flexSize = flexCount > 0 and (flexAvail / flexCount) or 0
+    local cursor = _stackStartCursor(specOrSlot, axis, inner, flexCount, contentSum, gapTotal)
+
+    for i, childId in ipairs(children) do
+        local size = sizes[i] == "fill" and flexSize or sizes[i]
+        local cspec = specFor(config, childId)
+        local crossSize = cspec and getCross(cspec, axis)
+        local childRect = _computeStackChildRect(axis, inner, cursor, size, crossSize)
+        layoutContainer(childId, childRect, placements, config, index, false)
+        cursor = cursor + size + gap
+    end
+end
+
+-- Container layout -----------------------------------------------------------
+
+-- Lay out one panel: compute slot rects, stamp each slot's placement,
+-- delegate each slot's child list to layoutStack.
+local function _layoutPanelSlots(id, parentRect, spec, placements, config, index)
+    local slots          = getPanelSlots(spec)
+    local slotRects      = computeSlotRects(parentRect, slots)
+    local panelChildren  = index[id] or {}
+    for slotName, slotSpec in pairs(slots) do
+        local slotRect = slotRects[slotName]
+        if slotRect then
+            placements[id .. "." .. slotName] = slotRect
+            local children = panelChildren[slotName] or {}
+            layoutStack(slotSpec, slotRect, children, placements, config, index,
+                        id .. "." .. slotName)
+        end
+    end
+end
+
+-- Lay out one section (non-panel container): stack body children inside
+-- parentRect, OR inside a section-local (0,0,w,h) rect when the section
+-- declares chrome.
+--
+-- Chrome detection uses `~= nil` so the `inset` sentinel value
+-- (CHROME_TEMPLATES["inset"] = false, meaning "plain Frame, no template
+-- inheritance") is still recognised -- otherwise widgets inside an inset
+-- section would be section-parented but get panel-relative placements,
+-- anchoring them outside the section rect.
+local function _layoutSectionChildren(id, parentRect, spec, placements, config, index)
+    local slots    = index[id] or {}
+    local children = slots.body or {}
+    if spec.chrome and CHROME_TEMPLATES[spec.chrome] ~= nil then
+        local localRect = rect(0, 0, parentRect.width, parentRect.height)
+        layoutStack(spec, localRect, children, placements, config, index, id)
+    else
+        layoutStack(spec, parentRect, children, placements, config, index, id)
+    end
+end
+
+layoutContainer = function(id, parentRect, placements, config, index, isPanel)
+    placements[id] = parentRect
+    local spec = specFor(config, id)
+    if not spec then return end
+    if isPanel then
+        _layoutPanelSlots(id, parentRect, spec, placements, config, index)
+    else
+        _layoutSectionChildren(id, parentRect, spec, placements, config, index)
+    end
+end
+
+-- Public API -----------------------------------------------------------------
+
+function Layout:Compute(config, ctx)
+    config = config or HDG.LayoutConfig
+    if not config then error("Layout:Compute: no config (pass one or set HDG.LayoutConfig)", 2) end
+    -- Shallow-copy ctx so Compute doesn't mutate the CALLER's table (purity contract):
+    -- it populates panelVisible below + harvests intrinsics. ComposeWindow already passes
+    -- a throwaway sub-ctx, but a direct Compute caller shouldn't see injected fields.
+    local src = ctx or {}
+    ctx = {}
+    for k, v in pairs(src) do ctx[k] = v end
+    local view = ctx.view or config.window.defaultView
+
+    -- Resolve `visible` selectors on PANELS too. shouldRender
+    -- handles sections + widgets already; panels were never evaluated, so
+    -- panel.visible bindings (queue/materials/warehouse mode-toggle) were
+    -- silently ignored. Populate ctx.panelVisible with the resolved bool
+    -- so computeWindowCells + the placement loop both honor it.
+    ctx.panelVisible = ctx.panelVisible or {}
+    if config.panels then
+        for panelId, panelSpec in pairs(config.panels) do
+            if shouldRender(panelSpec, view, ctx.state, ctx) then
+                ctx.panelVisible[panelId] = true
+            else
+                ctx.panelVisible[panelId] = false
+            end
+        end
+    end
+
+    local cells = computeWindowCells(config, view, ctx)
+
+    local placements = {}
+    -- buildChildIndex resolves `visibleInViews` + `visible` for every spec
+    -- and excludes hidden entries from the index. layoutContainer then
+    -- iterates only visible children, so the flex math allocates the full
+    -- slot to siblings of a hidden child without any extra bookkeeping.
+    local index = buildChildIndex(config, view, ctx.state, ctx)
+
+    -- _overSpecWarned dedupe persists across Compute passes (intentional).
+    -- Earlier code reset this per-Compute; combined with Log:Warn routing
+    -- (which dispatches LOG_PUSH -> Notify -> Refresh -> Compute) it caused
+    -- a feedback loop where the layout warning self-triggered indefinitely.
+    -- Dedupe key is `(containerId, along)`; geometry changes naturally
+    -- introduce new keys and re-fire warnings on real layout-shape shifts.
+    -- Intrinsics for `width = "auto"` / `height = "auto"` widgets, harvested
+    -- by the caller (MainFrame) from each widget's _intrinsicWidth/Height.
+    Layout._intrinsics = ctx.intrinsics
+
+    for panelId, panelSpec in pairs(config.panels or {}) do
+        local cellName = _resolvePanelCell(panelSpec, view)
+        local visible = ctx.panelVisible == nil or ctx.panelVisible[panelId] ~= false  -- exception(false-positive): sparse map; absent entry = visible; only panels with visible-selector appear in the map
+        local cellRect = cellName and cells[cellName] or nil
+        if cellName and cellRect and visible then
+            layoutContainer(panelId, cellRect, placements, config, index, true)
+        else
+            placements[panelId] = nil
+        end
+    end
+
+    -- Clear the per-Compute intrinsics scratch (getAlong reads it during the solve above
+    -- and nil-checks it). Set fresh each Compute, so no cross-pass leak; threading it
+    -- through the solver hot path isn't worth the churn for a non-re-entrant path.
+    Layout._intrinsics = nil
+    return placements
+end
+
+local function rectsEqual(a, b)
+    if not a or not b then return false end
+    return a.x == b.x and a.y == b.y and a.width == b.width and a.height == b.height
+end
+
+local function ApplyOne(widget, region)
+    if not widget or not region then return end
+    -- Diffing stub: skip if the rect is identical to the last applied. Cheap
+    -- win for full-Refresh-on-every-state-change patterns; foundation for a
+    -- proper reactive-update layer later (compare prev placements -> only
+    -- touch widgets whose rects changed). Sound because Layout is the SOLE
+    -- writer of widget geometry -- intrinsic measurement reads natural width via
+    -- GetUnboundedStringWidth (a pure read, no SetWidth probe), so nothing
+    -- mutates a widget's size out of band to invalidate this cache.
+    if rectsEqual(widget._lastRect, region) then return end
+    widget._lastRect = { x = region.x, y = region.y, width = region.width, height = region.height }
+
+    if widget.ApplyLayout then widget:ApplyLayout(region); return end  -- exception(optional): ApplyLayout is an optional override protocol (e.g. CardGrid); absent = default anchor path
+    widget:ClearAllPoints()
+    widget:SetPoint("TOPLEFT", region.x, -region.y)
+    widget:SetSize(region.width, region.height)
+    -- Hook for animation / transition layer (no-op today). Surfaces or themes
+    -- can attach :OnLayoutChanged(rect) to a widget to react to placement.
+    if widget.OnLayoutChanged then  -- exception(optional): OnLayoutChanged is an optional extension protocol; absent = no-op
+        local ok, err = pcall(widget.OnLayoutChanged, widget, region)
+        if not ok then
+            HDG.Log:Error("layout", "OnLayoutChanged error: " .. tostring(err))
+        end
+    end
+end
+
+local function SetVisible(widget, visible)
+    if not widget then return end   -- placement id with no built widget (engine-maintained)
+    if visible then widget:Show() else widget:Hide() end
+end
+
+-- Primitive: apply placements to every (id -> widget) pair, hiding any
+-- with no placement and showing those that have one. Optional `onApplied`
+-- runs per-applied (widget, region) for per-collection extras like the
+-- deferred-skinner logic on slot chromes.
+local function _applyToPlaced(items, placements, onApplied)
+    if not items then return end
+    for id, widget in pairs(items) do
+        local r = placements[id]
+        if r then
+            ApplyOne(widget, r)
+            SetVisible(widget, true)
+            if onApplied then onApplied(id, widget, r) end
+        else
+            SetVisible(widget, false)
+        end
+    end
+end
+
+-- Deferred skinner application -- runs ONCE per slot chrome, the first
+-- time the frame has a real rect. See BuildAll's chrome._pendingSkin
+-- assignment for why we can't paint at build-time (zero rect means
+-- SetAllPoints anchors into a 0x0 box and bg never paints until next
+-- refresh -- visible header flicker).
+local function _applyPendingSkin(_id, chrome, _region)
+    if not chrome._pendingSkin then return end
+    HDG.Theme:Register(chrome, chrome._pendingSkin)
+    chrome._pendingSkin = nil
+end
+
+function Layout:Apply(rootFrame, placements)
+    if not rootFrame or not placements then return end
+    _applyToPlaced(rootFrame.panels,      placements)
+    _applyToPlaced(rootFrame.sections,    placements)
+    _applyToPlaced(rootFrame.slotChromes, placements, _applyPendingSkin)
+    _applyToPlaced(rootFrame.widgets,     placements)
+end
+
+-- Build phase ----------------------------------------------------------------
+
+local function findEnclosingPanel(id, config)
+    local visited = {}
+    local cursor = id
+    while cursor and not visited[cursor] do
+        visited[cursor] = true
+        if config.panels and config.panels[cursor] then return cursor end
+        local spec = (config.sections and config.sections[cursor])
+                  or (config.widgets and config.widgets[cursor])
+        cursor = spec and spec["in"] or nil
+    end
+    return nil
+end
+
+-- Walks up the in-chain returning the FIRST chromed section (or panel) that
+-- encloses the widget. Used to determine widget parent: chromed sections
+-- bear a real Frame and become widget parents; ordinary sections are virtual
+-- and their child widgets parent through to the enclosing panel.
+local function findEnclosingContainer(id, config)
+    local visited = {}
+    local cursor = (config.widgets and config.widgets[id]) and config.widgets[id]["in"] or nil
+    while cursor and not visited[cursor] do
+        visited[cursor] = true
+        if config.panels and config.panels[cursor] then return cursor, "panel" end
+        local sectionSpec = config.sections and config.sections[cursor]
+        -- Note: `CHROME_TEMPLATES[chrome]` may be `false` (the `inset` sentinel
+        -- meaning "plain Frame, no template inheritance"). Use `~= nil` so we
+        -- recognise the section as a valid widget container in that case --
+        -- otherwise widgets inside an inset section would walk past it and
+        -- end up parented to the enclosing panel with panel-relative coords.
+        if sectionSpec and sectionSpec.chrome and CHROME_TEMPLATES[sectionSpec.chrome] ~= nil then
+            return cursor, "section"
+        end
+        cursor = sectionSpec and sectionSpec["in"] or nil
+    end
+    return nil, nil
+end
+
+-- ===== Layout:BuildAll helpers ============================================
+
+-- Theme tinting tokens for section chrome (Blizzard templates ship with
+-- brown/wood/slate bgs that we override via SectionBgTint Skinner).
+local CHROME_BG_TOKEN = {
+    card       = "surface.hover",    -- accent-washed detail fill (~10%) under the 3px accent bar (a contained detail block, not a lone stripe) -- via _attachChromeBgTint
+    cardBorder = "surface.hover",    -- same fill as card; border (not stripe) drawn in _attachChromeBgTint
+    tooltip    = "surface.panel_soft",
+    inset      = "surface.sunken",
+}
+
+-- Does this panel's cell map target the named view?
+local function _panelTargetsView(panelSpec, viewName)
+    return _resolvePanelCell(panelSpec, viewName) ~= nil
+end
+
+-- Does this panel target ONLY standalone views? (used by excludeStandalone)
+local function _panelIsStandaloneOnly(panelSpec, views)
+    if not panelSpec.cell then return false end
+    local any = false
+    for vName in pairs(panelSpec.cell) do
+        any = true
+        local v = views[vName]
+        if not (v and v.standalone) then return false end
+    end
+    return any  -- false for cell-less panels (defensive)
+end
+
+-- View-scope filter: opts.viewFilter restricts to one view; opts.excludeStandalone
+-- skips standalone-only panels. Sections/widgets inherit the enclosing panel's verdict.
+local function _makePanelPassesFilter(viewFilter, excludeStandalone, views)
+    return function(panelSpec)
+        if viewFilter and not _panelTargetsView(panelSpec, viewFilter) then return false end
+        if excludeStandalone and _panelIsStandaloneOnly(panelSpec, views) then return false end
+        return true
+    end
+end
+
+-- Build a widget by looking up its WidgetType and calling .build.
+-- Returns nil if the kind isn't registered or has no build fn.
+--
+-- Spec section 5: engines are views over the WidgetTypes registry. After
+-- build, this consults the kind's `skin` field (string role name per spec
+-- section 22) and registers with the Theme engine. Kinds needing a
+-- non-default initial Skinner state (chip's `status`) declare an
+-- `initialState(spec)` function on the WidgetType; the result is passed
+-- through Theme:Register so the role + state land together.
+--
+-- Build callbacks NEVER call Theme:Register on the kind's root widget --
+-- one source of truth for paint role assignment.
+local function _makeBuildKind(env)
+    return function(kind, parent, spec)
+        local kindDef = HDG.WidgetTypes:Get(kind)  -- errors loudly if missing
+        local widget = kindDef.build(parent, spec)
+        if not widget then return nil end
+        widget._hdgrKind = kind  -- engine introspection (spec section 5)
+        -- Per-spec skin override (spec.skin) wins over the kind's default skin --
+        -- lets a panel paint a non-Frame role (e.g. navPanel -> NavRegion
+        -- panel_soft) without a dedicated kind. Falls back to kindDef.skin.
+        local skinRole = spec.skin or kindDef.skin
+        if skinRole then
+            local state = nil
+            if kindDef.initialState then state = kindDef.initialState(spec) end
+            HDG.Theme:Register(widget, skinRole, state, env)
+        end
+        -- Central tooltip wiring: single point of attach for every kind.
+        -- TE handles false (no-op), {recipe=…} (registry), and inline shapes.
+        -- TE:Attach's _hdgrTooltipAttached guard prevents double-wire.
+        HDG.TooltipEngine:Attach(widget, spec.tooltip)
+        return widget
+    end
+end
+
+-- Build top-level panels. Skips defaultEnabled=false, already-built, or filtered.
+local function _buildPanels(config, rootFrame, buildKind, panelPassesFilter)
+    for panelId, panelSpec in pairs(config.panels or {}) do
+        if panelSpec.defaultEnabled ~= false
+           and not rootFrame.panels[panelId]
+           and panelPassesFilter(panelSpec)
+        then
+            local panel = buildKind(panelSpec.kind or "panel", rootFrame, panelSpec)
+            if panel then
+                panel.id = panelId
+                rootFrame.panels[panelId] = panel
+            end
+        end
+    end
+end
+
+-- Attach a theme-tinted background texture to a chrome frame so the
+-- Blizzard template's bleed (brown wood / slate) is hidden under our
+-- palette. SectionBgTint Skinner reads token via Register's stateTable.
+local function _attachChromeBgTint(sectionFrame, chrome)
+    local bgToken = CHROME_BG_TOKEN[chrome]
+    if not (bgToken and sectionFrame.CreateTexture) then return end
+    local tint = sectionFrame:CreateTexture(nil, "BACKGROUND", nil, 1)
+    if not tint then return end
+    tint:SetAllPoints()
+    HDG.Theme:Register(tint, "SectionBgTint", { token = bgToken })
+    sectionFrame._hdgrBgTint = tint
+    -- card: 3px semantic.accent left bar. BORDER layer so it sits above the bg fill.
+    if chrome == "card" then
+        local bar = sectionFrame:CreateTexture(nil, "BORDER")
+        bar:SetPoint("TOPLEFT", 0, 0)
+        bar:SetPoint("BOTTOMLEFT", 0, 0)
+        bar:SetWidth(3)
+        HDG.Theme:Register(bar, "SectionBgTint", { token = "semantic.accent" })
+        sectionFrame._hdgrAccentBar = bar
+    elseif chrome == "cardBorder" then
+        -- 1px border.default edge on all four sides (no accent stripe). Each edge is a
+        -- texture registered with the SectionBgTint skinner so it re-tints on theme switch.
+        local function _edge(p1, p2, w, h)
+            local t = sectionFrame:CreateTexture(nil, "BORDER")
+            t:SetPoint(p1, 0, 0); t:SetPoint(p2, 0, 0)
+            if w then t:SetWidth(w) end
+            if h then t:SetHeight(h) end
+            HDG.Theme:Register(t, "SectionBgTint", { token = "border.default" })
+            return t
+        end
+        sectionFrame._hdgrBorder = {
+            _edge("TOPLEFT",    "TOPRIGHT",    nil, 1),  -- top
+            _edge("BOTTOMLEFT", "BOTTOMRIGHT", nil, 1),  -- bottom
+            _edge("TOPLEFT",    "BOTTOMLEFT",  1,  nil), -- left
+            _edge("TOPRIGHT",   "BOTTOMRIGHT", 1,  nil), -- right
+        }
+    end
+end
+
+-- Build one section chrome frame inside its enclosing panel. Returns the
+-- created frame or nil if either (a) the section doesn't opt-in to chrome,
+-- or (b) the enclosing panel didn't build in this BuildAll call (view-
+-- scope filter). `template == false` (vs string) means "create plain
+-- Frame, no inheritance" -- used by `inset` so we can paint our own
+-- sunken look without fighting Blizzard's NineSlice borders.
+local function _buildOneSectionChrome(sectionId, sectionSpec, config, rootFrame, enclosingPanelOK)
+    local chrome    = sectionSpec.chrome
+    local hasChrome = chrome ~= nil and CHROME_TEMPLATES[chrome] ~= nil
+    if not hasChrome then return end
+    if rootFrame.sections[sectionId] then return end
+    local panelId = findEnclosingPanel(sectionId, config)
+    if not enclosingPanelOK(panelId) then return end
+    local template     = CHROME_TEMPLATES[chrome]
+    local inheritsFrom = (type(template) == "string") and template or nil
+    local panelFrame   = rootFrame.panels[panelId]
+    local sectionFrame = CreateFrame("Frame", nil, panelFrame, inheritsFrom)
+    if not sectionFrame then return end
+    sectionFrame.id = sectionId
+    rootFrame.sections[sectionId] = sectionFrame
+    _attachChromeBgTint(sectionFrame, chrome)
+end
+
+-- Build chrome frames for sections (chrome = "card"|"inset"|"tooltip"|...).
+-- Parents to the enclosing panel; becomes widget parent for the section's children.
+-- -- engine-internal
+local function _buildSectionChromes(config, rootFrame, enclosingPanelOK)
+    if not CreateFrame then return end
+    for sectionId, sectionSpec in pairs(config.sections or {}) do
+        _buildOneSectionChrome(sectionId, sectionSpec, config, rootFrame, enclosingPanelOK)
+    end
+end
+
+-- Build one panel-slot chrome frame (pure backdrop, lower frame level so
+-- widgets in the slot render on top). Skinner application is DEFERRED via
+-- _pendingSkin -- running it pre-Apply at zero size lets CreateTexture-
+-- based skinners (PanelHeader) anchor SetAllPoints into 0x0 and the bg
+-- never paints until next refresh (visible header flicker).
+local function _buildOneSlotChrome(panelId, slotName, slotSpec, panelFrame, rootFrame)
+    local skinName = slotSpec.chrome
+    local key      = panelId .. "." .. slotName
+    if not (skinName and not rootFrame.slotChromes[key]) then return end
+    local chrome = CreateFrame("Frame", nil, panelFrame, "BackdropTemplate")
+    if not chrome then return end
+    if chrome.SetFrameLevel and panelFrame.GetFrameLevel then
+        chrome:SetFrameLevel(panelFrame:GetFrameLevel())
+    end
+    chrome._pendingSkin = skinName
+    rootFrame.slotChromes[key] = chrome
+end
+
+-- Build chrome frames for panel slots (slot.chrome = skinner key). Widgets
+-- still parent to the panel; chrome sits at a lower frame level.
+local function _buildSlotChromes(config, rootFrame)
+    rootFrame.slotChromes = rootFrame.slotChromes or {}
+    if not CreateFrame then return end
+    for panelId, panelSpec in pairs(config.panels or {}) do
+        local panelFrame = rootFrame.panels[panelId]
+        if panelFrame and panelSpec.slots then
+            for slotName, slotSpec in pairs(panelSpec.slots) do
+                _buildOneSlotChrome(panelId, slotName, slotSpec, panelFrame, rootFrame)
+            end
+        end
+    end
+end
+
+-- Resolve the parent frame for a widget. Returns (parent, ok). ok=false
+-- means skip this widget (view-scope filter scattered its container into
+-- a different BuildAll call's rootFrame).
+local function _resolveWidgetParent(widgetId, config, rootFrame, viewFilter, excludeStandalone)
+    local containerId, containerKind = findEnclosingContainer(widgetId, config)
+    if containerKind == "section" then
+        local parent = rootFrame.sections[containerId]
+        return parent, parent ~= nil
+    end
+    if containerId then
+        local parent = rootFrame.panels[containerId]
+        return parent, parent ~= nil
+    end
+    -- No enclosing container declared -> top-level widget. Only allowed
+    -- when this is an unfiltered build.
+    return rootFrame, not (viewFilter or excludeStandalone)
+end
+
+-- Build leaf widgets. Skips if parent wasn't built in this rootFrame.
+local function _buildWidgets(config, rootFrame, buildKind, viewFilter, excludeStandalone)
+    for widgetId, widgetSpec in pairs(config.widgets or {}) do
+        if widgetSpec.defaultEnabled ~= false and not rootFrame.widgets[widgetId] then
+            local parent, ok = _resolveWidgetParent(widgetId, config, rootFrame, viewFilter, excludeStandalone)
+            if ok then
+                local widget = buildKind(widgetSpec.kind, parent, widgetSpec)
+                if widget then
+                    widget.id = widgetId
+                    rootFrame.widgets[widgetId] = widget
+                end
+            end
+        end
+    end
+end
+
+function Layout:BuildAll(rootFrame, config, env, opts)
+    if not rootFrame then return end
+    config = config or HDG.LayoutConfig or {}
+    rootFrame.panels   = rootFrame.panels   or {}
+    rootFrame.widgets  = rootFrame.widgets  or {}
+    rootFrame.sections = rootFrame.sections or {}
+
+    -- env enables sub-tree previews (alt scheme) without touching
+    -- Theme.currentScheme. Callers that skip env get the engine's currentScheme.
+    env = env or HDG.Environment._current
+
+    opts = opts or {}
+    local viewFilter        = opts.viewFilter
+    local excludeStandalone = opts.excludeStandalone == true
+    local views             = (config.window and config.window.views) or {}
+    local panelPassesFilter = _makePanelPassesFilter(viewFilter, excludeStandalone, views)
+    local buildKind         = _makeBuildKind(env)
+    local function enclosingPanelOK(panelId)
+        return panelId ~= nil and rootFrame.panels[panelId] ~= nil
+    end
+
+    _buildPanels(config, rootFrame, buildKind, panelPassesFilter)
+    _buildSectionChromes(config, rootFrame, enclosingPanelOK)
+    _buildSlotChromes(config, rootFrame)
+    _buildWidgets(config, rootFrame, buildKind, viewFilter, excludeStandalone)
+end
+
+-- Validation -- catches typos in `in`, `slot`, `kind`, `cell`. --------------
+
+-- Closed-schema field allow-lists. A widget spec may declare ANY field in the
+-- universal set PLUS any field its WidgetType registration declares in its
+-- `specFields` list. Anything else is a typo (`placholder`) or schema drift
+-- (`formatFn`); the validator rejects it loud. Panels + sections have their
+-- own field sets -- they're structurally distinct from widgets.
+local UNIVERSAL_WIDGET_FIELDS = {
+    kind = true, ["in"] = true, slot = true, order = true,
+    binding = true, visible = true, defaultEnabled = true,
+    width = true, height = true,
+    skin = true,  -- per-spec skin override (spec.skin > kind default); honored in _makeBuildKind
+    -- Universal-required tooltip declaration. Every widget must declare
+    -- tooltip = false (explicit no-tooltip) OR tooltip = { recipe = "Name" }
+    -- where Name resolves in HDG.TooltipRecipes. Enforced in Layout:Validate.
+    -- Catches "should-have-tooltip-but-doesn't" silently. See VDS migration
+    -- (VamoosesDyeStudio/docs/VDS_TOOLTIP_MIGRATION.md) for the design rationale.
+    tooltip = true,
+}
+local PANEL_SPEC_FIELDS = {
+    kind = true, cell = true, slots = true, frameName = true,
+    visible = true, defaultEnabled = true, visibleInViews = true,
+    bodyLayout = true, chrome = true,
+    padding = true, gap = true,
+    skin = true,  -- per-spec skin override (e.g. navPanel -> NavRegion); honored in _makeBuildKind
+}
+local SECTION_SPEC_FIELDS = {
+    ["in"] = true, slot = true, order = true,
+    layout = true, padding = true, gap = true, chrome = true,
+    visible = true, align = true, visibleInViews = true,   -- buildChildIndex honors it for sections too
+    -- Sections accept the same width/height overrides as widgets -- e.g.
+    -- a fixed-height column header or a "width = fill" slack absorber row.
+    -- The Layout engine reads these in resolveSection. Documented + tested.
+    width = true, height = true,
+}
+Layout._UNIVERSAL_WIDGET_FIELDS = UNIVERSAL_WIDGET_FIELDS  -- exported for tests
+Layout._PANEL_SPEC_FIELDS       = PANEL_SPEC_FIELDS
+Layout._SECTION_SPEC_FIELDS     = SECTION_SPEC_FIELDS
+
+-- ===== Layout:Validate helpers ============================================
+-- Each `_validateX` takes `err` (the error-accumulator closure) so the
+-- orchestrator owns it; shared helpers (`_validateContainerPlacement`,
+-- `_buildContainerIndexes`, etc.) are reused across panel/section/widget
+-- validators to kill the parent/slot/order/`in` duplication that was
+-- copied across three blocks.
+
+local function _hasKind(kind)
+    return HDG.WidgetTypes:TryGet(kind) ~= nil
+end
+
+-- Acceptable shape for window view width/height: number OR literal "auto"
+-- (M1 derives the size from columns+rows+padding+gap via GetViewDimensions).
+local function _validDim(v) return type(v) == "number" or v == "auto" end
+
+local function _validateWindowView(viewName, viewSpec, err)
+    if not _validDim(viewSpec.width) then
+        err(("config.window.views.%s.width must be a number or \"auto\""):format(viewName))
+    end
+    if not _validDim(viewSpec.height) then
+        err(("config.window.views.%s.height must be a number or \"auto\""):format(viewName))
+    end
+    if not viewSpec.columns then
+        err(("config.window.views.%s.columns is required"):format(viewName))
+    end
+    if not viewSpec.rows then
+        err(("config.window.views.%s.rows is required"):format(viewName))
+    end
+    -- Optional dynamic-tracks selectors. Must be string keys (selector
+    -- names); actual selector resolution happens at runtime in ResolveViewTracks.
+    if viewSpec.dynamicColumns ~= nil and type(viewSpec.dynamicColumns) ~= "string" then
+        err(("config.window.views.%s.dynamicColumns must be a selector name string"):format(viewName))
+    end
+    if viewSpec.dynamicRows ~= nil and type(viewSpec.dynamicRows) ~= "string" then
+        err(("config.window.views.%s.dynamicRows must be a selector name string"):format(viewName))
+    end
+    -- Cells must carry numeric col/row + colSpan/rowSpan -- _sumSpannedTracks and
+    -- _computeLiveRowsCols do `start + span - 1` arithmetic, so a missing span is a
+    -- latent runtime nil-crash. Catch it at startup.
+    for cellName, cellSpec in pairs(viewSpec.cells or {}) do
+        if type(cellSpec.col) ~= "number" or type(cellSpec.row) ~= "number"
+           or type(cellSpec.colSpan) ~= "number" or type(cellSpec.rowSpan) ~= "number" then
+            err(("config.window.views.%s.cells.%s needs numeric col/row/colSpan/rowSpan")
+                :format(viewName, tostring(cellName)))
+        end
+    end
+end
+
+-- Window shape: missing height/mode/mode.width would silently become 0
+-- at runtime without these checks (now that defensive defaults are gone).
+-- Catch them at startup instead.
+local function _validateWindow(windowCfg, err)
+    if not windowCfg then
+        err("config.window is missing")
+        return
+    end
+    if not windowCfg.views or type(windowCfg.views) ~= "table" then
+        err("config.window.views must be a table")
+        return
+    end
+    if not windowCfg.defaultView then
+        err("config.window.defaultView is required")
+    elseif not windowCfg.views[windowCfg.defaultView] then
+        err(("config.window.defaultView = %q does not exist in window.views"):format(
+            tostring(windowCfg.defaultView)))
+    end
+    for viewName, viewSpec in pairs(windowCfg.views) do
+        _validateWindowView(viewName, viewSpec, err)
+    end
+end
+
+-- Build (containerIds, panelSlots) -- the resolution maps consumed by
+-- per-spec parent/slot validators below.
+local function _buildContainerIndexes(config)
+    local containerIds = {}
+    for id in pairs(config.panels or {}) do containerIds[id] = "panel" end
+    for id in pairs(config.sections or {}) do containerIds[id] = "section" end
+    local panelSlots = {}
+    for id, spec in pairs(config.panels or {}) do
+        panelSlots[id] = { body = true }
+        for slotName in pairs(spec.slots or {}) do
+            panelSlots[id][slotName] = true
+        end
+    end
+    return containerIds, panelSlots
+end
+
+-- Resolve the layout direction for a container reference (panel.slot,
+-- panel body, or section). Returns "vertical" / "horizontal" / "fill",
+-- or nil when (parentId, slot) doesn't name a known container.
+--
+-- The fallback chain for panels: slot.layout > implicit-by-name
+-- (header/footer => horizontal) > panel.bodyLayout > "vertical".
+-- For sections: section.layout > "vertical".
+local function _resolveContainerLayout(config, parentId, slot)
+    if not parentId then return nil end
+    local panelSpec = config.panels and config.panels[parentId]
+    if panelSpec then
+        if slot then
+            local slotSpec = (panelSpec.slots or {})[slot]
+            if slotSpec then return _defaultSlotLayout(slot, slotSpec.layout) end
+        end
+        return panelSpec.bodyLayout or "vertical"
+    end
+    local sectionSpec = config.sections and config.sections[parentId]
+    if sectionSpec then return sectionSpec.layout or "vertical" end
+    return nil
+end
+
+-- Returns isStackedContainer(parentId, slot) -> bool closure over config.
+-- Stacked containers (vertical/horizontal layout) require explicit `order`
+-- on every child -- silent default-to-0 sorts ABOVE explicitly-ordered
+-- siblings, which has bitten us before (May 2026 indexHeader-at-bottom).
+local function _makeIsStackedContainer(config)
+    return function(parentId, slot)
+        local layout = _resolveContainerLayout(config, parentId, slot)
+        return layout == "vertical" or layout == "horizontal"
+    end
+end
+
+-- Mis-keying audit: catch widget specs accidentally placed in
+-- config.panels (structurally invisible bug class -- see HouseTab/Trainers
+-- May 2026 pass). Three rules:
+--   config.panels   -> must not have `in` (panels use `cell`)
+--                      must not be a leaf widget kind (has dispatch)
+--   config.sections -> must not have `kind` (sections are layout, not widget)
+--   config.widgets  -> must not have `cell` (cell is panel placement)
+local function _validatePanelsMiskeying(panels, err)
+    for id, spec in pairs(panels) do
+        if spec["in"] then
+            err(("panel %q has `in` = %q -- panels are placed via `cell`, not `in`."
+                .. " Did you mean to put this in config.widgets or config.sections?")
+                :format(id, tostring(spec["in"])))
+        end
+        -- Heuristic: leaf widgets have a `dispatch` field on their
+        -- WidgetType registration (they need refresh on state changes);
+        -- containers do not. Validator queries the registry, not the name.
+        if spec.kind then
+            local kindDef = HDG.WidgetTypes:TryGet(spec.kind)
+            if kindDef and kindDef.dispatch then
+                err(("panel %q has kind = %q -- that's a leaf widget kind "
+                    .. "(has dispatch). Did you mean to put this in config.widgets?")
+                    :format(id, spec.kind))
+            end
+        end
+    end
+end
+
+local function _validateSectionsMiskeying(sections, err)
+    for id, spec in pairs(sections) do
+        if spec.kind then
+            err(("section %q has `kind` = %q -- sections don't have a kind."
+                .. " Did you mean config.widgets?"):format(id, tostring(spec.kind)))
+        end
+    end
+end
+
+local function _validateWidgetsMiskeying(widgets, err)
+    for id, spec in pairs(widgets) do
+        if spec.cell then
+            err(("widget %q has `cell` = %s -- cell is panel placement, not widget."
+                .. " Did you mean config.panels?"):format(id, tostring(spec.cell)))
+        end
+    end
+end
+
+local function _validateMiskeying(config, err)
+    _validatePanelsMiskeying(config.panels or {}, err)
+    _validateSectionsMiskeying(config.sections or {}, err)
+    _validateWidgetsMiskeying(config.widgets or {}, err)
+end
+
+-- Shared parent/slot/order placement check. Used by BOTH section and
+-- widget validators -- DRY'd from the original two near-identical inline
+-- blocks. `entity` is "section" or "widget" for the error message; the
+-- behavior is otherwise identical.
+local function _validateContainerPlacement(entity, id, spec, containerIds, panelSlots, isStackedContainer, err)
+    local parent = spec["in"]
+    if not parent then
+        err(("%s %q: missing `in` field"):format(entity, id))
+        return
+    end
+    if not containerIds[parent] then
+        err(("%s %q: `in` = %q does not resolve to a panel or section"):format(entity, id, parent))
+        return
+    end
+    if spec.slot then
+        if containerIds[parent] == "panel" and not panelSlots[parent][spec.slot] then
+            err(("%s %q: slot %q not declared on panel %q"):format(entity, id, spec.slot, parent))
+        elseif containerIds[parent] == "section" then
+            err(("%s %q: slot %q is ignored because parent %q is a section, not a panel")
+                :format(entity, id, spec.slot, parent))
+        end
+    end
+    if isStackedContainer(parent, spec.slot) and spec.order == nil then
+        err(("%s %q: `in` = %q is a stacked container; `order` is required")
+            :format(entity, id, tostring(parent)))
+    end
+end
+
+-- Closed-schema field check. allowed[] is { fieldName -> true } from the
+-- per-entity spec-fields constant (PANEL_SPEC_FIELDS / SECTION_SPEC_FIELDS /
+-- UNIVERSAL_WIDGET_FIELDS + kindDef.specFields for widgets).
+local function _validateClosedSchema(entity, id, spec, allowed, label, err)
+    for fieldName in pairs(spec) do
+        if not allowed[fieldName] then
+            err(("%s %q: unknown field %q -- not in %s. Typo? Wrong sub-table?")
+                :format(entity, id, fieldName, label))
+        end
+    end
+end
+
+-- Selector-reference fields: `binding` (widgets) and `visible` (widgets,
+-- panels, sections) may name a selector. A string that isn't a static:/locale:
+-- literal is a selector name and MUST resolve in HDG.Selectors -- otherwise
+-- the typo degrades silently: Selectors:Call returns nil for an unknown name,
+-- so a bad `binding` paints an empty widget and a bad `visible` hides the
+-- entity outright (resolveVisible treats nil as hidden). Closes the
+-- binding/visible -> selector taxonomy the same way kind / rowKind / tooltip
+-- recipe are already closed: a loud boot print, not silent-empty UI.
+local function _isSelectorRef(v)
+    return type(v) == "string"
+        and v:sub(1, 7) ~= "static:"
+        and v:sub(1, 7) ~= "locale:"
+end
+
+local function _validateSelectorRefs(entity, id, spec, err)
+    local binding = spec.binding
+    if _isSelectorRef(binding) then
+        if not HDG.Selectors:Has(binding) then
+            err(("%s %q: binding %q is not a registered selector"):format(entity, id, binding))
+        end
+    elseif type(binding) == "table" then
+        for field, ref in pairs(binding) do
+            if _isSelectorRef(ref) and not HDG.Selectors:Has(ref) then
+                err(("%s %q: binding.%s = %q is not a registered selector")
+                    :format(entity, id, tostring(field), ref))
+            end
+        end
+    end
+    -- `visible` string form is always a selector name (resolveVisible does no
+    -- static:/locale: prefixing); boolean / function forms are non-selector.
+    if type(spec.visible) == "string" and not HDG.Selectors:Has(spec.visible) then
+        err(("%s %q: visible %q is not a registered selector"):format(entity, id, spec.visible))
+    end
+end
+
+local function _validatePanel(id, spec, config, err)
+    if spec.kind and not _hasKind(spec.kind) then
+        err(("panel %q: kind %q is not a registered WidgetType"):format(id, spec.kind))
+    end
+    _validateClosedSchema("panel", id, spec, PANEL_SPEC_FIELDS, "PANEL_SPEC_FIELDS", err)
+    _validateSelectorRefs("panel", id, spec, err)
+    for view, cellName in pairs(spec.cell or {}) do
+        local viewSpec = (config.window and config.window.views or {})[view]
+        if not viewSpec then
+            err(("panel %q: cell view %q does not exist in window.views"):format(id, view))
+        elseif not (viewSpec.cells and viewSpec.cells[cellName]) then
+            err(("panel %q: cell %q does not exist in window.views.%s.cells")
+                :format(id, cellName, view))
+        end
+    end
+end
+
+local function _validateSection(id, spec, containerIds, panelSlots, isStackedContainer, err)
+    _validateClosedSchema("section", id, spec, SECTION_SPEC_FIELDS, "SECTION_SPEC_FIELDS", err)
+    _validateSelectorRefs("section", id, spec, err)
+    _validateContainerPlacement("section", id, spec, containerIds, panelSlots, isStackedContainer, err)
+end
+
+-- Kinds whose construction requires a `font` field on the spec.
+local _TEXT_BEARING_KINDS = {
+    label = true,        -- + role ("TextDim"/"TextStatus") drives paint role
+    button = true, editbox = true,
+    chip = true,         -- chip has a label
+}
+
+-- Per-instance font requirement: text-bearing kinds may declare a
+-- `requiresFont(spec) -> bool` predicate on their WidgetType to suppress
+-- the font requirement for specific spec shapes (icon-only button variants
+-- are the canonical case). Engines query the registry, never peek at
+-- the spec internals directly. (Spec section 5.)
+local function _specRequiresFont(spec)
+    if not _TEXT_BEARING_KINDS[spec.kind] then return false end
+    local kindDef = HDG.WidgetTypes:TryGet(spec.kind)
+    if kindDef and kindDef.requiresFont then
+        return kindDef.requiresFont(spec) == true
+    end
+    return true
+end
+
+-- Closed-schema check for widgets. Allowed set is the union of
+-- UNIVERSAL_WIDGET_FIELDS + per-kind specFields. Delegates the actual
+-- check to _validateClosedSchema (shared with panel/section).
+local function _validateWidgetSpecFields(id, spec, err)
+    if not (spec.kind and _hasKind(spec.kind)) then return end
+    local kindDef = HDG.WidgetTypes:TryGet(spec.kind)
+    if not kindDef.specFields then return end
+    local allowed = {}
+    for k in pairs(UNIVERSAL_WIDGET_FIELDS) do allowed[k] = true end
+    for _, fieldName in ipairs(kindDef.specFields) do allowed[fieldName] = true end
+    _validateClosedSchema("widget", id, spec, allowed,
+        ("UNIVERSAL_WIDGET_FIELDS or WidgetType[%q].specFields"):format(spec.kind), err)
+end
+
+-- Universal-required tooltip declaration. Every widget MUST declare:
+--   tooltip = false                  -- explicit no-tooltip
+--   tooltip = { recipe = "Name" }    -- name resolves in HDG.TooltipRecipes
+-- Catches "should-have-tooltip-but-doesn't" silently. Inline strings,
+-- inline tables, inline functions REJECTED at boot -- content lives in
+-- the recipe registry only. See VDS migration doc + cookbook.
+local function _validateWidgetTooltip(id, spec, err)
+    local tip = spec.tooltip
+    if tip == nil then
+        err(("widget %q (kind %q): missing required `tooltip` field -- "
+            .. "declare tooltip = false OR tooltip = { recipe = \"Name\" }")
+            :format(id, tostring(spec.kind)))
+        return
+    end
+    if tip == false then return end  -- explicit no-tooltip; valid
+    if type(tip) ~= "table" then
+        err(("widget %q (kind %q): tooltip must be false OR { recipe = \"Name\" } -- got %s. "
+            .. "Inline strings/tables/functions are not allowed; use a named recipe.")
+            :format(id, tostring(spec.kind), type(tip)))
+        return
+    end
+    if type(tip.recipe) ~= "string" then
+        err(("widget %q (kind %q): tooltip table must be { recipe = \"Name\" } -- got recipe = %s")
+            :format(id, tostring(spec.kind), type(tip.recipe)))
+        return
+    end
+    if HDG.TooltipRecipes == nil then
+        err(("widget %q: HDG.TooltipRecipes registry missing -- check "
+            .. "Core/HDGR_TooltipRecipes.lua load order in .toc"):format(id))
+        return
+    end
+    if HDG.TooltipRecipes[tip.recipe] == nil then
+        err(("widget %q (kind %q): tooltip recipe %q not registered in HDG.TooltipRecipes")
+            :format(id, tostring(spec.kind), tip.recipe))
+    end
+end
+
+-- Scrollboxes that reference a rowKind must resolve to a registered
+-- HDG.Rows entry. Scrollboxes without rowKind require `rowHeight` inline.
+local function _validateWidgetScrollbox(id, spec, err)
+    if spec.kind ~= "scrollbox" then return end
+    if spec.rowKind then
+        local def = HDG.Rows.Get and HDG.Rows:Get(spec.rowKind) or nil
+        if not def then
+            err(("widget %q: scrollbox rowKind %q not registered in HDG.Rows")
+                :format(id, spec.rowKind))
+        end
+        return
+    end
+    if not spec.rowHeight then
+        err(("widget %q: scrollbox without rowKind requires `rowHeight` field"):format(id))
+    end
+end
+
+local function _validateWidget(id, spec, containerIds, panelSlots, isStackedContainer, err)
+    if not spec.kind then
+        err(("widget %q: missing `kind` field"):format(id))
+    elseif not _hasKind(spec.kind) then
+        err(("widget %q: kind %q is not a registered WidgetType"):format(id, spec.kind))
+    end
+    _validateContainerPlacement("widget", id, spec, containerIds, panelSlots, isStackedContainer, err)
+    if spec.kind and _specRequiresFont(spec) and not spec.font then
+        err(("widget %q: kind %q is text-bearing and requires a `font` role")
+            :format(id, spec.kind))
+    end
+    _validateWidgetSpecFields(id, spec, err)
+    _validateWidgetTooltip(id, spec, err)
+    _validateWidgetScrollbox(id, spec, err)
+    _validateSelectorRefs("widget", id, spec, err)
+end
+
+function Layout:Validate(config)
+    config = config or HDG.LayoutConfig or {}
+    local errors = {}
+    local function err(msg) errors[#errors + 1] = msg end
+
+    _validateWindow(config.window, err)
+    local containerIds, panelSlots = _buildContainerIndexes(config)
+    local isStackedContainer = _makeIsStackedContainer(config)
+    _validateMiskeying(config, err)
+
+    for id, spec in pairs(config.panels or {}) do
+        _validatePanel(id, spec, config, err)
+    end
+    for id, spec in pairs(config.sections or {}) do
+        _validateSection(id, spec, containerIds, panelSlots, isStackedContainer, err)
+    end
+    for id, spec in pairs(config.widgets or {}) do
+        _validateWidget(id, spec, containerIds, panelSlots, isStackedContainer, err)
+    end
+
+    return errors
+end
+
+-- ===== DescribeView (debug helper) =========================================
+-- Returns a multi-line string showing the layout chain for a view:
+--   view dimensions -> body padding -> per-panel slot widths -> section
+--   widths -> widget widths. Uses HDG.mainFrame.placements (the live
+--   resolved values) so the dump matches what's actually rendered.
+--
+-- Surfaced via the Debug tab's layout input + "Describe" button so a
+-- contributor doing card-grid math doesn't have to walk 4 files. Width
+-- formula for card grids:
+--   cardgrid_inner = N * cellSize + (N-1) * cellSpacing + (chrome inset pad)
+--   scrollbox_width = host - HDG.UI.SCROLLBOX_SCROLLBAR_RESERVE
+--   host = centerColumn (a `fill` widget gets the slack from contentRow)
+-- ===== Layout:DescribeView helpers ========================================
+
+-- Format the placement string for a given id. "(not placed)" when the
+-- Layout pipeline hasn't produced a placement (e.g. defaultEnabled=false).
+local function _formatPlacement(placements, id)
+    local p = placements[id]
+    if not p then return "(not placed)" end
+    return ("%dx%d"):format(p.width or 0, p.height or 0)
+end
+
+-- Build the bracketed "[chrome=card, pad=4, ...]" string for a spec.
+-- Returns empty string when no extra fields are present.
+local function _formatSpecExtras(spec)
+    local extras = {}
+    if spec.chrome  then extras[#extras + 1] = "chrome=" .. spec.chrome end
+    if spec.padding then extras[#extras + 1] = "pad="    .. tostring(spec.padding) end
+    if spec.gap     then extras[#extras + 1] = "gap="    .. tostring(spec.gap)     end
+    if spec.layout  then extras[#extras + 1] = "layout=" .. spec.layout end
+    if spec.kind    then extras[#extras + 1] = "kind="   .. spec.kind   end
+    if #extras == 0 then return "" end
+    return "  [" .. table.concat(extras, ", ") .. "]"
+end
+
+-- "Unknown view foo -- known: a, b, c" error string.
+local function _describeUnknownView(viewName, config)
+    local known = {}
+    for name in pairs(config.window.views) do known[#known + 1] = name end
+    table.sort(known)
+    return ("unknown view %q -- known: %s"):format(tostring(viewName), table.concat(known, ", "))
+end
+
+-- Build the childrenOf reverse-index: { [parentId] = { {id, kind, spec, order}, ... } }
+-- Both sections and widgets contribute. Lists sorted by spec.order for
+-- deterministic walk output.
+local function _buildChildrenOfIndex(config)
+    local childrenOf = {}
+    local function addChild(parentId, id, kind, spec)
+        if not parentId then return end
+        childrenOf[parentId] = childrenOf[parentId] or {}
+        childrenOf[parentId][#childrenOf[parentId] + 1] = {
+            id = id, kind = kind, spec = spec, order = spec.order
+        }
+    end
+    for id, spec in pairs(config.sections or {}) do
+        addChild(spec["in"], id, "section", spec)
+    end
+    for id, spec in pairs(config.widgets or {}) do
+        addChild(spec["in"], id, "widget", spec)
+    end
+    for _, list in pairs(childrenOf) do
+        table.sort(list, function(a, b) return (a.order or 0) < (b.order or 0) end)  -- fill/overlay sections omit order
+    end
+    return childrenOf
+end
+
+-- Recursive child walker. Appends "<indent>section foo: 100x200  (spec 100x200)
+-- [chrome=card]" lines to `out` for each descendant of parentId.
+local function _walkChildren(parentId, indent, childrenOf, placements, out)
+    local list = childrenOf[parentId]
+    if not list then return end
+    for _, c in ipairs(list) do
+        local spec = c.spec
+        out[#out + 1] = ("%s%-7s %s: %s  (spec %sx%s)%s"):format(
+            indent, c.kind, c.id,
+            _formatPlacement(placements, c.id),
+            tostring(spec.width or "?"), tostring(spec.height or "?"),
+            _formatSpecExtras(spec))
+        _walkChildren(c.id, indent .. "  ", childrenOf, placements, out)
+    end
+end
+
+-- View header section: "view X: 800x600" + columns/rows track lists.
+local function _describeViewHeader(out, viewName, viewSpec, vw, vh)
+    out[#out + 1] = ("view %s: %dx%d"):format(viewName, vw, vh)
+    if viewSpec.columns then
+        out[#out + 1] = ("  columns: { %s }"):format(table.concat(viewSpec.columns, ", "))
+    end
+    if viewSpec.rows then
+        local rowStrs = {}
+        for _, r in ipairs(viewSpec.rows) do rowStrs[#rowStrs + 1] = tostring(r) end
+        out[#out + 1] = ("  rows: { %s }"):format(table.concat(rowStrs, ", "))
+    end
+end
+
+-- Print one panel header + its slots + recurse into its descendants.
+local function _describeOnePanel(out, panelId, panelSpec, viewName, viewSpec, placements, childrenOf)
+    local cellName = _resolvePanelCell(panelSpec, viewName)
+    if not (cellName and viewSpec.cells and viewSpec.cells[cellName]) then return end
+    out[#out + 1] = ("panel  %s [cell=%s]: %s"):format(
+        panelId, cellName, _formatPlacement(placements, panelId))
+    if panelSpec.slots then
+        for slotName in pairs(panelSpec.slots) do
+            out[#out + 1] = ("  slot %s"):format(slotName)
+        end
+    end
+    _walkChildren(panelId, "  ", childrenOf, placements, out)
+end
+
+-- Iterate panels visible in this view + print each.
+local function _describeViewPanels(out, config, viewName, viewSpec, placements, childrenOf)
+    for panelId, panelSpec in pairs(config.panels or {}) do
+        _describeOnePanel(out, panelId, panelSpec, viewName, viewSpec, placements, childrenOf)
+    end
+end
+
+-- Footer hint: scrollbar reserve constant for card-grid math debugging.
+local function _describeViewFooter(out)
+    out[#out + 1] = ""
+    out[#out + 1] = ("scrollbox scrollbar reserve: %d px"):format(
+        HDG.UI.SCROLLBOX_SCROLLBAR_RESERVE)
+end
+
+function Layout:DescribeView(viewName)
+    local config = HDG.LayoutConfig
+    if not (config and config.window and config.window.views) then
+        return "Layout:DescribeView: HDG.LayoutConfig missing"
+    end
+    local viewSpec = config.window.views[viewName]
+    if not viewSpec then return _describeUnknownView(viewName, config) end
+
+    local placements = (HDG.mainFrame and HDG.mainFrame.placements) or {}  -- exception(boundary): optional module / not yet built
+    local out = {}
+    local vw, vh = self:GetViewDimensions(config, viewName)
+    local childrenOf = _buildChildrenOfIndex(config)
+
+    _describeViewHeader(out, viewName, viewSpec, vw, vh)
+    _describeViewPanels(out, config, viewName, viewSpec, placements, childrenOf)
+    _describeViewFooter(out)
+
+    return table.concat(out, "\n")
+end
