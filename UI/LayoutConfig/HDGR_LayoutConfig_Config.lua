@@ -154,7 +154,7 @@ LC.sections["config.credits"] = {
 LC.widgets["configPanel.title"] = {
     tooltip = false,
     kind = "label", ["in"] = "configPanel", slot = "header",
-    text = "Config", font = "heading",
+    text = "locale:CFG_PANEL_TITLE", font = "heading",
     height = 18, width = "auto", order = 10,
 }
 -- Spacer: title (left) -> Main Settings button (right).
@@ -168,7 +168,7 @@ LC.widgets["configPanel.headerSpacer"] = {
 LC.widgets["configPanel.otherSettingsBtn"] = {
     tooltip = false,
     kind = "button", ["in"] = "configPanel", slot = "header", font = "small",
-    text = "Main Settings", width = "auto", height = 22, order = 20, variant = "tertiary",
+    text = "locale:CFG_MAIN_SETTINGS_BTN", width = "auto", height = 22, order = 20, variant = "tertiary",
 }
 
 -- ---- Appearance section ------------------------------------------------------
@@ -176,7 +176,7 @@ LC.widgets["configPanel.otherSettingsBtn"] = {
 LC.widgets["configPanel.appearanceSectionLabel"] = {
     tooltip = false,
     kind = "label", role = "TextHeading", ["in"] = "config.appearanceHeader",
-    text = "Appearance", font = "small",
+    text = "locale:CFG_APPEARANCE_SECTION", font = "small",
     width = "fill", height = 16, order = 10,
 }
 
@@ -184,14 +184,14 @@ LC.widgets["configPanel.appearanceSectionLabel"] = {
 LC.widgets["configPanel.themeLabel"] = {
     tooltip = false,
     kind = "label", ["in"] = "config.themeRow", font = "body",
-    text = "Theme", width = 120, height = 22, order = 10,
+    text = "locale:CFG_THEME_LABEL", width = 120, height = 22, order = 10,
 }
 LC.widgets["configPanel.themeDropdown"] = {
     tooltip = false,
     kind = "dropdown", ["in"] = "config.themeRow",
     -- height=25: WowStyle2DropdownTemplate native height; shrinking misaligns the Background atlas.
     width = 240, height = 25, order = 20,
-    placeholder = "Theme...",
+    placeholder = "locale:CFG_THEME_PLACEHOLDER",
     binding   = { menu = "config.themeMenuItems", current = "config.theme" },
     setConfig = { key = "scheme" },
 }
@@ -200,7 +200,7 @@ LC.widgets["configPanel.themeDropdown"] = {
 LC.widgets["configPanel.scaleLabel"] = {
     tooltip = false,
     kind = "label", ["in"] = "config.scaleRow", font = "body",
-    text = "UI Scale", width = 120, height = 22, order = 10,
+    text = "locale:CFG_SCALE_LABEL", width = 120, height = 22, order = 10,
 }
 LC.widgets["configPanel.scaleDecBtn"] = {
     tooltip = false,
@@ -230,7 +230,7 @@ LC.widgets["configPanel.scaleIncBtn"] = {
 LC.widgets["configPanel.aboutSectionLabel"] = {
     tooltip = false,
     kind = "label", role = "TextHeading", ["in"] = "config.aboutHeader",
-    text = "About", font = "small",
+    text = "locale:CFG_ABOUT_SECTION", font = "small",
     width = "fill", height = 16, order = 10,
 }
 
@@ -239,7 +239,7 @@ LC.widgets["configPanel.discordLink"] = {
     tooltip = false,
     kind = "linkRow", ["in"] = "config.discordRow",
     icon  = HDG.Constants.DISCORD_TEXTURE,
-    label = "Discord",
+    label = "locale:CFG_DISCORD_LABEL",
     url   = HDG.Constants.DISCORD_URL,
     width = "fill", height = 24, order = 10,
 }
@@ -249,7 +249,7 @@ LC.widgets["configPanel.coffeeLink"] = {
     tooltip = false,
     kind = "linkRow", ["in"] = "config.coffeeRow",
     iconAtlas = "auctionhouse-icon-coin",
-    label = "Buy Me a Coffee",
+    label = "locale:CFG_COFFEE_LABEL",
     url   = HDG.Constants.COFFEE_URL,
     width = "fill", height = 24, order = 10,
 }
@@ -261,7 +261,7 @@ LC.widgets["configPanel.coffeeLink"] = {
 LC.widgets["configPanel.dangerSectionLabel"] = {
     tooltip = false,
     kind = "label", role = "TextHeading", ["in"] = "config.dangerHeader",
-    text = "Danger Zone", font = "small",
+    text = "locale:CFG_DANGER_SECTION", font = "small",
     width = "fill", height = 16, order = 10,
 }
 
@@ -269,13 +269,13 @@ LC.widgets["configPanel.dangerSectionLabel"] = {
 LC.widgets["configPanel.collectionResetBtn"] = {
     tooltip = false,
     kind = "button", ["in"] = "config.collectionResetRow", font = "body",
-    text = "Reset Collection Cache", width = 200, height = 24, order = 10,
+    text = "locale:CFG_COLLECTION_RESET_BTN", width = 200, height = 24, order = 10,
     variant = "tertiary",
 }
 LC.widgets["configPanel.collectionResetHint"] = {
     tooltip = false,
     kind = "label", role = "TextDim", ["in"] = "config.collectionResetRow", font = "caption",
-    text = "Wipes the catalog cache and rescans.",
+    text = "locale:CFG_COLLECTION_RESET_HINT",
     width = "fill", height = 14, order = 20,
 }
 
@@ -283,13 +283,13 @@ LC.widgets["configPanel.collectionResetHint"] = {
 LC.widgets["configPanel.hardReset"] = {
     tooltip = false,
     kind = "button", ["in"] = "config.hardResetRow", font = "body",
-    text = "Hard Reset", width = 160, height = 24, order = 10,
+    text = "locale:CFG_HARD_RESET_BTN", width = 160, height = 24, order = 10,
     textTone = "error",
 }
 LC.widgets["configPanel.hardResetHint"] = {
     tooltip = false,
     kind = "label", role = "TextDim", ["in"] = "config.hardResetRow", font = "caption",
-    text = "Wipes all HDG settings and reloads.",
+    text = "locale:CFG_HARD_RESET_HINT",
     width = "fill", height = 14, order = 20,
 }
 
@@ -298,7 +298,7 @@ LC.widgets["configPanel.hardResetHint"] = {
 LC.widgets["configPanel.creditsSectionLabel"] = {
     tooltip = false,
     kind = "label", role = "TextHeading", ["in"] = "config.creditsHeader",
-    text = "Special Thanks", font = "small",
+    text = "locale:CFG_CREDITS_SECTION", font = "small",
     width = "fill", height = 16, order = 10,
 }
 
@@ -418,6 +418,6 @@ addUISample("inspector.uirow_float_border",       "float.border",       "Tooltip
 LC.widgets["themeInspectorPanel.title"] = {
     tooltip = false,
     kind = "label", role = "TextHeading", ["in"] = "themeInspectorPanel", slot = "header",
-    text = "Theme Preview", font = "heading",
+    text = "locale:CFG_THEME_PREVIEW_TITLE", font = "heading",
     height = 18, width = "auto", order = 10,
 }

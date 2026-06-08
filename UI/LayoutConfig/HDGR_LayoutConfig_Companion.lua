@@ -140,7 +140,7 @@ LC.widgets["companionPanel.icon"] = {
 LC.widgets["companionPanel.title"] = {
     tooltip = false,
     kind = "label", role = "TextHeading", ["in"] = "companionPanel", slot = "header",
-    text = "Housing Decor Guide", font = "heading",
+    text = "locale:COMP_ADDON_TITLE", font = "heading",
     height = 18, width = "auto", order = 10,
 }
 LC.widgets["companionPanel.headerSpacer"] = {
@@ -196,7 +196,7 @@ LC.widgets["companionPanel.search"] = {
     tooltip = false,
     kind = "editbox", ["in"] = "companion.toolbar", font = "small",
     height = 22, width = "fill", order = 60,
-    placeholder = "Search decor...",
+    placeholder = "locale:COMP_SEARCH_PLACEHOLDER",
     binding = { text = "companion.search" },
 }
 
@@ -227,7 +227,7 @@ LC.widgets["companionPanel.grid"] = {
 LC.widgets["companionRecentPanel.label"] = {
     tooltip = false,
     kind = "label", role = "TextDim", ["in"] = "companionRecent.labelRow", font = "small",
-    text = "Recent placements", justifyH = "LEFT",
+    text = "locale:COMP_RECENT_PLACEMENTS_LABEL", justifyH = "LEFT",
     width = "fill", height = 12, order = 10,
 }
 LC.widgets["companionRecentPanel.strip"] = {

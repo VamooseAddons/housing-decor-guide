@@ -71,7 +71,7 @@ LC.sections["debug.footer"] = {
 LC.widgets["debugPanel.title"] = {
     tooltip = false,
     kind = "label", ["in"] = "debugPanel", slot = "header",
-    text = "Debug Log", font = "heading",
+    text = "locale:DEBUG_TITLE", font = "heading",
     height = 18, width = "auto", order = 10,
 }
 -- Layout describer: enter a view name + click Describe; output pops in CopyDialog.
@@ -83,28 +83,28 @@ LC.widgets["debugPanel.layoutInput"] = {
 LC.widgets["debugPanel.layoutBtn"] = {
     tooltip = false,
     kind = "button", ["in"] = "debugPanel", slot = "header", font = "small",
-    text = "Describe Layout", width = "auto", height = 22, order = 30,
+    text = "locale:DEBUG_DESCRIBE_LAYOUT", width = "auto", height = 22, order = 30,
     variant = "tertiary",
 }
 -- Memory Profile: GetAddOnMemoryUsage + collectgarbage("count") snapshot -> CopyDialog.
 LC.widgets["debugPanel.memBtn"] = {
     tooltip = false,
     kind = "button", ["in"] = "debugPanel", slot = "header", font = "small",
-    text = "Memory Profile", width = "auto", height = 22, order = 35,
+    text = "locale:DEBUG_MEM_PROFILE", width = "auto", height = 22, order = 35,
     variant = "tertiary",
 }
 -- Perf Profile: HDG.Perf:Report() -> CopyDialog. Gate: HDG_DB.perf (/hdgr perf on).
 LC.widgets["debugPanel.perfBtn"] = {
     tooltip = false,
     kind = "button", ["in"] = "debugPanel", slot = "header", font = "small",
-    text = "Perf Profile", width = "auto", height = 22, order = 37,
+    text = "locale:DEBUG_PERF_PROFILE", width = "auto", height = 22, order = 37,
     variant = "tertiary",
 }
 LC.widgets["debugPanel.tagFilter"] = {
     tooltip = false,
     kind = "dropdown", ["in"] = "debug.filterBar",
     height = 22, width = 140, order = 10,
-    placeholder = "All tags",
+    placeholder = "locale:DEBUG_TAG_ALL",
     binding  = { menu = "log.tagMenuItems", current = "log.filterTag" },
     dispatch = { type = "LOG_SET_FILTER", payloadKey = "tag" },
 }
@@ -112,19 +112,19 @@ LC.widgets["debugPanel.levelFilter"] = {
     tooltip = false,
     kind = "dropdown", ["in"] = "debug.filterBar",
     height = 22, width = 130, order = 20,
-    placeholder = "All levels",
+    placeholder = "locale:DEBUG_LEVEL_ALL",
     binding  = { menu = "log.levelMenuItems", current = "log.filterLevel" },
     dispatch = { type = "LOG_SET_FILTER", payloadKey = "level" },
 }
 LC.widgets["debugPanel.clear"] = {
     tooltip = false,
     kind = "button", ["in"] = "debug.filterBar", font = "caption",
-    text = "Clear", width = 60, height = 22, order = 30,
+    text = "locale:COMMON_CLEAR", width = 60, height = 22, order = 30,
 }
 LC.widgets["debugPanel.copy"] = {
     tooltip = false,
     kind = "button", ["in"] = "debug.filterBar", font = "caption",
-    text = "Copy", width = 60, height = 22, order = 40,
+    text = "locale:COMMON_COPY", width = 60, height = 22, order = 40,
 }
 -- Spacer right-pushes the autoscroll toggle.
 LC.widgets["debugPanel.spacer"] = {
@@ -151,7 +151,7 @@ LC.widgets["debugPanel.count"] = {
 LC.widgets["debugPanel.autoScroll"] = {
     tooltip = false,
     kind = "checkbox", ["in"] = "debug.footer",
-    text = "Auto-scroll", width = 100, height = 22, order = 20,
+    text = "locale:DEBUG_AUTOSCROLL", width = 100, height = 22, order = 20,
     binding = { checked = "log.filterAutoScroll" },
 }
 

@@ -71,7 +71,7 @@ LC.sections["data.list"] = {
 LC.widgets["dataPanel.title"] = {
     tooltip = false,
     kind = "label", ["in"] = "dataPanel", slot = "header",
-    text = "Your Data", font = "heading",
+    text = "locale:DATA_PANEL_TITLE", font = "heading",
     height = 18, width = "auto", order = 5,
 }
 
@@ -80,28 +80,28 @@ LC.widgets["dataPanel.title"] = {
 LC.widgets["dataPanel.kpiAchievements"] = {
     tooltip = false,
     kind = "statCard", ["in"] = "data.kpiStrip",
-    label = "Achievements Earned", value = "--",
+    label = "locale:DATA_KPI_ACHIEVEMENTS", value = "--",
     width = "fill", height = 84, order = 10,
     binding = { value = "data.kpiAchievements" },
 }
 LC.widgets["dataPanel.kpiAcquired"] = {
     tooltip = false,
     kind = "statCard", ["in"] = "data.kpiStrip",
-    label = "Items Acquired", value = "--",
+    label = "locale:DATA_KPI_ACQUIRED", value = "--",
     width = "fill", height = 84, order = 20,
     binding = { value = "data.kpiAcquired" },
 }
 LC.widgets["dataPanel.kpiFarmSessions"] = {
     tooltip = false,
     kind = "statCard", ["in"] = "data.kpiStrip",
-    label = "Farming Sessions", value = "--",
+    label = "locale:DATA_KPI_FARM_SESSIONS", value = "--",
     width = "fill", height = 84, order = 30,
     binding = { value = "data.kpiFarmSessions" },
 }
 LC.widgets["dataPanel.kpiLumber"] = {
     tooltip = false,
     kind = "statCard", ["in"] = "data.kpiStrip",
-    label = "Lumber Gathered", value = "--",
+    label = "locale:DATA_KPI_LUMBER", value = "--",
     width = "fill", height = 84, order = 40,
     binding = { value = "data.kpiLumber" },
 }

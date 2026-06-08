@@ -11,6 +11,13 @@ HDG.Locale = HDG.Locale or {
 
 local L = HDG.Locale
 
+-- Developer pseudolocale: a synthetic locale that wraps every enUS value in
+-- [brackets] so a translator (or the author on an English client) can see at a
+-- glance which on-screen strings are keyed (localisable) vs still hard-coded
+-- (they render plain, un-bracketed). Derived live from enUS in :Get -- no table
+-- to keep in sync. Picked via the Config > Advanced "Language" dropdown.
+local PSEUDO_LOCALE = "enXX"
+
 -- Initialize from persisted state or GetLocale(). Installs a Store subscriber for CONFIG_SET locale
 -- so the dropdown's pure-dispatch click path works (Iron Invariant section 6).
 function L:Initialize()
@@ -56,6 +63,42 @@ function L:GetLocale()
     return self._locale
 end
 
+-- Resolve a possibly-"locale:KEY"-prefixed display string to its localised text.
+-- Plain strings (and non-strings) pass through untouched. The widget factory
+-- (HDG.Layout build chokepoint) calls this so static LayoutConfig fields
+-- (text/label/placeholder/...) accept "locale:KEY" exactly like bindings do.
+function L:Resolve(s)
+    if type(s) == "string" and s:sub(1, 7) == "locale:" then
+        return self:Get(s:sub(8))
+    end
+    return s
+end
+
+-- Ordered {key,label} list for the Config > Advanced "Language" dropdown:
+-- Auto (client locale), every registered locale table, then the dev pseudolocale.
+function L:GetAvailableLocales()
+    local LABELS = {
+        enUS = "English (US)", esMX = "Espanol (MX)", esES = "Espanol (ES)",
+        ptBR = "Portugues (BR)", frFR = "Francais (FR)", deDE = "Deutsch",
+        ruRU = "Russian", koKR = "Korean", zhCN = "Chinese (Simplified)",
+        zhTW = "Chinese (Traditional)", itIT = "Italiano",
+    }
+    local keys = {}
+    for loc in pairs(self._tables) do keys[#keys + 1] = loc end
+    -- Stable order: enUS first, the rest alphabetically.
+    table.sort(keys, function(a, b)
+        if a == "enUS" then return true end
+        if b == "enUS" then return false end
+        return a < b
+    end)
+    local out = { { key = "", label = "Auto (client locale)" } }
+    for _, loc in ipairs(keys) do
+        out[#out + 1] = { key = loc, label = LABELS[loc] or loc }
+    end
+    out[#out + 1] = { key = PSEUDO_LOCALE, label = "Pseudo [brackets] (dev)" }
+    return out
+end
+
 -- Register a locale table. Multiple calls merge (later keys win). Modules ship their own keys.
 function L:Register(loc, t)
     if type(loc) ~= "string" or type(t) ~= "table" then return end
@@ -68,6 +111,12 @@ end
 -- Look up a key. Order: current locale -> enUS -> key string (loud-fail per ADR-006).
 function L:Get(key)
     if type(key) ~= "string" or key == "" then return tostring(key or "") end
+    -- Pseudolocale: bracket the enUS value (or the raw key if untranslated) so
+    -- keyed strings are visually distinct from hard-coded ones on any client.
+    if self._locale == PSEUDO_LOCALE then
+        local enUS = self._tables.enUS
+        return "[" .. ((enUS and enUS[key]) or key) .. "]"
+    end
     local t = self._tables[self._locale]
     if t and t[key] ~= nil then return t[key] end
     local enUS = self._tables.enUS

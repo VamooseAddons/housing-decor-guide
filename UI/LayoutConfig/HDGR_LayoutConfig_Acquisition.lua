@@ -145,7 +145,7 @@ LC.widgets["acquisitionListPanel.blankVendor"] = {
     kind = "label", ["in"] = "acq.listBody",
     visible = "acq.blankVendor",
     role = "TextDim",
-    text = "No vendors match your filters.",
+    text = "locale:ACQ_BLANK_VENDOR",
     font = "body", justifyH = "CENTER",
     width = "fill", height = 22, order = 30,
 }
@@ -161,7 +161,7 @@ LC.widgets["acquisitionListPanel.blankItem"] = {
     kind = "label", ["in"] = "acq.listBody",
     visible = "acq.blankItem",
     role = "TextDim",
-    text = "No items match your filters.",
+    text = "locale:ACQ_BLANK_ITEM",
     font = "body", justifyH = "CENTER",
     width = "fill", height = 22, order = 31,
 }
@@ -317,7 +317,7 @@ LC.sections["acq.actionCol.viewToggles"] = {
 LC.widgets["acquisitionListPanel.title"] = {
     tooltip = false,
     kind = "label", ["in"] = "acquisitionListPanel", slot = "header",
-    text = "Vendors", font = "heading",
+    text = "locale:ACQ_VENDORS_TITLE", font = "heading",
     height = 18, width = "auto", order = 10,
     binding = "acq.listTitle",
 }
@@ -338,12 +338,12 @@ LC.widgets["acquisitionListPanel.search"] = {
     kind = "editbox", ["in"] = "acq.filterBar", font = "body",
     height = 22, width = "fill", order = 10,
     multiline = false,
-    placeholder = "Search vendors by name or zone...",
+    placeholder = "locale:ACQ_SEARCH_PLACEHOLDER",
 }
 LC.widgets["acquisitionListPanel.mapAllBtn"] = {
     tooltip = false,
     kind = "button", ["in"] = "acq.filterBar", font = "small",
-    text = "Map Vendors", width = "auto", height = 22, order = 20, variant = "tertiary",
+    text = "locale:ACQ_MAP_VENDORS", width = "auto", height = 22, order = 20, variant = "tertiary",
     binding = { text = "acq.mapAllLabel" },
     visible = "acq.isViewMode_vendor",
 }
@@ -356,63 +356,64 @@ LC.widgets["acquisitionListPanel.clearPinsBtn"] = {
 -- Faction dropdown: filters vendors by Alliance / Horde / Neutral (sibling of Source dropdown).
 LC.widgets["acquisitionListPanel.factionDropdown"] = {
     tooltip = false,
-    kind = "dropdown", ["in"] = "acq.advancedSourceRow",
+    kind = "dropdown", ["in"] = "acq.advancedSourceRow", variant = "filter", multi = true,
     width = "fill", height = 22, order = 20, minWidth = 130,
-    placeholder  = "All factions",
+    placeholder  = "locale:ACQ_ALL_FACTIONS",
     binding      = { menu = "acq.factionMenuItems", current = "acq.factionFilter" },
-    setTransient = { view = "acquisition", key = "factionFilter" },
+    dispatch     = { type = "ACQ_TOGGLE_FACTION", payloadKey = "faction" },
 }
 -- Advanced-filters toggle: label flips between "+ / - Advanced Filters".
 LC.widgets["acquisitionListPanel.advancedToggle"] = {
     tooltip = false,
     kind = "button", ["in"] = "acq.advancedToggleRow", font = "small",
-    text = "+ Advanced Filters", width = "auto", height = 20, order = 10, variant = "tertiary",
+    text = "locale:ACQ_ADVANCED_CLOSED", width = "auto", height = 20, order = 10, variant = "tertiary",
     binding = { text = "acq.advancedFiltersLabel" },
 }
 -- Reset: clears all filter axes. Wired in Controller_Acquisition.
 LC.widgets["acquisitionListPanel.resetFilters"] = {
     tooltip = false,
     kind = "button", ["in"] = "acq.advancedToggleRow", font = "small",
-    text = "Reset", width = "auto", height = 20, order = 20, variant = "tertiary",
+    text = "locale:COMMON_RESET", width = "auto", height = 20, order = 20, variant = "tertiary",
 }
--- Per-axis dropdowns: all share UI_SET_TRANSIENT shape; menu selector + key vary.
+-- Per-axis dropdowns: multi-select checkbox menus (clone of Recipes). Each dispatches
+-- its ACQ_TOGGLE_* action; the "All X" master entry (isAll) clears the set.
 LC.widgets["acquisitionListPanel.expansionDropdown"] = {
     tooltip = false,
-    kind = "dropdown", ["in"] = "acq.advancedDropdownRow",
+    kind = "dropdown", ["in"] = "acq.advancedDropdownRow", variant = "filter", multi = true,
     width = "fill", height = 22, order = 10, minWidth = 130,
-    placeholder  = "All Expansions",
+    placeholder  = "locale:ACQ_ALL_EXPANSIONS",
     binding      = { menu = "acq.expansionMenuItems", current = "acq.expansionFilter" },
-    setTransient = { view = "acquisition", key = "expansionFilter" },
+    dispatch     = { type = "ACQ_TOGGLE_EXPANSION", payloadKey = "expansion" },
 }
 LC.widgets["acquisitionListPanel.zoneDropdown"] = {
     tooltip = false,
-    kind = "dropdown", ["in"] = "acq.advancedDropdownRow",
+    kind = "dropdown", ["in"] = "acq.advancedDropdownRow", variant = "filter", multi = true,
     width = "fill", height = 22, order = 20, minWidth = 130,
-    placeholder  = "All Zones",
+    placeholder  = "locale:ACQ_ALL_ZONES",
     binding      = { menu = "acq.zoneMenuItems", current = "acq.zoneFilter" },
-    setTransient = { view = "acquisition", key = "zoneFilter" },
+    dispatch     = { type = "ACQ_TOGGLE_ZONE", payloadKey = "zone" },
 }
 LC.widgets["acquisitionListPanel.repDropdown"] = {
     tooltip = false,
-    kind = "dropdown", ["in"] = "acq.advancedDropdownRow",
+    kind = "dropdown", ["in"] = "acq.advancedDropdownRow", variant = "filter", multi = true,
     width = "fill", height = 22, order = 30, minWidth = 130,
-    placeholder  = "All Reps",
+    placeholder  = "locale:ACQ_ALL_REPS",
     binding      = { menu = "acq.repMenuItems", current = "acq.repFilter" },
-    setTransient = { view = "acquisition", key = "repFilter" },
+    dispatch     = { type = "ACQ_TOGGLE_REP", payloadKey = "rep" },
 }
 LC.widgets["acquisitionListPanel.sourceDropdown"] = {
     tooltip = false,
-    kind = "dropdown", ["in"] = "acq.advancedSourceRow",
+    kind = "dropdown", ["in"] = "acq.advancedSourceRow", variant = "filter", multi = true,
     width = "fill", height = 22, order = 10, minWidth = 130,
-    placeholder  = "All Sources",
+    placeholder  = "locale:ACQ_ALL_SOURCES",
     binding      = { menu = "acq.sourceMenuItems", current = "acq.sourceFilter" },
-    setTransient = { view = "acquisition", key = "sourceFilter" },
+    dispatch     = { type = "ACQ_TOGGLE_SOURCE", payloadKey = "source" },
 }
 -- Active-filters label: flips between "Active filters:" / "No active filters".
 LC.widgets["acquisitionListPanel.activeFiltersLabel"] = {
     tooltip = false,
     kind = "label", role = "TextDim", ["in"] = "acq.activeFiltersRow",
-    font = "small", text = "No active filters", height = 14, order = 10,
+    font = "small", text = "locale:ACQ_NO_ACTIVE_FILTERS", height = 14, order = 10,
     binding = "acq.activeFiltersLabel",
 }
 -- Two scrollboxes share the same cell (acq.list); Layout's visible resolver picks one.
@@ -456,7 +457,7 @@ LC.widgets["acquisitionListPanel.recipeList"] = {
 LC.widgets["acquisitionDetailPanel.title"] = {
     tooltip = false,
     kind = "label", ["in"] = "acquisitionDetailPanel", slot = "header",
-    text = "Selected Vendor", font = "subheading",
+    text = "locale:ACQ_SELECTED_VENDOR", font = "subheading",
     -- width="fill": title absorbs slack and clips long names gracefully
     -- (auto+headerExpansion overflowed the 460px header on long item names).
     height = 16, width = "fill", order = 10,
@@ -497,13 +498,13 @@ LC.widgets["acquisitionDetailPanel.headerExpansion"] = {
 LC.widgets["acquisitionDetailPanel.waypointBtn"] = {
     tooltip = false,
     kind = "button", ["in"] = "acq.actionCol", font = "button",
-    text = "Waypoint", width = "fill", height = 22, order = 20, variant = "tertiary",
+    text = "locale:ACQ_WAYPOINT", width = "fill", height = 22, order = 20, variant = "tertiary",
     visible = "acq.hasSelectedNpc",
 }
 LC.widgets["acquisitionDetailPanel.showOnMapBtn"] = {
     tooltip = false,
     kind = "button", ["in"] = "acq.actionCol", font = "button",
-    text = "Show on Map", width = "fill", height = 22, order = 30, variant = "tertiary",
+    text = "locale:ACQ_SHOW_ON_MAP", width = "fill", height = 22, order = 30, variant = "tertiary",
     visible = "acq.hasSelectedNpc",
 }
 -- Vendor note editbox (full row width). Grid/List toggles in acq.actionCol.viewToggles.
@@ -512,19 +513,19 @@ LC.widgets["acquisitionDetailPanel.vendorNote"] = {
     kind = "editbox", ["in"] = "acq.vendorNoteRow", font = "body",
     text = "", height = 44, width = "fill", order = 10,
     multiline   = true,
-    placeholder = "Add a vendor note...",
+    placeholder = "locale:ACQ_VENDOR_NOTE_PLACEHOLDER",
     binding = { text = "acq.selected.note" },
 }
 LC.widgets["acquisitionDetailPanel.itemsViewGridBtn"] = {
     tooltip = false,
     kind = "button", ["in"] = "acq.actionCol.viewToggles", font = "small",
-    text = "Grid", width = "fill", height = 22, order = 10, variant = "tertiary",
+    text = "locale:ACQ_ITEMS_VIEW_GRID", width = "fill", height = 22, order = 10, variant = "tertiary",
     binding = { active = "acq.isItemsView_grid" },
 }
 LC.widgets["acquisitionDetailPanel.itemsViewListBtn"] = {
     tooltip = false,
     kind = "button", ["in"] = "acq.actionCol.viewToggles", font = "small",
-    text = "List", width = "fill", height = 22, order = 20, variant = "tertiary",
+    text = "locale:ACQ_ITEMS_VIEW_LIST", width = "fill", height = 22, order = 20, variant = "tertiary",
     binding = { active = "acq.isItemsView_list" },
 }
 -- Item-view 3D model preview. Dispatcher resolves itemID via HDG.HousingCatalogObserver.
@@ -537,7 +538,7 @@ LC.widgets["acquisitionDetailPanel.itemPreview"] = {
     showCorbels  = false,
     showAtlas    = false,
     bgTile       = true,                             -- ported VDS dark tiling backdrop
-    placeholder  = "Click an item to preview",
+    placeholder  = "locale:ACQ_PREVIEW_PLACEHOLDER",
     -- sceneInsets: declarative budget; build fn has no fallback by design.
     sceneInsets    = { top = 8, right = 8, bottom = 8, left = 8 },
     defaultSceneID = 859,   -- HOUSING_CATALOG_DECOR_MODELSCENEID_DEFAULT (12.0.5)
@@ -582,7 +583,7 @@ LC.widgets["acquisitionDetailPanel.itemWowheadBtn"] = {
 LC.widgets["acquisitionDetailPanel.itemInfoCartBtn"] = {
     tooltip = false,
     kind = "button", ["in"] = "acq.itemInfoCartRow", font = "small",
-    text = "Cart +", width = "auto", height = 22, order = 10, variant = "tertiary",
+    text = "locale:ACQ_CART_ADD_BTN", width = "auto", height = 22, order = 10, variant = "tertiary",
     visible = "acq.hasSelectedItem",
 }
 -- Vendor list header ("Available from (N)"). Height 18 (was 32) -- phantom space
@@ -661,7 +662,7 @@ LC.widgets["acquisitionDetailPanel.selectedDetail"] = {
 LC.widgets["acquisitionDetailPanel.selectedAddToCartBtn"] = {
     tooltip = false,
     kind = "button", ["in"] = "acq.actionCol.selectedBlock",
-    font = "small", text = "+ Cart", width = "fill", height = 20,
+    font = "small", text = "locale:ACQ_SELECTED_CART_BTN", width = "fill", height = 20,
     order = 30, variant = "tertiary",
 }
 
@@ -709,6 +710,6 @@ LC.widgets["acquisitionListPanel.presetDivider"] = {
 LC.widgets["acquisitionListPanel.missingToggle"] = {
     tooltip = false,
     kind = "checkbox", ["in"] = "acq.presetStrip", font = "button",
-    text = "Missing", width = 86, height = 22, order = 21,
+    text = "locale:ACQ_MISSING_TOGGLE", width = 86, height = 22, order = 21,
     binding = { checked = "acq.missingOnly" },
 }

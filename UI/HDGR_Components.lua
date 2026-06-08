@@ -936,6 +936,21 @@ local function buildDropdown(parent, spec)
                 if HDG.RequestReflow then HDG:RequestReflow() end   -- exception(nullable): RequestReflow registered at init time; nil in headless mock + early boot
             end
         end)
+    elseif variant == "filter" then
+        -- width="fill"/fixed FILTER dropdowns: the template's resizeToText shrinks the
+        -- button to its label, leaving uneven gaps across the row. Don't DISABLE
+        -- resizeToText (that corrupts the FontString layout it co-manages) -- keep it ON
+        -- and CLAMP its min/max to the slot the layout assigns, so it fills the slot while
+        -- text still renders cleanly. ApplyLayout is the Layout-engine placement override
+        -- (Layout:ApplyOne calls it instead of the default SetPoint/SetSize).
+        function dd:ApplyLayout(region)
+            self:ClearAllPoints()
+            self:SetPoint("TOPLEFT", region.x, -region.y)
+            self:SetHeight(region.height)
+            self.resizeToTextMinWidth = region.width
+            self.resizeToTextMaxWidth = region.width
+            self:SetWidth(region.width)
+        end
     end
 
     local onSelect = buildDropdownOnSelect(spec)
@@ -976,11 +991,19 @@ end
 
 local function dispatchDropdown(widget, values)
     if not widget then return end
+    -- RADIO (single-select) menus snapshot `current` at generate time, so they need a
+    -- rebuild to repaint the selected dot when state changes externally. CHECKBOX (multi)
+    -- menus poll their isSelected fn live (MenuTemplates), so they self-update on click
+    -- WITHOUT a rebuild -- and rebuilding an OPEN *scrolling* checkbox menu re-lays-out the
+    -- scrollbox on every toggle, which re-fires UpdateToMenuSelections -> UpdateText and
+    -- garbles the trigger text (the scroll-bar-only corruption). So skip it for multi.
+    if not widget._hdgrMulti then
+        widget:GenerateMenu()
+    end
     if widget._hdgrVariant == "filter" then
         -- Filter chrome is static-label: resolve the label from the menu items
-        -- + current value and stamp via SetText. Multi dropdowns count the set;
-        -- single dropdowns match the one selected value. selectionPrefix applied
-        -- manually (mirrors Style1's SetSelectionTranslator).
+        -- + current value and stamp via SetText. Multi dropdowns count the set
+        -- ("Expansions [2]"); single dropdowns match the one selected value.
         local label
         if widget._hdgrMulti then
             label = resolveMultiFilterLabel(values.menu, values.current, widget._hdgrPlaceholder)
@@ -992,9 +1015,6 @@ local function dispatchDropdown(widget, values)
         end
         widget:SetText(tostring(label))
     end
-    -- Either variant: rebuild the menu so any open popup repaints its
-    -- isSelected dots against the new state. Cheap when not open.
-    widget:GenerateMenu()
 end
 
 -- ===== ModelPreview: housing decor 3D preview ===============================

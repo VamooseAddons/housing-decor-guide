@@ -229,7 +229,7 @@ LC.sections["mogul.goblinDetailList"] = {
 LC.widgets["mogulPanel.title"] = {
     tooltip = false,
     kind = "label", ["in"] = "mogulPanel", slot = "header",
-    text = "Mogul", font = "heading",
+    text = "locale:MOG_PANEL_TITLE", font = "heading",
     height = 18, width = "auto", order = 10,
     binding = "mogul.title",
 }
@@ -240,35 +240,35 @@ LC.widgets["mogulPanel.title"] = {
 LC.widgets["mogulPanel.src_Auto"] = {
     tooltip = false,
     kind = "button", ["in"] = "mogulPanel", slot = "header", font = "small",
-    text = "Auto", width = "auto", height = 20, order = 11, variant = "tertiary",
+    text = "locale:MOG_SRC_AUTO", width = "auto", height = 20, order = 11, variant = "tertiary",
     visible = "mogul.isSubView_goblin",
     binding = { active = "config.sourceActive_Auto" },
 }
 LC.widgets["mogulPanel.src_Auctionator"] = {
     tooltip = false,
     kind = "button", ["in"] = "mogulPanel", slot = "header", font = "small",
-    text = "Auctionator", width = "auto", height = 20, order = 12, variant = "tertiary",
+    text = "locale:MOG_SRC_AUCTIONATOR", width = "auto", height = 20, order = 12, variant = "tertiary",
     visible = "goblin.showSourceAuctionator",
     binding = { active = "config.sourceActive_Auctionator" },
 }
 LC.widgets["mogulPanel.src_Direct"] = {
     tooltip = false,
     kind = "button", ["in"] = "mogulPanel", slot = "header", font = "small",
-    text = "Direct", width = "auto", height = 20, order = 13, variant = "tertiary",
+    text = "locale:MOG_SRC_DIRECT", width = "auto", height = 20, order = 13, variant = "tertiary",
     visible = "mogul.isSubView_goblin",
     binding = { active = "config.sourceActive_Direct" },
 }
 LC.widgets["mogulPanel.src_TSM"] = {
     tooltip = false,
     kind = "button", ["in"] = "mogulPanel", slot = "header", font = "small",
-    text = "TSM", width = "auto", height = 20, order = 14, variant = "tertiary",
+    text = "locale:MOG_SRC_TSM", width = "auto", height = 20, order = 14, variant = "tertiary",
     visible = "goblin.showSourceTSM",
     binding = { active = "config.sourceActive_TSM" },
 }
 LC.widgets["mogulPanel.refreshScanBtn"] = {
     tooltip = false,
     kind = "button", ["in"] = "mogulPanel", slot = "header", font = "small",
-    text = "Refresh from AH", width = 140, height = 20, order = 20, variant = "tertiary",
+    text = "locale:MOG_REFRESH_FROM_AH", width = 140, height = 20, order = 20, variant = "tertiary",
     visible = "mogul.isSubView_goblin",
     binding = { text = "config.scanButtonLabel" },
 }
@@ -283,46 +283,46 @@ LC.widgets["mogulPanel.headerSpacer"] = {
 LC.widgets["mogulPanel.modeProfit"] = {
     tooltip = { recipe = "MogulModeProfit" },
     kind = "button", ["in"] = "mogul.controlsRow1", variant = "tertiary", font = "button",
-    text = "Profit", width = 80, height = 22, order = 10,
+    text = "locale:MOG_MODE_PROFIT", width = 80, height = 22, order = 10,
     binding = { active = "mogul.isMode_profit" },
 }
 LC.widgets["mogulPanel.modeCollection"] = {
     tooltip = { recipe = "MogulModeCollection" },
     kind = "button", ["in"] = "mogul.controlsRow1", variant = "tertiary", font = "button",
-    text = "Collection", width = 100, height = 22, order = 20,
+    text = "locale:MOG_MODE_COLLECTION", width = 100, height = 22, order = 20,
     binding = { active = "mogul.isMode_collection" },
 }
 -- View chips (Char / Account)
 LC.widgets["mogulPanel.viewChar"] = {
     tooltip = { recipe = "MogulViewChar" },
     kind = "button", ["in"] = "mogul.controlsRow1", variant = "tertiary", font = "button",
-    text = "Char", width = 70, height = 22, order = 30,
+    text = "locale:MOG_VIEW_CHAR", width = 70, height = 22, order = 30,
     binding = { active = "mogul.isView_char" },
 }
 LC.widgets["mogulPanel.viewAccount"] = {
     tooltip = { recipe = "MogulViewAccount" },
     kind = "button", ["in"] = "mogul.controlsRow1", variant = "tertiary", font = "button",
-    text = "Account", width = 80, height = 22, order = 40,
+    text = "locale:MOG_VIEW_ACCOUNT", width = 80, height = 22, order = 40,
     binding = { active = "mogul.isView_account" },
 }
 -- OptimizeBy chips
 LC.widgets["mogulPanel.optLumber"] = {
     tooltip = { recipe = "MogulOptOwned" },
     kind = "button", ["in"] = "mogul.controlsRow2", variant = "tertiary", font = "button",
-    text = "Use Owned Mats", width = 130, height = 22, order = 10,
+    text = "locale:MOG_OPT_USE_OWNED_MATS", width = 130, height = 22, order = 10,
     binding = { active = "mogul.isOpt_lumberOnly" },
 }
 LC.widgets["mogulPanel.optAH"] = {
     tooltip = { recipe = "MogulOptBuy" },
     kind = "button", ["in"] = "mogul.controlsRow2", variant = "tertiary", font = "button",
-    text = "Buy Mats from AH", width = 150, height = 22, order = 20,
+    text = "locale:MOG_OPT_BUY_MATS_FROM_AH", width = 150, height = 22, order = 20,
     binding = { active = "mogul.isOpt_lumberPlusMats" },
 }
 -- Supply impact: "Supply impact:" label + radioGroup (Off/Smooth%/Cap) + optional editbox.
 LC.widgets["mogulPanel.supplyLabel"] = {
     tooltip = false,
     kind = "label", role = "TextDim", ["in"] = "mogul.controlsRow3",
-    text = "Supply impact:", font = "small",
+    text = "locale:MOG_SUPPLY_IMPACT_LABEL", font = "small",
     height = 20, width = "auto", order = 5,
 }
 -- width=190: Off(~38)+Smooth%(~68)+Cap(~44)+2x spacing(14)=~178px.
@@ -346,7 +346,7 @@ LC.widgets["mogulPanel.supplyParam"] = {
 LC.widgets["mogulPanel.frugal"] = {
     tooltip = { recipe = "MogulFrugal" },
     kind = "button", ["in"] = "mogul.controlsRow3", variant = "tertiary", font = "button",
-    text = "Frugal", width = 70, height = 22, order = 30,
+    text = "locale:MOG_FRUGAL", width = 70, height = 22, order = 30,
     binding = { active = "mogul.frugal" },
 }
 -- Totals line.
@@ -360,7 +360,7 @@ LC.widgets["mogulPanel.totals"] = {
 LC.widgets["mogulPanel.queueAll"] = {
     tooltip = false,
     kind = "button", ["in"] = "mogul.totalsRow", font = "small",
-    text = "Queue All", width = "auto", height = 14, order = 20, variant = "tertiary",
+    text = "locale:MOG_QUEUE_ALL", width = "auto", height = 14, order = 20, variant = "tertiary",
     binding = { enabled = "mogul.queueAllEnabled" },
 }
 
@@ -380,7 +380,7 @@ LC.widgets["mogulPanel.planColSpacer"] = {
 LC.widgets["mogulPanel.planColName"] = {
     tooltip = false,
     kind = "label", role = "TextDim", ["in"] = "mogul.planColumnHeader",
-    text = "Recipe", font = "caption", width = "fill", height = 14, order = 20,
+    text = "locale:MOG_PLAN_COL_RECIPE", font = "caption", width = "fill", height = 14, order = 20,
 }
 LC.widgets["mogulPanel.planColLumber"] = {
     tooltip = false,
@@ -398,14 +398,14 @@ LC.widgets["mogulPanel.planColEach"] = {
 LC.widgets["mogulPanel.planColRevNet"] = {
     tooltip = false,
     kind = "label", role = "TextDim", ["in"] = "mogul.planColumnHeader",
-    text = "Revenue / Net", font = "caption",
+    text = "locale:MOG_PLAN_COL_REVENUE_NET", font = "caption",
     width = 150, height = 14, order = 50, justifyH = "RIGHT",
 }
 -- "Exp" header: dim, right-anchored to mirror the row's _expFs cell.
 LC.widgets["mogulPanel.planColExp"] = {
     tooltip = false,
     kind = "label", role = "TextDim", ["in"] = "mogul.planColumnHeader",
-    text = "Exp", font = "caption",
+    text = "locale:MOG_PLAN_COL_EXP", font = "caption",
     width = 40, height = 14, order = 60, justifyH = "RIGHT",
 }
 
@@ -422,7 +422,7 @@ LC.widgets["mogulPanel.list"] = {
 LC.widgets["mogulPanel.lumberTitle"] = {
     tooltip = false,
     kind = "label", role = "TextDim", ["in"] = "mogul.lumberHeader",
-    text = "Lumber used in plan", font = "small",
+    text = "locale:MOG_LUMBER_USED_IN_PLAN", font = "small",
     height = 14, width = "fill", order = 10,
     binding = "mogul.lumberHeaderLabel",
 }
@@ -439,7 +439,7 @@ LC.widgets["mogulPanel.lumberList"] = {
 LC.widgets["mogulPanel.matsTitle"] = {
     tooltip = false,
     kind = "label", role = "TextDim", ["in"] = "mogul.matsHeader",
-    text = "Reagents to buy", font = "small",
+    text = "locale:MOG_REAGENTS_TO_BUY", font = "small",
     height = 14, width = "fill", order = 10,
     binding = "mogul.matsTitle",
 }
@@ -447,7 +447,7 @@ LC.widgets["mogulPanel.matsTitle"] = {
 LC.widgets["mogulPanel.sendToAH"] = {
     tooltip = false,
     kind = "button", ["in"] = "mogul.matsHeader", font = "small",
-    text = "-> Auctionator", width = "auto", height = 14, order = 20, variant = "tertiary",
+    text = "locale:MOG_SEND_TO_AUCTIONATOR", width = "auto", height = 14, order = 20, variant = "tertiary",
     binding = { enabled = "mogul.auctionatorEnabled" },
 }
 LC.widgets["mogulPanel.matsList"] = {
@@ -576,7 +576,7 @@ LC.widgets["mogulPanel.goblinSearch"] = {
     kind = "editbox", ["in"] = "mogul.goblinFilterRow", font = "body",
     height = 22, width = 160, order = 10,
     multiline = false,
-    placeholder = "Search by name...",
+    placeholder = "locale:MOG_SEARCH_PLACEHOLDER",
 }
 -- Mouse hint (sort + row-expand). Spacer right-aligns it.
 LC.widgets["mogulPanel.goblinHintsSpacer"] = {
@@ -585,7 +585,7 @@ LC.widgets["mogulPanel.goblinHintsSpacer"] = {
 }
 LC.widgets["mogulPanel.goblinHints"] = {
     tooltip = false, kind = "clickHints", ["in"] = "mogul.goblinFilterRow",
-    leftText = "Sort by a column header, or expand a row for its reagent breakdown.",
+    leftText = "locale:MOG_GOBLIN_HINTS_LEFT",
     width = 16, height = 16, order = 90,
 }
 -- Knowledge + Queue dropdowns: selectionPrefix adds axis name ("Knowledge: All" etc).
@@ -593,8 +593,8 @@ LC.widgets["mogulPanel.goblinKnowDropdown"] = {
     tooltip = false,
     kind = "dropdown", ["in"] = "mogul.goblinKnowGroup",
     width = "auto", height = 20, order = 10, minWidth = 130,
-    placeholder     = "Knowledge: ...",
-    selectionPrefix = "Knowledge: ",
+    placeholder     = "locale:MOG_KNOWLEDGE_PLACEHOLDER",
+    selectionPrefix = "locale:MOG_KNOWLEDGE_PREFIX",
     binding  = { menu = "goblin.knowledgeMenuItems", current = "goblin.knowledge" },
     dispatch = { type = "GOBLIN_SET_KNOWLEDGE", payloadKey = "mode" },
 }
@@ -602,15 +602,15 @@ LC.widgets["mogulPanel.goblinQueueDropdown"] = {
     tooltip = false,
     kind = "dropdown", ["in"] = "mogul.goblinQueueGroup",
     width = "auto", height = 20, order = 10, minWidth = 110,
-    placeholder     = "Queue: ...",
-    selectionPrefix = "Queue: ",
+    placeholder     = "locale:MOG_QUEUE_PLACEHOLDER",
+    selectionPrefix = "locale:MOG_QUEUE_PREFIX",
     binding  = { menu = "goblin.queueMenuItems", current = "goblin.queue" },
     dispatch = { type = "GOBLIN_SET_QUEUE", payloadKey = "mode" },
 }
 LC.widgets["mogulPanel.goblinAuctions"] = {
     tooltip = false,
     kind = "button", ["in"] = "mogul.goblinFilterRow", font = "small",
-    text = "Auctions", width = "auto", height = 20, order = 40, variant = "tertiary",
+    text = "locale:MOG_AUCTIONS", width = "auto", height = 20, order = 40, variant = "tertiary",
     binding = { active = "goblin.auctionsActive" },
 }
 LC.widgets["mogulPanel.goblinList"] = {
@@ -650,17 +650,17 @@ LC.widgets["mogulPanel.goblinDetailTitle"] = {
 LC.widgets["mogulPanel.goblinDetailColQty"] = {
     tooltip = false,
     kind = "label", role = "TextDim", ["in"] = "mogul.goblinDetailHeader",
-    text = "Qty", font = "caption", width = 50, height = 16, order = 70,
+    text = "locale:MOG_DETAIL_COL_QTY", font = "caption", width = 50, height = 16, order = 70,
 }
 LC.widgets["mogulPanel.goblinDetailColOwned"] = {
     tooltip = false,
     kind = "label", role = "TextDim", ["in"] = "mogul.goblinDetailHeader",
-    text = "Owned", font = "caption", width = 60, height = 16, order = 80,
+    text = "locale:MOG_DETAIL_COL_OWNED", font = "caption", width = 60, height = 16, order = 80,
 }
 LC.widgets["mogulPanel.goblinDetailColCost"] = {
     tooltip = false,
     kind = "label", role = "TextDim", ["in"] = "mogul.goblinDetailHeader",
-    text = "Cost", font = "caption", width = 80, height = 16, order = 90,
+    text = "locale:MOG_DETAIL_COL_COST", font = "caption", width = 80, height = 16, order = 90,
 }
 LC.widgets["mogulPanel.goblinDetailList"] = {
     tooltip = false,
@@ -677,12 +677,12 @@ LC.widgets["mogulPanel.goblinDetailList"] = {
 LC.widgets["mogulPanel.goblinProfLabel"] = {
     tooltip = false,
     kind = "label", role = "TextDim", ["in"] = "mogul.goblinProfRow",
-    text = "Prof:", font = "caption", width = "auto", height = 20, order = 1,
+    text = "locale:MOG_PROF_LABEL", font = "caption", width = "auto", height = 20, order = 1,
 }
 LC.widgets["mogulPanel.goblinProf_All"] = {
     tooltip = false,
     kind = "button", ["in"] = "mogul.goblinProfRow", font = "small",
-    text = "All", width = "auto", height = 20, order = 5, variant = "tertiary",
+    text = "locale:COMMON_ALL", width = "auto", height = 20, order = 5, variant = "tertiary",
     binding = { active = "goblin.profActive_All" },
     profession = "All",
 }

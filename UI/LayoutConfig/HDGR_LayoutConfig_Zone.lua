@@ -102,7 +102,7 @@ LC.widgets["zoneHeaderPanel.icon"] = {
 LC.widgets["zoneHeaderPanel.title"] = {
     tooltip = false,
     kind = "label", role = "TextHeading", ["in"] = "zoneHeaderPanel", slot = "header",
-    text = "Zone Scanner", font = "heading",
+    text = "locale:ZONE_TITLE", font = "heading",
     height = 18, width = "auto", order = 10,
 }
 LC.widgets["zoneHeaderPanel.spacer"] = {
@@ -125,14 +125,14 @@ LC.widgets["zonePanel.searchBox"] = {
     tooltip = false,
     kind = "editbox", ["in"] = "zone.filterBar",
     font = "body", width = "fill", height = 22, order = 10,
-    placeholder = "Search vendors...",
+    placeholder = "locale:ZONE_SEARCH_PLACEHOLDER",
     binding = { text = "zone.search" },
 }
 
 LC.widgets["zonePanel.showCollectedBtn"] = {
     tooltip = false,
     kind = "button", ["in"] = "zone.filterBar",
-    font = "small", text = "Show Collected", width = "auto", height = 22,
+    font = "small", text = "locale:ZONE_SHOW_COLLECTED", width = "auto", height = 22,
     order = 20, variant = "tertiary",
     binding = { active = "zone.showCollected" },
 }
@@ -154,7 +154,7 @@ LC.widgets["zonePanel.entries"] = {
 LC.widgets["zonePanel.mapAllBtn"] = {
     tooltip = false,
     kind = "button", ["in"] = "zone.actionBar",
-    font = "body", text = "Map All", width = "auto", height = 22,
+    font = "body", text = "locale:ZONE_MAP_ALL", width = "auto", height = 22,
     order = 10, variant = "tertiary",
 }
 LC.widgets["zonePanel.actionSpacer"] = {

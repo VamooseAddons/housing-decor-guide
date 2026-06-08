@@ -390,6 +390,13 @@ HDG.Constants = {
         ACQ_TOGGLE_ADVANCED_FILTERS = "HDGR_ACQ_TOGGLE_ADVANCED_FILTERS",
         -- Missing toggle is orthogonal to ACQ_SET_PRESET (ANDs with active source).
         ACQ_TOGGLE_MISSING          = "HDGR_ACQ_TOGGLE_MISSING",
+        -- Advanced-filter multi-select toggles. payload: { <axis> = value }; value=="all"
+        -- clears the axis set (empty set = "All"). Clone of RECIPES_TOGGLE_EXPANSION.
+        ACQ_TOGGLE_EXPANSION        = "HDGR_ACQ_TOGGLE_EXPANSION",   -- payload: { expansion }
+        ACQ_TOGGLE_ZONE             = "HDGR_ACQ_TOGGLE_ZONE",        -- payload: { zone }
+        ACQ_TOGGLE_REP              = "HDGR_ACQ_TOGGLE_REP",         -- payload: { rep }
+        ACQ_TOGGLE_SOURCE           = "HDGR_ACQ_TOGGLE_SOURCE",      -- payload: { source }
+        ACQ_TOGGLE_FACTION          = "HDGR_ACQ_TOGGLE_FACTION",     -- payload: { faction }
 
         -- ===== Structured logging =====
         LOG_PUSH            = "HDGR_LOG_PUSH",            -- payload: { tag, level, text, timestamp, duration, metadata }

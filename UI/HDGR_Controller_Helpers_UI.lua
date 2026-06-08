@@ -278,24 +278,38 @@ function UI.GateChips(itemID, questDone, achEarned, repMet)
     return table.concat(out, " ")
 end
 
--- Send reagent deficit to Auctionator shopping list (searches by name).
--- "item:<id>" fallback so the list is never silently empty. Returns (count, present).
+-- Send a reagent buy-list to Auctionator as a shopping list. Each reagent is
+-- { id = itemID, qty = stillNeeded } (qty = the gap between what's needed and held).
+-- When Auctionator exposes ConvertToSearchString we emit an exact-name search that
+-- carries that quantity, so the list reflects the buy gap (not a fuzzy name search) --
+-- parity with HDG v2.45. Bare-name fallback (older Auctionator). "item:<id>" fallback
+-- so the list is never silently empty. Returns (count, present).
 function UI.SendReagentsToAuctionator(listName, reagents)
     local API = _G.Auctionator and _G.Auctionator.API and _G.Auctionator.API.v1  -- exception(boundary): optional addon
     if not (API and API.CreateShoppingList) then return 0, false end
-    local names = {}
+    local callerID = HDG.Constants.ADDON_NAME
+    local hasQty   = API.ConvertToSearchString ~= nil
+    local terms = {}
     for _, mat in ipairs(reagents) do
         local name = HDG.ItemNameResolver:ResolveName(mat.id)
         if (not name or name == "") and C_Item and C_Item.GetItemInfo then  -- exception(boundary): uncached item
             name = (C_Item.GetItemInfo(mat.id))
         end
         if not name or name == "" then name = "item:" .. tostring(mat.id) end
-        names[#names + 1] = name
+        if hasQty then
+            terms[#terms + 1] = API.ConvertToSearchString(callerID, {
+                searchString = name,
+                isExact      = true,
+                quantity     = (mat.qty and mat.qty > 0) and mat.qty or nil,
+            })
+        else
+            terms[#terms + 1] = name
+        end
     end
-    if #names > 0 then
-        API.CreateShoppingList(HDG.Constants.ADDON_NAME, listName, names)
+    if #terms > 0 then
+        API.CreateShoppingList(callerID, listName, terms)
     end
-    return #names, true
+    return #terms, true
 end
 
 -- ===== Composer primitives =====================================================

@@ -189,14 +189,14 @@ LC.panels.projectsPickerPreviewPanel = {
 
 LC.widgets["projectsLandingPanel.title"] = {
     tooltip = false, kind = "label", ["in"] = "projectsLandingPanel", slot = "header",
-    text = "Projects", font = "heading", height = 18, width = "auto", order = 5,
+    text = "locale:PROJ_TITLE", font = "heading", height = 18, width = "auto", order = 5,
 }
 -- House switcher (same self-wired dropdown as the Architect bar). Orients the ledger.
 LC.widgets["projectsLandingPanel.houseDropdown"] = {
     tooltip = false, kind = "dropdown", ["in"] = "projectsLandingPanel", slot = "header",
     binding   = { menu = "projects.houseMenuItems", current = "projects.activeHouseID" },
     dispatch  = { type = "PROJECTS_FOCUS_HOUSE", payloadKey = "houseID" },
-    placeholder = "House...", width = 200, height = 24, order = 6,
+    placeholder = "locale:PROJ_HOUSE_DROPDOWN_PLACEHOLDER", width = 200, height = 24, order = 6,
     visible = "projects.hasRooms",
 }
 LC.widgets["projectsLandingPanel.headerSpacer"] = {
@@ -211,25 +211,25 @@ LC.widgets["projectsLandingPanel.orphanAlert"] = {
 }
 LC.widgets["projectsLandingPanel.openArchitect"] = {
     tooltip = false, kind = "button", ["in"] = "projectsLandingPanel", slot = "header",
-    font = "body", text = "Open Architect", width = 120, height = 22, order = 10,
+    font = "body", text = "locale:PROJ_OPEN_ARCHITECT", width = 120, height = 22, order = 10,
     visible = "projects.hasRooms",
 }
 LC.widgets["projectsLandingPanel.newWhatIf"] = {
     tooltip = false, kind = "button", ["in"] = "projectsLandingPanel", slot = "header",
-    font = "body", text = "+ What-if", width = 90, height = 22, order = 12,
+    font = "body", text = "locale:PROJ_NEW_WHATIF", width = 90, height = 22, order = 12,
     visible = "projects.hasRooms",
 }
 -- Standalone planning (Phase G): design a layout WITHOUT capturing a house first --
 -- mocks up a from-scratch what-if (no live cap; the shopping list is "all to build").
 LC.widgets["projectsLandingPanel.newDesign"] = {
     tooltip = false, kind = "button", ["in"] = "projectsLandingPanel", slot = "header",
-    font = "body", text = "Start a design", width = 120, height = 22, order = 22,
+    font = "body", text = "locale:PROJ_START_DESIGN", width = 120, height = 22, order = 22,
     visible = "projects.noRooms",
 }
 -- First-time CTA (no rooms captured): centered prompt.
 LC.widgets["projectsLandingPanel.cta"] = {
     tooltip = false, kind = "label", ["in"] = "projectsLandingPanel",
-    text = "Capture your house in the Layout editor to plan its decor -- or Start a design from scratch to mock up a layout you don't own yet.",
+    text = "locale:PROJ_NO_ROOMS_CTA",
     font = "body", width = "fill", height = 40, order = 10,
     visible = "projects.noRooms",
 }
@@ -250,7 +250,7 @@ LC.widgets["projectsBarPanel.houseDropdown"] = {
     tooltip = false, kind = "dropdown", ["in"] = "projectsBarPanel",
     binding   = { menu = "projects.houseMenuItems", current = "projects.activeHouseID" },
     dispatch  = { type = "PROJECTS_FOCUS_HOUSE", payloadKey = "houseID" },
-    placeholder = "House...", width = 220, height = 25, order = 10,
+    placeholder = "locale:PROJ_HOUSE_DROPDOWN_PLACEHOLDER", width = 220, height = 25, order = 10,
 }
 LC.widgets["projectsBarPanel.spacer"] = {
     tooltip = false, kind = "spacer", ["in"] = "projectsBarPanel",
@@ -277,9 +277,9 @@ LC.widgets["projectsBarPanel.budgetBar"] = {
 LC.widgets["projectsBarPanel.clickHints"] = {
     tooltip = false,   -- self-owned tooltip composed from leftText/rightText
     kind = "clickHints", ["in"] = "projectsBarPanel",
-    leftText  = "Select a room. Drag it to reposition on the grid.",
-    rightText = "Room options -- move, rotate, or remove the room.",
-    title     = "Canvas controls",
+    leftText  = "locale:PROJ_CANVAS_LEFT_HINT",
+    rightText = "locale:PROJ_CANVAS_RIGHT_HINT",
+    title     = "locale:PROJ_CANVAS_TITLE",
     width = 34, height = 16, order = 50,
 }
 
@@ -301,17 +301,17 @@ LC.widgets["projectsNavPanel.floors"] = {
 -- to its LEFT when removable, instead of pushing "+ Floor" left.
 LC.widgets["projectsNavPanel.addFloor"] = {
     tooltip = false, kind = "button", ["in"] = "projectsNavPanel",
-    font = "body", text = "+ Floor", width = 72, height = 22, order = 18,
+    font = "body", text = "locale:PROJ_ADD_FLOOR", width = 72, height = 22, order = 18,
     visible = "projects.canAddWhatIfFloor",
 }
 LC.widgets["projectsNavPanel.removeFloor"] = {
     tooltip = false, kind = "button", ["in"] = "projectsNavPanel",
-    font = "body", text = "- Floor", width = 72, height = 22, order = 17,
+    font = "body", text = "locale:PROJ_REMOVE_FLOOR", width = 72, height = 22, order = 17,
     visible = "projects.canRemoveWhatIfFloor",
 }
 LC.widgets["projectsNavPanel.captureAll"] = {
     tooltip = { recipe = "ProjectsCaptureAll" }, kind = "button", ["in"] = "projectsNavPanel",
-    font = "body", text = "Capture all floors", width = 130, height = 22, order = 20,
+    font = "body", text = "locale:PROJ_CAPTURE_ALL_FLOORS", width = 130, height = 22, order = 20,
 }
 -- (Dashboard button dropped 2026-06-07 -- the "Projects" parent nav node already
 --  navigates to projectsLanding, so the button was a redundant second route.)
@@ -325,28 +325,28 @@ LC.widgets["projectsCanvasPanel.canvas"] = {
 -- Detail panel: selected room title.
 LC.widgets["projectsDetailPanel.title"] = {
     tooltip = false, kind = "label", ["in"] = "projectsDetailPanel", slot = "header",
-    text = "Room", font = "heading", height = 18, width = "fill", order = 5,
+    text = "locale:PROJ_DETAIL_ROOM_TITLE", font = "heading", height = 18, width = "fill", order = 5,
 }
 -- Picker (left rail): room palette (what-if) or Live-mode CTA (stock).
 -- Placing rooms only makes sense on a what-if; editing Live gets wiped on recapture.
 LC.widgets["projectsPickerPanel.title"] = {
     tooltip = false, kind = "label", ["in"] = "projectsPickerPanel", slot = "header",
-    text = "Rooms", font = "heading", height = 18, width = "fill", order = 5,
+    text = "locale:PROJ_PICKER_ROOMS_TITLE", font = "heading", height = 18, width = "fill", order = 5,
 }
 LC.widgets["projectsPickerPanel.hint"] = {
     tooltip = false, kind = "label", ["in"] = "projectsPickerPanel",
-    text = "Click to place, then drag.", font = "caption", width = "fill", height = 16, order = 2,
+    text = "locale:PROJ_PICKER_WHATIF_HINT", font = "caption", width = "fill", height = 16, order = 2,
     visible = "projects.isWhatIfMode",
 }
 -- Stock (Live) mode: palette locked; branch a what-if to redesign.
 LC.widgets["projectsPickerPanel.stockHint"] = {
     tooltip = false, kind = "label", ["in"] = "projectsPickerPanel",
-    text = "Live house -- your captured layout. The game doesn't give addons your room connections, so HDG can't auto-arrange them -- drag rooms to place them (they join where their doors touch). Branch a what-if to redesign.",
+    text = "locale:PROJ_PICKER_STOCK_HINT",
     font = "caption", width = "fill", height = 96, order = 3, visible = "projects.isStockMode",
 }
 LC.widgets["projectsPickerPanel.newWhatIf"] = {
     tooltip = false, kind = "button", ["in"] = "projectsPickerPanel",
-    font = "body", text = "+ New what-if", width = "fill", height = 24, order = 4,
+    font = "body", text = "locale:PROJ_NEW_WHATIF_PICKER", width = "fill", height = 24, order = 4,
     visible = "projects.isStockMode",
 }
 LC.widgets["projectsPickerPanel.list"] = {
@@ -362,7 +362,7 @@ LC.widgets["projectsPickerPanel.planValidation"] = {
 -- Room shopping list: what-if vs reality delta. Hidden when the active version is Live.
 LC.widgets["projectsPickerPanel.shoppingLabel"] = {
     tooltip = false, kind = "label", ["in"] = "projectsPickerPanel",
-    text = "Shopping list", font = "caption", width = "fill", height = 16, order = 22,
+    text = "locale:PROJ_SHOPPING_LIST_LABEL", font = "caption", width = "fill", height = 16, order = 22,
     visible = "projects.hasShoppingList",
 }
 LC.widgets["projectsPickerPanel.shoppingList"] = {
@@ -383,7 +383,7 @@ LC.widgets["projectsDetailPanel.meta"] = {
 }
 LC.widgets["projectsDetailPanel.note"] = {
     tooltip = false, kind = "label", ["in"] = "projectsDetailPanel",
-    text = "Rooms connect where their doors touch -- drag them next to each other.",
+    text = "locale:PROJ_ROOM_CONNECT_HINT",
     font = "caption", width = "fill", height = 28, order = 30, visible = "projects.sidePanelOpen",
 }
 -- Crate detail: room's crate decor list + add-crate CTA.
@@ -394,24 +394,24 @@ LC.widgets["projectsDetailPanel.crateTitle"] = {
 }
 LC.widgets["projectsDetailPanel.addDecor"] = {
     tooltip = false, kind = "button", ["in"] = "projectsDetailPanel",
-    font = "body", text = "+ Add decor", width = 120, height = 24, order = 42,
+    font = "body", text = "locale:PROJ_ADD_DECOR", width = 120, height = 24, order = 42,
     visible = "projects.crateDetailHasCrate",
 }
 -- Export / Import in the header (fill title pushes them right).
 LC.widgets["projectsDetailPanel.exportCrate"] = {
     tooltip = false, kind = "button", ["in"] = "projectsDetailPanel", slot = "header",
-    font = "body", text = "Export", width = 62, height = 22, order = 6,
+    font = "body", text = "locale:PROJ_EXPORT_BTN", width = 62, height = 22, order = 6,
     visible = "projects.crateDetailHasCrate",
 }
 LC.widgets["projectsDetailPanel.importCrate"] = {
     tooltip = false, kind = "button", ["in"] = "projectsDetailPanel", slot = "header",
-    font = "body", text = "Import", width = 62, height = 22, order = 7,
+    font = "body", text = "locale:COMMON_IMPORT", width = 62, height = 22, order = 7,
     visible = "projects.sidePanelOpen",
 }
 -- Orphaned crates: rooms removed on recapture; re-attach to selected room or delete.
 LC.widgets["projectsDetailPanel.orphanLabel"] = {
     tooltip = false, kind = "label", ["in"] = "projectsDetailPanel",
-    text = "Orphaned crates -- re-attach to this room:", font = "caption",
+    text = "locale:PROJ_ORPHAN_REATTACH_LABEL", font = "caption",
     width = "fill", height = 28, order = 46, visible = "projects.orphansAttachable",
 }
 LC.widgets["projectsDetailPanel.orphanList"] = {
@@ -422,7 +422,7 @@ LC.widgets["projectsDetailPanel.orphanList"] = {
 }
 LC.widgets["projectsDetailPanel.addCrate"] = {
     tooltip = { recipe = "ProjectsAddCrate" }, kind = "button", ["in"] = "projectsDetailPanel",
-    font = "body", text = "+ Add Crate", width = 120, height = 24, order = 45,
+    font = "body", text = "locale:PROJ_ADD_CRATE", width = 120, height = 24, order = 45,
     visible = "projects.crateDetailNeedsCrate",
 }
 LC.widgets["projectsDetailPanel.crateList"] = {
@@ -435,7 +435,7 @@ LC.widgets["projectsDetailPanel.crateList"] = {
 -- (reattachable). Sits below the fill crateList. Shown only when a crate exists.
 LC.widgets["projectsDetailPanel.detachCrate"] = {
     tooltip = { recipe = "ProjectsDetachCrate" }, kind = "button", ["in"] = "projectsDetailPanel",
-    font = "body", text = "Detach Crate", width = "fill", height = 24, order = 60,
+    font = "body", text = "locale:PROJ_DETACH_CRATE", width = "fill", height = 24, order = 60,
     variant = "tertiary", visible = "projects.crateDetailHasCrate",
 }
 
@@ -444,7 +444,7 @@ LC.widgets["projectsDetailPanel.detachCrate"] = {
 -- Left list panel header: title + spacer + Import button.
 LC.widgets["projectsLayoutsListPanel.title"] = {
     tooltip = false, kind = "label", ["in"] = "projectsLayoutsListPanel", slot = "header",
-    text = "Layouts", font = "heading", height = 18, width = "auto", order = 5,
+    text = "locale:PROJ_LAYOUTS_TITLE", font = "heading", height = 18, width = "auto", order = 5,
 }
 LC.widgets["projectsLayoutsListPanel.headerSpacer"] = {
     tooltip = false, kind = "spacer", ["in"] = "projectsLayoutsListPanel", slot = "header",
@@ -452,7 +452,7 @@ LC.widgets["projectsLayoutsListPanel.headerSpacer"] = {
 }
 LC.widgets["projectsLayoutsListPanel.importBtn"] = {
     tooltip = { recipe = "LayoutImport" }, kind = "button", ["in"] = "projectsLayoutsListPanel", slot = "header",
-    font = "body", text = "Import", width = 72, height = 22, order = 10,
+    font = "body", text = "locale:COMMON_IMPORT", width = 72, height = 22, order = 10,
 }
 -- Version list: house group headers interleaved with version rows (flat projection).
 LC.widgets["projectsLayoutsListPanel.list"] = {
@@ -500,56 +500,56 @@ LC.sections["projectsLayoutsDetailPanel.actions2"] = {
 -- Primary row.
 LC.widgets["projectsLayoutsDetailPanel.loadBtn"] = {
     tooltip = { recipe = "LayoutLoad" }, kind = "button", ["in"] = "projectsLayoutsDetailPanel.actions1",
-    font = "body", text = "Load in Architect", width = 140, height = 24, order = 10,
+    font = "body", text = "locale:PROJ_LOAD_IN_ARCHITECT", width = 140, height = 24, order = 10,
     visible = "projects.hasLayoutSelection",
 }
 LC.widgets["projectsLayoutsDetailPanel.shareBtn"] = {
     tooltip = { recipe = "LayoutShare" }, kind = "button", ["in"] = "projectsLayoutsDetailPanel.actions1",
-    font = "body", text = "Share code", width = 100, height = 24, order = 20,
+    font = "body", text = "locale:PROJ_SHARE_CODE", width = 100, height = 24, order = 20,
     visible = "projects.hasLayoutSelection",
 }
 -- Secondary row.
 LC.widgets["projectsLayoutsDetailPanel.renameBtn"] = {
     tooltip = false, kind = "button", ["in"] = "projectsLayoutsDetailPanel.actions2",
-    font = "body", text = "Rename", width = 80, height = 22, order = 10,
+    font = "body", text = "locale:PROJ_RENAME_BTN", width = 80, height = 22, order = 10,
     visible = "projects.hasLayoutSelection",
 }
 LC.widgets["projectsLayoutsDetailPanel.duplicateBtn"] = {
     tooltip = { recipe = "LayoutDuplicate" }, kind = "button", ["in"] = "projectsLayoutsDetailPanel.actions2",
-    font = "body", text = "Duplicate", width = 90, height = 22, order = 20,
+    font = "body", text = "locale:PROJ_DUPLICATE_BTN", width = 90, height = 22, order = 20,
     visible = "projects.hasLayoutSelection",
 }
 LC.widgets["projectsLayoutsDetailPanel.deleteBtn"] = {
     tooltip = false, kind = "button", ["in"] = "projectsLayoutsDetailPanel.actions2",
-    font = "body", text = "Delete", width = 80, height = 22, order = 30,
+    font = "body", text = "locale:COMMON_DELETE", width = 80, height = 22, order = 30,
     visible = "projects.hasLayoutSelection",
 }
 
 -- ===== Picker widgets ========================================================
 LC.widgets["projectsPickerListPanel.title"] = {
     tooltip = false, kind = "label", ["in"] = "projectsPickerListPanel", slot = "header",
-    text = "Add decor", font = "heading", height = 18, width = "auto", order = 5,
+    text = "locale:PROJ_PICKER_TITLE", font = "heading", height = 18, width = "auto", order = 5,
 }
 LC.widgets["projectsPickerListPanel.search"] = {
     tooltip = false, kind = "editbox", ["in"] = "projectsPickerListPanel", slot = "header",
     font = "body", width = "fill", height = 22, order = 10, multiline = false,
-    placeholder = "Search decor by name...",
+    placeholder = "locale:DECOR_SEARCH_PLACEHOLDER",
 }
 LC.widgets["projectsPickerListPanel.back"] = {
     tooltip = false, kind = "button", ["in"] = "projectsPickerListPanel", slot = "header",
-    font = "body", text = "Back", width = 60, height = 22, order = 20,
+    font = "body", text = "locale:COMMON_BACK", width = 60, height = 22, order = 20,
 }
 -- Import from a saved Style: a single menu button (was a stacked scrollbox) -> opens
 -- a per-style menu (Add all / Add missing). Frees the panel for one decor list.
 LC.widgets["projectsPickerListPanel.styleImport"] = {
     tooltip = false, kind = "button", ["in"] = "projectsPickerListPanel",
-    font = "body", text = "Import from a Style...", width = "auto", height = 22, order = 1,
+    font = "body", text = "locale:PROJ_IMPORT_FROM_STYLE", width = "auto", height = 22, order = 1,
     variant = "tertiary", visible = "projects.pickerHasStyles",
 }
 -- Gated bulk-add above the list (picker is owned-only; filterChips removed).
 LC.widgets["projectsPickerListPanel.addAll"] = {
     tooltip = false, kind = "button", ["in"] = "projectsPickerListPanel",
-    font = "body", text = "+ Add all", binding = { text = "projects.pickerBulkAddLabel" },
+    font = "body", text = "locale:PROJ_ADD_ALL", binding = { text = "projects.pickerBulkAddLabel" },
     width = 130, height = 22, order = 7, visible = "projects.pickerCanBulkAdd",
 }
 LC.widgets["projectsPickerListPanel.list"] = {
@@ -561,7 +561,7 @@ LC.widgets["projectsPickerPreviewPanel.preview"] = {
     tooltip = false, kind = "modelPreview", ["in"] = "projectsPickerPreviewPanel",
     binding = { itemID = "projects.pickerSelectedItemID" },
     width = "fill", height = "fill", order = 10,
-    showControls = true, bgTile = true, placeholder = "Click an item to preview",
+    showControls = true, bgTile = true, placeholder = "locale:DECOR_PREVIEW_PLACEHOLDER",
     sceneInsets = { top = 8, right = 8, bottom = 8, left = 8 },
     defaultSceneID = 859,   -- HOUSING_CATALOG_DECOR_MODELSCENEID_DEFAULT (12.0.5)
 }

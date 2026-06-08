@@ -1,5 +1,45 @@
 ## [Unreleased]
 
+## [3.1.0] - 2026-06-08 (June 2026)
+
+ADDED:
+- Localization is back. The interface and tooltips are now translatable, and HDG
+  ships first-pass translations for German, Spanish (Spain & Latin America), French,
+  Italian, Korean, Portuguese (Brazil), Russian, and Chinese (Simplified &
+  Traditional). Pick a language under Options > AddOns > Housing Decor Guide >
+  Advanced (or leave it on Auto to follow your client). Decoration, vendor, and zone
+  names still come straight from the game, so they're always in your language.
+  Untranslated strings fall back to English; community translation help is welcome on
+  Discord. (Chinese/Korean render with your client's font automatically.)
+- Acquire's advanced filters (Expansion / Zone / Reps / Sources / factions) are now
+  multi-select: tick several values in any dropdown to widen the filter -- e.g. show
+  decor from Cataclysm AND Mists of Pandaria, or vendors selling Alliance OR Horde
+  items. Each menu has an "All X" entry at the top to clear that axis, and your
+  selections carry across both Shop by Vendor and Find Decor. Reset clears everything.
+
+FIXED:
+- Lumber Tracker's live "+N this session" no longer counts bank/warband stock as
+  gathered. The session counter was reading your TOTAL held (bags + bank + warband)
+  against a bag-only start, so harvesting 1 log with 67 already in the bank showed
+  "+68 this session". It now counts only what you've gathered into your bags (the
+  per-type stock column still shows your full owned total). Matches the harvest log.
+- "Send to Auctionator" (Recipes materials and Mogul) once again exports the buy
+  *gap* -- each missing reagent with the quantity you still need (needed minus what's
+  in your bags), as an exact-name search -- instead of a bare fuzzy name with no
+  amount. Matches the old behaviour; needs Auctionator's quantity-aware search (older
+  versions still get the name list).
+- Find Decor's "Crafted" filter now lists only decor you can actually craft (items
+  with a recipe), instead of also pulling in drops and achievement rewards that the
+  live catalog sometimes mislabels as crafted.
+- An item sold by a vendor now appears under that vendor's zone even when the seller
+  comes from a manual catalog correction -- e.g. the Tailor's Shop Sign now shows up
+  under Silvermoon City (sold by Deynna), matching the Shop by Vendor view. Vendor
+  locations always come from the curated vendor data now, so Find by Item and Shop by
+  Vendor agree on where to find a vendor.
+- Smart Sets: the "Subject" style axis is populated again -- decor is sorted across
+  its subjects (florals, creatures, symbols, and so on) instead of everything
+  collapsing into a single bucket.
+
 ## [3.0.2] - 2026-06-08 (June 2026)
 
 ADDED:

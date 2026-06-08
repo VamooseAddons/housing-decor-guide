@@ -755,8 +755,11 @@ function RecipesController:Wire(rootFrame)
         local rows = HDG.Selectors:Call("recipes.materials.current", HDG.Store:GetState(), {})  -- exception(false-positive): top-level controller method (not a row factory)
         local reagents = {}
         for _, r in ipairs(rows) do
-            if r.kind == "matRow" and ((r.qty or 0) - (r.have or 0)) > 0 then
-                reagents[#reagents + 1] = { id = r.itemID }
+            if r.kind == "matRow" then
+                local deficit = (r.qty or 0) - (r.have or 0)
+                if deficit > 0 then
+                    reagents[#reagents + 1] = { id = r.itemID, qty = deficit }
+                end
             end
         end
         local n, present = HDG.UI.SendReagentsToAuctionator("HDG Recipe Materials", reagents)

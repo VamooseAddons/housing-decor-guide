@@ -113,7 +113,7 @@ LC.widgets["shoppingHeaderPanel.icon"] = {
 LC.widgets["shoppingHeaderPanel.title"] = {
     tooltip = false,
     kind = "label", role = "TextHeading", ["in"] = "shoppingHeaderPanel", slot = "header",
-    text = "Shopping List", font = "heading",
+    text = "locale:SHOP_TITLE", font = "heading",
     height = 18, width = "auto", order = 10,
 }
 LC.widgets["shoppingHeaderPanel.spacer"] = {
@@ -125,8 +125,8 @@ LC.widgets["shoppingHeaderPanel.spacer"] = {
 LC.widgets["shoppingHeaderPanel.clickHints"] = {
     tooltip = false,   -- self-owned tooltip, composed from leftText/rightText
     kind = "clickHints", ["in"] = "shoppingHeaderPanel", slot = "header",
-    leftText  = "Expand or collapse a group (zone, vendor, or wishlist).",
-    rightText = "Item options -- set quantity, remove, or show the vendor on the map.",
+    leftText  = "locale:SHOP_HINT_LEFT",
+    rightText = "locale:SHOP_HINT_RIGHT",
     width = 34, height = 16, order = 90,
 }
 LC.widgets["shoppingHeaderPanel.close"] = {
@@ -143,7 +143,7 @@ LC.widgets["shoppingHeaderPanel.close"] = {
 LC.widgets["shoppingPanel.title"] = {
     tooltip = false,
     kind = "label", role = "TextHeading", ["in"] = "shoppingPanel", slot = "header",
-    text = "Shopping", font = "heading",
+    text = "locale:SHOP_PANEL_TITLE", font = "heading",
     height = 18, width = "auto", order = 10,
 }
 -- Summary: width="fill" absorbs slack and truncates gracefully
@@ -161,7 +161,7 @@ LC.widgets["shoppingPanel.listSwitcher"] = {
     kind = "dropdown", ["in"] = "shoppingPanel", slot = "header",
     -- height=25: WowStyle2DropdownTemplate native height; shrinking misaligns the Background atlas.
     width = 180, height = 25, order = 20, minWidth = 140,
-    placeholder = "(no list)",
+    placeholder = "locale:SHOP_NO_LIST",
     binding  = { menu = "shopping.activeListMenuItems",
                  current = "shopping.activeListId" },
     dispatch = { type = "SHOPPING_LIST_ACTIVATE", payloadKey = "id" },
@@ -178,7 +178,7 @@ LC.widgets["shoppingPanel.attributionText"] = {
 LC.widgets["shoppingPanel.attributionOpenBtn"] = {
     tooltip = false,
     kind = "button", ["in"] = "shopping.attribution",
-    font = "small", text = "Open", width = "auto", height = 20,
+    font = "small", text = "locale:SHOP_OPEN_BTN", width = "auto", height = 20,
     order = 20, variant = "tertiary",
     visible = "shopping.hasUrl",
 }
@@ -200,25 +200,25 @@ LC.widgets["shoppingPanel.entries"] = {
 LC.widgets["shoppingPanel.waypointAllBtn"] = {
     tooltip = false,
     kind = "button", ["in"] = "shopping.actionBar",
-    font = "body", text = "Waypoint All", width = "auto", height = 22,
+    font = "body", text = "locale:SHOP_WAYPOINT_ALL", width = "auto", height = 22,
     order = 10, variant = "tertiary",
 }
 LC.widgets["shoppingPanel.clearBtn"] = {
     tooltip = false,
     kind = "button", ["in"] = "shopping.actionBar",
-    font = "body", text = "Clear", width = "auto", height = 22,
+    font = "body", text = "locale:COMMON_CLEAR", width = "auto", height = 22,
     order = 20, variant = "tertiary",
 }
 LC.widgets["shoppingPanel.exportBtn"] = {
     tooltip = false,
     kind = "button", ["in"] = "shopping.actionBar",
-    font = "body", text = "Export", width = "auto", height = 22,
+    font = "body", text = "locale:COMMON_EXPORT", width = "auto", height = 22,
     order = 30, variant = "tertiary",
 }
 LC.widgets["shoppingPanel.importBtn"] = {
     tooltip = false,
     kind = "button", ["in"] = "shopping.actionBar",
-    font = "body", text = "Import", width = "auto", height = 22,
+    font = "body", text = "locale:COMMON_IMPORT", width = "auto", height = 22,
     order = 40, variant = "tertiary",
 }
 LC.widgets["shoppingPanel.actionBarSpacer"] = {
@@ -231,14 +231,14 @@ LC.widgets["shoppingPanel.actionBarSpacer"] = {
 LC.widgets["shoppingPanel.deleteListBtn"] = {
     tooltip = false,
     kind = "button", ["in"] = "shopping.actionBar",
-    font = "body", text = "Delete", width = "auto", height = 22,
+    font = "body", text = "locale:COMMON_DELETE", width = "auto", height = 22,
     order = 48, variant = "tertiary",
     visible = "shopping.hasMultipleLists",
 }
 LC.widgets["shoppingPanel.newListBtn"] = {
     tooltip = false,
     kind = "button", ["in"] = "shopping.actionBar",
-    font = "body", text = "+ New", width = "auto", height = 22,
+    font = "body", text = "locale:SHOP_NEW_LIST", width = "auto", height = 22,
     order = 50, variant = "tertiary",
 }
 

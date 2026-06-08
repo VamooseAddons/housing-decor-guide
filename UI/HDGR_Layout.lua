@@ -1083,10 +1083,36 @@ end
 --
 -- Build callbacks NEVER call Theme:Register on the kind's root widget --
 -- one source of truth for paint role assignment.
+-- Display-string spec fields that may carry a "locale:KEY" prefix. Selector-path
+-- fields (binding/visible/setConfig) are deliberately excluded -- the BindingEngine
+-- already resolves "locale:" on bindings, and resolving a path field would corrupt it.
+local LOCALE_TEXT_FIELDS = {
+    "text", "label", "placeholder", "title", "value", "leftText", "rightText", "selectionPrefix",
+}
+
+-- Return a build-ready spec with any "locale:KEY" display fields resolved to text.
+-- Plain specs pass through with no allocation. NEVER mutates the shared LayoutConfig
+-- table: doing so would bake the first-built locale and stick it across rebuilds.
+local function _resolveLocaleSpec(spec)
+    if not HDG.Locale then return spec end  -- exception(boundary): Locale load-order partial in headless tests
+    local needsCopy = false
+    for _, f in ipairs(LOCALE_TEXT_FIELDS) do
+        local v = spec[f]
+        if type(v) == "string" and v:sub(1, 7) == "locale:" then needsCopy = true; break end
+    end
+    if not needsCopy then return spec end
+    local copy = {}
+    for k, v in pairs(spec) do copy[k] = v end
+    for _, f in ipairs(LOCALE_TEXT_FIELDS) do
+        copy[f] = HDG.Locale:Resolve(copy[f])
+    end
+    return copy
+end
+
 local function _makeBuildKind(env)
     return function(kind, parent, spec)
         local kindDef = HDG.WidgetTypes:Get(kind)  -- errors loudly if missing
-        local widget = kindDef.build(parent, spec)
+        local widget = kindDef.build(parent, _resolveLocaleSpec(spec))
         if not widget then return nil end
         widget._hdgrKind = kind  -- engine introspection (spec section 5)
         -- Per-spec skin override (spec.skin) wins over the kind's default skin --

@@ -425,13 +425,13 @@ LC.sections["styles.import.footer"] = {
 LC.widgets["stylesPanel.headerBack"] = {
     tooltip = false,
     kind = "button", ["in"] = "stylesPanel", slot = "header", font = "small",
-    text = "< Back", width = "auto", height = 22, order = 5, variant = "tertiary",
+    text = "locale:STY_BACK", width = "auto", height = 22, order = 5, variant = "tertiary",
     visible = "styles.isView_detail",
 }
 LC.widgets["stylesPanel.title"] = {
     tooltip = false,
     kind = "label", ["in"] = "stylesPanel", slot = "header",
-    text = "Styles", font = "heading",
+    text = "locale:STY_PANEL_TITLE", font = "heading",
     height = 18, width = "auto", order = 10,
     binding = "styles.headerTitle",
 }
@@ -445,7 +445,7 @@ LC.widgets["stylesPanel.smartsetHints"] = {
     tooltip = false,   -- self-owned tooltip
     kind = "clickHints", ["in"] = "stylesPanel", slot = "header",
     visible = "styles.isView_smartset",
-    leftText = "Cycle a tag's severity -- signature, accent, clashing, or off.",
+    leftText = "locale:STY_SMARTSET_HINTS_LEFT",
     width = 16, height = 16, order = 25,
 }
 LC.widgets["stylesPanel.headerCount"] = {
@@ -461,19 +461,19 @@ LC.widgets["stylesPanel.headerCount"] = {
 LC.widgets["stylesPanel.heroTagline"] = {
     tooltip = false,
     kind = "label", ["in"] = "styles.landing.heroRow", font = "subheading",
-    text = "Style, On Purpose -- drag, drop, and act like that was the plan.",
+    text = "locale:STY_LANDING_TAGLINE",
     height = 22, width = "fill", order = 10,
 }
 LC.widgets["stylesPanel.saveSnapshot"] = {
     tooltip = false,
     kind = "button", ["in"] = "styles.landing.heroRow", font = "small",
-    text = "Save Placed Decor", width = "auto", height = 22, order = 17, variant = "tertiary",
+    text = "locale:STY_SAVE_PLACED_DECOR", width = "auto", height = 22, order = 17, variant = "tertiary",
     binding = { enabled = "styles.snapshot.canSave" },
 }
 LC.widgets["stylesPanel.openImport"] = {
     tooltip = false,
     kind = "button", ["in"] = "styles.landing.heroRow", font = "small",
-    text = "Import", width = "auto", height = 22, order = 18, variant = "tertiary",
+    text = "locale:STY_IMPORT_BTN", width = "auto", height = 22, order = 18, variant = "tertiary",
 }
 LC.widgets["stylesPanel.totalLabel"] = {
     tooltip = false,
@@ -495,7 +495,7 @@ LC.widgets["stylesPanel.landingSearch"] = {
     tooltip = false,
     kind = "editbox", ["in"] = "styles.landing.searchRow", font = "small",
     height = 22, width = 200, order = 20,
-    placeholder = "Search styles...",
+    placeholder = "locale:STY_SEARCH_STYLES_PLACEHOLDER",
     binding = { text = "styles.landing.search" },
 }
 
@@ -522,7 +522,7 @@ LC.widgets["stylesPanel.detailSearch"] = {
     tooltip = false,
     kind = "editbox", ["in"] = "stylesPanel", slot = "header", font = "small",
     height = 20, width = 200, order = 12,
-    placeholder = "Search items...",
+    placeholder = "locale:STY_SEARCH_ITEMS_PLACEHOLDER",
     visible = "styles.isView_detail",
     binding = { text = "styles.detail.search" },
 }
@@ -543,26 +543,26 @@ LC.widgets["stylesPanel.detailList"] = {
 LC.widgets["stylesPanel.curatorSourceColLabel"] = {
     tooltip = false,
     kind = "label", role = "TextDim", ["in"] = "styles.curator.sourceLabelRow", font = "small",
-    text = "VIEWING (SOURCE)", height = 14, width = "fill", order = 10,
+    text = "locale:STY_CURATOR_SOURCE_LABEL", height = 14, width = "fill", order = 10,
 }
 LC.widgets["stylesPanel.curatorSourceBtn"] = {
     tooltip = false,
     kind = "dropdown", ["in"] = "styles.curator.sourceRow",
     height = 22, order = 10, minWidth = 180,
-    placeholder = "Source...",
+    placeholder = "locale:STY_CURATOR_SOURCE_PLACEHOLDER",
     binding  = { menu = "styles.curator.sourceMenuItems", current = "styles.curator.sourceMode" },
     dispatch = { type = "STYLES_CURATOR_SET_SOURCE", payloadKey = "mode" },
 }
 LC.widgets["stylesPanel.curatorFileIntoLabel"] = {
     tooltip = false,
     kind = "label", role = "TextDim", ["in"] = "styles.curator.leftLabel", font = "small",
-    text = "FILE INTO (TARGET)", height = 14, width = "fill", order = 10,
+    text = "locale:STY_CURATOR_FILE_INTO_LABEL", height = 14, width = "fill", order = 10,
 }
 -- + New Style.
 LC.widgets["stylesPanel.curatorNewStyle"] = {
     tooltip = false,
     kind = "button", ["in"] = "styles.curator.newStyleRow", font = "small",
-    text = "+ New Style", width = "fill", height = 22, order = 10, variant = "tertiary",
+    text = "locale:STY_CURATOR_NEW_STYLE", width = "fill", height = 22, order = 10, variant = "tertiary",
 }
 LC.widgets["stylesPanel.curatorTargetList"] = {
     tooltip = false,
@@ -576,7 +576,7 @@ LC.widgets["stylesPanel.curatorTargetList"] = {
 LC.widgets["stylesPanel.curatorMove"] = {
     tooltip = false,
     kind = "button", ["in"] = "styles.curator.controls", font = "small",
-    text = "Move", width = "auto", height = 22, order = 5, variant = "primary",
+    text = "locale:STY_CURATOR_MOVE", width = "auto", height = 22, order = 5, variant = "primary",
     binding = { text = "styles.curator.moveButtonLabel",
                 enabled = "styles.curator.canMove" },
 }
@@ -589,12 +589,12 @@ LC.widgets["stylesPanel.curatorControlsSpacer"] = {
 LC.widgets["stylesPanel.curatorClearSelection"] = {
     tooltip = false,
     kind = "button", ["in"] = "styles.curator.controls", font = "small",
-    text = "Clear selection", width = "auto", height = 22, order = 20, variant = "tertiary",
+    text = "locale:STY_CURATOR_CLEAR_SELECTION", width = "auto", height = 22, order = 20, variant = "tertiary",
 }
 LC.widgets["stylesPanel.curatorUndoBtn"] = {
     tooltip = false,
     kind = "button", ["in"] = "styles.curator.controls", font = "small",
-    text = "Undo last move", width = "auto", height = 22, order = 30, variant = "tertiary",
+    text = "locale:STY_CURATOR_UNDO_LAST_MOVE", width = "auto", height = 22, order = 30, variant = "tertiary",
     binding = { enabled = "styles.curator.canUndo" },
 }
 -- Card-grid: icon tiles; selection via cell atlas swap.
@@ -612,7 +612,7 @@ LC.widgets["stylesPanel.curatorItemGrid"] = {
 LC.widgets["stylesPanel.curatorRecentLabel"] = {
     tooltip = false,
     kind = "label", role = "TextDim", ["in"] = "styles.curator.recentLabelRow", font = "small",
-    text = "RECENT (UNDO)", height = 14, width = "fill", order = 10,
+    text = "locale:STY_CURATOR_RECENT_LABEL", height = 14, width = "fill", order = 10,
 }
 LC.widgets["stylesPanel.curatorRecentList"] = {
     tooltip = false,
@@ -625,7 +625,7 @@ LC.widgets["stylesPanel.curatorRecentList"] = {
 LC.widgets["stylesPanel.curatorMembershipsLabel"] = {
     tooltip = false,
     kind = "label", role = "TextDim", ["in"] = "styles.curator.membershipsLabelRow", font = "small",
-    text = "MEMBERSHIPS", height = 14, width = "fill", order = 10,
+    text = "locale:STY_CURATOR_MEMBERSHIPS_LABEL", height = 14, width = "fill", order = 10,
 }
 LC.widgets["stylesPanel.curatorMembershipsList"] = {
     tooltip = false,
@@ -686,30 +686,30 @@ LC.widgets["stylesPanel.curatorSubcategoryStrip"] = {
 LC.widgets["stylesPanel.importBack"] = {
     tooltip = false,
     kind = "button", ["in"] = "styles.import.headerRow", font = "small",
-    text = "< Back", width = "auto", height = 22, order = 10, variant = "tertiary",
+    text = "locale:STY_BACK", width = "auto", height = 22, order = 10, variant = "tertiary",
 }
 LC.widgets["stylesPanel.importTitle"] = {
     tooltip = false,
     kind = "label", ["in"] = "styles.import.headerRow", font = "heading",
-    text = "Import Shopping List", height = 22, width = "fill", order = 20,
+    text = "locale:STY_IMPORT_TITLE", height = 22, width = "fill", order = 20,
 }
 LC.widgets["stylesPanel.importIntro"] = {
     tooltip = false,
     kind = "label", role = "TextDim", ["in"] = "styles.import.intro", font = "small",
-    text = "Paste a URL, comma-separated item IDs, or any text containing item numbers. Parse builds a preview; Commit saves as a Shopping List.",
+    text = "locale:STY_IMPORT_INTRO",
     height = 32, width = "fill", order = 10,
 }
 LC.widgets["stylesPanel.importUrlEdit"] = {
     tooltip = false,
     kind = "editbox", ["in"] = "styles.import.pasteRow", font = "small",
     width = "fill", height = 22, order = 10,
-    placeholder = "Paste URL or item IDs here...",
+    placeholder = "locale:STY_IMPORT_URL_PLACEHOLDER",
     binding = { text = "styles.import.urlText" },
 }
 LC.widgets["stylesPanel.importParse"] = {
     tooltip = false,
     kind = "button", ["in"] = "styles.import.pasteRow", font = "small",
-    text = "Parse", width = "auto", height = 22, order = 20, variant = "tertiary",
+    text = "locale:STY_IMPORT_PARSE", width = "auto", height = 22, order = 20, variant = "tertiary",
 }
 LC.widgets["stylesPanel.importStatus"] = {
     tooltip = false,
@@ -728,7 +728,7 @@ LC.widgets["stylesPanel.importPreviewList"] = {
 LC.widgets["stylesPanel.importReset"] = {
     tooltip = false,
     kind = "button", ["in"] = "styles.import.footer", font = "small",
-    text = "Reset", width = "auto", height = 22, order = 10, variant = "tertiary",
+    text = "locale:COMMON_RESET", width = "auto", height = 22, order = 10, variant = "tertiary",
 }
 LC.widgets["stylesPanel.importHint"] = {
     tooltip = false,
@@ -738,7 +738,7 @@ LC.widgets["stylesPanel.importHint"] = {
 LC.widgets["stylesPanel.importCommit"] = {
     tooltip = false,
     kind = "button", ["in"] = "styles.import.footer", font = "small",
-    text = "Commit", width = "auto", height = 22, order = 30, variant = "primary",
+    text = "locale:STY_IMPORT_COMMIT", width = "auto", height = 22, order = 30, variant = "primary",
     binding = { enabled = "styles.import.canCommit" },
 }
 
@@ -746,37 +746,37 @@ LC.widgets["stylesPanel.importCommit"] = {
 LC.widgets["stylesPanel.smartsetNameLabel"] = {
     tooltip = false,
     kind = "label", role = "TextDim", ["in"] = "styles.smartset.fieldsRow", font = "small",
-    text = "Name", width = 40, height = 20, order = 10,
+    text = "locale:STY_SMARTSET_NAME_LABEL", width = 40, height = 20, order = 10,
 }
 LC.widgets["stylesPanel.smartsetNameEdit"] = {
     tooltip = false,
     kind = "editbox", ["in"] = "styles.smartset.fieldsRow", font = "small",
     width = 220, height = 22, order = 20,
-    placeholder = "Untitled",
+    placeholder = "locale:STY_SMARTSET_NAME_PLACEHOLDER",
     binding = { text = "styles.smartset.draft.displayName" },
 }
 LC.widgets["stylesPanel.smartsetDescLabel"] = {
     tooltip = false,
     kind = "label", role = "TextDim", ["in"] = "styles.smartset.fieldsRow", font = "small",
-    text = "Description", width = 70, height = 20, order = 30,
+    text = "locale:STY_SMARTSET_DESC_LABEL", width = 70, height = 20, order = 30,
 }
 LC.widgets["stylesPanel.smartsetDescEdit"] = {
     tooltip = false,
     kind = "editbox", ["in"] = "styles.smartset.fieldsRow", font = "small",
     width = "fill", height = 22, order = 40,
-    placeholder = "Short description (optional)",
+    placeholder = "locale:STY_SMARTSET_DESC_PLACEHOLDER",
     binding = { text = "styles.smartset.draft.description" },
 }
 -- Column labels (AXIS / TAG).
 LC.widgets["stylesPanel.smartsetAxisLabel"] = {
     tooltip = false,
     kind = "label", role = "TextDim", ["in"] = "styles.smartset.axisLabelRow", font = "small",
-    text = "AXIS", height = 14, width = "fill", order = 10,
+    text = "locale:STY_SMARTSET_AXIS_LABEL", height = 14, width = "fill", order = 10,
 }
 LC.widgets["stylesPanel.smartsetTagLabel"] = {
     tooltip = false,
     kind = "label", role = "TextDim", ["in"] = "styles.smartset.tagLabelRow", font = "small",
-    text = "TAG (CLICK TO ADD)", height = 14, width = "fill", order = 10,
+    text = "locale:STY_SMARTSET_TAG_LABEL", height = 14, width = "fill", order = 10,
 }
 -- Body scrollboxes.
 LC.widgets["stylesPanel.smartsetAxisList"] = {
@@ -809,23 +809,23 @@ LC.widgets["stylesPanel.smartsetPreviewArea"] = {
 LC.widgets["stylesPanel.smartsetClear"] = {
     tooltip = false,
     kind = "button", ["in"] = "styles.smartset.footer", font = "small",
-    text = "Clear All", width = "auto", height = 22, order = 10, variant = "tertiary",
+    text = "locale:STY_SMARTSET_CLEAR_ALL", width = "auto", height = 22, order = 10, variant = "tertiary",
 }
 LC.widgets["stylesPanel.smartsetHint"] = {
     tooltip = false,
     kind = "label", role = "TextDim", ["in"] = "styles.smartset.footer", font = "small",
-    text = "Select tags to see preview", height = 14, width = "fill", order = 20,
+    text = "locale:STY_SMARTSET_HINT", height = 14, width = "fill", order = 20,
     binding = "styles.smartset.hintLabel",
 }
 LC.widgets["stylesPanel.smartsetCancel"] = {
     tooltip = false,
     kind = "button", ["in"] = "styles.smartset.footer", font = "small",
-    text = "Cancel", width = "auto", height = 22, order = 30, variant = "tertiary",
+    text = "locale:COMMON_CANCEL", width = "auto", height = 22, order = 30, variant = "tertiary",
 }
 LC.widgets["stylesPanel.smartsetSave"] = {
     tooltip = false,
     kind = "button", ["in"] = "styles.smartset.footer", font = "small",
-    text = "Save", width = "auto", height = 22, order = 40, variant = "primary",
+    text = "locale:COMMON_SAVE", width = "auto", height = 22, order = 40, variant = "primary",
     binding = { enabled = "styles.smartset.canSave" },
 }
 

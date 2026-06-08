@@ -102,7 +102,7 @@ LC.sections["alts.charsBody"] = {
 LC.widgets["altsPanel.title"] = {
     tooltip = false,
     kind = "label", ["in"] = "altsPanel", slot = "header",
-    text = "Alts", font = "heading",
+    text = "locale:ALTS_TITLE", font = "heading",
     height = 18, width = "auto", order = 10,
     binding = "alts.title",
 }
@@ -110,7 +110,7 @@ LC.widgets["altsPanel.title"] = {
 LC.widgets["altsPanel.summaryHeader"] = {
     tooltip = false,
     kind = "label", ["in"] = "alts.summaryHeader",
-    text = "Account Summary  (best skill per profession)",
+    text = "locale:ALTS_SUMMARY_HEADING",
     font = "heading", height = 16, width = "fill", order = 10,
     role = "TextStatus",
 }
@@ -134,7 +134,7 @@ LC.widgets["altsPanel.summaryLegend"] = {
 LC.widgets["altsPanel.charsTitle"] = {
     tooltip = false,
     kind = "label", ["in"] = "alts.charsHeader",
-    text = "Characters", font = "heading",
+    text = "locale:ALTS_CHARS_TITLE", font = "heading",
     height = 22, width = "auto", order = 10,
 }
 LC.widgets["altsPanel.charsSpacer"] = {
@@ -145,14 +145,14 @@ LC.widgets["altsPanel.charsSpacer"] = {
 LC.widgets["altsPanel.charsPill_active"] = {
     tooltip = false,
     kind = "button", ["in"] = "alts.charsHeader", font = "caption",
-    text = "Active", width = "auto", height = 18, order = 30, variant = "chip",
+    text = "locale:ALTS_PILL_ACTIVE", width = "auto", height = 18, order = 30, variant = "chip",
     binding = { text = "alts.activePillLabel", active = "alts.isPopulation_active" },
     population = "active",
 }
 LC.widgets["altsPanel.charsPill_hidden"] = {
     tooltip = false,
     kind = "button", ["in"] = "alts.charsHeader", font = "caption",
-    text = "Hidden", width = "auto", height = 18, order = 40, variant = "chip",
+    text = "locale:ALTS_PILL_HIDDEN", width = "auto", height = 18, order = 40, variant = "chip",
     binding = { text = "alts.hiddenPillLabel", active = "alts.isPopulation_hidden" },
     population = "hidden",
 }

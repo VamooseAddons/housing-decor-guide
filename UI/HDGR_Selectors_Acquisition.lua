@@ -497,7 +497,8 @@ Selectors:Register("acq.sourceMenuItems", {
     fn = function()
         local items = {}
         for _, opt in ipairs(HDG.Constants.ACQ_SOURCES or {}) do
-            items[#items + 1] = { value = opt.value, text = opt.label }
+            items[#items + 1] = { kind = "checkbox", value = opt.value, text = opt.label,
+                isAll = opt.value == "all" }
         end
         return items
     end,
@@ -505,8 +506,8 @@ Selectors:Register("acq.sourceMenuItems", {
 Selectors:Register("acq.hasSourceFilter", {
     calls = {"acq.sourceFilter"},
     fn = function(state, ctx)
-        local v = Selectors:Call("acq.sourceFilter", state, ctx)
-        return v ~= "all"
+        local set = Selectors:Call("acq.sourceFilter", state, ctx)
+        return next(set) ~= nil
     end,
 })
 
@@ -531,17 +532,26 @@ Selectors:Register("acq.matchesSource", {
     reads = {"session.catalog.sweepGeneration"},
     calls = {"acq.sourceFilter"},
     fn = function(state, ctx)
-        local v = Selectors:Call("acq.sourceFilter", state, ctx)
-        if v == "all" then return function() return true end end
-        local kind = HDG.Constants.SOURCE_KIND_BY_FILTER[v]
-        if kind then return _matchesFlag(kind.key) end
-        if v == "gold" then
-            return function(row) local _, gold = _itemCostFlags(row.itemID); return gold end
+        local set = Selectors:Call("acq.sourceFilter", state, ctx)
+        if next(set) == nil then return function() return true end end
+        -- Multi-select: build one matcher per selected source value; a row passes if
+        -- ANY matches (OR within the source axis).
+        local matchers = {}
+        for v in pairs(set) do
+            local kind = HDG.Constants.SOURCE_KIND_BY_FILTER[v]
+            if kind then
+                matchers[#matchers + 1] = _matchesFlag(kind.key)
+            elseif v == "gold" then
+                matchers[#matchers + 1] = function(row) local _, gold = _itemCostFlags(row.itemID); return gold end
+            elseif v == "endeavor" then
+                matchers[#matchers + 1] = function(row) return (_itemCostFlags(row.itemID)) == true end
+            end
         end
-        if v == "endeavor" then
-            return function(row) return (_itemCostFlags(row.itemID)) == true end
+        if #matchers == 0 then return function() return false end end
+        return function(row)
+            for _, m in ipairs(matchers) do if m(row) then return true end end
+            return false
         end
-        return function() return false end
     end,
 })
 
@@ -560,11 +570,11 @@ Selectors:Register("acq.matchesItemFilters", {
         local matchSource  = Selectors:Call("acq.matchesSource",   state, ctx)
         local matchPreset  = Selectors:Call("acq.matchesPreset",   state, ctx)
         local matchMissing = Selectors:Call("acq.matchesMissing",  state, ctx)
-        local expansion    = Selectors:Call("acq.expansionFilter", state, ctx)
-        local hasExp = expansion ~= "all"
+        local expSet = Selectors:Call("acq.expansionFilter", state, ctx)
+        local hasExp = next(expSet) ~= nil
         return function(itemID)
             if not itemID then return false end
-            if hasExp and HDG.HousingCatalogObserver:GetExpansionForItem(itemID) ~= expansion then
+            if hasExp and not expSet[HDG.HousingCatalogObserver:GetExpansionForItem(itemID)] then
                 return false
             end
             local probe = { itemID = itemID }
@@ -595,12 +605,12 @@ Selectors:Register("acq.items", {
         local q         = Selectors:Call("acq.filterQuery",        state, ctx)
         local matchItem = Selectors:Call("acq.matchesItemFilters", state, ctx)
         local isColl    = Selectors:Call("decor.isCollected",      state, ctx)
-        local repFilter     = Selectors:Call("acq.repFilter",     state, ctx)
-        local zoneFilter    = Selectors:Call("acq.zoneFilter",    state, ctx)
-        local factionFilter = Selectors:Call("acq.factionFilter", state, ctx)
-        local hasRep     = repFilter ~= "all"
-        local hasZone    = zoneFilter ~= "all"
-        local hasFaction = factionFilter ~= "all"
+        local repSet     = Selectors:Call("acq.repFilter",     state, ctx)
+        local zoneSet    = Selectors:Call("acq.zoneFilter",    state, ctx)
+        local factionSet = Selectors:Call("acq.factionFilter", state, ctx)
+        local hasRep     = next(repSet)     ~= nil
+        local hasZone    = next(zoneSet)    ~= nil
+        local hasFaction = next(factionSet) ~= nil
         local Aug        = HDG.StaticData.VendorAugment
         local needle     = q ~= "" and q:lower() or nil
         local out = {}
@@ -624,14 +634,14 @@ Selectors:Register("acq.items", {
                 local catRow = HDG.HousingCatalogObserver:GetRow(item.itemID)  -- exception(boundary): GetRow nil pre-bake
                 if hasRep then
                     local fg = catRow and catRow.factionGate
-                    if not (fg and fg.factionName == repFilter) then pass = false end
+                    if not (fg and fg.factionName and repSet[fg.factionName]) then pass = false end
                 end
                 if pass and (hasZone or hasFaction) then
                     local matched = false
                     for _, v in ipairs(catRow and catRow.vendors or {}) do  -- exception(boundary): row.vendors absent pre-bake
                         local meta   = v.npcID and Aug:Get(v.npcID)
-                        local zoneOK = (not hasZone)    or (((meta and meta.zone) or v.zone) == zoneFilter)
-                        local facOK  = (not hasFaction) or ((FACTION_LABEL[(meta and meta.faction) or "N"] or "Neutral") == factionFilter)
+                        local zoneOK = (not hasZone)    or zoneSet[((meta and meta.zone) or v.zone)] == true
+                        local facOK  = (not hasFaction) or factionSet[(FACTION_LABEL[(meta and meta.faction) or "N"] or "Neutral")] == true
                         if zoneOK and facOK then matched = true; break end
                     end
                     if not matched then pass = false end
@@ -742,7 +752,7 @@ Selectors:Register("acq.recipeRows", {
 Selectors:Register("acq.factionFilter", {
     reads = {"session.ui.acquisition.factionFilter", "session.staticData.tick"},
     fn = function(state)
-        return state.session.ui.acquisition.factionFilter or "all"
+        return state.session.ui.acquisition.factionFilter   -- multi-select SET ({} = all)
     end,
 })
 
@@ -752,10 +762,10 @@ Selectors:Register("acq.factionMenuItems", {
     memoized = true,
     fn = function()
         return {
-            { value = "all",      text = "All factions" },
-            { value = "Alliance", text = "Alliance"     },
-            { value = "Horde",    text = "Horde"        },
-            { value = "Neutral",  text = "Neutral"      },
+            { kind = "checkbox", isAll = true, value = "all", text = "All factions" },
+            { kind = "checkbox", value = "Alliance", text = "Alliance" },
+            { kind = "checkbox", value = "Horde",    text = "Horde"    },
+            { kind = "checkbox", value = "Neutral",  text = "Neutral"  },
         }
     end,
 })
@@ -813,9 +823,9 @@ Selectors:Register("acq.axisMenuItems", {
             local sorted = {}
             for val in pairs(seen[name]) do sorted[#sorted + 1] = val end
             table.sort(sorted)
-            local out = { { value = "all", text = label } }
+            local out = { { kind = "checkbox", isAll = true, value = "all", text = label } }
             for _, val in ipairs(sorted) do
-                out[#out + 1] = { value = val, text = val }
+                out[#out + 1] = { kind = "checkbox", value = val, text = val }
             end
             return out
         end
@@ -832,7 +842,7 @@ local function RegisterAxis(axis, pluralLabel)
     Selectors:Register("acq." .. stateKey, {
         reads = { HDG.Paths.Join("session.ui.acquisition", stateKey) },
         fn = function(state)
-            return state.session.ui.acquisition[stateKey] or "all"
+            return state.session.ui.acquisition[stateKey]   -- multi-select SET ({} = all)
         end,
     })
     Selectors:Register("acq." .. axis .. "MenuItems", {
@@ -851,7 +861,7 @@ end
 Selectors:Register("acq.expansionFilter", {
     reads = {"session.ui.acquisition.expansionFilter"},
     fn = function(state)
-        return state.session.ui.acquisition.expansionFilter or "all"
+        return state.session.ui.acquisition.expansionFilter   -- multi-select SET ({} = all)
     end,
 })
 -- Expansion dropdown options: enumerate the canonical EXPANSION_DATA via
@@ -869,9 +879,10 @@ Selectors:Register("acq.expansionMenuItems", {
     reads    = {},
     memoized = true,
     fn = function()
-        local out = { { value = "all", text = "All Expansions" } }
+        local out = { { kind = "checkbox", isAll = true, value = "all", text = "All Expansions" } }
         for _, e in HDG.Expansion.Each() do
             out[#out + 1] = {
+                kind  = "checkbox",
                 value = e.display,
                 text  = HDG.Expansion.GetColorHex(e.display) .. e.display .. "|r",
             }
@@ -887,7 +898,7 @@ RegisterAxis("zone", "All Zones")
 Selectors:Register("acq.repFilter", {
     reads = {"session.ui.acquisition.repFilter"},
     fn = function(state)
-        return state.session.ui.acquisition.repFilter or "all"
+        return state.session.ui.acquisition.repFilter   -- multi-select SET ({} = all)
     end,
 })
 -- Menu items: union of every vendor's reps set. Shares the axisMenuItems
@@ -910,19 +921,19 @@ Selectors:Register("acq.hasSearchFilter", {
 })
 Selectors:Register("acq.hasFactionFilter", {
     calls = {"acq.factionFilter"},
-    fn = function(state, ctx) return Selectors:Call("acq.factionFilter", state, ctx) ~= "all" end,
+    fn = function(state, ctx) return next(Selectors:Call("acq.factionFilter", state, ctx)) ~= nil end,
 })
 Selectors:Register("acq.hasExpansionFilter", {
     calls = {"acq.expansionFilter"},
-    fn = function(state, ctx) return Selectors:Call("acq.expansionFilter", state, ctx) ~= "all" end,
+    fn = function(state, ctx) return next(Selectors:Call("acq.expansionFilter", state, ctx)) ~= nil end,
 })
 Selectors:Register("acq.hasZoneFilter", {
     calls = {"acq.zoneFilter"},
-    fn = function(state, ctx) return Selectors:Call("acq.zoneFilter", state, ctx) ~= "all" end,
+    fn = function(state, ctx) return next(Selectors:Call("acq.zoneFilter", state, ctx)) ~= nil end,
 })
 Selectors:Register("acq.hasRepFilter", {
     calls = {"acq.repFilter"},
-    fn = function(state, ctx) return Selectors:Call("acq.repFilter", state, ctx) ~= "all" end,
+    fn = function(state, ctx) return next(Selectors:Call("acq.repFilter", state, ctx)) ~= nil end,
 })
 Selectors:Register("acq.hasPresetFilter", {
     calls = {"acq.preset"},
@@ -966,6 +977,18 @@ Selectors:Register("acq.activeFiltersLabel", {
 local function tagText(axis, valueLabel)
     return string.format("%s: %s  [x]", axis, valueLabel)
 end
+-- Join a multi-select filter SET's values for the chip text (sorted, stable).
+-- labelMap optionally maps internal value -> display label (source axis).
+local function _joinSet(set, labelMap)
+    local vals = {}
+    for v in pairs(set) do vals[#vals + 1] = labelMap and (labelMap[v] or v) or v end
+    table.sort(vals)
+    -- Cap the chip text so one many-value axis can't blow out the single-line row
+    -- (the Layout engine has no flow/wrap): show up to 3, then "+N".
+    local n = #vals
+    if n <= 3 then return table.concat(vals, ", ") end
+    return table.concat({ vals[1], vals[2], vals[3] }, ", ") .. string.format(" +%d", n - 3)
+end
 Selectors:Register("acq.tagSearch", {
     calls = {"acq.filterQuery"},
     fn = function(state, ctx)
@@ -975,25 +998,25 @@ Selectors:Register("acq.tagSearch", {
 Selectors:Register("acq.tagFaction", {
     calls = {"acq.factionFilter"},
     fn = function(state, ctx)
-        return tagText("Faction", Selectors:Call("acq.factionFilter", state, ctx))
+        return tagText("Faction", _joinSet(Selectors:Call("acq.factionFilter", state, ctx)))
     end,
 })
 Selectors:Register("acq.tagExpansion", {
     calls = {"acq.expansionFilter"},
     fn = function(state, ctx)
-        return tagText("Expansion", Selectors:Call("acq.expansionFilter", state, ctx))
+        return tagText("Expansion", _joinSet(Selectors:Call("acq.expansionFilter", state, ctx)))
     end,
 })
 Selectors:Register("acq.tagZone", {
     calls = {"acq.zoneFilter"},
     fn = function(state, ctx)
-        return tagText("Zone", Selectors:Call("acq.zoneFilter", state, ctx))
+        return tagText("Zone", _joinSet(Selectors:Call("acq.zoneFilter", state, ctx)))
     end,
 })
 Selectors:Register("acq.tagRep", {
     calls = {"acq.repFilter"},
     fn = function(state, ctx)
-        return tagText("Rep", Selectors:Call("acq.repFilter", state, ctx))
+        return tagText("Rep", _joinSet(Selectors:Call("acq.repFilter", state, ctx)))
     end,
 })
 -- Preset + source tags. Display the human-readable label
@@ -1021,12 +1044,11 @@ Selectors:Register("acq.tagMissing", {
 Selectors:Register("acq.tagSource", {
     calls = {"acq.sourceFilter"},
     fn = function(state, ctx)
-        local v = Selectors:Call("acq.sourceFilter", state, ctx)
-        if v == "all" then return "" end
-        for _, opt in ipairs(HDG.Constants.ACQ_SOURCES or {}) do
-            if opt.value == v then return tagText("Source", opt.label) end
-        end
-        return tagText("Source", v)
+        local set = Selectors:Call("acq.sourceFilter", state, ctx)
+        if next(set) == nil then return "" end
+        local labels = {}
+        for _, opt in ipairs(HDG.Constants.ACQ_SOURCES or {}) do labels[opt.value] = opt.label end
+        return tagText("Source", _joinSet(set, labels))
     end,
 })
 
@@ -1100,18 +1122,18 @@ Selectors:Register("acq.vendors", {
     fn = function(state, ctx)
         local all       = Selectors:Call("acq.allVendors",      state, ctx)
         local q         = Selectors:Call("acq.filterQuery",     state, ctx)
-        local faction   = Selectors:Call("acq.factionFilter",   state, ctx)
-        local zone      = Selectors:Call("acq.zoneFilter",      state, ctx)
-        local rep       = Selectors:Call("acq.repFilter",       state, ctx)
-        local source    = Selectors:Call("acq.sourceFilter",    state, ctx)
-        local expansion = Selectors:Call("acq.expansionFilter", state, ctx)
+        local factionSet = Selectors:Call("acq.factionFilter",   state, ctx)
+        local zoneSet    = Selectors:Call("acq.zoneFilter",      state, ctx)
+        local repSet     = Selectors:Call("acq.repFilter",       state, ctx)
+        local sourceSet  = Selectors:Call("acq.sourceFilter",    state, ctx)
+        local expSet     = Selectors:Call("acq.expansionFilter", state, ctx)
         local preset    = Selectors:Call("acq.preset",          state, ctx)
         local missingOnly = Selectors:Call("acq.missingOnly",   state, ctx)
-        -- Vendor-intrinsic axes -- checked per-vendor below.
+        -- Vendor-intrinsic axes (multi-select SETs) -- checked per-vendor below.
         local hasSearch  = q       ~= ""
-        local hasFaction = faction ~= "all"
-        local hasZone    = zone    ~= "all"
-        local hasRep     = rep     ~= "all"
+        local hasFaction = next(factionSet) ~= nil
+        local hasZone    = next(zoneSet)    ~= nil
+        local hasRep     = next(repSet)     ~= nil
         -- Item-intrinsic axes (source / expansion / preset) flow through the
         -- shared item predicate: a vendor passes if it sells >=1 catalog item
         -- matching ALL active ones. Makes Sources + Expansion + presets work in
@@ -1120,7 +1142,7 @@ Selectors:Register("acq.vendors", {
         -- "recipes" preset filters at the VENDOR level (recipeCount), not via the
         -- item-source predicate -- handled separately in the loop below.
         local recipesPreset = (preset == "recipes")
-        local hasItemFilter = (source ~= "all") or (expansion ~= "all")
+        local hasItemFilter = (next(sourceSet) ~= nil) or (next(expSet) ~= nil)
             or (preset ~= nil and not recipesPreset)
             or (missingOnly and not recipesPreset)
         if not (hasSearch or hasFaction or hasZone or hasRep or hasItemFilter or recipesPreset) then
@@ -1133,11 +1155,14 @@ Selectors:Register("acq.vendors", {
         local out = {}
         for _, v in ipairs(all) do
             local searchOK  = (not hasSearch)  or _vendorMatchesSearch(v, needle)
-            local factionOK = (not hasFaction) or v.faction == faction
-            local zoneOK    = (not hasZone)    or v.zone    == zone
-            -- Rep is set-membership: vendor passes if its reps set contains
-            -- the picked rep name (sells at least one item gated by that rep).
-            local repOK     = (not hasRep)     or (v.reps and v.reps[rep] == true)
+            local factionOK = (not hasFaction) or factionSet[v.faction] == true
+            local zoneOK    = (not hasZone)    or zoneSet[v.zone] == true
+            -- Rep set-intersect: vendor passes if its reps set contains ANY picked
+            -- rep name (sells at least one item gated by one of the chosen reps).
+            local repOK     = not hasRep
+            if hasRep and v.reps then
+                for r in pairs(repSet) do if v.reps[r] then repOK = true; break end end
+            end
             local itemOK    = (not hasItemFilter) or _vendorSellsMatchingItem(v, itemPred)
             -- Rep preset also matches a vendor selling a rep-gated RECIPE (the
             -- catalog only knows rep-gated decor; recipe gates live in recipeSource).

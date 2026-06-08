@@ -33,7 +33,7 @@ LC.panels.warehousePanel = {
 LC.widgets["warehousePanel.title"] = {
     tooltip = false,
     kind = "label", ["in"] = "warehousePanel", slot = "header",
-    text = "Warehouse", font = "heading",
+    text = "locale:WARE_PANEL_TITLE", font = "heading",
     height = 18, width = "fill", order = 10,   -- fill absorbs slack -> toggle right-aligns
 }
 -- Auto-show toggle, right of the title bar: pop the lumber tracker on harvest,
@@ -41,7 +41,7 @@ LC.widgets["warehousePanel.title"] = {
 LC.widgets["warehousePanel.autoShowToggle"] = {
     tooltip = { recipe = "LumberAutoShow" },
     kind = "checkbox", ["in"] = "warehousePanel", slot = "header", font = "button",
-    text = "Auto-show on harvest", width = 170, height = 22, order = 20,
+    text = "locale:WARE_AUTOSHOW_TOGGLE", width = 170, height = 22, order = 20,
     binding = { checked = "warehouse.autoShowLumber" },
 }
 
@@ -161,43 +161,43 @@ LC.sections["warehouse.usedInList"] = {
 LC.widgets["warehousePanel.lumberHdr.name"] = {
     tooltip = false,
     kind = "label", ["in"] = "warehouse.lumberHeader",
-    font = "caption", text = "Lumber",
+    font = "caption", text = "locale:WARE_LUMBER_HDR_NAME",
     width = 90, height = 12, order = 10,
 }
 LC.widgets["warehousePanel.lumberHdr.exp"] = {
     tooltip = false,
     kind = "label", ["in"] = "warehouse.lumberHeader",
-    font = "caption", text = "Exp",
+    font = "caption", text = "locale:WARE_LUMBER_HDR_EXP",
     width = 44, height = 12, order = 15,
 }
 LC.widgets["warehousePanel.lumberHdr.bag"] = {
     tooltip = false,
     kind = "label", ["in"] = "warehouse.lumberHeader",
-    font = "caption", text = "Bag", justifyH = "RIGHT",
+    font = "caption", text = "locale:WARE_LUMBER_HDR_BAG", justifyH = "RIGHT",
     width = 36, height = 12, order = 20,
 }
 LC.widgets["warehousePanel.lumberHdr.bank"] = {
     tooltip = false,
     kind = "label", ["in"] = "warehouse.lumberHeader",
-    font = "caption", text = "Bnk", justifyH = "RIGHT",
+    font = "caption", text = "locale:WARE_LUMBER_HDR_BANK", justifyH = "RIGHT",
     width = 36, height = 12, order = 30,
 }
 LC.widgets["warehousePanel.lumberHdr.warband"] = {
     tooltip = false,
     kind = "label", ["in"] = "warehouse.lumberHeader",
-    font = "caption", text = "Wband", justifyH = "RIGHT",
+    font = "caption", text = "locale:WARE_LUMBER_HDR_WARBAND", justifyH = "RIGHT",
     width = 44, height = 12, order = 40,
 }
 LC.widgets["warehousePanel.lumberHdr.needed"] = {
     tooltip = false,
     kind = "label", ["in"] = "warehouse.lumberHeader",
-    font = "caption", text = "Need", justifyH = "RIGHT",
+    font = "caption", text = "locale:WARE_LUMBER_HDR_NEED", justifyH = "RIGHT",
     width = 42, height = 12, order = 50,
 }
 LC.widgets["warehousePanel.lumberHdr.stock"] = {
     tooltip = false,
     kind = "label", ["in"] = "warehouse.lumberHeader",
-    font = "caption", text = "In Stock", justifyH = "RIGHT",
+    font = "caption", text = "locale:WARE_LUMBER_HDR_STOCK", justifyH = "RIGHT",
     width = 64, height = 12, order = 60,
 }
 LC.widgets["warehousePanel.lumberList"] = {
@@ -212,7 +212,7 @@ LC.widgets["warehousePanel.lumberList"] = {
 LC.widgets["warehousePanel.lumberHistoryHeader"] = {
     tooltip = false,
     kind = "label", ["in"] = "warehouse.lumberHistoryHeader",
-    font = "caption", text = "Lumber Farming History",
+    font = "caption", text = "locale:WARE_LUMBER_HISTORY_HDR",
     width = "fill", height = 12, order = 10,
 }
 LC.widgets["warehousePanel.lumberHistoryList"] = {
@@ -227,13 +227,13 @@ LC.widgets["warehousePanel.lumberHistoryList"] = {
 LC.widgets["warehousePanel.allMatsHeader"] = {
     tooltip = false,
     kind = "label", ["in"] = "warehouse.allMatsHeader",
-    font = "caption", text = "Materials",
+    font = "caption", text = "locale:WARE_ALL_MATS_HDR",
     width = "fill", height = 12, order = 10,
 }
 LC.widgets["warehousePanel.usedInHeader"] = {
     tooltip = false,
     kind = "label", ["in"] = "warehouse.usedInHeader",
-    font = "caption", text = "Used In",
+    font = "caption", text = "locale:WARE_USED_IN_HDR",
     width = "fill", height = 12, order = 10,
     binding = "warehouse.usedInTitle",
 }
@@ -242,7 +242,7 @@ LC.widgets["warehousePanel.allMatsSearch"] = {
     kind = "editbox", ["in"] = "warehouse.allMatsSearch", font = "body",
     height = 22, width = "fill", order = 10,
     multiline   = false,
-    placeholder = "Search materials...",
+    placeholder = "locale:WARE_MAT_SEARCH_PLACEHOLDER",
     binding = { text = "warehouse.matSearch" },
 }
 LC.widgets["warehousePanel.allMatsList"] = {

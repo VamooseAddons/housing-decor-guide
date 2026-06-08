@@ -34,30 +34,30 @@ HDG = HDG or {}
 
 HDG.TooltipHints = {
     -- Click hints (single button)
-    click_expand_collapse  = "Click to expand or collapse",
-    click_navigate         = "Click to set a waypoint",
-    click_scan             = "Click to refresh",
-    click_confirm_craft    = "Click to confirm craft",
-    click_copy_url         = "Click to copy URL",
-    click_cycle_sort       = "Click to cycle sort order",
-    click_ah_search        = "Click to search the auction house",
-    click_open_profession  = "Click to open profession window",
-    click_inspect          = "Click to inspect",
-    left_apply             = "Left-click to apply",
+    click_expand_collapse  = "locale:HINT_CLICK_EXPAND_COLLAPSE",
+    click_navigate         = "locale:HINT_CLICK_NAVIGATE",
+    click_scan             = "locale:HINT_CLICK_SCAN",
+    click_confirm_craft    = "locale:HINT_CLICK_CONFIRM_CRAFT",
+    click_copy_url         = "locale:HINT_CLICK_COPY_URL",
+    click_cycle_sort       = "locale:HINT_CLICK_CYCLE_SORT",
+    click_ah_search        = "locale:HINT_CLICK_AH_SEARCH",
+    click_open_profession  = "locale:HINT_CLICK_OPEN_PROFESSION",
+    click_inspect          = "locale:HINT_CLICK_INSPECT",
+    left_apply             = "locale:HINT_LEFT_APPLY",
 
     -- Shift+click
-    shift_shopping     = "Shift-click to add to shopping list",
-    shift_waypoint     = "Shift-click to set waypoint",
-    shift_auctionator  = "Shift-click to send to Auctionator",
-    shift_remove_one   = "Shift-click to remove one",
-    shift_remove_all   = "Shift-click to remove all",
+    shift_shopping     = "locale:HINT_SHIFT_SHOPPING",
+    shift_waypoint     = "locale:HINT_SHIFT_WAYPOINT",
+    shift_auctionator  = "locale:HINT_SHIFT_AUCTIONATOR",
+    shift_remove_one   = "locale:HINT_SHIFT_REMOVE_ONE",
+    shift_remove_all   = "locale:HINT_SHIFT_REMOVE_ALL",
 
     -- Ctrl+click
-    ctrl_queue = "Ctrl-click to queue",
+    ctrl_queue = "locale:HINT_CTRL_QUEUE",
 
     -- Right-click
-    right_remove       = "Right-click to remove",
-    right_auctionator  = "Right-click to send to Auctionator",
+    right_remove       = "locale:HINT_RIGHT_REMOVE",
+    right_auctionator  = "locale:HINT_RIGHT_AUCTIONATOR",
 }
 
 -- ============================================================================
@@ -72,121 +72,121 @@ local H = HDG.TooltipHints
 -- ===== Window chrome ========================================================
 
 R.Close = {
-    title  = "Close",
+    title  = "locale:TIP_CLOSE",
     anchor = "ANCHOR_BOTTOM",
 }
 
 -- Compartment / minimap buttons -- click hints inline (button-specific, not reusable).
 R.AddonCompartment = {
-    title      = "|cFFfcd34dHousing Decor Guide|r",
-    body       = "Track and craft housing decor items",
+    title      = "locale:TIP_ADDON_TITLE",
+    body       = "locale:TIP_ADDON_BODY",
     anchor     = "ANCHOR_RIGHT",
     extraLines = {
-        { text = "Click: Toggle addon window", r = 0.7, g = 0.7, b = 0.7 },
+        { text = "locale:TIP_COMPARTMENT_CLICK", r = 0.7, g = 0.7, b = 0.7 },
     },
 }
 
 R.MinimapButton = {
-    title      = "|cFFfcd34dHousing Decor Guide|r",
+    title      = "locale:TIP_ADDON_TITLE",
     anchor     = "ANCHOR_LEFT",   -- LibDBIcon-managed; engine override may apply
     extraLines = {
-        { text = "Left-click: Toggle window",      r = 0.7, g = 0.7, b = 0.7 },
-        { text = "Right-click: Open settings",     r = 0.7, g = 0.7, b = 0.7 },
-        { text = "Drag: Reposition icon",          r = 0.7, g = 0.7, b = 0.7 },
+        { text = "locale:TIP_MINIMAP_LEFT_CLICK",   r = 0.7, g = 0.7, b = 0.7 },
+        { text = "locale:TIP_MINIMAP_RIGHT_CLICK",  r = 0.7, g = 0.7, b = 0.7 },
+        { text = "locale:TIP_MINIMAP_DRAG",         r = 0.7, g = 0.7, b = 0.7 },
     },
 }
 
 -- ===== Outreach (about pane) ================================================
 
 R.Discord = {
-    title  = "Discord",
-    body   = "Join the Vamoose Discord community",
+    title  = "locale:TIP_DISCORD_TITLE",
+    body   = "locale:TIP_DISCORD_BODY",
     anchor = "ANCHOR_RIGHT",
 }
 
 R.Coffee = {
-    title  = "Buy me a coffee",
-    body   = "Support the addon",
+    title  = "locale:TIP_COFFEE_TITLE",
+    body   = "locale:TIP_COFFEE_BODY",
     anchor = "ANCHOR_RIGHT",
 }
 
 -- ===== Config sidebar checkboxes ============================================
-R.ConfigDebugToggle    = { title = "Debug mode",  body = "Print debug breadcrumbs to chat" }
-R.ConfigMinimapToggle  = { title = "Minimap icon", body = "Show / hide the minimap button" }
-R.OpenDebugLog         = { title = "Open Debug Log", body = "Open the HDG log window (buffered debug trace; requires Debug Mode on to populate)" }
-R.WowheadLink          = { title = "Wowhead", body = "Open this item's Wowhead page in your browser" }
-R.ProjectsAddCrate     = { title = "Add Crate", body = "A crate holds one room's worth of decor. Adds it to the selected room." }
-R.ProjectsDetachCrate  = { title = "Detach Crate", body = "Unlinks this crate from the room and moves it to the orphan bay (Projects -> Orphaned crates), where you can reattach it to another room. Nothing is deleted." }
-R.ProjectsCaptureAll   = { title = "Capture all floors", body = "Captures every room on each floor of your house. NOTE: the game doesn't tell addons how your rooms connect, so HDG can't auto-arrange them -- after capturing, drag the rooms into their real layout yourself (rooms join where their doors touch)." }
-R.LumberAutoShow       = { title = "Auto-show on harvest", body = "Pop the lumber tracker automatically when you harvest lumber. Turn off to keep it out of the way -- the Warehouse tab always has the numbers." }
+R.ConfigDebugToggle    = { title = "locale:TIP_CONFIG_DEBUG_TITLE",    body = "locale:TIP_CONFIG_DEBUG_BODY" }
+R.ConfigMinimapToggle  = { title = "locale:TIP_CONFIG_MINIMAP_TITLE",  body = "locale:TIP_CONFIG_MINIMAP_BODY" }
+R.OpenDebugLog         = { title = "locale:TIP_OPEN_DEBUG_LOG_TITLE",  body = "locale:TIP_OPEN_DEBUG_LOG_BODY" }
+R.WowheadLink          = { title = "locale:TIP_WOWHEAD_TITLE",         body = "locale:TIP_WOWHEAD_BODY" }
+R.ProjectsAddCrate     = { title = "locale:TIP_PROJECTS_ADD_CRATE_TITLE",    body = "locale:TIP_PROJECTS_ADD_CRATE_BODY" }
+R.ProjectsDetachCrate  = { title = "locale:TIP_PROJECTS_DETACH_CRATE_TITLE", body = "locale:TIP_PROJECTS_DETACH_CRATE_BODY" }
+R.ProjectsCaptureAll   = { title = "locale:TIP_PROJECTS_CAPTURE_ALL_TITLE",  body = "locale:TIP_PROJECTS_CAPTURE_ALL_BODY" }
+R.LumberAutoShow       = { title = "locale:TIP_LUMBER_AUTO_SHOW_TITLE",      body = "locale:TIP_LUMBER_AUTO_SHOW_BODY" }
 
 -- Layouts tab actions (effect-focused -- what each does, not just the label).
-R.LayoutLoad      = { title = "Load in Architect", body = "Open this layout in the Architect to view or edit it. Editing a what-if never changes your real house or the Live snapshot.", anchor = "ANCHOR_TOP" }
-R.LayoutShare     = { title = "Share code", body = "Copy a shareable code of this layout's room plan (geometry only -- no decor). A friend pastes it into Import to recreate it in their own house.", anchor = "ANCHOR_TOP" }
-R.LayoutImport    = { title = "Import layout", body = "Paste a shared layout code to add it as a new what-if. With more than one house, you pick which house it lands under.", anchor = "ANCHOR_BOTTOM" }
-R.LayoutDuplicate = { title = "Duplicate", body = "Copy this layout into a new what-if you can redesign freely, leaving the original untouched.", anchor = "ANCHOR_TOP" }
+R.LayoutLoad      = { title = "locale:TIP_LAYOUT_LOAD_TITLE",      body = "locale:TIP_LAYOUT_LOAD_BODY",      anchor = "ANCHOR_TOP" }
+R.LayoutShare     = { title = "locale:TIP_LAYOUT_SHARE_TITLE",     body = "locale:TIP_LAYOUT_SHARE_BODY",     anchor = "ANCHOR_TOP" }
+R.LayoutImport    = { title = "locale:TIP_LAYOUT_IMPORT_TITLE",    body = "locale:TIP_LAYOUT_IMPORT_BODY",    anchor = "ANCHOR_BOTTOM" }
+R.LayoutDuplicate = { title = "locale:TIP_LAYOUT_DUPLICATE_TITLE", body = "locale:TIP_LAYOUT_DUPLICATE_BODY", anchor = "ANCHOR_TOP" }
 
 -- ===== Mogul / Goblin TSM columns ==========================================
 -- Registered unconditionally so Layout:Validate passes regardless of TSM load state.
-R.GoblinTsmServer = { title = "Server", body = "Maps to TSM DBMinBuyout: the lowest current auction-house buyout on your realm." }
-R.GoblinTsmMarket = { title = "Market", body = "Maps to TSM DBMarket: TSM's calculated market value for this item." }
-R.GoblinTsmRegion = { title = "Region", body = "Maps to TSM DBRegionSaleAvg: the average sale price across your whole region." }
-R.GoblinSaleRate  = { title = "Rate",   body = "Maps to TSM DBRegionSaleRate: how often this item sells region-wide (sold/day vs posted/day). Needs the TSM Desktop App." }
-R.GoblinSoldPerDay = { title = "/Day",  body = "Maps to TSM DBRegionSoldPerDay: estimated units sold per day across your region. Needs the TSM Desktop App." }
-R.GoblinAhQty     = { title = "#AH",    body = "Units currently listed on your realm's auction house. Populated by 'Refresh from AH'; shows '-' until you scan." }
+R.GoblinTsmServer  = { title = "locale:TIP_GOBLIN_TSM_SERVER_TITLE",   body = "locale:TIP_GOBLIN_TSM_SERVER_BODY" }
+R.GoblinTsmMarket  = { title = "locale:TIP_GOBLIN_TSM_MARKET_TITLE",   body = "locale:TIP_GOBLIN_TSM_MARKET_BODY" }
+R.GoblinTsmRegion  = { title = "locale:TIP_GOBLIN_TSM_REGION_TITLE",   body = "locale:TIP_GOBLIN_TSM_REGION_BODY" }
+R.GoblinSaleRate   = { title = "locale:TIP_GOBLIN_SALE_RATE_TITLE",    body = "locale:TIP_GOBLIN_SALE_RATE_BODY" }
+R.GoblinSoldPerDay = { title = "locale:TIP_GOBLIN_SOLD_PER_DAY_TITLE", body = "locale:TIP_GOBLIN_SOLD_PER_DAY_BODY" }
+R.GoblinAhQty      = { title = "locale:TIP_GOBLIN_AH_QTY_TITLE",       body = "locale:TIP_GOBLIN_AH_QTY_BODY" }
 
 -- ===== Mogul optimizer controls ============================================
 -- Effect guidance (what the toggle does FOR you), not the mechanics. Kept short.
-R.MogulModeProfit     = { title = "Profit",                  body = "Ranks crafts by the gold you'll make.",                                           anchor = "ANCHOR_BOTTOMRIGHT" }
-R.MogulModeCollection = { title = "Collection",              body = "Ranks by decor you don't own yet -- completion over gold.",                         anchor = "ANCHOR_BOTTOMRIGHT" }
-R.MogulViewChar       = { title = "This character",          body = "Plans from this character's known recipes and bags.",                              anchor = "ANCHOR_BOTTOMRIGHT" }
-R.MogulViewAccount    = { title = "Account-wide",            body = "Pools recipes and materials across all your characters.",                          anchor = "ANCHOR_BOTTOMRIGHT" }
-R.MogulOptOwned       = { title = "Use owned materials",     body = "Only plans crafts your current materials cover -- no shopping.",                    anchor = "ANCHOR_BOTTOMRIGHT" }
-R.MogulOptBuy         = { title = "Buy materials from the AH", body = "Includes buying missing reagents; their AH cost is subtracted from the profit.",  anchor = "ANCHOR_BOTTOMRIGHT" }
-R.MogulFrugal         = { title = "Frugal",                  body = "Favors lumber-light crafts so your wood stretches across more pieces.",             anchor = "ANCHOR_BOTTOMRIGHT" }
-R.MogulSupplyImpact   = { title = "Supply impact",           body = "Accounts for prices dropping as you flood the market. Smooth% decays the price per copy sold; Cap limits how many you plan.", anchor = "ANCHOR_BOTTOMRIGHT" }
+R.MogulModeProfit     = { title = "locale:TIP_MOGUL_MODE_PROFIT_TITLE",      body = "locale:TIP_MOGUL_MODE_PROFIT_BODY",      anchor = "ANCHOR_BOTTOMRIGHT" }
+R.MogulModeCollection = { title = "locale:TIP_MOGUL_MODE_COLLECTION_TITLE", body = "locale:TIP_MOGUL_MODE_COLLECTION_BODY", anchor = "ANCHOR_BOTTOMRIGHT" }
+R.MogulViewChar       = { title = "locale:TIP_MOGUL_VIEW_CHAR_TITLE",       body = "locale:TIP_MOGUL_VIEW_CHAR_BODY",       anchor = "ANCHOR_BOTTOMRIGHT" }
+R.MogulViewAccount    = { title = "locale:TIP_MOGUL_VIEW_ACCOUNT_TITLE",    body = "locale:TIP_MOGUL_VIEW_ACCOUNT_BODY",    anchor = "ANCHOR_BOTTOMRIGHT" }
+R.MogulOptOwned       = { title = "locale:TIP_MOGUL_OPT_OWNED_TITLE",       body = "locale:TIP_MOGUL_OPT_OWNED_BODY",       anchor = "ANCHOR_BOTTOMRIGHT" }
+R.MogulOptBuy         = { title = "locale:TIP_MOGUL_OPT_BUY_TITLE",         body = "locale:TIP_MOGUL_OPT_BUY_BODY",         anchor = "ANCHOR_BOTTOMRIGHT" }
+R.MogulFrugal         = { title = "locale:TIP_MOGUL_FRUGAL_TITLE",          body = "locale:TIP_MOGUL_FRUGAL_BODY",          anchor = "ANCHOR_BOTTOMRIGHT" }
+R.MogulSupplyImpact   = { title = "locale:TIP_MOGUL_SUPPLY_IMPACT_TITLE",   body = "locale:TIP_MOGUL_SUPPLY_IMPACT_BODY",   anchor = "ANCHOR_BOTTOMRIGHT" }
 
 -- ===== Recipe list filters =================================================
-R.RecipeFilterUnknown = { title = "Unknown", body = "Recipes no character on your account has learned.", anchor = "ANCHOR_BOTTOM" }
-R.RedeemableTag       = { title = "Redeemable", body = "You own these -- they were auto-awarded to you (e.g. an achievement or quest reward); you've just never placed one. Place it once to claim a permanent copy. Until then it sits in your catalog as an unredeemed instance.", anchor = "ANCHOR_BOTTOM" }
+R.RecipeFilterUnknown = { title = "locale:TIP_RECIPE_FILTER_UNKNOWN_TITLE", body = "locale:TIP_RECIPE_FILTER_UNKNOWN_BODY", anchor = "ANCHOR_BOTTOM" }
+R.RedeemableTag       = { title = "locale:TIP_REDEEMABLE_TAG_TITLE",         body = "locale:TIP_REDEEMABLE_TAG_BODY",         anchor = "ANCHOR_BOTTOM" }
 
 -- ===== House-editor companion: mode tabs ===================================
-R.CompanionStyles      = { title = "Your Styles",  body = "Place decor from the style sets you've saved.",                              anchor = "ANCHOR_BOTTOM" }
-R.CompanionShopping    = { title = "Shopping",     body = "Place straight from your shopping lists.",                                   anchor = "ANCHOR_BOTTOM" }
-R.CompanionSnapshots   = { title = "Snapshots",    body = "Re-place a saved layout to rebuild a room.",                                 anchor = "ANCHOR_BOTTOM" }
-R.CompanionThemes      = { title = "Themes",       body = "Furnish a space from a ready-made room concept.",                            anchor = "ANCHOR_BOTTOM" }
-R.CompanionCollections = { title = "Collections",  body = "Browse decor by category -- Recently Learned, Dyeable, and by placement cost.", anchor = "ANCHOR_BOTTOM" }
-R.CompanionRecent      = { title = "Recent",       body = "Decor you've placed or removed this editing session.",                       anchor = "ANCHOR_BOTTOM" }
+R.CompanionStyles      = { title = "locale:TIP_COMPANION_STYLES_TITLE",      body = "locale:TIP_COMPANION_STYLES_BODY",      anchor = "ANCHOR_BOTTOM" }
+R.CompanionShopping    = { title = "locale:TIP_COMPANION_SHOPPING_TITLE",    body = "locale:TIP_COMPANION_SHOPPING_BODY",    anchor = "ANCHOR_BOTTOM" }
+R.CompanionSnapshots   = { title = "locale:TIP_COMPANION_SNAPSHOTS_TITLE",   body = "locale:TIP_COMPANION_SNAPSHOTS_BODY",   anchor = "ANCHOR_BOTTOM" }
+R.CompanionThemes      = { title = "locale:TIP_COMPANION_THEMES_TITLE",      body = "locale:TIP_COMPANION_THEMES_BODY",      anchor = "ANCHOR_BOTTOM" }
+R.CompanionCollections = { title = "locale:TIP_COMPANION_COLLECTIONS_TITLE", body = "locale:TIP_COMPANION_COLLECTIONS_BODY", anchor = "ANCHOR_BOTTOM" }
+R.CompanionRecent      = { title = "locale:TIP_COMPANION_RECENT_TITLE",      body = "locale:TIP_COMPANION_RECENT_BODY",      anchor = "ANCHOR_BOTTOM" }
 
 -- ===== Section headers / instructional ======================================
 R.QueueHeader = {
-    title  = "Queue",
-    body   = "TODO: lift workflow description from HDG queue header tooltip.",
+    title  = "locale:TIP_QUEUE_HEADER_TITLE",
+    body   = "locale:TIP_QUEUE_HEADER_BODY",
     anchor = "ANCHOR_BOTTOM",
 }
 
 R.MaterialsHeader = {
-    title  = "Materials",
-    body   = "TODO: lift workflow description from HDG materials panel header tooltip.",
+    title  = "locale:TIP_MATERIALS_HEADER_TITLE",
+    body   = "locale:TIP_MATERIALS_HEADER_BODY",
     anchor = "ANCHOR_BOTTOM",
 }
 
 -- ===== Warning button recipes ===============================================
 R.WarnResetConfig = {
-    title  = "|cffff6060Reset all settings|r",
-    body   = "This resets HDG's display options. Your tracked data is preserved.",
+    title  = "locale:TIP_WARN_RESET_CONFIG_TITLE",
+    body   = "locale:TIP_WARN_RESET_CONFIG_BODY",
     anchor = "ANCHOR_BOTTOM",
 }
 
 R.WarnHardReset = {
-    title  = "|cffff6060Hard reset all data|r",
-    body   = "Wipes ALL HDG data: SavedVariables, queue, alts. Requires /reload.",
+    title  = "locale:TIP_WARN_HARD_RESET_TITLE",
+    body   = "locale:TIP_WARN_HARD_RESET_BODY",
     anchor = "ANCHOR_BOTTOM",
 }
 
 R.WarnClearPins = {
-    title  = "|cffff6060Clear all map pins|r",
-    body   = "Removes every HDG pin from the world map. Pinned again on next refresh.",
+    title  = "locale:TIP_WARN_CLEAR_PINS_TITLE",
+    body   = "locale:TIP_WARN_CLEAR_PINS_BODY",
     anchor = "ANCHOR_BOTTOM",
 }
 

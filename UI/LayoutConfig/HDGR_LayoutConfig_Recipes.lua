@@ -164,7 +164,7 @@ LC.widgets["recipesListPanel.blankLabel"] = {
     kind = "label", ["in"] = "recipes.listBody",
     visible = "recipes.isBlank",
     role = "TextDim",
-    text = "No recipes match your filters.",
+    text = "locale:REC_BLANK_RECIPES",
     font = "body", justifyH = "CENTER",
     width = "fill", height = 22,
     order = 30,
@@ -201,7 +201,7 @@ LC.widgets["recipesQueuePanel.emptyLabel"] = {
     tooltip = false,
     kind = "label", ["in"] = "recipes.queueBody",
     visible = "recipes.queueIsEmpty",
-    text = "Queue is empty.",   -- short: the narrow queue panel truncates longer copy
+    text = "locale:REC_QUEUE_EMPTY",   -- short: the narrow queue panel truncates longer copy
     font = "body", justifyH = "CENTER",
     width = "fill", height = 22, order = 30,
 }
@@ -277,7 +277,7 @@ LC.widgets["recipesStripPanel.expansionDropdown"] = {
     variant = "filter", multi = true,
     -- width="auto": auto-sizes to selection text; fixed widths under-report and overlap the next dropdown.
     width = "auto", height = 22, order = 5, minWidth = 130,
-    placeholder = "All Expansions",
+    placeholder = "locale:ACQ_ALL_EXPANSIONS",
     binding  = { menu = "recipes.expansionMenuItems", current = "recipes.expansionFilter" },
     dispatch = { type = "RECIPES_TOGGLE_EXPANSION", payloadKey = "expansion" },
 }
@@ -286,7 +286,7 @@ LC.widgets["recipesStripPanel.professionDropdown"] = {
     kind = "dropdown", ["in"] = "recipes.profStrip",
     variant = "filter", multi = true,
     width = "auto", height = 22, order = 10, minWidth = 140,
-    placeholder = "All Professions",
+    placeholder = "locale:REC_ALL_PROFESSIONS",
     binding  = { menu = "recipes.professionMenuItems", current = "recipes.professionFilter" },
     dispatch = { type = "RECIPES_TOGGLE_PROFESSION", payloadKey = "profession" },
 }
@@ -301,7 +301,7 @@ LC.widgets["recipesStripPanel.toolbarSpacer"] = {
 LC.widgets["recipesStripPanel.runClear"] = {
     tooltip = false,
     kind = "button", ["in"] = "recipes.profStrip", font = "small",
-    text = "Clear all", width = "auto", height = 22, order = 30, variant = "tertiary",
+    text = "locale:REC_CLEAR_ALL", width = "auto", height = 22, order = 30, variant = "tertiary",
     visible = "recipes.runVisible",
 }
 
@@ -320,7 +320,7 @@ LC.widgets["recipesStripPanel.runChips"] = {
 LC.widgets["recipesListPanel.title"] = {
     tooltip = false,
     kind = "label", ["in"] = "recipesListPanel", slot = "header",
-    text = "Recipes", font = "heading",
+    text = "locale:REC_RECIPES_TITLE", font = "heading",
     height = 18, width = "auto", order = 10,
 }
 LC.widgets["recipesListPanel.headerSpacer"] = {
@@ -338,19 +338,19 @@ LC.widgets["recipesListPanel.count"] = {
 LC.widgets["recipesListPanel.filterAll"] = {
     tooltip = false,
     kind = "button", ["in"] = "recipes.listFilterStrip", font = "small",
-    text = "All", width = "auto", height = 20, order = 10, variant = "tertiary",
+    text = "locale:COMMON_ALL", width = "auto", height = 20, order = 10, variant = "tertiary",
     binding = { active = "recipes.isListFilter_all" },
 }
 LC.widgets["recipesListPanel.filterKnown"] = {
     tooltip = false,
     kind = "button", ["in"] = "recipes.listFilterStrip", font = "small",
-    text = "Known", width = "auto", height = 20, order = 20, variant = "tertiary",
+    text = "locale:REC_FILTER_KNOWN", width = "auto", height = 20, order = 20, variant = "tertiary",
     binding = { active = "recipes.isListFilter_known" },
 }
 LC.widgets["recipesListPanel.filterReady"] = {
     tooltip = false,
     kind = "button", ["in"] = "recipes.listFilterStrip", font = "small",
-    text = "Ready", width = "auto", height = 20, order = 30, variant = "tertiary",
+    text = "locale:REC_FILTER_READY", width = "auto", height = 20, order = 30, variant = "tertiary",
     binding = { active = "recipes.isListFilter_ready" },
 }
 -- Unknown = recipes NO character on the account has learned (craftableState =
@@ -358,7 +358,7 @@ LC.widgets["recipesListPanel.filterReady"] = {
 LC.widgets["recipesListPanel.filterUnknown"] = {
     tooltip = { recipe = "RecipeFilterUnknown" },
     kind = "button", ["in"] = "recipes.listFilterStrip", font = "small",
-    text = "Unknown", width = "auto", height = 20, order = 40, variant = "tertiary",
+    text = "locale:REC_FILTER_UNKNOWN", width = "auto", height = 20, order = 40, variant = "tertiary",
     binding = { active = "recipes.isListFilter_unknown" },
 }
 LC.widgets["recipesListPanel.search"] = {
@@ -366,13 +366,13 @@ LC.widgets["recipesListPanel.search"] = {
     kind = "editbox", ["in"] = "recipes.filterBar", font = "body",
     height = 22, width = "fill", order = 10,
     multiline   = false,
-    placeholder = "Search recipes...",
+    placeholder = "locale:REC_SEARCH_PLACEHOLDER",
     binding = { text = "recipes.searchQuery" },
 }
 LC.widgets["recipesListPanel.resetFilters"] = {
     tooltip = false,
     kind = "button", ["in"] = "recipes.filterBar", font = "small",
-    text = "Reset", width = "auto", height = 22, order = 20, variant = "tertiary",
+    text = "locale:COMMON_RESET", width = "auto", height = 22, order = 20, variant = "tertiary",
 }
 LC.widgets["recipesListPanel.list"] = {
     tooltip = false,
@@ -391,7 +391,7 @@ LC.widgets["recipesListPanel.list"] = {
 LC.widgets["recipesQueuePanel.title"] = {
     tooltip = false,
     kind = "label", ["in"] = "recipesQueuePanel", slot = "header",
-    text = "Queue", font = "heading",
+    text = "locale:REC_QUEUE_TITLE", font = "heading",
     height = 18, width = "auto", order = 10,
     binding = "recipes.queueTitleLabel",
 }
@@ -403,9 +403,9 @@ LC.widgets["recipesQueuePanel.hintSpacer"] = {
 LC.widgets["recipesQueuePanel.clickHints"] = {
     tooltip = false,   -- self-owned tooltip, composed from left/right/note text
     kind = "clickHints", ["in"] = "recipesQueuePanel", slot = "header",
-    title     = "Queue actions",
-    leftText  = "Pick a recipe -- scopes its materials + previews it (click again to clear).",
-    rightText = "Remove a recipe from the queue.",
+    title     = "locale:REC_QUEUE_HINTS_TITLE",
+    leftText  = "locale:REC_QUEUE_HINTS_LEFT",
+    rightText = "locale:REC_QUEUE_HINTS_RIGHT",
     noteText  = "Number button (shown when ready) crafts -- Craft 1 or Craft Max.",
     width = 34, height = 16, order = 20,
 }
@@ -414,13 +414,13 @@ LC.widgets["recipesQueuePanel.clickHints"] = {
 LC.widgets["recipesQueuePanel.add"] = {
     tooltip = false,
     kind = "button", ["in"] = "recipesQueuePanel", slot = "header", font = "small",
-    text = "Add", width = "auto", height = 22, order = 11, variant = "tertiary",
+    text = "locale:COMMON_ADD", width = "auto", height = 22, order = 11, variant = "tertiary",
     visible = "recipes.hasSelectedRecipe",
 }
 LC.widgets["recipesQueuePanel.clear"] = {
     tooltip = false,
     kind = "button", ["in"] = "recipesQueuePanel", slot = "header", font = "small",
-    text = "Clear", width = "auto", height = 22, order = 12, variant = "tertiary",
+    text = "locale:COMMON_CLEAR", width = "auto", height = 22, order = 12, variant = "tertiary",
     visible = "recipes.queueHasEntries",
 }
 -- Model preview: explicit insets + defaultSceneID (build fn has no fallback by design).
@@ -433,7 +433,7 @@ LC.widgets["recipesQueuePanel.model"] = {
     showCorbels  = false,
     showAtlas    = false,
     bgTile       = true,                             -- ported VDS dark tiling backdrop
-    placeholder  = "Select a recipe to preview",
+    placeholder  = "locale:REC_PREVIEW_PLACEHOLDER",
     sceneInsets    = { top = 8, right = 8, bottom = 8, left = 8 },
     defaultSceneID = 859,   -- HOUSING_CATALOG_DECOR_MODELSCENEID_DEFAULT (12.0.5)
 }
@@ -450,7 +450,7 @@ LC.widgets["recipesQueuePanel.list"] = {
 LC.widgets["recipesQueuePanel.craftOrderHeader"] = {
     tooltip = false,
     kind = "label", ["in"] = "recipes.queueCraftOrderHeader",
-    font = "caption", text = "Queue",
+    font = "caption", text = "locale:REC_QUEUE_TITLE",
     width = "fill", height = 12, order = 10,
     binding = "recipes.queueLumberHeaderLabel",
 }
@@ -468,7 +468,7 @@ LC.widgets["recipesQueuePanel.craftOrderList"] = {
 LC.widgets["recipesMaterialsPanel.title"] = {
     tooltip = false,
     kind = "label", ["in"] = "recipesMaterialsPanel", slot = "header",
-    text = "Materials", font = "heading",
+    text = "locale:REC_MATERIALS_TITLE", font = "heading",
     height = 18, width = "auto", order = 10,
 }
 -- Materials controls: grouping toggle (Totals / By Recipe) + depth radio (Direct / Raw).
@@ -498,7 +498,7 @@ LC.widgets["recipesMaterialsPanel.list"] = {
 LC.widgets["recipesMaterialsPanel.craftTheseHeader"] = {
     tooltip = false,
     kind = "label", ["in"] = "recipes.materialsCraftTheseHeader",
-    font = "caption", text = "Craft These First:",
+    font = "caption", text = "locale:REC_CRAFT_THESE_FIRST",
     width = "fill", height = 12, order = 10,
 }
 LC.widgets["recipesMaterialsPanel.craftTheseList"] = {
@@ -519,6 +519,6 @@ LC.widgets["recipesMaterialsPanel.costLabel"] = {
 LC.widgets["recipesMaterialsPanel.addAll"] = {
     tooltip = false,
     kind = "button", ["in"] = "recipes.materialsCostBar", font = "small",
-    text = "Buy Mats from AH", width = "auto", height = 22, order = 20,
+    text = "locale:REC_BUY_MATS_FROM_AH", width = "auto", height = 22, order = 20,
     variant = "primary",
 }

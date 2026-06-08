@@ -161,11 +161,12 @@ local function NewAcquisitionSessionUI()
         advancedFiltersOpen = false,
         preset              = nil,     -- source axis (achievement|reputation|endeavor|quest)
         missingOnly         = false,   -- collection axis -- ANDs with preset (orthogonal toggle)
-        factionFilter       = nil,
-        expansionFilter     = nil,
-        zoneFilter          = nil,
-        repFilter           = nil,
-        sourceFilter        = "all",
+        -- Advanced filters are multi-select SETs (empty = "All"). ACQ_TOGGLE_* flip membership.
+        factionFilter       = {},
+        expansionFilter     = {},
+        zoneFilter          = {},
+        repFilter           = {},
+        sourceFilter        = {},
     }
 end
 
@@ -1355,6 +1356,16 @@ end
 -- call so Logger / Combat / Persistence layers fire at the right edges
 -- without the reducer caring.
 
+-- Multi-select filter-set toggle: value=="all" clears the set (-> "All"); else
+-- flip membership. Shared by the 5 ACQ_TOGGLE_* cases (empty set = all).
+local function _acqToggleFilter(set, value)
+    if value == "all" then
+        for k in pairs(set) do set[k] = nil end
+    else
+        set[value] = not (set[value] == true) and true or nil
+    end
+end
+
 function HDG.Store:_RawDispatch(action)
     if type(action) ~= "table" or not action.type then
         error("HDG.Store:_RawDispatch requires {type=..., payload=?}", 2)
@@ -1564,6 +1575,20 @@ function HDG.Store:_RawDispatch(action)
         self.state.session.ui.acquisition.missingOnly =
             not self.state.session.ui.acquisition.missingOnly
 
+    -- Advanced-filter multi-select set toggles. payload.<axis> == "all" clears the
+    -- set (master "All X" -> show every value); else flip membership. Empty = all.
+    -- Clone of RECIPES_TOGGLE_EXPANSION; session-scoped (no persistence).
+    elseif action.type == A.ACQ_TOGGLE_EXPANSION then
+        _acqToggleFilter(self.state.session.ui.acquisition.expansionFilter, payload.expansion)
+    elseif action.type == A.ACQ_TOGGLE_ZONE then
+        _acqToggleFilter(self.state.session.ui.acquisition.zoneFilter, payload.zone)
+    elseif action.type == A.ACQ_TOGGLE_REP then
+        _acqToggleFilter(self.state.session.ui.acquisition.repFilter, payload.rep)
+    elseif action.type == A.ACQ_TOGGLE_SOURCE then
+        _acqToggleFilter(self.state.session.ui.acquisition.sourceFilter, payload.source)
+    elseif action.type == A.ACQ_TOGGLE_FACTION then
+        _acqToggleFilter(self.state.session.ui.acquisition.factionFilter, payload.faction)
+
     elseif action.type == A.UI_FILTER_RESET then
         -- Atomic per-tab filter reset (ADR-018). Tab-specific logic lives in
         -- the dispatch table below; no new action enum needed for additional tabs.
@@ -1576,11 +1601,11 @@ function HDG.Store:_RawDispatch(action)
             acq.searchQuery     = ""
             acq.preset          = nil
             acq.missingOnly     = false
-            acq.factionFilter   = nil
-            acq.expansionFilter = nil
-            acq.zoneFilter      = nil
-            acq.repFilter       = nil
-            acq.sourceFilter    = "all"
+            acq.factionFilter   = {}
+            acq.expansionFilter = {}
+            acq.zoneFilter      = {}
+            acq.repFilter       = {}
+            acq.sourceFilter    = {}
         elseif tab == "recipes" then
             local r = self.state.session.ui.recipes
             r.searchQuery         = ""

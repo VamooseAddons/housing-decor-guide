@@ -48,9 +48,18 @@ end
 
 -- Fonts are shared across all themes. FRIZQT across every role keeps typography
 -- unified; ARIALN is slightly crisper sub-12px but the family swap reads as inconsistent.
-local FONT_HEADING = "Fonts\\FRIZQT__.TTF"
-local FONT_BODY    = "Fonts\\FRIZQT__.TTF"
-local FONT_SMALL   = "Fonts\\FRIZQT__.TTF"
+-- Locale-aware base: FRIZQT covers Latin + Cyrillic (deDE/frFR/esES/ruRU/...), but has
+-- NO CJK glyphs -- on zhCN/zhTW/koKR clients it renders tofu boxes. STANDARD_TEXT_FONT is
+-- WoW's per-locale font (the regional CJK face on those clients), so CJK locales use it.
+-- (Old HDG lesson: a hardcoded FRIZQT gave CJK users glyph-fallback boxes.)
+local CJK_LOCALES = { zhCN = true, zhTW = true, koKR = true }
+local _baseFont = "Fonts\\FRIZQT__.TTF"
+if CJK_LOCALES[(GetLocale and GetLocale()) or ""] and STANDARD_TEXT_FONT then
+    _baseFont = STANDARD_TEXT_FONT
+end
+local FONT_HEADING = _baseFont
+local FONT_BODY    = _baseFont
+local FONT_SMALL   = _baseFont
 
 local DEFAULT_FONTS = {
     heading      = { file = FONT_HEADING, size = 16, flags = "" },

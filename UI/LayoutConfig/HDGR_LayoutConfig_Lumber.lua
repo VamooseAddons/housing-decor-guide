@@ -109,7 +109,7 @@ LC.sections["lumber.action.bar"] = {
 LC.widgets["lumberPanel.title"] = {
     tooltip = false,
     kind = "label", role = "TextHeading", ["in"] = "lumberPanel", slot = "header",
-    text = "Lumber Tracker", font = "heading",
+    text = "locale:LUM_TITLE", font = "heading",
     height = 18, width = "auto", order = 10,
 }
 LC.widgets["lumberPanel.headerSpacer"] = {
@@ -195,12 +195,12 @@ LC.widgets["lumberActionPanel.spacer"] = {
 LC.widgets["lumberActionPanel.endSession"] = {
     tooltip = false,
     kind = "button", ["in"] = "lumber.action.bar", font = "small",
-    text = "End Session", width = "auto", height = 20, order = 20, variant = "tertiary",
+    text = "locale:LUM_END_SESSION", width = "auto", height = 20, order = 20, variant = "tertiary",
 }
 LC.widgets["lumberActionPanel.backToMain"] = {
     tooltip = false,
     kind = "button", ["in"] = "lumber.action.bar", font = "small",
-    text = "Back", width = "auto", height = 20, order = 30, variant = "tertiary",
+    text = "locale:COMMON_BACK", width = "auto", height = 20, order = 30, variant = "tertiary",
 }
 
 -- ===== Satellite window (HDG-ADR-025 step 5) ============================

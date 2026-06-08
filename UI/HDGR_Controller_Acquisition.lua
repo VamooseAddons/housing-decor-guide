@@ -448,10 +448,11 @@ function AcquisitionController:_wireFilterTags(rootFrame)
             CH.Mechanics.SetUITransientView("acquisition", "searchQuery", "")
             if searchBoxRef and searchBoxRef.SetText then searchBoxRef:SetText("") end
         end,
-        faction   = function() CH.Mechanics.SetUITransientView("acquisition", "factionFilter",   "all") end,
-        expansion = function() CH.Mechanics.SetUITransientView("acquisition", "expansionFilter", "all") end,
-        zone      = function() CH.Mechanics.SetUITransientView("acquisition", "zoneFilter",      "all") end,
-        rep       = function() CH.Mechanics.SetUITransientView("acquisition", "repFilter",       "all") end,
+        -- Multi-select axes: dispatch the toggle with value "all" -> reducer clears the set.
+        faction   = function() HDG.Store:Dispatch({ type = HDG.Constants.ACTIONS.ACQ_TOGGLE_FACTION,   payload = { faction   = "all" } }) end,
+        expansion = function() HDG.Store:Dispatch({ type = HDG.Constants.ACTIONS.ACQ_TOGGLE_EXPANSION, payload = { expansion = "all" } }) end,
+        zone      = function() HDG.Store:Dispatch({ type = HDG.Constants.ACTIONS.ACQ_TOGGLE_ZONE,      payload = { zone      = "all" } }) end,
+        rep       = function() HDG.Store:Dispatch({ type = HDG.Constants.ACTIONS.ACQ_TOGGLE_REP,       payload = { rep       = "all" } }) end,
         -- Preset: re-dispatching the active value toggles it off (reducer contract).
         preset    = function()
             local current = HDG.Selectors:Call("acq.preset", HDG.Store:GetState(), {})  -- exception(false-positive): top-level controller method (not a row factory)
@@ -462,7 +463,7 @@ function AcquisitionController:_wireFilterTags(rootFrame)
                 })
             end
         end,
-        source    = function() CH.Mechanics.SetUITransientView("acquisition", "sourceFilter",    "all") end,
+        source    = function() HDG.Store:Dispatch({ type = HDG.Constants.ACTIONS.ACQ_TOGGLE_SOURCE, payload = { source = "all" } }) end,
         -- Missing tag is only visible when missingOnly is true, so a toggle
         -- dispatch clears it back off.
         missing   = function() HDG.Store:Dispatch({ type = HDG.Constants.ACTIONS.ACQ_TOGGLE_MISSING }) end,
@@ -596,6 +597,14 @@ function AcquisitionController:_wireVendorNoteBox(rootFrame)
 end
 
 function AcquisitionController:Wire(rootFrame)
+    -- Active-filter chips overflow horizontally (the layout engine has no flow/wrap),
+    -- so clip the list panel: chips cut off at its edge instead of bleeding into the
+    -- detail panel. Dropdown popups are top-level frames -> clipping never hides them.
+    local listPanel = rootFrame.panels and rootFrame.panels["acquisitionListPanel"]
+    if listPanel and listPanel.SetClipsChildren then  -- exception(false-positive): mock rootFrame may lack panels / Frame methods
+        listPanel:SetClipsChildren(true)
+    end
+
     local itemList = HDG.UI.W(rootFrame, "acquisitionListPanel.itemList")
     if itemList and itemList.WireStoreSelectionSync then
         itemList:WireStoreSelectionSync("session.ui.acquisition.selectedItemID",

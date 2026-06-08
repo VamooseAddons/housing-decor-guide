@@ -47,6 +47,14 @@ HDG.TooltipEngine = HDG.TooltipEngine or {}
 
 local TE = HDG.TooltipEngine
 
+-- Resolve a possibly-"locale:KEY"-prefixed tooltip string to localised text at
+-- render (hover) time, so recipe defs can carry locale keys and switch live --
+-- no /reload, unlike build-time static LayoutConfig text. Plain strings pass through.
+local function _loc(s)
+    if HDG.Locale then return HDG.Locale:Resolve(s) end  -- exception(boundary): Locale load-order partial in headless tests
+    return s
+end
+
 -- ===== Internal helpers ===================================================
 
 -- Resolve a tooltip def to a final TE table.
@@ -107,16 +115,16 @@ local function renderTooltip(widget, t)
     end
 
     if t.title then
-        tooltip:AddLine(t.title)
+        tooltip:AddLine(_loc(t.title))
     end
     if t.body then
-        tooltip:AddLine(t.body, 1, 1, 1, true)   -- wrap=true
+        tooltip:AddLine(_loc(t.body), 1, 1, 1, true)   -- wrap=true
     end
 
     if t.extraLines then
         for _, line in ipairs(t.extraLines) do
             if type(line) == "string" then
-                tooltip:AddLine(line, 1, 1, 1, true)
+                tooltip:AddLine(_loc(line), 1, 1, 1, true)
             elseif type(line) == "table" then
                 -- Per-line color channels are optional (default white); wrap
                 -- defaults to true; author opts out with wrap = false.
@@ -125,11 +133,11 @@ local function renderTooltip(widget, t)
                     -- One line shape: a `right` value is the only switch. With it,
                     -- two-column via AddDoubleLine (label | value); without it, a
                     -- plain AddLine. left colors = r/g/b; right colors = rr/rg/rb.
-                    tooltip:AddDoubleLine(line.text or "", line.right,
+                    tooltip:AddDoubleLine(_loc(line.text or ""), _loc(line.right),
                         line.r or 1, line.g or 1, line.b or 1,
                         line.rr or 1, line.rg or 1, line.rb or 1)
                 else
-                    tooltip:AddLine(line.text or "",
+                    tooltip:AddLine(_loc(line.text or ""),
                         line.r or 1, line.g or 1, line.b or 1,
                         line.wrap ~= false)  -- exception(optional): tooltip line.wrap absent = default-on per extraLines protocol
                 end

@@ -107,7 +107,7 @@ LC.widgets["removalistListPanel.factionDropdown"] = {
     tooltip = false,
     kind = "dropdown", ["in"] = "removalistListPanel", slot = "header",
     width = "fill", height = 25, order = 10,
-    placeholder     = "Faction...",
+    placeholder     = "locale:REMV_FACTION_PLACEHOLDER",
     binding      = { menu = "removalist.factionMenuItems", current = "removalist.faction" },
     setTransient = { view = "removalist", key = "faction" },
 }
@@ -187,7 +187,7 @@ LC.sections["removalistInfoPanel.body"] = {
 LC.widgets["removalistInfoPanel.title"] = {
     tooltip = false, kind = "label", role = "TextHeading",
     ["in"] = "removalistInfoPanel", slot = "header",
-    text = "Move & Orientation", font = "heading", height = 16, width = "auto", order = 10,
+    text = "locale:REMV_ORIENTATION_TITLE", font = "heading", height = 16, width = "auto", order = 10,
 }
 
 -- Swap / Clear action strip (panel content top, above the result).
@@ -197,11 +197,11 @@ LC.sections["removalistInfoPanel.actions"] = {
 }
 LC.widgets["removalistInfoPanel.swapBtn"] = {
     tooltip = false, kind = "button", ["in"] = "removalistInfoPanel.actions",
-    text = "Swap", width = "auto", height = 22, order = 10, variant = "tertiary", font = "small",
+    text = "locale:REMV_SWAP", width = "auto", height = 22, order = 10, variant = "tertiary", font = "small",
 }
 LC.widgets["removalistInfoPanel.clearBtn"] = {
     tooltip = false, kind = "button", ["in"] = "removalistInfoPanel.actions",
-    text = "Clear", width = "auto", height = 22, order = 20, variant = "tertiary", font = "small",
+    text = "locale:COMMON_CLEAR", width = "auto", height = 22, order = 20, variant = "tertiary", font = "small",
 }
 
 -- Result card: chrome="cardBorder" = the card fill (surface.hover) + a 1px border, NO
@@ -236,7 +236,7 @@ LC.widgets["removalistInfoPanel.resultPair"] = {
 LC.widgets["removalistInfoPanel.keyHeading"] = {
     tooltip = false, kind = "label", role = "TextDim",
     ["in"] = "removalistInfoPanel.body",
-    text = "COMMUNITY ROTATION KEY", font = "caption", height = 14, width = "fill", order = 20,
+    text = "locale:REMV_ROTATION_KEY_HEADING", font = "caption", height = 14, width = "fill", order = 20,
 }
 LC.widgets["removalistInfoPanel.keyGrid"] = {
     tooltip = false, kind = "removalistRotationKey",
@@ -259,5 +259,5 @@ LC.widgets["removalistInfoPanel.credit"] = {
     tooltip = false, kind = "label", role = "Text",
     ["in"] = "removalistInfoPanel.body",
     -- "Blue" tinted to her Discord name colour (inline |c -- a specific person's colour, not a theme token).
-    text = "Thanks to |cffB388EBBlue|r from AoA discord", font = "caption", height = 16, width = "fill", wrap = true, order = 50,
+    text = "locale:REMV_CREDIT", font = "caption", height = 16, width = "fill", wrap = true, order = 50,
 }

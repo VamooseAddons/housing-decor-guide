@@ -94,7 +94,7 @@ LC.widgets["houseTabPanel.list"] = {
 LC.widgets["houseTabPickerPanel.title"] = {
     tooltip = false,
     kind = "label", ["in"] = "houseTabPickerPanel", slot = "header",
-    text = "Customize Dashboard",
+    text = "locale:HT_PICKER_TITLE",
     font = "heading",
     width = "fill", height = 22, order = 10,
 }
@@ -102,7 +102,7 @@ LC.widgets["houseTabPickerPanel.title"] = {
 LC.widgets["houseTabPickerPanel.clickHints"] = {
     tooltip = false, kind = "clickHints", ["in"] = "houseTabPickerPanel", slot = "header",
     dragText = "Reorder the dashboard widgets.",
-    title    = "Customize Dashboard",
+    title    = "locale:HT_PICKER_TITLE",
     width = 16, height = 16, order = 20,
 }
 

@@ -127,8 +127,8 @@ LC.widgets["decorFilterPanel.previewBgDropdown"] = {
     tooltip = false,
     kind = "dropdown", ["in"] = "decor.filterRowTop",
     width = 170, height = 25, order = 30,
-    placeholder     = "Background",
-    selectionPrefix = "Background ",
+    placeholder     = "locale:DECOR_BG_PLACEHOLDER",
+    selectionPrefix = "locale:DECOR_BG_PREFIX",
     binding   = { menu = "decor.previewBgMenuItems", current = "decor.previewBg" },
     setConfig = { key = "decorPreviewBg" },
 }
@@ -266,7 +266,7 @@ LC.sections["decor.detailNote"] = {
 LC.widgets["decorLoadingPanel.loadingLabel"] = {
     tooltip = false,
     kind = "label", ["in"] = "decorLoadingPanel",
-    text = "Scanning catalog...",
+    text = "locale:DECOR_LOADING",
     font = "body", justifyH = "CENTER",
     width = "fill", height = 22,
     order = 10,
@@ -283,7 +283,7 @@ LC.widgets["decorErrorPanel.headline"] = {
     tooltip = false,
     kind = "label", ["in"] = "decorErrorPanel",
     role = "TextWarning",
-    text = "Catalog not loaded",
+    text = "locale:DECOR_ERROR_HEADLINE",
     font = "body", justifyH = "CENTER",
     width = "fill", height = 22, order = 10,
 }
@@ -291,7 +291,7 @@ LC.widgets["decorErrorPanel.sub"] = {
     tooltip = false,
     kind = "label", ["in"] = "decorErrorPanel",
     role = "TextDim",
-    text = "Open the Housing Catalog in-game to scan.",
+    text = "locale:DECOR_ERROR_SUB",
     font = "body", justifyH = "CENTER",
     width = "fill", height = 22, order = 20,
 }
@@ -307,7 +307,7 @@ LC.widgets["decorBlankPanel.label"] = {
     tooltip = false,
     kind = "label", ["in"] = "decorBlankPanel",
     role = "TextDim",
-    text = "No decor matches your filters.",
+    text = "locale:DECOR_BLANK",
     font = "body", justifyH = "CENTER",
     width = "fill", height = 22,
     order = 10,
@@ -316,7 +316,7 @@ LC.widgets["decorBlankPanel.label"] = {
 LC.widgets["decorPanel.title"] = {
     tooltip = false,
     kind = "label", ["in"] = "decorPanel", slot = "header",
-    text = "Decor Browser", font = "heading",
+    text = "locale:DECOR_BROWSER_TITLE", font = "heading",
     height = 18, width = "auto", order = 10,
 }
 LC.widgets["decorPanel.headerSpacer"] = {
@@ -327,8 +327,8 @@ LC.widgets["decorPanel.headerSpacer"] = {
 LC.widgets["decorPanel.clickHints"] = {
     tooltip = false,   -- self-owned tooltip composed from leftText/rightText
     kind = "clickHints", ["in"] = "decorPanel", slot = "header",
-    leftText  = "Select a decor item to preview and manage it.",
-    rightText = "Favorite or unfavorite the item.",
+    leftText  = "locale:DECOR_HINT_LEFT",
+    rightText = "locale:DECOR_HINT_RIGHT",
     width = 34, height = 16, order = 90,
 }
 -- Ownership ratio + filtered count, below the list (diag.info tone).
@@ -344,13 +344,13 @@ LC.widgets["decorPanel.search"] = {
     kind = "editbox", ["in"] = "decor.filterRowBottom", font = "body",
     height = 22, width = 240, order = 10,
     multiline = false,
-    placeholder = "Search decor by name...",
+    placeholder = "locale:DECOR_SEARCH_PLACEHOLDER",
 }
 -- Persistent filter reset: always visible. Wired in Controller_Decor -> UI_FILTER_RESET{tab="decor"}.
 LC.widgets["decorPanel.resetFilters"] = {
     tooltip = false,
     kind = "button", ["in"] = "decor.filterRowBottom", font = "small",
-    text = "Reset", width = "auto", height = 22, order = 15, variant = "tertiary",
+    text = "locale:COMMON_RESET", width = "auto", height = 22, order = 15, variant = "tertiary",
 }
 LC.widgets["decorPanel.list"] = {
     tooltip = false,
@@ -370,7 +370,7 @@ LC.widgets["decorPanel.list"] = {
 LC.widgets["decorDetailPanel.title"] = {
     tooltip = false,
     kind = "label", ["in"] = "decorDetailPanel", slot = "header",
-    text = "Click an item", font = "heading",
+    text = "locale:DECOR_CLICK_AN_ITEM", font = "heading",
     height = 18, width = "auto", order = 10,
     binding = "decor.selectedItem.name",
 }
@@ -399,7 +399,7 @@ LC.widgets["decorDetailPanel.itemPreview"] = {
     showAtlas    = false,                            -- parchment off; bgTile is the backdrop now
     bgTile         = true,                           -- ported VDS dark tiling backdrop (the "default" bg)
     configurableBg = true,                           -- preview-bg dropdown overrides the tile with an atlas
-    placeholder  = "Click an item to preview",
+    placeholder  = "locale:DECOR_PREVIEW_PLACEHOLDER",
     -- sceneInsets: declarative budget; build fn has no fallback by design.
     sceneInsets    = { top = 30, right = 10, bottom = 25, left = 10 },
     defaultSceneID = 859,   -- HOUSING_CATALOG_DECOR_MODELSCENEID_DEFAULT (12.0.5)
@@ -445,7 +445,7 @@ LC.widgets["decorDetailPanel.itemTags"] = {
 LC.widgets["decorDetailPanel.destroyBtn"] = {
     tooltip = false,
     kind = "button", ["in"] = "decor.detailMeta", font = "small",
-    text = "Destroy a stored copy", width = "auto", height = 22,
+    text = "locale:DECOR_DESTROY_BTN", width = "auto", height = 22,
     order = 45, variant = "tertiary",
     textTone = "error",
     visible = "decor.showDestroyButton",
@@ -455,7 +455,7 @@ LC.widgets["decorDetailPanel.destroyBtn"] = {
 LC.widgets["decorDetailPanel.wishlistBtn"] = {
     tooltip = false,
     kind = "button", ["in"] = "decor.noteCard", font = "small",
-    text = "+ Wishlist", width = "fill", height = 22,
+    text = "locale:DECOR_WISHLIST_BTN", width = "fill", height = 22,
     order = 5, variant = "tertiary",
     visible = "decor.hasSelectedItem",
 }
@@ -465,7 +465,7 @@ LC.widgets["decorDetailPanel.note"] = {
     kind = "editbox", ["in"] = "decor.detailNote", font = "body",
     height = "fill", width = "fill", order = 10,
     multiline   = true,
-    placeholder = "Add a personal note...",
+    placeholder = "locale:DECOR_NOTE_PLACEHOLDER",
     binding = { text = "decor.selectedItem.note" },
 }
 
@@ -490,7 +490,7 @@ LC.widgets["decorPanel.filterLabel"] = {
     tooltip = false,
     kind = "label", ["in"] = "decor.filterLabel", font = "caption",
     role = "TextDim",
-    text = "Filter:", width = 38, height = 22, order = 10,
+    text = "locale:DECOR_FILTER_LABEL", width = 38, height = 22, order = 10,
 }
 
 -- "Tags:" label: dim; hides with its section via decor.hasTagsRow.
@@ -498,7 +498,7 @@ LC.widgets["decorPanel.tagsLabel"] = {
     tooltip = false,
     kind = "label", ["in"] = "decor.tagsLabel", font = "caption",
     role = "TextDim",
-    text = "Tags:", width = 38, height = 22, order = 10,
+    text = "locale:DECOR_TAGS_LABEL", width = 38, height = 22, order = 10,
 }
 
 -- Tag-row chip slots: N pre-allocated, bound to decor.tagSlot.*. Empty slots hidden via visible.
@@ -520,7 +520,7 @@ end
 LC.widgets["decorPanel.onlyUncollectedToggle"] = {
     tooltip = false,
     kind = "button", ["in"] = "decor.filterRowBottom", font = "button",
-    text = "Uncollected", width = "auto", height = 22, order = 40, variant = "tertiary",
+    text = "locale:DECOR_UNCOLLECTED", width = "auto", height = 22, order = 40, variant = "tertiary",
     binding = { active = "decor.onlyUncollected" },
     toggle = "onlyUncollected",
 }
@@ -528,7 +528,7 @@ LC.widgets["decorPanel.onlyUncollectedToggle"] = {
 LC.widgets["decorPanel.onlyStoredToggle"] = {
     tooltip = false,
     kind = "button", ["in"] = "decor.filterRowBottom", font = "button",
-    text = "Destroy decor", width = "auto", height = 22, order = 50, variant = "tertiary",
+    text = "locale:DECOR_DESTROY_TOGGLE", width = "auto", height = 22, order = 50, variant = "tertiary",
     textTone = "error",
     binding = { active = "decor.onlyStored" },
     toggle = "onlyStored",

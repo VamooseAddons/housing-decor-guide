@@ -43,7 +43,7 @@ LC.panels.trainersPanel = {
 LC.widgets["trainersPanel.title"] = {
     tooltip = false,
     kind = "label", ["in"] = "trainersPanel", slot = "header",
-    text = "Trainers", font = "heading",
+    text = "locale:TRN_TITLE", font = "heading",
     height = 18, width = "auto", order = 5,
 }
 LC.widgets["trainersPanel.headerSpacer"] = {
@@ -57,7 +57,7 @@ LC.widgets["trainersPanel.searchBox"] = {
     binding = "trainers.searchQuery",
     font = "body",
     width = 220, height = 22, order = 10,
-    placeholder = "Search trainer / zone...",
+    placeholder = "locale:TRN_SEARCH_PLACEHOLDER",
 }
 LC.widgets["trainersPanel.list"] = {
     tooltip = false,

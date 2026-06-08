@@ -91,6 +91,11 @@ local function BuildActionMeta()
         [A.ACQ_SET_PRESET] = T({ "session.ui.acquisition.preset" }),
         [A.ACQ_TOGGLE_ADVANCED_FILTERS] = T({ "session.ui.acquisition.advancedFiltersOpen" }),
         [A.ACQ_TOGGLE_MISSING] = T({ "session.ui.acquisition.missingOnly" }),
+        [A.ACQ_TOGGLE_EXPANSION] = T({ "session.ui.acquisition.expansionFilter" }),
+        [A.ACQ_TOGGLE_ZONE]      = T({ "session.ui.acquisition.zoneFilter" }),
+        [A.ACQ_TOGGLE_REP]       = T({ "session.ui.acquisition.repFilter" }),
+        [A.ACQ_TOGGLE_SOURCE]    = T({ "session.ui.acquisition.sourceFilter" }),
+        [A.ACQ_TOGGLE_FACTION]   = T({ "session.ui.acquisition.factionFilter" }),
         -- Pure signal; actual data changes carried by the narrow delta actions.
         [A.DECOR_CATALOG_READY]          = { persists = false, combatUnsafe = false,
             invalidates = { "session.catalog.sweepGeneration" } },

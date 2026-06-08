@@ -263,7 +263,11 @@ Selectors:Register("lumber.sessionStats", {
         if not session then return nil end
 
         local Bag     = HDG.BagObserver
-        local held    = Bag and Bag:GetTotal(activeID) or 0
+        -- Bag-only to match the bag-only startCount (LUMBER_SESSION_START records the
+        -- pre-harvest BAG count). GetTotal here counted bank+warband stock as
+        -- "gathered this session" -- e.g. harvest 1 with 67 in the bank showed +68.
+        -- Mirrors LumberObserver:FinalizeSession's bag-only delta.
+        local held    = Bag and Bag:GetBagCount(activeID) or 0
         local now     = _G.GetTime and _G.GetTime() or 0  -- exception(boundary): GetTime nil in headless
         local duration = math.max(1, now - session.startedAt)
         local totalGathered = held - session.startCount

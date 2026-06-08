@@ -879,7 +879,9 @@ Selectors:Register("decor.matchesTag", {
     fn = function(state, ctx)
         local top = Selectors:Call("decor.topFilter", state, ctx)
         local tag = Selectors:Call("decor.activeTag",  state, ctx)
-        if tag == nil or tag == "All Decor" then
+        -- Crafted is source-restricting: even with no profession sub-tag it must narrow
+        -- to crafted decor (handled below), so it skips this pass-all early-out.
+        if (tag == nil or tag == "All Decor") and top ~= "crafted" then
             return function() return true end
         end
 
@@ -935,22 +937,23 @@ Selectors:Register("decor.matchesTag", {
             return function() return false end
         end
 
-        -- ===== Profession sub-tags under 'crafted' =====
-        -- Uses spellID->profession map from RecipeKnowledgeScanner:Scan() (O(1) per row).
-        -- ADR-003a carve-out: deterministic post-init module read (no Blizzard API).
-        -- Read inside the closure so a pre-scan race doesn't freeze the map to empty.
-        -- Pre-scan: empty map -> filter narrows to 0 rows, repaints on RECIPE_KNOWLEDGE_UPDATED.
-        -- see ADR-003a in docs/HDGR_ARCHITECTURE.md.
+        -- ===== Crafted: items whose canonical source IS the recipe (sourceType==6) =====
+        -- row.sourceType is baked by _bakeSourceTypes (priority Quest>Ach>Vendor>Crafted),
+        -- so 6 = recipe-backed with no higher source -- the row's craft star. Matches the
+        -- curated recipe DB, NOT the player's known recipes. No profession sub-tag selected
+        -- -> all crafted; else narrow to that recipe's profession.
         if top == "crafted" then
-            local recipes = state.account.recipes
-            -- Capture spellID->profession map ONCE per filter pass.
-            local scanner = HDG.RecipeKnowledgeScanner
-            local spellMap = (scanner and scanner.GetSpellIDToProfession
-                              and scanner:GetSpellIDToProfession()) or {}
+            local byItemID = HDG.HousingCatalogObserver.byItemID
+            if tag == nil or tag == "All Decor" then
+                return function(itemID)
+                    local row = byItemID[itemID]
+                    return row ~= nil and row.sourceType == 6
+                end
+            end
             return function(itemID)
-                local r = recipes[itemID]
-                if not r or not r.spellID then return false end
-                return spellMap[r.spellID] == tag
+                local row = byItemID[itemID]
+                return row ~= nil and row.sourceType == 6
+                   and row.recipe and row.recipe.profession == tag
             end
         end
 

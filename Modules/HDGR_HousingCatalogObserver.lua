@@ -173,20 +173,14 @@ local function _indexVendor(acc, name, zone, faction, standing, itemID)
     end
 end
 
--- Feed a row's vendor sources into _indexVendor: catalog-supplied (row.vendors) and
--- override-derived (row.sources type=5 for hidden/placeholder vendors like Chel the Chip).
+-- Feed a row's vendor sources into _indexVendor. row.vendors is the complete list:
+-- _bakeVendors folds CatalogOverride type=5 vendors (hidden/placeholder sellers like
+-- Chel the Chip) into it, so no separate row.sources pass is needed here.
 local function _indexVendorsFromRow(acc, row)
     if row.vendors then
         for _, v in ipairs(row.vendors) do
             if v.name and v.name ~= "" then
                 _indexVendor(acc, v.name, v.zone, v.faction, v.standing, row.itemID)
-            end
-        end
-    end
-    if row.sources then
-        for _, s in ipairs(row.sources) do
-            if s.type == 5 and s.name and s.name ~= "" then
-                _indexVendor(acc, s.name, s.detail or "", nil, nil, row.itemID)
             end
         end
     end
@@ -515,8 +509,9 @@ function R:BuildRow(info)
     R:_bakePlacement(row)    -- row.placementLabel (budget icon prefixed)
     R:_bakeVendors(row)      -- per-vendor enrichment + row.vendorLines[]
     R:_bakeCost(row)         -- row.costEntries (unified) + row.costLine
+    R:_bakeRecipe(row)       -- row.recipe + row.recipeLabel (MUST precede _bakeSourceTypes,
+                             -- which reads row.recipe to assign sourceType=6 / CRAFTED)
     R:_bakeSourceTypes(row)  -- row.sourceType / sourceName / altSourceType / altSourceName
-    R:_bakeRecipe(row)       -- row.recipe + row.recipeLabel
     R:_bakeBonusXp(row)      -- row.bonusXpLabel (first-acquisition reward chip)
     R:_bakeVariantDyes(row)  -- row.dyedVariants[] (per-owned-variant dye derivation)
     -- Single canonical source/gate bake. Produces row.sourceTags[] in
@@ -644,9 +639,26 @@ local function _resolveVendorNpc(v, Aug)
     v.x       = meta.x
     v.y       = meta.y
     v.faction = v.faction ~= "" and v.faction or (meta.faction or "N")
+    -- VendorAugment is authoritative for vendor location: overwrite the (often
+    -- wrong) catalog zone. Vendors not in VendorAugment fall through the early
+    -- returns above and keep their catalog zone. This makes the zone filter,
+    -- the byVendor index, and the per-item vendor display agree on one zone.
+    v.zone    = meta.zone or v.zone
 end
 
 function R:_bakeVendors(row)
+    -- Fold CatalogOverride vendors (row.sources type=5) into row.vendors so the whole
+    -- pipeline -- the zone/faction filters, the per-item vendor display, AND the byVendor
+    -- index -- sees ONE complete vendor list (catalog + override-supplied vendors). The
+    -- resolve loop below then stamps their npcID/zone from VendorAugment like any vendor.
+    if row.sources then
+        for _, s in ipairs(row.sources) do
+            if s.type == 5 and s.name and s.name ~= "" then
+                row.vendors = row.vendors or {}
+                row.vendors[#row.vendors + 1] = { name = s.name, zone = s.detail or "", faction = "", standing = "" }
+            end
+        end
+    end
     if not row.vendors then row.vendors, row.vendorLines = {}, {}; return end
     local Aug = HDG.StaticData.VendorAugment
     local lines = {}
