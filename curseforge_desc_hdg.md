@@ -12,7 +12,7 @@
 
 ---
 
-## What's New in v3.0.0
+## What's New in v3.0.2
 
 - **Rebuilt from the ground up** on a new reactive engine -- faster, leaner, and far easier to extend.
 - **Your data upgrades automatically** on first launch: collections, favorites, item/vendor notes, shopping lists, crafting & farming history, saved styles, and per-character recipe knowledge all carry over.
@@ -104,7 +104,7 @@ A companion window injects into Blizzard's House Editor so you can **place decor
 ---
 
 **Author:** Vamoose
-**Version:** 3.0.0
+**Version:** 3.0.2
 **Game Version:** 12.0.5+ (Midnight)
 **Source / Issues:** https://github.com/VamooseAddons/housing-decor-guide
 **Discord:** https://discord.gg/RWZaxJaHFP

@@ -37,11 +37,13 @@ Selectors:Register("mogul.dynamicColumns", {
              "account.config.preferredPriceAddon", "session.prices.tick"},
     fn = function(state)
         local subView = state.session.ui.mogul.subView
-        -- 950 = 700 core + 4 gap + 4 TSM cells (60+60+60+50) + 3 gaps (12) + 22 padding.
-        if subView == "goblin" and effectiveSourceIsTSM(state) then
-            return { 950 }
+        if subView == "goblin" then
+            -- #AH (40) is always shown in Goblin -> base widens 700 -> 745.
+            -- TSM active adds Server/Market/Region/TSM% (260) + Rate/+Day (100) + gaps -> ~1135.
+            if effectiveSourceIsTSM(state) then return { 1135 } end
+            return { 745 }
         end
-        return { 700 }
+        return { 700 }   -- mogul craft-optimizer subview
     end,
 })
 
@@ -533,6 +535,9 @@ Selectors:Register("goblin.rows", {
             if col == "tsmMarket" then return row.tsmMarket end
             if col == "tsmRegion" then return row.tsmRegion end
             if col == "tsmPct"    then return row.tsmPct end
+            if col == "saleRate"  then return row.saleRate end
+            if col == "soldPerDay" then return row.soldPerDay end
+            if col == "ahQty"     then return row.ahQty end
             if col == "profit"    then return row.profit end
             if col == "pct"       then return row.margin end
             return row.profit
@@ -656,6 +661,7 @@ do
         cost      = "Cost",      sell      = "Sell",
         tsmMin    = "Server",    tsmMarket = "Market",    tsmRegion = "Region",
         tsmPct    = "TSM %",     profit    = "Profit",    pct       = "%",
+        ahQty     = "#AH",       saleRate  = "Rate",      soldPerDay = "/Day",
     }
     local function headerFn(col)
         return function(state)

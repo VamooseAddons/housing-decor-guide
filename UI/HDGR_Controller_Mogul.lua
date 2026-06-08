@@ -56,7 +56,7 @@ function MogulController:_wireGoblinControls(rootFrame)
     HDG.UI.OnClick(rootFrame, "mogulPanel.goblinAuctions",
         function() dispatch("GOBLIN_TOGGLE_AUCTIONS", {}) end)
     for _, col in ipairs({"name","lumber","perLum","cost","sell",
-                          "tsmMin","tsmMarket","tsmRegion","tsmPct","profit","pct"}) do
+                          "tsmMin","tsmMarket","tsmRegion","tsmPct","saleRate","soldPerDay","profit","pct"}) do
         local captured = col
         HDG.UI.OnClick(rootFrame, "mogulPanel.goblinCol_" .. col,
             function() dispatch("GOBLIN_SET_SORT", { col = captured }) end)
@@ -149,6 +149,16 @@ HDG.Controllers:Register("mogul", MogulController)
 
 -- Gold formatter (zero shown as "0 <coin>").
 local moneyText = HDG.Format.FormatGoldZero
+
+-- Compact count for the narrow "/Day" column. Spans a huge range: a hot commodity
+-- (~156577/day -> "157k") down to slow decor (0.096/day -> "0.10").
+local function _compactCount(n)
+    if n >= 10000 then return string.format("%.0fk", n / 1000) end
+    if n >= 1000  then return string.format("%.1fk", n / 1000) end
+    if n >= 10    then return string.format("%d", math.floor(n + 0.5)) end
+    if n >= 1     then return string.format("%.1f", n) end
+    return string.format("%.2f", n)   -- sub-1/day (slow decor)
+end
 
 -- Format "rev / net" gold pair compactly (e.g. "795g / 791g") used in two
 -- columns: per-craft (constant per recipe) and total (crafts * per).
@@ -666,10 +676,14 @@ local function _layoutGoblinRow(row)
     row._costFs   = _addColumnCell(row, 70,  row._sellFs,   4, false)
     row._perLumFs = _addColumnCell(row, 70,  row._costFs,   4, false)
     row._lumberFs = _addColumnCell(row, 100, row._perLumFs, 4, false)
-    row._tsmMinFs    = _addRightCell(row, 60, row._pctFs,       4)
-    row._tsmMarketFs = _addRightCell(row, 60, row._tsmMinFs,    4)
-    row._tsmRegionFs = _addRightCell(row, 60, row._tsmMarketFs, 4)
+    -- #AH (always shown) chains right off pct; TSM block then chains off #AH.
+    row._ahFs        = _addRightCell(row, 40, row._pctFs,       4)
+    row._tsmMinFs    = _addRightCell(row, 70, row._ahFs,        4)   -- 70 fits 999,999g (matches Cost/Sell)
+    row._tsmMarketFs = _addRightCell(row, 70, row._tsmMinFs,    4)
+    row._tsmRegionFs = _addRightCell(row, 70, row._tsmMarketFs, 4)
     row._tsmPctFs    = _addRightCell(row, 50, row._tsmRegionFs, 4)
+    row._saleRateFs  = _addRightCell(row, 50, row._tsmPctFs,    4)   -- "Rate" (TSM-gated)
+    row._perDayFs    = _addRightCell(row, 50, row._saleRateFs,  4)   -- "/Day" (TSM-gated)
     local name = HDG.UI.RowText(row, "small", "Text")
     if row._iconTex then
         name:SetPoint("LEFT", row._iconTex, "RIGHT", 4, 0)
@@ -723,15 +737,23 @@ local function _paintTsmColumns(row, ed)
     if not ed.isTSMActive then
         row._tsmMinFs:Hide();    row._tsmMarketFs:Hide()
         row._tsmRegionFs:Hide(); row._tsmPctFs:Hide()
+        row._saleRateFs:Hide();  row._perDayFs:Hide()
         return
     end
     row._tsmMinFs:Show();    row._tsmMarketFs:Show()
     row._tsmRegionFs:Show(); row._tsmPctFs:Show()
+    row._saleRateFs:Show();  row._perDayFs:Show()
     row._tsmMinFs:SetText(ed.tsmMin       and moneyText(ed.tsmMin)    or "-")
     row._tsmMarketFs:SetText(ed.tsmMarket and moneyText(ed.tsmMarket) or "-")
     row._tsmRegionFs:SetText(ed.tsmRegion and moneyText(ed.tsmRegion) or "-")
     row._tsmPctFs:SetText(ed.tsmPct and string.format("%d%%",
         math.floor(ed.tsmPct + 0.5)) or "-")
+    -- Rate = TSM sale rate (% of postings that sell). saleRate is per-mille (rate x1000), so
+    -- /10 -> 1-decimal percent (0.032 -> "3.2%"). /Day = real units/realm/day.
+    row._saleRateFs:SetText((ed.saleRate and ed.saleRate > 0)
+        and string.format("%.1f%%", ed.saleRate / 10) or "-")
+    row._perDayFs:SetText((ed.soldPerDay and ed.soldPerDay > 0)
+        and _compactCount(ed.soldPerDay) or "-")
 end
 
 -- Profit: success (positive), error (negative), "?" when unpriceable.
@@ -752,7 +774,8 @@ end
 
 local GOBLIN_RESET_FS = {
     "_nameFs","_lumberFs","_perLumFs","_costFs","_sellFs",
-    "_tsmMinFs","_tsmMarketFs","_tsmRegionFs","_tsmPctFs",
+    "_ahFs","_tsmMinFs","_tsmMarketFs","_tsmRegionFs","_tsmPctFs",
+    "_saleRateFs","_perDayFs",
     "_profitFs","_pctFs",
 }
 local function _resetGoblinRow(row)
@@ -774,6 +797,8 @@ local function _goblinRowFactory(template)
             row._costFs:SetText(  ed.materialCost and moneyText(ed.materialCost) or "?")
             row._sellFs:SetText(  ed.sellPrice    and moneyText(ed.sellPrice)    or "?")
             _paintTsmColumns(row, ed)
+            -- #AH: live AH count (Direct scan). nil = unscanned -> "-"; 0 = scanned, none listed.
+            row._ahFs:SetText(ed.ahQty ~= nil and tostring(ed.ahQty) or "-")
             _paintProfitCell(row, ed)
             row._pctFs:SetText(ed.margin and string.format("%d%%",
                 math.floor(ed.margin + 0.5)) or "?")

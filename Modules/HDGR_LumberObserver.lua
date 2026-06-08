@@ -7,7 +7,7 @@
 -- Four responsibilities:
 --   1. Bag-delta detection (per lumber ID)
 --      Cache the last-known total per lumber ID; on every BAG_UPDATE,
---      diff against the live total via BagObserver:GetTotal. Positive
+--      diff against the live BAG count via BagObserver:GetBagCount. Positive
 --      delta -> harvest event(s); negative delta -> consumed (no event,
 --      just refresh the cache). SUPPRESSED while a transfer UI (mail /
 --      bank / merchant / trade) is open -- lumber gained that way is not a
@@ -99,7 +99,7 @@ function L:Scan()
     self._initialized = true
 
     for lumberID, _ in pairs(lumberSet) do
-        local cur  = Bag:GetTotal(lumberID)
+        local cur  = Bag:GetBagCount(lumberID)  -- bags ONLY: bank/warband swings are not harvests
         local prev = self._lastTotals[lumberID] or cur  -- first observation = no delta
         self._lastTotals[lumberID] = cur
         if not firstPass and cur > prev then
@@ -114,7 +114,7 @@ function L:_RefreshBaseline()
     local Bag = HDG.BagObserver
     if not Bag then return end
     for lumberID in pairs(_ensureLumberIDSet()) do
-        self._lastTotals[lumberID] = Bag:GetTotal(lumberID)
+        self._lastTotals[lumberID] = Bag:GetBagCount(lumberID)
     end
     self._initialized = true  -- we now hold a known-good baseline
 end
@@ -253,9 +253,10 @@ function L:FinalizeSession()
     local wallNow       = (_G.time and _G.time()) or 0  -- exception(boundary): GetTime/time absent in headless harness
     local startedAtWall = wallNow - math.max(0, now - startedAt)
 
-    -- sessionTotal = current bag count minus startCount.
+    -- sessionTotal = current bag count minus startCount. Bag-only to match the
+    -- bag-only startCount (harvest detection); bank/warband stock is excluded.
     local Bag   = HDG.BagObserver
-    local cur   = Bag and Bag:GetTotal(activeID) or 0
+    local cur   = Bag and Bag:GetBagCount(activeID) or 0
     local total = math.max(0, cur - startCount)
 
     -- Zone is best-effort; nil on loading screens.

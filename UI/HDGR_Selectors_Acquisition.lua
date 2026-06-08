@@ -1528,7 +1528,8 @@ Selectors:Register("acq.selectedItem.vendors", {
         local row = HDG.HousingCatalogObserver:GetRow(itemID)
         if not (row and row.vendors) then return {} end
         local aug = HDG.StaticData.ItemAugment:Get(itemID)
-        local out = {}
+        local out  = {}
+        local seen = {}   -- npcID -> out index (de-dupe multi-zone vendor dups)
         for _, v in ipairs(row.vendors) do
             local npcID = HDG.StaticData.VendorAugment:ResolveName(v.name, v.zone)
             local meta  = npcID and HDG.StaticData.VendorAugment:Get(npcID)
@@ -1536,7 +1537,7 @@ Selectors:Register("acq.selectedItem.vendors", {
             local minRep    = (aug and aug.minRep) or 0
             local repName   = (aug and aug.factionName)
                            or (row.factionGate and row.factionGate.factionName) or ""
-            out[#out + 1] = {
+            local newRow = {
                 costLine   = row.costLine,  -- baked cost line for the vendor meta row (cost - zone - faction)
                 npcID      = npcID,
                 name       = v.name,
@@ -1556,6 +1557,21 @@ Selectors:Register("acq.selectedItem.vendors", {
                 questID    = 0,
                 achieveID  = 0,     -- DEFERRED: CostAugment
             }
+            -- De-dupe by npcID. The catalog sometimes lists ONE vendor under two
+            -- zone strings (e.g. Gina Mudclaw under "Valley of the Four Winds" +
+            -- "Timeless Isle"; only Valley is real) -> two rows with the same key
+            -- "ivr_<npcID>" -> Bind-stage key collision. Mirrors acq.allVendors:
+            -- keep the row whose zone IS the resolved (meta) location, drop the phantom.
+            local prev = npcID and seen[npcID]
+            if prev then
+                local metaZone = meta and meta.zone
+                if metaZone and v.zone == metaZone and out[prev].zone ~= metaZone then
+                    out[prev] = newRow
+                end
+            else
+                out[#out + 1] = newRow
+                if npcID then seen[npcID] = #out end
+            end
         end
         table.sort(out, function(a, b) return (a.name or "") < (b.name or "") end)
         return out

@@ -369,7 +369,12 @@ HDG.Rows:Register("acqItemVendorRow", {
             row._mapBtn:SetScript("OnClick", nil)
         end,
     }),
-    key     = function(ed) return "ivr_" .. tostring(ed and ed.npcID or "?") end,
+    -- Key by npcID; fall back to name@zone when the vendor name didn't resolve to
+    -- an npcID (else two distinct unresolved vendors both key "ivr_?" -> collision).
+    key     = function(ed)
+        if not ed then return "ivr_?" end
+        return "ivr_" .. tostring(ed.npcID or ((ed.name or "?") .. "@" .. (ed.zone or "?")))
+    end,
 })
 
 -- ===== CardGrid cell: acqVendorItemTile =====================================

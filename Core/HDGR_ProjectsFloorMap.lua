@@ -107,27 +107,47 @@ function M.FloatingDoorCardinal(rooms, roomID)
     -- Ground-level neighbours only -- the garden door doesn't project up its span.
     local occ = M.OccupiedCells(rooms, base, exclude)
 
-    -- Distance to the nearest occupied cell off a given edge (nil if none within SCAN).
-    local function gap(card)
-        local along = (card == "N" or card == "S") and w or d
+    -- Cell key `dist` cells off `card`, at offset `j` along that edge.
+    local function edgeKey(card, dist, j)
+        if     card == "W" then return (c.x - dist)         .. "," .. (c.y + j)
+        elseif card == "E" then return (c.x + w - 1 + dist) .. "," .. (c.y + j)
+        elseif card == "N" then return (c.x + j)            .. "," .. (c.y - dist)
+        else                    return (c.x + j)            .. "," .. (c.y + d - 1 + dist)  -- S
+        end
+    end
+    local function alongOf(card) return (card == "N" or card == "S") and w or d end
+
+    -- Pass 1: a door sits at the CENTRE of an edge, never a corner -- so a side can only
+    -- connect if a neighbour occupies the cell(s) at that edge's MIDPOINT. Rank each
+    -- cardinal by (1) neighbour-at-midpoint, then (2) total adjacent overlap. This beats
+    -- the old "smallest gap, ties N>S>E>W", which floated a door to a 1-cell CORNER kiss
+    -- (Garden Eve's SE corner) over the full shared wall where the door actually lives.
+    local best, bestCard   -- best = { atMidpoint(0/1), overlapCells }
+    for _, card in ipairs({ "N", "S", "E", "W" }) do
+        local along    = alongOf(card)
+        local m1, m2   = math.floor((along - 1) / 2), math.ceil((along - 1) / 2)
+        local atMid    = (occ[edgeKey(card, 1, m1)] or occ[edgeKey(card, 1, m2)]) and 1 or 0
+        local overlap  = 0
+        for j = 0, along - 1 do if occ[edgeKey(card, 1, j)] then overlap = overlap + 1 end end
+        if overlap > 0 and (not best or atMid > best[1]
+                            or (atMid == best[1] and overlap > best[2])) then
+            best, bestCard = { atMid, overlap }, card
+        end
+    end
+    if bestCard then return bestCard end
+
+    -- Pass 2: nothing adjacent -> float toward the NEAREST neighbour within SCAN (ties N first).
+    local bestGap, gapCard
+    for _, card in ipairs({ "N", "S", "E", "W" }) do
+        local along = alongOf(card)
         for dist = 1, SCAN do
-            for j = 0, along - 1 do
-                local k
-                if     card == "W" then k = (c.x - dist)         .. "," .. (c.y + j)
-                elseif card == "E" then k = (c.x + w - 1 + dist) .. "," .. (c.y + j)
-                elseif card == "N" then k = (c.x + j)            .. "," .. (c.y - dist)
-                else                    k = (c.x + j)            .. "," .. (c.y + d - 1 + dist)  -- S
-                end
-                if occ[k] then return dist end
+            local hit = false
+            for j = 0, along - 1 do if occ[edgeKey(card, dist, j)] then hit = true; break end end
+            if hit then
+                if not bestGap or dist < bestGap then bestGap, gapCard = dist, card end
+                break
             end
         end
-        return nil
     end
-
-    local best, bestCard
-    for _, card in ipairs({ "N", "S", "E", "W" }) do
-        local g = gap(card)
-        if g and (not best or g < best) then best, bestCard = g, card end
-    end
-    return bestCard or default
+    return gapCard or default
 end

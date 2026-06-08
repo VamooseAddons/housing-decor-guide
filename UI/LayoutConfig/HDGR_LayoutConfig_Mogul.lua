@@ -511,12 +511,21 @@ LC.widgets["mogulPanel.goblinCol_pct"] = {
     width = 40, height = 16, order = 80,
     binding = { text = "goblin.sortHeader_pct", active = "goblin.sortActive_pct" },
 }
--- TSM columns: visible-bound to goblin.isTSMActive; collapse when TSM absent -> window narrows to 700.
+-- #AH: live units-on-AH count (Direct scan). Always shown (source-independent of TSM);
+-- reads "-" until "Refresh from AH" runs a scan. Sits just right of the % column.
+LC.widgets["mogulPanel.goblinCol_ah"] = {
+    tooltip = { recipe = "GoblinAhQty" },
+    kind = "button", ["in"] = "mogul.goblinColumnHeader",
+    font = "small", variant = "tertiary",
+    width = 40, height = 16, order = 81,
+    binding = { text = "goblin.sortHeader_ahQty", active = "goblin.sortActive_ahQty" },
+}
+-- TSM columns: visible-bound to goblin.isTSMActive; collapse when TSM absent -> window narrows to 745.
 LC.widgets["mogulPanel.goblinCol_tsmMin"] = {
     tooltip = { recipe = "GoblinTsmServer" },
     kind = "button", ["in"] = "mogul.goblinColumnHeader",
     font = "small", variant = "tertiary",
-    width = 60, height = 16, order = 82,
+    width = 70, height = 16, order = 82,
     visible = "goblin.isTSMActive",
     binding = { text = "goblin.sortHeader_tsmMin", active = "goblin.sortActive_tsmMin" },
 }
@@ -524,7 +533,7 @@ LC.widgets["mogulPanel.goblinCol_tsmMarket"] = {
     tooltip = { recipe = "GoblinTsmMarket" },
     kind = "button", ["in"] = "mogul.goblinColumnHeader",
     font = "small", variant = "tertiary",
-    width = 60, height = 16, order = 84,
+    width = 70, height = 16, order = 84,
     visible = "goblin.isTSMActive",
     binding = { text = "goblin.sortHeader_tsmMarket", active = "goblin.sortActive_tsmMarket" },
 }
@@ -532,7 +541,7 @@ LC.widgets["mogulPanel.goblinCol_tsmRegion"] = {
     tooltip = { recipe = "GoblinTsmRegion" },
     kind = "button", ["in"] = "mogul.goblinColumnHeader",
     font = "small", variant = "tertiary",
-    width = 60, height = 16, order = 86,
+    width = 70, height = 16, order = 86,
     visible = "goblin.isTSMActive",
     binding = { text = "goblin.sortHeader_tsmRegion", active = "goblin.sortActive_tsmRegion" },
 }
@@ -543,6 +552,23 @@ LC.widgets["mogulPanel.goblinCol_tsmPct"] = {
     width = 50, height = 16, order = 88,
     visible = "goblin.isTSMActive",
     binding = { text = "goblin.sortHeader_tsmPct", active = "goblin.sortActive_tsmPct" },
+}
+-- Region velocity (TSM AuctionDB; needs the TSM Desktop App). Same gate as the TSM block.
+LC.widgets["mogulPanel.goblinCol_saleRate"] = {
+    tooltip = { recipe = "GoblinSaleRate" },
+    kind = "button", ["in"] = "mogul.goblinColumnHeader",
+    font = "small", variant = "tertiary",
+    width = 50, height = 16, order = 90,
+    visible = "goblin.isTSMActive",
+    binding = { text = "goblin.sortHeader_saleRate", active = "goblin.sortActive_saleRate" },
+}
+LC.widgets["mogulPanel.goblinCol_soldPerDay"] = {
+    tooltip = { recipe = "GoblinSoldPerDay" },
+    kind = "button", ["in"] = "mogul.goblinColumnHeader",
+    font = "small", variant = "tertiary",
+    width = 50, height = 16, order = 92,
+    visible = "goblin.isTSMActive",
+    binding = { text = "goblin.sortHeader_soldPerDay", active = "goblin.sortActive_soldPerDay" },
 }
 -- Filter row.
 LC.widgets["mogulPanel.goblinSearch"] = {

@@ -131,6 +131,9 @@ R.LayoutDuplicate = { title = "Duplicate", body = "Copy this layout into a new w
 R.GoblinTsmServer = { title = "Server", body = "Maps to TSM DBMinBuyout: the lowest current auction-house buyout on your realm." }
 R.GoblinTsmMarket = { title = "Market", body = "Maps to TSM DBMarket: TSM's calculated market value for this item." }
 R.GoblinTsmRegion = { title = "Region", body = "Maps to TSM DBRegionSaleAvg: the average sale price across your whole region." }
+R.GoblinSaleRate  = { title = "Rate",   body = "Maps to TSM DBRegionSaleRate: how often this item sells region-wide (sold/day vs posted/day). Needs the TSM Desktop App." }
+R.GoblinSoldPerDay = { title = "/Day",  body = "Maps to TSM DBRegionSoldPerDay: estimated units sold per day across your region. Needs the TSM Desktop App." }
+R.GoblinAhQty     = { title = "#AH",    body = "Units currently listed on your realm's auction house. Populated by 'Refresh from AH'; shows '-' until you scan." }
 
 -- ===== Mogul optimizer controls ============================================
 -- Effect guidance (what the toggle does FOR you), not the mechanics. Kept short.

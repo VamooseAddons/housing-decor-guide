@@ -177,10 +177,23 @@ Selectors:Register("data.kpiAcquired", {
     end,
 })
 
+-- A phantom farming record: zero elapsed time but a positive haul. These come
+-- from bank/warband stock being mis-logged as a "session" (pre bag-only-detection
+-- fix). Hidden everywhere -- rows AND KPIs -- so they don't pollute history or
+-- inflate totals. Real farming sessions always span >0 seconds.
+local function _isPhantomFarm(e)
+    local dur = (e.finalizedAt and e.startedAt) and (e.finalizedAt - e.startedAt) or 0
+    return dur == 0 and (e.sessionTotal or 0) > 0
+end
+
 Selectors:Register("data.kpiFarmSessions", {
     reads = { "account.lumber.history.entries" },
     fn = function(state)
-        return tostring(#state.account.lumber.history.entries)
+        local n = 0
+        for _, e in ipairs(state.account.lumber.history.entries) do
+            if not _isPhantomFarm(e) then n = n + 1 end
+        end
+        return tostring(n)
     end,
 })
 
@@ -189,7 +202,7 @@ Selectors:Register("data.kpiLumber", {
     fn = function(state)
         local n = 0
         for _, e in ipairs(state.account.lumber.history.entries) do
-            n = n + (e.sessionTotal or 0)
+            if not _isPhantomFarm(e) then n = n + (e.sessionTotal or 0) end
         end
         return HDG.Format.FormatAmount(n)
     end,
@@ -242,25 +255,28 @@ Selectors:Register("data.farmingHistoryRows", {
         rows[#rows + 1] = { kind = "sectionHeader", label = "Lumber Farming History" }
         local entries = state.account.lumber.history.entries
         local byID    = _lumberByID()
-        -- Render newest first.
+        -- Render newest first. Phantom (0s + >0 haul) records are skipped.
         for i = #entries, 1, -1 do
-            local e    = entries[i]
-            local info = byID[e.lumberID]
-            local dur  = (e.finalizedAt and e.startedAt)
-                         and _formatDuration(e.finalizedAt - e.startedAt) or ""
-            rows[#rows + 1] = {
-                kind         = "farmHistRow",
-                id           = e.id,   -- unique row key (lumberName+minute collides)
-                lumberName   = info and (info.shortName or info.name) or tostring(e.lumberID),
-                expansion    = info and info.expansion or "",
-                sessionTotal = e.sessionTotal or 0,
-                duration     = dur,
-                zone         = e.zone or "",
-                character    = e.character or "",
-                dateStr      = _formatTimestamp(e.startedAt),
-            }
+            local e = entries[i]
+            if not _isPhantomFarm(e) then
+                local info = byID[e.lumberID]
+                local dur  = (e.finalizedAt and e.startedAt)
+                             and _formatDuration(e.finalizedAt - e.startedAt) or ""
+                rows[#rows + 1] = {
+                    kind         = "farmHistRow",
+                    id           = e.id,   -- unique row key (lumberName+minute collides)
+                    lumberName   = info and (info.shortName or info.name) or tostring(e.lumberID),
+                    expansion    = info and info.expansion or "",
+                    sessionTotal = e.sessionTotal or 0,
+                    duration     = dur,
+                    zone         = e.zone or "",
+                    character    = e.character or "",
+                    dateStr      = _formatTimestamp(e.startedAt),
+                }
+            end
         end
-        if #entries == 0 then
+        -- #rows == 1 means only the section header survived (no entries, or all phantom).
+        if #rows == 1 then
             rows[#rows + 1] = { kind = "emptyRow", label = "No farming sessions recorded yet." }
         end
         return rows

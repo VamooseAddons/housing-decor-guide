@@ -10,6 +10,10 @@
 --   * lumberQty       -- total lumber units consumed per craft
 --   * lumberType      -- itemID of the dominant lumber for this recipe
 --   * lumberValue     -- profit / lumberQty (gold per lumber unit)
+-- Plus TSM-gated velocity + live-supply columns:
+--   * saleRate        -- TSM sale rate x1000 (per-mille; % of postings that sell; "Rate")
+--   * soldPerDay      -- TSM region units/day, real value (fractional for slow decor; "/Day")
+--   * ahQty           -- units currently listed (Direct scan; "#AH")
 --
 -- Pure function: same DB state -> same output. Invalidation at the selector
 -- layer (session.prices.tick, account.recipes, etc.). No caching: O(n=305)
@@ -105,7 +109,7 @@ function G:ScoreRecipe(recipe)
 
         -- Raw TSM prices (all 3 shown side-by-side when TSM loaded).
     -- tsmPct = margin vs region sale avg (cross-realm value); distinct from `margin` (preferred source).
-    local tsmMin, tsmMarket, tsmRegion, tsmPct
+    local tsmMin, tsmMarket, tsmRegion, tsmPct, saleRate, soldPerDay
     if PS:IsTSMAvailable() then
         tsmMin    = PS:GetTSMMinBuyout(recipe.itemID)
         tsmMarket = PS:GetTSMMarket(recipe.itemID)
@@ -113,7 +117,11 @@ function G:ScoreRecipe(recipe)
         if tsmRegion and tsmRegion > 0 then
             tsmPct = (tsmRegion - materialCost) / tsmRegion * 100
         end
+        saleRate   = PS:GetRegionSaleRate(recipe.itemID)    -- "Rate" column
+        soldPerDay = PS:GetRegionSoldPerDay(recipe.itemID)  -- "/Day" column
     end
+    -- #AH column: units currently listed (Direct scan; source-independent of TSM).
+    local ahQty = PS:GetDirectQty(recipe.itemID)
 
     return {
         itemID        = recipe.itemID,
@@ -134,6 +142,9 @@ function G:ScoreRecipe(recipe)
         tsmMarket     = tsmMarket,
         tsmRegion     = tsmRegion,
         tsmPct        = tsmPct,
+        saleRate      = saleRate,
+        soldPerDay    = soldPerDay,
+        ahQty         = ahQty,
     }
 end
 

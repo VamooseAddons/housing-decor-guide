@@ -528,21 +528,23 @@ HDG.WidgetTypes:Register("projectsCanvas", {
     specFields   = {},   -- model flows via binding; no kind-specific spec fields
 })
 
--- /hdgr doors: door audit for the open Architect canvas. Prints declared vs
--- rotated cardinal doors per room (N=top S=bot E=right W=left). Dev tool.
+-- /hdgr doors: door audit for the open Architect canvas. Reads the ACTUAL rendered
+-- orbs (m.orbs) -- gardens + stairwells FLOAT their single door to the nearest
+-- neighbour, so re-deriving from GetDoors+rotation (the old audit) misreports them.
+-- Prints, per room, each orb's cardinal@midpoint and whether it's connected. Dev tool.
 function C:DoorAudit()
     local m = C._activeHost and C._activeHost._lastModel  -- exception(nullable): C._activeHost is nil when architect canvas is not open
     if not (m and m.rooms) then print("HDG doors: open the Architect first."); return end
-    local A, seen = HDG.Projects.ShapeAtlas, {}
-    print("|cff66ccffHDGR door audit|r  rendered cardinal = edge (N=top S=bot E=right W=left):")
+    local byRoom = {}
+    for _, o in ipairs(m.orbs) do
+        byRoom[o.roomID] = byRoom[o.roomID] or {}
+        local b = byRoom[o.roomID]
+        b[#b + 1] = string.format("%s@%d,%d%s", o.cardinal, o.midX, o.midY, o.connected and "*" or "")
+    end
+    print("|cff66ccffHDGR door audit|r  cell(x,y,w,d) | orbs cardinal@midX,midY (* = connected; N=top S=bot E=right W=left):")
     for _, r in ipairs(m.rooms) do
-        local key = r.shape .. ":" .. (r.rotation or 0)
-        if not seen[key] then
-            seen[key] = true
-            local decl, rot = A.GetDoors(r.shape), {}
-            for _, c in ipairs(decl) do rot[#rot + 1] = A.RotateCardinal(c, r.rotation or 0) end
-            print(string.format("  %s rot=%d  decl=[%s]  rendered=[%s]",
-                r.shape, r.rotation or 0, table.concat(decl, ","), table.concat(rot, ",")))
-        end
+        local b = byRoom[r.roomID] or {}
+        print(string.format("  %s rot=%d  cell(%d,%d,%d,%d)  [%s]",
+            r.name or r.shape, r.rotation or 0, r.x, r.y, r.w, r.d, table.concat(b, "  ")))
     end
 end

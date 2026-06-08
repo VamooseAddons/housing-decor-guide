@@ -150,6 +150,31 @@ function P:GetTSMMinBuyout(itemID)   return getTSMByKey(itemID, "DBMinBuyout")  
 function P:GetTSMMarket(itemID)       return getTSMByKey(itemID, "DBMarket")        end
 function P:GetRegionSaleAvg(itemID)   return getTSMByKey(itemID, "DBRegionSaleAvg") end
 
+-- Region sale-velocity metrics. Both need TSM's region AuctionDB data (the TSM Desktop App
+-- must be exporting AppData) or return nil. BOTH are sub-1 fractions for slow decor
+-- (verified vs a live tooltip -- Animated Sin'dorei Hammer: SaleRate 0.032, AvgDailySold
+-- 0.096), and GetCustomPriceValue rounds to a whole number -- so the bare source collapses
+-- them to 0. We multiply inside the price string to keep precision past the round:
+--   SaleRate   -> "1000 * DBRegionSaleRate" = rate x1000 (per-mille). Sale rate IS a
+--                 percentage by definition (the % of postings that sell, always 0..1), so
+--                 the row renders rate/10 as a 1-decimal % (0.032 -> 32 -> "3.2%").
+--   SoldPerDay -> "1000 * DBRegionSoldPerDay" /1000 = real units/realm/day (0.096 -> "0.10").
+function P:GetRegionSaleRate(itemID)
+    local v = getTSMByKey(itemID, "1000 * DBRegionSaleRate")
+    return v   -- per-mille; the row divides by 10 to show a 1-decimal percent
+end
+function P:GetRegionSoldPerDay(itemID)
+    local v = getTSMByKey(itemID, "1000 * DBRegionSoldPerDay")
+    return v and v / 1000 or nil
+end
+
+-- Units currently listed on the AH for this item, from the live Direct browse scan
+-- (info.totalQuantity). nil = not yet scanned; 0 = scanned, none listed.
+function P:GetDirectQty(itemID)
+    if not itemID then return nil end
+    return HDG.Store:GetState().account.prices.directQtyCache[itemID]
+end
+
 -- Writes config flag only; the subscriber reacts to account.config.mockTSM
 -- invalidation to refresh availability + nudge price selectors (same path as
 -- the Advanced checkbox, so both stay in sync).
@@ -227,13 +252,14 @@ end
 
 local function processBatch(results)
     if not scan.active or not results then return end
-    local batch = {}
+    local batch, qtyBatch = {}, {}
     local n = 0
     for _, info in ipairs(results) do
         local itemID = info.itemKey and info.itemKey.itemID
         if itemID and scan.needed[itemID]
            and info.totalQuantity and info.totalQuantity > 0 then
-            batch[itemID] = info.minPrice
+            batch[itemID]    = info.minPrice
+            qtyBatch[itemID] = info.totalQuantity   -- units currently listed (#AH column)
             n = n + 1
         end
     end
@@ -241,7 +267,7 @@ local function processBatch(results)
         scan.found = scan.found + n
         HDG.Store:Dispatch({
             type    = HDG.Constants.ACTIONS.PRICES_DIRECT_SCAN_BATCH,
-            payload = { prices = batch },
+            payload = { prices = batch, quantities = qtyBatch },
         })
         HDG.Store:Dispatch({
             type    = HDG.Constants.ACTIONS.PRICES_DIRECT_SCAN_PROGRESS,

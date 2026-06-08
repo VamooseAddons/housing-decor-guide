@@ -1,5 +1,35 @@
 ## [Unreleased]
 
+## [3.0.2] - 2026-06-08 (June 2026)
+
+ADDED:
+- Goblin tab gains three auction-velocity columns (all sortable). "Rate" shows TSM's
+  region sale rate -- the percentage of your postings that typically sell (e.g.
+  3.2%); "/Day" shows the region average sold per day. Both need TradeSkillMaster
+  with its desktop app running. "#AH" shows how many of the item are currently
+  listed on your realm's auction house (populated when you press Refresh from AH).
+
+FIXED:
+- Capturing all floors no longer re-adds multi-floor rooms (stairwells, tall rooms,
+  gardens) as duplicates on every floor they span. The room is recorded once and
+  projected onto the floors above; a stairwell that reaches the 3rd floor now
+  projects correctly onto both upper floors.
+- In the Architect, a garden or stairwell's door now points at the room it actually
+  shares a wall with, instead of being pulled toward a room it only touches at a
+  corner -- so the doorway connects as expected.
+- Fixed an error (and a duplicate row) in an item's "Available from" vendor list
+  when the catalog listed the same vendor under two zone names (e.g. Gina Mudclaw).
+  Each vendor now appears once.
+
+## [3.0.1] - 2026-06-08 (June 2026)
+
+FIXED:
+- Lumber Farming History no longer records the lumber sitting in your bank or
+  warband bank as harvests. The tracker now counts only lumber gathered into your
+  bags, so warband stock loading on login (or another character depositing) no
+  longer creates phantom "sessions". Existing phantom entries -- the instant
+  (0-second) ones -- are hidden from the history and excluded from the totals.
+
 ## [3.0.0] - 2026-06-08 (June 2026)
 
 Housing Decor Guide is rebuilt from the ground up on a new reactive engine. Your

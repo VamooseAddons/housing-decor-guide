@@ -20,6 +20,15 @@ function B:GetTotal(itemID)
     return _G.C_Item.GetItemCount(itemID, true, false, true, true) or 0  -- exception(boundary): C_Item nil for uncached / invalid item
 end
 
+-- Carried-in-bags count ONLY (no bank / reagent bank / warband). Harvest detection
+-- diffs on this: bank/warband totals change async (login load, cross-char deposit,
+-- portable-bank sync) with no gating UI, and those are NOT gathers. Only lumber
+-- landing in your bags is a harvest.
+function B:GetBagCount(itemID)
+    if not (itemID and _G.C_Item and _G.C_Item.GetItemCount) then return 0 end  -- exception(boundary): C_Item nil for uncached / invalid item
+    return _G.C_Item.GetItemCount(itemID, false, false, false, false) or 0  -- exception(boundary): C_Item nil for uncached / invalid item
+end
+
 -- Per-storage breakdown. Derives bank/warband by subtraction across flag combinations.
 function B:GetSplit(itemID)
     if not (itemID and _G.C_Item and _G.C_Item.GetItemCount) then return 0, 0, 0 end

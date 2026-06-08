@@ -715,6 +715,7 @@ end
 local function NewPrices()
     return {
         directCache     = {},   -- [itemID] = copper (0 = scanned, not listed)
+        directQtyCache  = {},   -- [itemID] = units currently listed (0 = scanned, none listed; nil = unscanned)
         directCacheTime = nil,  -- unix ts of last full scan
         ownedAuctions   = {},   -- [itemID] = { qty, buyout } from C_AuctionHouse
     }
@@ -1146,8 +1147,9 @@ local function EnsureStateShape(state)
     EnsureShopping(state.account)
     state.account.characters  = state.account.characters  or NewCharacters()
     state.account.prices      = state.account.prices      or NewPrices()
-    state.account.prices.directCache   = state.account.prices.directCache   or {}
-    state.account.prices.ownedAuctions = state.account.prices.ownedAuctions or {}
+    state.account.prices.directCache    = state.account.prices.directCache    or {}
+    state.account.prices.directQtyCache = state.account.prices.directQtyCache or {}
+    state.account.prices.ownedAuctions  = state.account.prices.ownedAuctions  or {}
     state.account.collections = state.account.collections or {}   -- exception(boundary): SavedVariables migration for Styles tab + Crates
     -- Projects topology: re-ensure sub-fields so saves predating a field get it backfilled (SV migration).
     state.account.projects = state.account.projects or NewProjectsState()
@@ -2346,6 +2348,7 @@ function HDG.Store:_RawDispatch(action)
     elseif action.type == A.PRICES_DIRECT_SCAN_STARTED then
         -- Replace-on-scan: wipe the previous cache so each scan is a fresh snapshot.
         self.state.account.prices.directCache = {}
+        self.state.account.prices.directQtyCache = {}
         self.state.account.prices.directCacheTime = nil
         local s = self.state.session.prices
         s.scanning  = true
@@ -2363,15 +2366,21 @@ function HDG.Store:_RawDispatch(action)
         for itemID, copper in pairs(payload.prices) do
             cache[itemID] = copper
         end
+        local qty = self.state.account.prices.directQtyCache
+        for itemID, n in pairs(payload.quantities or {}) do
+            qty[itemID] = n
+        end
         self.state.session.prices.tick =
             self.state.session.prices.tick + 1
 
     elseif action.type == A.PRICES_DIRECT_SCAN_COMPLETED then
         local cache = self.state.account.prices.directCache
+        local qty   = self.state.account.prices.directQtyCache
         -- Zero out items we wanted but never saw -- prevents re-scan
         -- attempts every session for items that simply aren't on the AH.
         for itemID in pairs(payload.neededItems) do
             if cache[itemID] == nil then cache[itemID] = 0 end
+            if qty[itemID]   == nil then qty[itemID]   = 0 end
         end
         self.state.account.prices.directCacheTime = payload.now
         local s = self.state.session.prices
@@ -2382,6 +2391,7 @@ function HDG.Store:_RawDispatch(action)
 
     elseif action.type == A.PRICES_DIRECT_CACHE_CLEARED then
         self.state.account.prices.directCache     = {}
+        self.state.account.prices.directQtyCache  = {}
         self.state.account.prices.directCacheTime = nil
         self.state.session.prices.tick =
             self.state.session.prices.tick + 1
