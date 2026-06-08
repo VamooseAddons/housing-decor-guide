@@ -104,7 +104,6 @@ local _CONTRIBUTORS = {
     { name = "Gravebait",     note = "Feature suggestions" },
     { name = "Hydra",         note = "Bug reports & testing" },
     { name = "JodouKast",     note = "Community support & feature ideas" },
-    { name = "Jonnyne",       note = "Early adopter & support" },
     { name = "Katsmiaou",     note = "Feature suggestions" },
     { name = "KeeperHarvest", note = "Detailed vendor audit & bug reports" },
     { name = "Medivha",       note = "Detailed trainer & vendor data audit" },
