@@ -984,6 +984,17 @@ Selectors:Register("styles.curator.sourceItems", {
             end
         end
 
+        -- Curator shows only owned (collected) decor (matches old HDG's editor gate).
+        -- Style-membership (unassigned/all/style) and ownership are orthogonal axes;
+        -- this applies the ownership axis to every mode.
+        local ownedSourceIDs = {}
+        for _, itemID in ipairs(sourceIDs) do
+            if HDG.HousingCatalogObserver:IsOwned(itemID) then
+                ownedSourceIDs[#ownedSourceIDs + 1] = itemID
+            end
+        end
+        sourceIDs = ownedSourceIDs
+
         -- Filter by numeric categoryID / subcategoryID (nil categoryName rows would
         -- never match a string-keyed filter; 0 = synthetic "Uncategorized" bucket).
         local subFilt = state.session.ui.styles.curator.focusedSubcategoryID   -- nil = All
@@ -1119,7 +1130,8 @@ Selectors:Register("styles.curator.coverageLabel", {
     end,
 })
 
--- Unassigned count: catalog items not in any user style. Warning-tone footer label.
+-- Unassigned count: OWNED items not in any user style (matches the owned-only
+-- curator source). Warning-tone footer label.
 Selectors:Register("styles.curator.unassignedCount", {
     memoized = true,
     reads = { "account.collections",
@@ -1131,7 +1143,10 @@ Selectors:Register("styles.curator.unassignedCount", {
         local memberships = Selectors:Call("styles.curator.itemMemberships", state, ctx)
         local n = 0
         HDG.HousingCatalogObserver:IterateRows(function(itemID)
-            if not memberships[itemID] then n = n + 1 end
+            -- Owned + not in any user style (mirrors the owned-only curator source).
+            if not memberships[itemID] and HDG.HousingCatalogObserver:IsOwned(itemID) then
+                n = n + 1
+            end
         end)
         return n
     end,
