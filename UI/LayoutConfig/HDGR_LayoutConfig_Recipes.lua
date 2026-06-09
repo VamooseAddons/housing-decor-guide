@@ -335,6 +335,14 @@ LC.widgets["recipesListPanel.count"] = {
     width = "auto", height = 14, order = 20,
     binding = "recipes.countLabel",
 }
+-- Mouse hints: shift-click-to-queue has no affordance on the row, so the hint surfaces it.
+LC.widgets["recipesListPanel.clickHints"] = {
+    tooltip = false,   -- self-owned tooltip composed from leftText/shiftText
+    kind = "clickHints", ["in"] = "recipesListPanel", slot = "header",
+    leftText  = "locale:REC_LIST_HINTS_LEFT",
+    shiftText = "locale:REC_LIST_HINTS_SHIFT",
+    width = 16, height = 16, order = 25,
+}
 LC.widgets["recipesListPanel.filterAll"] = {
     tooltip = false,
     kind = "button", ["in"] = "recipes.listFilterStrip", font = "small",

@@ -71,9 +71,9 @@ function MogulController:_wireQueueAll(rootFrame)
         local A = HDG.Constants.ACTIONS
         for _, row in ipairs(plan.rows) do
             local r = row.recipe
-            if r and r.spellID and r.itemID and row.crafts > 0 then  -- plan row: crafts is planner-stamped numeric
+            if r and r.itemID and row.crafts > 0 then  -- plan row: crafts is planner-stamped numeric
                 HDG.Store:Dispatch({ type = A.CRAFT_QUEUE_ADD,
-                    payload = { recipeID = r.spellID, itemID = r.itemID, qty = row.crafts, source = "mogul" } })
+                    payload = { recipeID = r.itemID, itemID = r.itemID, qty = row.crafts, source = "mogul" } })
             end
         end
         HDG.Store:Dispatch({ type = A.UI_SET_PERSISTENT, payload = { key = "view", value = "recipes" } })
@@ -332,7 +332,7 @@ local function _paintMogulPlan(row, ed, template)
     ensurePlanRow(row)
     showShape(row, "plan")
 
-    row._itemID, row._recipeID, row._name = ed.itemID, ed.spellID, ed.name   -- R4 tooltip stamps
+    row._itemID, row._recipeID, row._name = ed.itemID, ed.itemID, ed.name   -- R4 tooltip stamps
     HDG.TooltipEngine:Attach(row, HDG.TooltipRecipes.RecipeRow)
 
     -- Resolve color tokens once per Configure (not 4x inline).
@@ -653,11 +653,16 @@ local function _layoutGoblinRow(row)
         icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
         row._iconTex = icon
     end
-    -- One-time click hook; Configure stamps _currentItemID per paint.
+    -- One-time click hook; Configure stamps _currentItemID + _recipeID + _name per paint.
+    -- Shift-click queues the recipe (1 per click); a plain click toggles the detail panel.
     row:EnableMouse(true)
     row:SetScript("OnMouseUp", function(self, button)
         if button ~= "LeftButton" then return end
         if not self._currentItemID then return end
+        if IsShiftKeyDown() then
+            HDG.UI.QueueRecipe(self._recipeID, self._currentItemID, self._name)
+            return
+        end
         HDG.Store:Dispatch({
             type    = HDG.Constants.ACTIONS.GOBLIN_TOGGLE_ROW_EXPAND,
             payload = { itemID = self._currentItemID },
@@ -778,9 +783,18 @@ local GOBLIN_RESET_FS = {
     "_saleRateFs","_perDayFs",
     "_profitFs","_pctFs",
 }
+-- Mouse-action hints for goblin row tooltips (R.RecipeRow is shared with the
+-- recipe-list / queue rows, which DON'T stamp _clickHints, so only goblin rows
+-- surface these). Same wording as the goblin header clickHints.
+local GOBLIN_ROW_HINTS = {
+    leftText  = "locale:MOG_GOBLIN_HINTS_LEFT",
+    shiftText = "locale:MOG_GOBLIN_HINTS_SHIFT",
+}
+
 local function _resetGoblinRow(row)
     if row._iconTex and row._iconTex.SetTexture then row._iconTex:SetTexture(nil) end
     row._itemID, row._recipeID, row._name = nil, nil, nil   -- clear R4 tooltip stamps
+    row._clickHints = nil
     HDG.UI.ClearRowText(row, unpack(GOBLIN_RESET_FS))
 end
 
@@ -791,7 +805,8 @@ local function _goblinRowFactory(template)
             _paintGoblinIcon(row, ed)
             row._nameFs:SetText(ed.name or "?")
             row._currentItemID = ed.itemID                  -- click target for OnMouseUp
-            row._itemID, row._recipeID, row._name = ed.itemID, ed.spellID, ed.name  -- R4 tooltip stamps
+            row._itemID, row._recipeID, row._name = ed.itemID, ed.itemID, ed.name  -- R4 tooltip stamps
+            row._clickHints = GOBLIN_ROW_HINTS              -- surfaces mouse actions on the row tooltip
             _paintLumberColumn(row, ed)
             row._perLumFs:SetText(ed.lumberValue  and moneyText(ed.lumberValue)  or "?")
             row._costFs:SetText(  ed.materialCost and moneyText(ed.materialCost) or "?")

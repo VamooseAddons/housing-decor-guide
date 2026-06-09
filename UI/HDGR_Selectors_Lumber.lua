@@ -59,11 +59,9 @@ Selectors:Register("lumber.queueNeed", {
         for _, l in ipairs(HDG.Constants.LUMBER_DATA) do
             out[l.id] = 0
         end
-        local db = HDG.StaticData.Professions:GetAll()
-        if not db then return out end  -- exception(boundary): StaticData warms async; cold = all-zero map
         local q  = state.account.craft.queue
         for _, row in ipairs(q) do
-            HDG.StaticData.Professions:VisitBasicSlots(db[row.recipeID], function(slot)
+            HDG.StaticData.Recipes:VisitReagents(HDG.StaticData.Recipes:Get(row.recipeID), function(slot)
                 -- ~= nil discriminates lumber slots (dense pre-seed)
                 if slot.itemID and slot.qty and out[slot.itemID] ~= nil then
                     out[slot.itemID] = out[slot.itemID] + slot.qty * (row.remaining or 1)  -- exception(boundary): queue row from SVars may lack remaining

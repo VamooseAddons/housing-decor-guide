@@ -1278,10 +1278,13 @@ function R:GetCategoryForItem(itemID)
     return row and row.category
 end
 
+-- Crafted decor -- has a profession recipe (row.recipe -> sourceType 6 / [PROF] chip)
+-- -- is the only Bind-on-Equip, hence the only Auction-House-tradeable decor.
+-- Everything else (vendor / drop / quest / achievement) is BoP or Warbound.
 function R:GetBindTypeForItem(itemID)
     local row = R:GetRow(itemID)
     if not row then return nil end
-    return (row.category == "Professions") and "BoE" or "BoP"
+    return (row.recipe ~= nil) and "BoE" or "BoP"
 end
 
 function R:GetItemsByVendor(vendorName, vendorZone)

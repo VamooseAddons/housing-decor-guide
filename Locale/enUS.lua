@@ -52,6 +52,7 @@ HDG.Locale:Register("enUS", {
     -- Browser header click hints
     DECOR_HINT_LEFT        = "Select a decor item to preview and manage it.",
     DECOR_HINT_RIGHT       = "Favorite or unfavorite the item.",
+    DECOR_HINT_SHIFT       = "Add a craftable item to the craft queue.",
     -- Detail pane
     DECOR_PREVIEW_PLACEHOLDER = "Click an item to preview",
     DECOR_DESTROY_BTN      = "Destroy a stored copy",
@@ -156,6 +157,7 @@ HDG.Locale:Register("enUS", {
     MOG_SEND_TO_AUCTIONATOR     = "-> Auctionator",
     MOG_SEARCH_PLACEHOLDER      = "Search by name...",
     MOG_GOBLIN_HINTS_LEFT       = "Sort by a column header, or expand a row for its reagent breakdown.",
+    MOG_GOBLIN_HINTS_SHIFT      = "Add the recipe to the craft queue.",
     MOG_KNOWLEDGE_PLACEHOLDER   = "Knowledge: ...",
     MOG_KNOWLEDGE_PREFIX        = "Knowledge: ",
     MOG_QUEUE_PLACEHOLDER       = "Queue: ...",
@@ -232,6 +234,8 @@ HDG.Locale:Register("enUS", {
     REC_QUEUE_HINTS_TITLE      = "Queue actions",
     REC_QUEUE_HINTS_LEFT       = "Pick a recipe -- scopes its materials + previews it (click again to clear).",
     REC_QUEUE_HINTS_RIGHT      = "Remove a recipe from the queue.",
+    REC_LIST_HINTS_LEFT        = "Select a recipe to preview it and scope its materials.",
+    REC_LIST_HINTS_SHIFT       = "Add the recipe to the craft queue.",
     REC_PREVIEW_PLACEHOLDER    = "Select a recipe to preview",
     REC_MATERIALS_TITLE        = "Materials",
     REC_CRAFT_THESE_FIRST      = "Craft These First:",

@@ -1087,7 +1087,8 @@ end
 -- fields (binding/visible/setConfig) are deliberately excluded -- the BindingEngine
 -- already resolves "locale:" on bindings, and resolving a path field would corrupt it.
 local LOCALE_TEXT_FIELDS = {
-    "text", "label", "placeholder", "title", "value", "leftText", "rightText", "selectionPrefix",
+    "text", "label", "placeholder", "title", "value",
+    "leftText", "rightText", "shiftText", "dragText", "noteText", "selectionPrefix",
 }
 
 -- Return a build-ready spec with any "locale:KEY" display fields resolved to text.

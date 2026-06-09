@@ -55,6 +55,31 @@ local function _loc(s)
     return s
 end
 
+-- ===== Click-hint lines (shared: clickHints widget + row tooltips) ==========
+-- Build "Left-click: ...", "Right-click: ...", "Shift-click: ..." display lines
+-- from a {leftText/dragText/rightText/shiftText} spec, resolving any "locale:KEY"
+-- values at call time. One source of truth so the header clickHints widget and
+-- the per-row tooltips never word the same action differently.
+function TE.ClickHintLines(spec)
+    local out = {}
+    if spec.leftText  then out[#out + 1] = "Left-click: "   .. _loc(spec.leftText)  end
+    if spec.dragText  then out[#out + 1] = "Click + drag: " .. _loc(spec.dragText)  end
+    if spec.rightText then out[#out + 1] = "Right-click: "  .. _loc(spec.rightText) end
+    if spec.shiftText then out[#out + 1] = "Shift-click: "  .. _loc(spec.shiftText) end
+    return out
+end
+
+-- Append grey click-hint lines (after a blank spacer) to a tooltip `extras`
+-- array. No-op when spec is nil -- pooled rows that don't stamp _clickHints (e.g.
+-- recipe/queue rows that share R.RecipeRow with the goblin scanner) get no hints.
+function TE.AppendClickHints(extras, spec)
+    if not spec then return end  -- exception(nullable): per-row _clickHints stamp is optional
+    if #extras > 0 then extras[#extras + 1] = " " end  -- blank spacer above the hints
+    for _, line in ipairs(TE.ClickHintLines(spec)) do
+        extras[#extras + 1] = { text = line, r = 0.5, g = 0.5, b = 0.5 }
+    end
+end
+
 -- ===== Internal helpers ===================================================
 
 -- Resolve a tooltip def to a final TE table.

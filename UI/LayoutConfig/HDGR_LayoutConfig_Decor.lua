@@ -329,6 +329,7 @@ LC.widgets["decorPanel.clickHints"] = {
     kind = "clickHints", ["in"] = "decorPanel", slot = "header",
     leftText  = "locale:DECOR_HINT_LEFT",
     rightText = "locale:DECOR_HINT_RIGHT",
+    shiftText = "locale:DECOR_HINT_SHIFT",
     width = 34, height = 16, order = 90,
 }
 -- Ownership ratio + filtered count, below the list (diag.info tone).

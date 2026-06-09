@@ -506,24 +506,23 @@ HDG.Theme.Skinners = {
         -- Hover text swap: OnEnter/OnLeave handlers repaint text color per state.
         -- Hooked once per button (_hdgrHoverHooked) so scheme repaints don't stack handlers.
         -- Active branch sets its own text color; hover is skipped when active=true.
+        -- Text tracks the TERTIARY tokens (matching the steady-state paint above):
+        -- every text button renders on the dark tertiary atlas -- variant tints only
+        -- the border -- so the label must stay light. Keying hover off the variant flipped
+        -- primary/danger buttons to text_inverse (tuned for a light fill) -> invisible on
+        -- the dark atlas. _textTone (e.g. Hard Reset = error) overrides in both directions.
         if not button._hdgrHoverHooked and button.HookScript then
             button._hdgrHoverHooked = true
             button:HookScript("OnEnter", function(btn)
                 if HDG.Theme.states[btn] and HDG.Theme.states[btn].active then return end
-                local v = btn._hdgrVariant or "default"
-                local c = HDG.Theme:GetColor("button." .. v .. ".text.hover")
-                       or HDG.Theme:GetColor("button.default.text.hover")
+                local c = (btn._textTone and HDG.Theme:GetColor("semantic." .. btn._textTone))
+                       or HDG.Theme:GetColor("button.tertiary.text.hover")
                 if c then setTextColor(btn, c) end
             end)
             button:HookScript("OnLeave", function(btn)
                 if HDG.Theme.states[btn] and HDG.Theme.states[btn].active then return end
-                local v = btn._hdgrVariant or "default"
-                local c = HDG.Theme:GetColor("button." .. v .. ".text.normal")
-                       or HDG.Theme:GetColor("button.default.text.normal")
-                -- Honor _textTone override (e.g. Hard Reset = error).
-                if btn._textTone then
-                    c = HDG.Theme:GetColor("semantic." .. btn._textTone) or c
-                end
+                local c = (btn._textTone and HDG.Theme:GetColor("semantic." .. btn._textTone))
+                       or HDG.Theme:GetColor("button.tertiary.text.normal")
                 if c then setTextColor(btn, c) end
             end)
         end

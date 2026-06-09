@@ -135,6 +135,18 @@ local function _wireDecorClicks(row, ed)
     local variantKey = ed.variantKey
     HDG.UI.WireLeftRightClick(row,
         function()
+            -- Shift-click queues the item's recipe (decor rows carry no recipeID,
+            -- so resolve it via the Professions reverse index); non-craftable
+            -- decor toasts a "no recipe" note instead. A plain click selects.
+            if IsShiftKeyDown() then
+                local rid = HDG.StaticData.Recipes:Get(itemID) and itemID
+                if rid then
+                    HDG.UI.QueueRecipe(rid, itemID, ed.name)
+                else
+                    HDG.Log:Debug("queue", ed.name .. " has no recipe")
+                end
+                return
+            end
             -- selectedItemID drives the detail pane (base item data); the
             -- separate selectedVariantKey drives the list highlight + the dyed
             -- model preview (which specific owned variant was clicked).

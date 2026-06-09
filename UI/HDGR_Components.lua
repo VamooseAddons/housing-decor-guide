@@ -621,10 +621,9 @@ local function buildClickHints(parent, spec)
     if spec.rightText                 then addGlyph("housing-hotkey-icon-rightclick") end
     frame:SetWidth(math.max(1, count * CLICKHINT_GLYPH + math.max(0, count - 1) * CLICKHINT_GAP))
 
-    local lines = {}
-    if spec.leftText  then lines[#lines + 1] = "Left-click: "   .. spec.leftText  end
-    if spec.dragText  then lines[#lines + 1] = "Click + drag: " .. spec.dragText  end
-    if spec.rightText then lines[#lines + 1] = "Right-click: "  .. spec.rightText end
+    -- Shared with row tooltips so wording never drifts. Shift is a keyboard
+    -- modifier: it adds a tooltip line but no mouse glyph (handled above).
+    local lines = HDG.TooltipEngine.ClickHintLines(spec)
     if spec.noteText  then lines[#lines + 1] = spec.noteText end   -- plain extra line (e.g. a button hint)
     HDG.TooltipEngine:Attach(frame, {
         title      = spec.title or "Mouse actions",
@@ -635,7 +634,7 @@ local function buildClickHints(parent, spec)
 end
 
 HDG.WidgetTypes:Register("clickHints", {
-    specFields = { "leftText", "rightText", "dragText", "noteText", "title" },
+    specFields = { "leftText", "rightText", "dragText", "shiftText", "noteText", "title" },
     build = function(parent, spec) return buildClickHints(parent, spec) end,
 })
 

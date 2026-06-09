@@ -146,3 +146,12 @@ end
 -- NormalizeAlias: explicit alternate spelling of GetFull. Accept any name
 -- form and return the canonical display name (or nil for unknown).
 function E.NormalizeAlias(rawName) return E.GetFull(rawName) end
+
+-- FromSkillLine: DecorDB stores the profession skill-line ("Classic Alchemy",
+-- "Midnight Inscription") in its `expansion` field; the UI wants the canonical
+-- expansion ("Classic", "Midnight"). Try the full string, then the leading word.
+-- Mirrors old HDG's HDG_ExpansionData.NormalizeToDisplayName.
+function E.FromSkillLine(raw)
+    if not raw or raw == "" then return nil end
+    return E.GetFull(raw) or E.GetFull(raw:match("^(%S+)"))
+end

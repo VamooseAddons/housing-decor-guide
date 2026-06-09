@@ -35,6 +35,27 @@ function UI.OnClick(rootFrame, widgetId, fn)
     if w and w.SetScript then w:SetScript("OnClick", fn) end
 end
 
+-- Add a recipe to the craft queue + toast the amount added on the status rail.
+-- The single funnel for every "add to queue" site: the Recipes +stepper / Queue
+-- Add button and the Goblin / Decor shift-click handlers all route here. `opts`
+-- merges extra payload fields (source / sessionKey; opts.qty overrides the
+-- default 1). The `queue` log tag is user-visible, so the toast surfaces on the
+-- status rail for ~3s regardless of which view dispatched it.
+function UI.QueueRecipe(recipeID, itemID, displayName, opts)
+    local payload = { recipeID = recipeID, itemID = itemID, qty = 1 }
+    local silent
+    if opts then
+        silent = opts.silent
+        for k, v in pairs(opts) do if k ~= "silent" then payload[k] = v end end
+    end
+    HDG.Store:Dispatch({ type = HDG.Constants.ACTIONS.CRAFT_QUEUE_ADD, payload = payload })
+    -- Each add is atomic (+qty); the toast reports THIS add, not the running queue total.
+    -- Batch callers pass opts.silent and emit their own one-line summary instead.
+    if not silent then
+        HDG.Log:Debug("queue", "Added " .. (displayName or "recipe") .. " x" .. payload.qty)
+    end
+end
+
 -- Standard search editbox wiring: userInput guard prevents dispatch on programmatic SetText.
 function UI.WireSearchBox(rootFrame, widgetId, tabName, stateKey)
     local searchBox = UI.W(rootFrame, widgetId)

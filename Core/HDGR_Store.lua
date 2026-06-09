@@ -765,6 +765,7 @@ NewShoppingSessionUI = function()
             zones    = {},   -- [zoneName] = true means COLLAPSED
             vendors  = {},   -- [npcID]    = true means COLLAPSED
             wishList = false, -- true means COLLAPSED
+            ahList   = false, -- Auction House (crafted/BoE) section; true means COLLAPSED
         },
     }
 end
@@ -3334,8 +3335,8 @@ function HDG.Store:_RawDispatch(action)
         -- keyed by zoneName / npcID. Reducer owns the flip; the view dispatches only which bucket
         -- + key. (Replaces the controller's read-clone-flip-write _patchExpanded.)
         local e = self.state.session.ui.shoppingList.expanded
-        if payload.bucket == "wishList" then
-            e.wishList = not (e.wishList == true)
+        if payload.bucket == "wishList" or payload.bucket == "ahList" then
+            e[payload.bucket] = not (e[payload.bucket] == true)
         elseif payload.bucket and payload.key ~= nil then
             local b = e[payload.bucket]
             b[payload.key] = not (b[payload.key] == true) and true or nil
@@ -3385,6 +3386,34 @@ function HDG.Store:_RawDispatch(action)
                 if entry.itemID == payload.itemID and entry.npcID == payload.npcID then
                     entry.qty = math.max(1, math.floor(tonumber(payload.qty) or 1))  -- exception(boundary): string-input qty from EditBox
                     break
+                end
+            end
+        end
+
+    elseif action.type == A.SHOPPING_RESOLVE_VENDORS then
+        -- Persist resolved vendor npcIDs onto wishlist (npcID-less) entries so they
+        -- bucket under their vendor + travel with Export. resolutions = {[itemID]=npcID}.
+        -- Walk high->low: a resolved row that collides with an existing (itemID, npcID)
+        -- vendor row merges its qty in and is removed (coalesce, mirroring ITEM_ADD).
+        local list = self.state.account.vendorShoppingLists[payload.listID]
+        if list then
+            local res = payload.resolutions
+            for i = #list.items, 1, -1 do
+                local entry = list.items[i]
+                local npc = res[entry.itemID]   -- resolved vendor for this itemID, or nil
+                if (not entry.npcID) and npc then
+                    local mergeInto
+                    for _, other in ipairs(list.items) do
+                        if other ~= entry and other.itemID == entry.itemID and other.npcID == npc then
+                            mergeInto = other; break
+                        end
+                    end
+                    if mergeInto then
+                        mergeInto.qty = (mergeInto.qty or 1) + (entry.qty or 1)
+                        table.remove(list.items, i)
+                    else
+                        entry.npcID = npc
+                    end
                 end
             end
         end

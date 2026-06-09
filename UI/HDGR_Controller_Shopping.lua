@@ -110,6 +110,10 @@ local function _hideAllChrome(row)
     if row._shoppingZonePinBuilt then
         row._zonePinBtn:Hide()
     end
+    if row._shoppingAhBtnsBuilt then
+        row._ahSendBtn:Hide()
+        row._ahCraftBtn:Hide()
+    end
 end
 
 local function _showItemChrome(row, ed)
@@ -186,6 +190,92 @@ local function _showZonePin(row, ed)
     row._zonePinBtn:Show()
 end
 
+-- Send every Auction House (crafted/BoE) item in the active list to Auctionator as
+-- one exact-name search list. Mirrors the Recipes materials "Add All" path.
+local function _sendAhToAuctionator()
+    local state = HDG.Store:GetState()  -- exception(false-positive): top-level controller method (not a row factory)
+    local entries = HDG.Selectors:Call("shopping.activeListEntries", state, {})
+    local items = {}
+    for _, e in ipairs(entries) do
+        if (not e.npcID) and e.isTradeable then
+            items[#items + 1] = { id = e.itemID, qty = e.qty or 1 }
+        end
+    end
+    local n, present = HDG.UI.SendReagentsToAuctionator("HDG Auction House", items)
+    if not present then
+        HDG.Log:Warn("shopping", "Auctionator not installed")
+    elseif n > 0 then
+        HDG.Log:Info("shopping", "Sent " .. n .. " item" .. (n > 1 and "s" or "") .. " to Auctionator")
+    else
+        HDG.Log:Info("shopping", "No Auction House items to send")
+    end
+end
+
+-- Send every Auction House (crafted/BoE) item in the active list to the Recipes
+-- craft queue. Crafted decor can be made instead of bought; this is the "make them
+-- all" counterpart to the Auctionator button. One summary toast (per-item silent).
+local function _sendAhToCraftingQueue()
+    local state = HDG.Store:GetState()  -- exception(false-positive): top-level controller method (not a row factory)
+    local entries = HDG.Selectors:Call("shopping.activeListEntries", state, {})
+    local n = 0
+    for _, e in ipairs(entries) do
+        if (not e.npcID) and e.isTradeable then
+            local rid = HDG.StaticData.Recipes:Get(e.itemID) and e.itemID
+            if rid then
+                HDG.UI.QueueRecipe(rid, e.itemID, nil, { qty = e.qty or 1, silent = true })
+                n = n + 1
+            end
+        end
+    end
+    if n > 0 then
+        HDG.Log:Info("queue", "Added " .. n .. " recipe" .. (n > 1 and "s" or "") .. " to the craft queue")
+    else
+        HDG.Log:Warn("shopping", "No craftable items to queue")
+    end
+end
+
+-- Crafting/Auction House header buttons (RIGHT edge): Auctionator (buy) at the very
+-- edge, crafting queue (make) to its left. Lazily built per pooled row.
+local function _ensureAhButtons(row)
+    if row._shoppingAhBtnsBuilt then return end
+    local ahBtn = HDG.UI:AtlasButton(row, HDG.Constants.SHOPPING_LIST_ICON_ATLAS, 14)
+    ahBtn:SetPoint("RIGHT", row, "RIGHT", -4, 0)
+    ahBtn:Hide()
+    HDG.TooltipEngine:Attach(ahBtn, { title = "Send all to Auctionator", anchor = "ANCHOR_RIGHT" })
+    row._ahSendBtn = ahBtn
+
+    local craftBtn = HDG.UI:AtlasButton(row, "Professions-Crafting-Orders-Icon", 14)
+    craftBtn:SetPoint("RIGHT", row, "RIGHT", -22, 0)
+    craftBtn:Hide()
+    HDG.TooltipEngine:Attach(craftBtn, { title = "Send all to crafting queue", anchor = "ANCHOR_RIGHT" })
+    row._ahCraftBtn = craftBtn
+
+    row._shoppingAhBtnsBuilt = true
+end
+
+local function _showAhButtons(row)
+    _ensureAhButtons(row)
+    row._ahSendBtn:SetScript("OnClick", _sendAhToAuctionator)
+    row._ahSendBtn:Show()
+    row._ahCraftBtn:SetScript("OnClick", _sendAhToCraftingQueue)
+    row._ahCraftBtn:Show()
+end
+
+-- wishItem "where to buy" tooltip: standard item tooltip + the resolved vendor.
+-- Only resolved wishlist rows stamp _shopVendor; every other row (items, headers,
+-- unresolved wishlist) leaves it nil -> no tooltip, behaviour unchanged.
+local function _shoppingRowTooltip(self)
+    local af = self._shopVendor
+    if not af then return nil end  -- exception(nullable): only resolved wishlist rows stamp this
+    local zone = (af.zone and af.zone ~= "") and (" -- " .. af.zone) or ""
+    return {
+        itemID     = self._shopItemID,
+        anchor     = "ANCHOR_RIGHT",
+        extraLines = { { text = "Available from: " .. (af.name or "?") .. zone,
+                         r = 0.6, g = 0.78, b = 0.95 } },
+    }
+end
+
 -- One-time base layout (pooled rows): name + right FontStrings.
 local function _layoutShoppingRow(row)
     HDG.UI:EnsureRowChrome(row)
@@ -194,6 +284,8 @@ local function _layoutShoppingRow(row)
 
     local right = HDG.UI.RowText(row, "caption", "TextDim", "RIGHT")
     row._rightFs = right
+
+    HDG.TooltipEngine:Attach(row, _shoppingRowTooltip)
 end
 
 -- Per-kind row configurers (dispatch-table targets; doc cliff #2). Each owns
@@ -203,7 +295,8 @@ local function _configureWishHeaderRow(row, ed)
     row._nameFs:SetPoint("LEFT", row, "LEFT", 8, 0)
     row._nameFs:SetPoint("RIGHT", row, "RIGHT", -60, 0)
     row._rightFs:SetPoint("RIGHT", row, "RIGHT", -8, 0)
-    row._nameFs:SetText(HDG.UI.CollapsePrefix(ed.collapsed) .. "Wishlist")
+    row._nameFs:SetText(HDG.Theme:ColorCode("semantic.accent")
+        .. HDG.UI.CollapsePrefix(ed.collapsed) .. "Wishlist" .. "|r")
     row._rightFs:SetText("(" .. ed.count .. ")")
     row:SetScript("OnClick", function()
         HDG.Store:Dispatch({ type = HDG.Constants.ACTIONS.SHOPPING_TOGGLE_EXPANDED,
@@ -217,7 +310,8 @@ local function _configureZoneRow(row, ed)
     -- Leave space for pin button (-22) + right-text (-30).
     row._nameFs:SetPoint("RIGHT", row, "RIGHT", -100, 0)
     row._rightFs:SetPoint("RIGHT", row, "RIGHT", -22, 0)
-    row._nameFs:SetText(HDG.UI.CollapsePrefix(ed.collapsed) .. ed.zone)
+    row._nameFs:SetText(HDG.Theme:ColorCode("semantic.accent")
+        .. HDG.UI.CollapsePrefix(ed.collapsed) .. ed.zone .. "|r")
     row._rightFs:SetText("(" .. ed.vendorCount .. " vendors)")
     row:SetScript("OnClick", function()
         HDG.Store:Dispatch({ type = HDG.Constants.ACTIONS.SHOPPING_TOGGLE_EXPANDED,
@@ -231,7 +325,8 @@ local function _configureVendorRow(row, ed)
     row._nameFs:SetPoint("LEFT", row, "LEFT", 16, 0)
     row._nameFs:SetPoint("RIGHT", row, "RIGHT", -80, 0)
     row._rightFs:SetPoint("RIGHT", row, "RIGHT", -8, 0)
-    row._nameFs:SetText(HDG.UI.CollapsePrefix(ed.collapsed) .. ed.name)
+    row._nameFs:SetText(HDG.Theme:ColorCode("semantic.accent")
+        .. HDG.UI.CollapsePrefix(ed.collapsed) .. ed.name .. "|r")
     row._rightFs:SetText("(" .. ed.itemCount .. " items)")
     row:SetScript("OnClick", function()
         HDG.Store:Dispatch({ type = HDG.Constants.ACTIONS.SHOPPING_TOGGLE_EXPANDED,
@@ -248,6 +343,10 @@ local function _configureItemRow(row, ed)
     row._rightFs:SetPoint("RIGHT", row, "RIGHT", -60, 0)
     row._nameFs:SetText(HDG.UI.ItemName(ed.itemID))
     row._rightFs:SetText("x" .. ed.qty)
+    -- Resolved wishlist rows carry a "where to buy" hint -> stamp for the tooltip.
+    if ed.availableFrom then
+        row._shopItemID, row._shopVendor = ed.itemID, ed.availableFrom
+    end
     _showItemChrome(row, ed)
     -- Right-click context menu (Set qty / Remove [/ Open vendor]).
     HDG.UI.WireLeftRightClick(row, nil, function()
@@ -255,11 +354,29 @@ local function _configureItemRow(row, ed)
     end)
 end
 
+local function _configureAhHeaderRow(row, ed)
+    row:SetHeight(22)
+    row._nameFs:SetPoint("LEFT", row, "LEFT", 8, 0)
+    -- Leave space for two buttons (-4 Auctionator, -22 crafting queue) + count (-40).
+    row._nameFs:SetPoint("RIGHT", row, "RIGHT", -120, 0)
+    row._rightFs:SetPoint("RIGHT", row, "RIGHT", -40, 0)
+    row._nameFs:SetText(HDG.Theme:ColorCode("semantic.accent")
+        .. HDG.UI.CollapsePrefix(ed.collapsed) .. "Crafting / Auction House" .. "|r")
+    row._rightFs:SetText("(" .. ed.count .. ")")
+    row:SetScript("OnClick", function()
+        HDG.Store:Dispatch({ type = HDG.Constants.ACTIONS.SHOPPING_TOGGLE_EXPANDED,
+            payload = { bucket = "ahList" } })
+    end)
+    _showAhButtons(row)
+end
+
 local _CONFIGURE_SHOPPING_BY_KIND = {
     wishHeader = _configureWishHeaderRow,
+    ahHeader   = _configureAhHeaderRow,
     zone       = _configureZoneRow,
     vendor     = _configureVendorRow,
     wishItem   = _configureItemRow,
+    ahItem     = _configureItemRow,
     item       = _configureItemRow,
 }
 
@@ -277,12 +394,16 @@ local function _shoppingRowFactory(template)
             row._rightFs:ClearAllPoints()
             row:SetScript("OnClick", nil)
             row:RegisterForClicks("LeftButtonUp")
+            row._shopItemID, row._shopVendor = nil, nil   -- tooltip stamps (resolved wishItems only)
             _hideAllChrome(row)
 
             local handler = _CONFIGURE_SHOPPING_BY_KIND[ed.kind]
             if handler then handler(row, ed) end
 
-            HDG.Theme:Register(row, "RowChrome", { selected = false })
+            -- zone + wishlist headers get the panel-header band; vendor sub-headers
+            -- rely on accent text alone (sub-tier); item rows stay plain.
+            local isTopHeader = ed.kind == "zone" or ed.kind == "wishHeader" or ed.kind == "ahHeader"
+            HDG.Theme:Register(row, "RowChrome", { selected = false, header = isTopHeader })
         end,
         Reset = function(row)
             if row._nameFs  then row._nameFs:SetText("")  end
@@ -300,6 +421,8 @@ HDG.Rows:Register("shoppingRow", {
     key     = function(ed)
         if ed.kind == "wishHeader" then return "wh" end
         if ed.kind == "wishItem"   then return "wi_" .. tostring(ed.itemID) end
+        if ed.kind == "ahHeader"   then return "ah" end
+        if ed.kind == "ahItem"     then return "ai_" .. tostring(ed.itemID) end
         if ed.kind == "zone"       then return "z_"  .. tostring(ed.zone) end
         if ed.kind == "vendor"     then return "v_"  .. tostring(ed.npcID) end
         if ed.kind == "item"       then return "i_"  .. tostring(ed.npcID) .. "_" .. tostring(ed.itemID) end
@@ -327,13 +450,25 @@ function ShoppingController:_OpenItemContextMenu(anchor, ed)
             })
         end },
     }
-    -- Vendor-only: open on world map (wishlist items have no vendor).
+    -- Open on world map: stored cart vendor (npcID), or the catalog-resolved vendor
+    -- for a wishlist item (availableFrom; mapID present only when waypointable).
     if ed.npcID then
         items[#items + 1] = { text = "Open vendor on map", callback = function()
             local aug = HDG.StaticData.VendorAugment:Get(ed.npcID)
             if aug and aug.mapID and aug.mapID > 0 then
                 HDG.Waypoints:Set(aug.mapID, aug.x, aug.y, aug.name)
             end
+        end }
+    elseif ed.availableFrom and ed.availableFrom.mapID then
+        local af = ed.availableFrom
+        items[#items + 1] = { text = "Open vendor on map", callback = function()
+            HDG.Waypoints:Set(af.mapID, af.x, af.y, af.name)
+        end }
+    elseif ed.kind == "ahItem" then
+        items[#items + 1] = { text = "Search on Auctionator", callback = function()
+            local _, present = HDG.UI.SendReagentsToAuctionator("HDG Auction House",
+                { { id = ed.itemID, qty = ed.qty or 1 } })
+            if not present then HDG.Log:Warn("shopping", "Auctionator not installed") end
         end }
     end
     HDG.UI.ShowMenu(anchor, items)
@@ -351,15 +486,44 @@ local function _importShoppingList(value)
     if preview then
         local src  = (preview.meta and preview.meta.source) or "unknown"
         local desc = (preview.meta and preview.meta.desc)   or preview.name or ""
-        local date = (preview.meta and preview.meta.date)   or ""
+        local date = HDG.Format.FriendlyDate(preview.meta and preview.meta.date) or ""
         local trailer = desc ~= "" and (" | " .. desc) or ""
-        if date ~= "" then trailer = trailer .. " (" .. tostring(date) .. ")" end
+        if date ~= "" then trailer = trailer .. " (" .. date .. ")" end
         HDG.Log:Success("shopping",
             ("Imported: %d items | Source: %s%s | Created as new list"):format(
                 #preview.items, src, trailer))
+        -- Resolve + persist vendor npcIDs on the freshly-imported list (the import
+        -- carries the blob's npcIDs verbatim; this fills in the ones it left at 0).
+        ShoppingController:_EnrichListVendors(HDG.Store:GetState().account.activeShoppingListId)
     else
         HDG.Log:Warn("shopping",
             "Import failed -- unrecognised format (expected HDGVL:1:...)")
+    end
+end
+
+-- Resolve + persist vendor npcIDs for a list's wishlist (npcID-less) entries, so
+-- vendor-buyable items leave the Wishlist, bucket under their vendor, and carry
+-- the npcID into Export. The catalog bakes npcID onto row.vendors[1] at sweep
+-- time; items with no catalog vendor (crafted / drops / quests / achievements)
+-- resolve to nothing and correctly stay in the Wishlist. No-op until the catalog
+-- has swept (sweepGeneration 0 = no baked vendors yet).
+function ShoppingController:_EnrichListVendors(listID)
+    local state = HDG.Store:GetState()  -- exception(false-positive): top-level controller method (not a row factory)
+    if state.session.catalog.sweepGeneration == 0 then return end  -- exception(nullable): catalog not swept yet
+    local list = listID and state.account.vendorShoppingLists[listID] or nil
+    if not list then return end  -- exception(nullable): list may be missing/empty
+    local res, n = {}, 0
+    for _, entry in ipairs(list.items) do
+        if not entry.npcID then
+            local row = HDG.HousingCatalogObserver:GetRow(entry.itemID)
+            local v = row and row.vendors and row.vendors[1]
+            if v and v.npcID then res[entry.itemID] = v.npcID; n = n + 1 end
+        end
+    end
+    if n > 0 then
+        HDG.Store:Dispatch({ type = HDG.Constants.ACTIONS.SHOPPING_RESOLVE_VENDORS,
+            payload = { listID = listID, resolutions = res } })
+        HDG.Log:Info("shopping", "Resolved vendors for " .. n .. " item" .. (n > 1 and "s" or ""))
     end
 end
 
@@ -374,7 +538,22 @@ function ShoppingController:Wire(rootFrame)
     -- for an incidental sweep from another surface (tabbing the main window).
     rootFrame:HookScript("OnShow", function()
         HDG.HousingCatalogObserver:RequestLoad()
+        -- Enrich now if the catalog's already warm (re-open); a cold open no-ops
+        -- here and the DECOR_CATALOG_READY subscription below catches the sweep.
+        ShoppingController:_EnrichListVendors(HDG.Store:GetState().account.activeShoppingListId)
     end)
+
+    -- Resolve + persist vendor npcIDs for the active list once the catalog sweep
+    -- completes -- fixes already-imported lists (npcID=0 from the blob) on the
+    -- first sweep after open. Subscribe once (Wire may run per window rebuild).
+    if not ShoppingController._enrichSubscribed then
+        ShoppingController._enrichSubscribed = true
+        HDG.Store:Subscribe(function(actionType)
+            if actionType == A.DECOR_CATALOG_READY then
+                ShoppingController:_EnrichListVendors(HDG.Store:GetState().account.activeShoppingListId)
+            end
+        end)
+    end
 
     -- Window chrome close [X]. Dismisses the shopping floating window by
     -- flipping account.ui.shoppingWidgetShown off. HDG.Window's reconciler

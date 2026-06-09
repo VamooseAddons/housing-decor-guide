@@ -585,7 +585,8 @@ LC.widgets["mogulPanel.goblinHintsSpacer"] = {
 }
 LC.widgets["mogulPanel.goblinHints"] = {
     tooltip = false, kind = "clickHints", ["in"] = "mogul.goblinFilterRow",
-    leftText = "locale:MOG_GOBLIN_HINTS_LEFT",
+    leftText  = "locale:MOG_GOBLIN_HINTS_LEFT",
+    shiftText = "locale:MOG_GOBLIN_HINTS_SHIFT",
     width = 16, height = 16, order = 90,
 }
 -- Knowledge + Queue dropdowns: selectionPrefix adds axis name ("Knowledge: All" etc).

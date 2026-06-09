@@ -476,6 +476,8 @@ local function BuildActionMeta()
             invalidates = { "account.vendorShoppingLists" } },
         [A.SHOPPING_ITEM_SET_QTY] = { persists = true, combatUnsafe = false,
             invalidates = { "account.vendorShoppingLists" } },
+        [A.SHOPPING_RESOLVE_VENDORS] = { persists = true, combatUnsafe = false,
+            invalidates = { "account.vendorShoppingLists" } },
 
         -- ===== Zone Scanner ===========================================
         [A.ZONE_CHANGED] = { persists = false, combatUnsafe = false,

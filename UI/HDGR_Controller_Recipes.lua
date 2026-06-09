@@ -249,10 +249,7 @@ local function _paintRecipeRow(row, ed)
     local qn = ed.queuedQty
     row._plusBtn:Show()
     row._plusBtn:SetScript("OnClick", function()
-        HDG.Store:Dispatch({
-            type    = HDG.Constants.ACTIONS.CRAFT_QUEUE_ADD,
-            payload = { recipeID = ed.recipeID, itemID = ed.itemID, qty = 1 },
-        })
+        HDG.UI.QueueRecipe(ed.recipeID, ed.itemID, ed.name)
     end)
     if qn > 0 then
         row._qtyFs:SetText(tostring(qn))
@@ -268,9 +265,14 @@ local function _paintRecipeRow(row, ed)
         row._minusBtn:Hide()
     end
 
-    -- Row-body click: select the recipe + set the unified focus (drives the
-    -- queue model preview). Last click wins.
+    -- Row-body click: shift-click queues the recipe (1 per click); a plain click
+    -- selects it + sets the unified focus (drives the queue model preview).
+    -- Last click wins.
     row:SetScript("OnClick", function()
+        if IsShiftKeyDown() then
+            HDG.UI.QueueRecipe(ed.recipeID, ed.itemID, ed.name)
+            return
+        end
         HDG.Store:Dispatch({
             type    = HDG.Constants.ACTIONS.RECIPES_SELECT_RECIPE,
             payload = { recipeID = ed.recipeID },
@@ -721,27 +723,9 @@ function RecipesController:Wire(rootFrame)
         local state = HDG.Store:GetState()  -- exception(false-positive): top-level controller method (not a row factory)
         local rid   = state.session.ui.recipes.selectedRecipeID
         if not rid then return end
-        local db = HDG.StaticData.Professions:GetAll()
-        local r  = db and db[rid]
+        local r = HDG.StaticData.Recipes:Get(rid)
         if not r then return end
-        HDG.Store:Dispatch({
-            type    = HDG.Constants.ACTIONS.CRAFT_QUEUE_ADD,
-            payload = {
-                recipeID   = rid,
-                itemID     = r.itemID,
-                qty        = 1,
-                source     = "manual",
-                sessionKey = "ui",
-            },
-        })
-        -- After dispatch, find the (possibly coalesced) queue row for this
-        -- recipe so the toast shows the cumulative qty.
-        local q = HDG.Store:GetState().account.craft.queue  -- exception(false-positive): top-level controller read
-        local total = 1
-        for _, row in ipairs(q) do
-            if row.recipeID == rid then total = row.remaining or 1; break end  -- migration (legacy queue rows)
-        end
-        pushQueueToast("Added " .. (r.name or "recipe") .. " x" .. total)
+        HDG.UI.QueueRecipe(rid, r.itemID, r.name, { source = "manual", sessionKey = "ui" })
     end)
 
     HDG.UI.OnClick(rootFrame, "recipesQueuePanel.clear", function()

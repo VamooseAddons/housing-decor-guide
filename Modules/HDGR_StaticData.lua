@@ -192,6 +192,46 @@ function S.Recipes:GetAll()
     return _table("HDGR_DecorDB")
 end
 
+-- Reverse index: reagent itemID -> array of decor recipe itemIDs that use it.
+-- Powers the "Used in N decor recipes" reagent tooltip line. Lazy; rebuilt when the
+-- DB table reference changes (same pattern as _byItemIDCache).
+local _reagentUsersCache, _reagentUsersSource
+local function _ensureReagentUsers()
+    local db = _table("HDGR_DecorDB")
+    if _reagentUsersSource == db then return end
+    _reagentUsersCache, _reagentUsersSource = {}, db
+    for _, entry in pairs(db) do
+        if entry.itemID and entry.reagents then
+            for rid in pairs(entry.reagents) do
+                local list = _reagentUsersCache[rid] or {}
+                list[#list + 1] = entry.itemID
+                _reagentUsersCache[rid] = list
+            end
+        end
+    end
+end
+
+-- Decor recipe itemIDs that use this exact reagent itemID (nil if none). The
+-- caller unions across quality-variant siblings (a tiered reagent's recipes list
+-- one tier; the player may hold another) -- keeps this facade DecorDB-only.
+function S.Recipes:RecipesUsingReagent(reagentItemID)
+    if not reagentItemID then return nil end
+    _ensureReagentUsers()
+    return _reagentUsersCache[reagentItemID]
+end
+
+-- Walk a DecorDB entry's direct reagents, mirroring Professions:VisitBasicSlots so the
+-- decor recipe path (queue/materials/lumber/tooltip) can read DecorDB instead of
+-- ProfessionsDB. visitor({ itemID, qty, name }); a truthy return stops early. DecorDB
+-- has no non-basic slots, so there is no `type` filter. Reagents are pairs()-iterated
+-- (unordered) -- fine for the commutative accumulators + any-match early-stop consumers.
+function S.Recipes:VisitReagents(entry, visitor)
+    if not (entry and entry.reagents) then return end
+    for itemID, info in pairs(entry.reagents) do
+        if visitor({ itemID = itemID, qty = info.qty, name = info.name }) then return end
+    end
+end
+
 -- ============================================================================
 -- Professions  (HDGR_ProfessionsDB by recipeID + HDGR_ProfessionThresholds)
 -- ============================================================================
@@ -210,6 +250,24 @@ end
 
 function S.Professions:GetThresholds()
     return _table("HDGR_ProfessionThresholds")
+end
+
+-- Reverse index: produced itemID -> recipeID. ProfessionsDB is keyed by recipeID
+-- with `.itemID` on each entry; this lets decor rows (which carry no recipeID)
+-- resolve a craftable item to its recipe for the craft queue. Lazily built;
+-- rebuilt when the source table identity changes. Last-wins on the rare
+-- item-with-multiple-recipes (any recipe that yields the item suffices).
+local _itemToRecipeCache, _itemToRecipeSource
+function S.Professions:GetByItemID(itemID)
+    if not itemID then return nil end
+    local db = _table("HDGR_ProfessionsDB")
+    if _itemToRecipeSource ~= db then
+        _itemToRecipeCache, _itemToRecipeSource = {}, db
+        for recipeID, recipe in pairs(db) do
+            if recipe.itemID then _itemToRecipeCache[recipe.itemID] = recipeID end
+        end
+    end
+    return _itemToRecipeCache[itemID]
 end
 
 -- Quality-variant groups: tiered reagents have separate itemIDs per quality

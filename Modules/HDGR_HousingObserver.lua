@@ -292,7 +292,9 @@ end
 -- pure transforms in HDG.Projects.{Capture,AutoLayout}. One atomic PROJECTS_CAPTURE_COMMIT.
 -- =============================================================================
 
--- Localized room name -> ShapeAtlas shape ID (kept in sync with ShapeAtlas IDs).
+-- Static localizedName -> shapeID FALLBACK (English only, cold-catalog safety net).
+-- PRIMARY resolution is the live room catalog (_buildCatalogNameToShape below), which
+-- is locale-correct in every client. Kept in sync with ShapeAtlas IDs.
 local NAME_TO_SHAPE = {
     ["Closet"]                  = "closet_xs",
     ["Square Room (Tiny)"]      = "square_xs",
@@ -313,6 +315,34 @@ local NAME_TO_SHAPE = {
     ["Stairwell (Right)"]       = "staircase_mirror",
     ["Stairwell Room (Empty)"]  = "tall_room",
 }
+
+-- Entry = the base room. pin:CanRemove() reports the IsBaseRoom restriction for it (and
+-- only it) -- a locale-independent signal read synchronously off the pin. Resolved at load;
+-- the headless harness stubs Enum, so fall back to the known enum value there.
+local ENTRY_RESTRICTION = (Enum and Enum.HousingLayoutRestriction and Enum.HousingLayoutRestriction.IsBaseRoom) or 4  -- exception(boundary): Enum.HousingLayoutRestriction absent in headless harness
+
+-- localizedName -> shapeID, built fresh per capture from the LIVE room catalog
+-- (session.house.roomCatalog). The catalog's localized name is byte-identical to
+-- pinFrame:GetRoomName() (same DB2 field -- verified enUS; the recordID->shapeID bridge
+-- is locale-independent by construction), so capture resolves shapes in EVERY locale,
+-- not just English. Prefab rooms carry nil shapeID -> skipped (catalog iconAtlas renders them).
+local function _buildCatalogNameToShape()
+    local map = {}
+    for _, e in ipairs(HDG.Store:GetState().session.house.roomCatalog.entries) do
+        if e.shapeID then map[e.name] = e.shapeID end
+    end
+    return map
+end
+
+-- Pure: resolve a captured room's shapeID. The base room is the Entry anchor -- isBase comes
+-- from the pin's IsBaseRoom removal restriction (locale-independent) and Entry is NOT a catalog
+-- room, so neither name map can cover it. Then the live-catalog map (locale-correct), then the
+-- static English fallback (cold catalog), then the raw name (unknown -> ShapeAtlas renders a
+-- generic cell; never crashes).
+function HO.ResolveShape(name, isBase, catalogNameToShape)
+    if isBase then return "entry" end
+    return catalogNameToShape[name] or NAME_TO_SHAPE[name] or name
+end
 
 local _capture     -- transient capture buffer for one Layout-mode floor session
 local _activeSweep -- active "capture all floors" sweep state (timer-driven)
@@ -403,13 +433,15 @@ local function _ingestPin(pinFrame)
         _capture.nextIndex = _capture.nextIndex + 1
     end
     if pinType == 1 then   -- room pin
+        -- Entry = the base room: pin:CanRemove() == IsBaseRoom restriction. Read synchronously
+        -- off the pin, NOT via C_HousingLayout.IsBaseRoom(guid) (field-reported unreliable).
+        -- Locale-independent -- Entry is not a catalog room and GetRoomName is localized.
+        room.isBase = pinFrame:CanRemove() == ENTRY_RESTRICTION
         room.name  = pinFrame:GetRoomName()
-        room.shape = NAME_TO_SHAPE[room.name] or room.name
+        _capture.nameToShape = _capture.nameToShape or _buildCatalogNameToShape()   -- locale-correct map; built once per capture
+        room.shape = HO.ResolveShape(room.name, room.isBase, _capture.nameToShape)
         room._roomPin = pinFrame   -- temp ref; restriction flags + final pos read at finalize
         room.posAdd   = _pinPos(pinFrame)   -- diagnostic: screen coords at pin-add time
-        if C_HousingLayout and C_HousingLayout.IsBaseRoom and C_HousingLayout.IsBaseRoom(roomGUID) then  -- exception(boundary): C_HousingLayout is a Blizzard API namespace; nil in headless tests
-            room.isBase = true
-        end
     elseif pinType == 0 then  -- door pin
         local d = pinFrame:GetDoorConnectionInfo()
         if d then

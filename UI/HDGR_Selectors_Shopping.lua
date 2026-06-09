@@ -164,7 +164,8 @@ Selectors:Register("shopping.attributionText", {
         if a.desc and a.desc ~= "" and a.desc:lower() ~= a.source:lower() then
             label = label .. ": " .. a.desc
         end
-        if a.date and a.date ~= "" then label = label .. "  " .. tostring(a.date) end
+        local d = HDG.Format.FriendlyDate(a.date)
+        if d then label = label .. "  " .. d end
         return label
     end,
 })
@@ -185,6 +186,29 @@ end
 local function _isCatalogDecor(itemID, sweepGeneration)
     if sweepGeneration == 0 then return true end  -- cold: pass through until sweep
     return HDG.HousingCatalogObserver.byItemID[itemID] ~= nil
+end
+
+-- Display-time vendor resolution for wishlist items (no stored npcID): the live
+-- catalog's first vendor + VendorAugment, mirroring FindFirstVendorForItem. Never
+-- written to state -- this is a render hint so vendor-buyable wishlist items can
+-- show "where to buy" without freezing a (possibly wrong / multi-vendor) npcID.
+-- Returns a coords-bearing table, a name/zone-only table, or nil (drop/quest/ach
+-- items with no vendor).
+local function _resolveWishlistVendor(itemID)
+    local crow = HDG.HousingCatalogObserver:GetRow(itemID)
+    local cv = crow and crow.vendors and crow.vendors[1]
+    if not cv then return nil end
+    local npc = HDG.StaticData.VendorAugment:ResolveName(cv.name, cv.zone)
+    local aug = npc and HDG.StaticData.VendorAugment:Get(npc)
+    if aug and aug.mapID and aug.mapID > 0 then
+        -- Coords resolved: mapID present == waypointable (consumers key on it).
+        return { npcID = npc, name = aug.name, zone = aug.zone,
+                 mapID = aug.mapID, x = aug.x, y = aug.y }
+    end
+    -- Augment missing / coordless: catalog name+zone only (no mapID -> no waypoint).
+    local name = (aug and aug.name) or cv.name
+    if name and name ~= "" then return { name = name, zone = (aug and aug.zone) or cv.zone } end
+    return nil
 end
 
 Selectors:Register("shopping.activeListEntries", {
@@ -220,6 +244,10 @@ Selectors:Register("shopping.activeListEntries", {
                         y       = meta.y,
                         faction = meta.faction,
                     } or nil,
+                    -- Wishlist (no npcID) render hint: where the catalog says it sells.
+                    availableFrom = (not entry.npcID) and _resolveWishlistVendor(entry.itemID) or nil,
+                    -- BoE = crafted (Professions) = the only AH-tradeable decor -> Auction House lane.
+                    isTradeable = HDG.HousingCatalogObserver:GetBindTypeForItem(entry.itemID) == "BoE",
                 }
             end
         end
@@ -227,12 +255,15 @@ Selectors:Register("shopping.activeListEntries", {
     end,
 })
 
--- Bucket entries into wishlist + zone>vendor>items structure.
+-- Bucket entries into three lanes: vendor (npcID -> zone>vendor>items), Auction
+-- House (no vendor but BoE/crafted), and wishlist (everything else -- the
+-- non-purchasable drops/quests/achievements). Vendor wins over AH: a crafted item
+-- a vendor also sells is something you can physically buy, so it routes to the vendor.
 local function _bucketShoppingEntries(entries)
-    local wish, zones, zoneOrder = {}, {}, {}
+    local wish, ah, zones, zoneOrder = {}, {}, {}, {}
     for _, entry in ipairs(entries) do
         if not entry.npcID then
-            wish[#wish + 1] = entry
+            if entry.isTradeable then ah[#ah + 1] = entry else wish[#wish + 1] = entry end
         else
             local zoneName = entry.vendor and entry.vendor.zone or "Unknown"
             local z = zones[zoneName]
@@ -259,7 +290,7 @@ local function _bucketShoppingEntries(entries)
             return (va and va.name or "") < (vb and vb.name or "")
         end)
     end
-    return wish, zones, zoneOrder
+    return wish, ah, zones, zoneOrder
 end
 
 -- Per-item row envelope. Source chips via GateChips(itemID); no per-source flags in envelope.
@@ -282,6 +313,22 @@ local function _appendWishSection(rows, wish, wishCollapsed)
         rows[#rows + 1] = {
             kind = "wishItem", itemID = w.itemID, qty = w.qty,
             addedAt = w.addedAt, iconID = w.iconID,
+            availableFrom = w.availableFrom,   -- catalog "where to buy" hint (display only)
+        }
+    end
+end
+
+-- Append Auction House header + items (when expanded). Crafted/BoE decor: bought
+-- off the AH (or crafted). Header omitted entirely when empty (unlike wishlist,
+-- which has a manual add button -- the AH lane is purely auto-populated).
+local function _appendAhSection(rows, ah, ahCollapsed)
+    if #ah == 0 then return end
+    rows[#rows + 1] = { kind = "ahHeader", collapsed = ahCollapsed, count = #ah }
+    if ahCollapsed then return end
+    for _, a in ipairs(ah) do
+        rows[#rows + 1] = {
+            kind = "ahItem", itemID = a.itemID, qty = a.qty,
+            addedAt = a.addedAt, iconID = a.iconID,
         }
     end
 end
@@ -327,13 +374,16 @@ Selectors:Register("shopping.entriesByZone", {
         local entries  = Selectors:Call("shopping.activeListEntries", state, ctx)
         local expanded = state.session.ui.shoppingList.expanded
         local wishCollapsed   = expanded.wishList == true
+        local ahCollapsed     = expanded.ahList   == true
         local zoneCollapsed   = expanded.zones    -- map
         local vendorCollapsed = expanded.vendors  -- map
 
-        local wish, zones, zoneOrder = _bucketShoppingEntries(entries)
+        local wish, ah, zones, zoneOrder = _bucketShoppingEntries(entries)
 
+        -- Order: Wishlist -> Auction House -> vendor zones.
         local rows = {}
         _appendWishSection(rows, wish, wishCollapsed)
+        _appendAhSection(rows, ah, ahCollapsed)
         for _, zoneName in ipairs(zoneOrder) do
             _appendZoneSection(rows, zoneName, zones[zoneName], zoneCollapsed, vendorCollapsed)
         end

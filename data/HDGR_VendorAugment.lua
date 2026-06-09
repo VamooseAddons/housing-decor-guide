@@ -183,7 +183,7 @@ HDGR_VendorAugment = {
     [254944] = { name = "Tajaka Sawtusk", zone = "Zul'Aman", mapID = 2437, x = 46.0, y = 66.0, faction = "N", exp = "Midnight" },
     [255095] = { name = "Kuvahn", zone = "Zul'Aman", mapID = 2437, x = 45.2, y = 69.8, faction = "N", exp = "Midnight" },
     [255101] = { name = "Mynde", zone = "Suramar", mapID = 680, x = 45.6, y = 69.2, faction = "N", exp = "Legion" },
-    [255114] = { name = "Maku", zone = "Harandar", mapID = 2413, x = 62.2, y = 34.6, faction = "N", exp = "Midnight" },
+    [255114] = { name = "Maku", zone = "Harandar", mapID = 2576, x = 62.2, y = 34.6, faction = "N", exp = "Midnight" },
     [255203] = { name = "Xiao Dan", zone = "Founder's Point", mapID = 2352, x = 52.0, y = 38.2, faction = "N", exp = "Midnight" },
     [255213] = { name = "Faarden the Builder", zone = "Founder's Point", mapID = 2352, x = 52.0, y = 38.4, faction = "N", exp = "Midnight" },
     [255216] = { name = "Balen Starfinder", zone = "Founder's Point", mapID = 2352, x = 52.2, y = 37.8, faction = "N", exp = "Midnight" },

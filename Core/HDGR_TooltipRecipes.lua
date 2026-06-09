@@ -219,6 +219,14 @@ end
 -- R2: Decor row -- decor picker, house editor grid.
 -- Custom (non-item) tooltip; source + expansion read live at hover from HousingCatalogObserver.
 -- stamp: row._itemID, _name, _collected, _storedCount
+-- Mouse-action hints shown on every decor row tooltip (same wording as the
+-- decor header clickHints; resolved live so a locale switch repaints them).
+local DECOR_ROW_HINTS = {
+    leftText  = "locale:DECOR_HINT_LEFT",
+    rightText = "locale:DECOR_HINT_RIGHT",
+    shiftText = "locale:DECOR_HINT_SHIFT",
+}
+
 function R.DecorRow(self)
     if not self._itemID then return nil end
     local extras = {}
@@ -267,6 +275,7 @@ function R.DecorRow(self)
     local icon  = CI and CI.GetItemIconByID and CI.GetItemIconByID(self._itemID)  -- exception(boundary): nil uncached
     local title = icon and (("|T%d:16:16|t "):format(icon) .. name) or name
 
+    HDG.TooltipEngine.AppendClickHints(extras, DECOR_ROW_HINTS)
     return {
         title      = title,
         anchor     = "ANCHOR_RIGHT",
@@ -296,13 +305,24 @@ function R.RecipeRow(self)
     if not self._itemID then return nil end
     local extras = {}
 
-    -- Knowledge status. For alt-known recipes, NAME the alt: Mogul resolves the
-    -- char from per-char knownRecipes (recipeID == spellID). Char name is the
+    -- Decor collection status (the item this recipe produces). Same green/amber as
+    -- the decor row tooltip; catalog miss (non-decor recipe / uncached) skips the line.
+    local crow = HDG.HousingCatalogObserver:GetRow(self._itemID)
+    if crow then
+        if crow.isOwned then
+            extras[#extras + 1] = { text = "Decor: Collected",     r = 0.4,  g = 0.9,  b = 0.4  }
+        else
+            extras[#extras + 1] = { text = "Decor: Not collected", r = 0.85, g = 0.72, b = 0.35 }
+        end
+    end
+
+    -- Recipe knowledge status. For alt-known recipes, NAME the alt: Mogul resolves
+    -- the char from per-char knownRecipes (recipeID == spellID). Char name is the
     -- part of the "Name-Realm" key before the "-" (same as the Mogul plan rows).
     -- Falls back to the generic line if no scanner data has landed for the alt.
     local known = HDG.Store:GetState().account.recipes[self._itemID]
     if known and known.selfKnown then
-        extras[#extras + 1] = { text = "Learned",        r = 0.45, g = 0.82, b = 0.45 }
+        extras[#extras + 1] = { text = "Recipe: Known", r = 0.45, g = 0.82, b = 0.45 }
     elseif known and known.altKnown then
         -- Use the entry's spellID (NOT _recipeID): per-char knownRecipes + the
         -- scanner's altKnown bridge are keyed by spellID, and _recipeID is the
@@ -310,11 +330,11 @@ function R.RecipeRow(self)
         local knowers = known.spellID and HDG.Mogul:AltsKnowingSpellID(known.spellID)
         local who     = knowers and #knowers > 0 and table.concat(knowers, ", ")
         extras[#extras + 1] = {
-            text = who and ("Known by " .. who) or "Known by an alt",
+            text = who and ("Recipe: Known by " .. who) or "Recipe: Known by an alt",
             r = 0.85, g = 0.72, b = 0.35,
         }
     else
-        extras[#extras + 1] = { text = "Not learned yet", r = 0.78, g = 0.45, b = 0.45 }
+        extras[#extras + 1] = { text = "Recipe: Not learned", r = 0.78, g = 0.45, b = 0.45 }
     end
 
     -- Queue multiplier: queue rows stamp _qtyMult = queued count; recipe-list /
@@ -324,13 +344,12 @@ function R.RecipeRow(self)
         extras[#extras + 1] = { text = ("Queued: %dx -- materials below are for all %d"):format(mult, mult), r = 0.6, g = 0.78, b = 0.95 }
     end
 
-    -- Materials (have / need x qty), colored by sufficiency. VisitBasicSlots
+    -- Materials (have / need x qty), colored by sufficiency. VisitReagents
     -- yields the immediate reagents; bag counts come from the BagObserver.
-    local db     = HDG.StaticData.Professions:GetAll()
-    local recipe = self._recipeID and db and db[self._recipeID]
+    local recipe = self._recipeID and HDG.StaticData.Recipes:Get(self._recipeID)
     if recipe then
         local counts, mats = HDG.BagObserver:GetCounts() or {}, {}
-        HDG.StaticData.Professions:VisitBasicSlots(recipe, function(slot)
+        HDG.StaticData.Recipes:VisitReagents(recipe, function(slot)
             if slot.itemID and slot.qty then
                 mats[#mats + 1] = {
                     name = slot.name or HDG.ItemNameResolver:ResolveName(slot.itemID),
@@ -366,6 +385,9 @@ function R.RecipeRow(self)
     -- Item icon to the LEFT of the name (texture escape accepts the fileID directly).
     local icon  = CI and CI.GetItemIconByID and CI.GetItemIconByID(self._itemID)  -- exception(boundary): nil for uncached
     local title = icon and (("|T%d:16:16|t "):format(icon) .. name) or name
+
+    -- Goblin scanner rows stamp _clickHints; recipe-list / queue rows leave it nil (no hints).
+    HDG.TooltipEngine.AppendClickHints(extras, self._clickHints)
     return {
         title      = title,
         anchor     = "ANCHOR_RIGHT",

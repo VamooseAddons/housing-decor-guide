@@ -1,5 +1,63 @@
 ## [Unreleased]
 
+## [3.1.1] - 2026-06-09 (June 2026)
+
+ADDED:
+- Shift-click to queue. Hold Shift and click an item to drop it straight into the
+  Recipes craft queue -- now from three places: a recipe in the Recipes list, a line
+  in the Goblin profit scanner, and a craftable piece in Find Decor. A note on the
+  status bar confirms each add (and tells you when a decor item has no recipe).
+  Plain clicks are unchanged (select / expand). The Recipes "+" button now shows the
+  same confirmation. The mouse-action hint in each list header (hover the glyph) now
+  lists the shift-click action, and Find Decor and Goblin rows now show the mouse
+  actions (including shift-click to queue) right in their hover tooltip too.
+- Recipe tooltips now show two status lines at a glance: "Decor: Collected / Not
+  collected" (whether you already own the decoration it makes) and "Recipe: Known /
+  Not learned" (whether you can craft it). Also shown on Goblin scanner rows.
+- Shopping List now sorts everything into three lanes automatically. Vendor-bought
+  items -- including ones imported from Wowhead/wowdb that arrived without a vendor --
+  are matched to their seller from the live catalog (on open and on import) and grouped
+  under that vendor, with the vendor saved so it travels with Export. Crafted decor
+  (the only Bind-on-Equip / Auction-House-able decor) gets its own "Crafting / Auction
+  House" section with two header buttons -- send the whole batch to the craft queue, or
+  to Auctionator (plus per-item right-click search). The Wishlist now holds only what
+  you truly can't buy -- drops, quests, achievements.
+  Hover or right-click a still-unresolved row for "Available from" / "Open vendor on map".
+
+CHANGED:
+- Shopping List headers are easier to scan: zone and Wishlist headers now sit on a
+  tinted header band with accent-colored text, vendor sub-headers use accent text,
+  and item rows stay plain -- a clear zone > vendor > item hierarchy.
+
+FIXED:
+- Item tooltips now actually show "Used in N decor recipes" for crafting reagents.
+  The line was reading a reagent field that doesn't exist, so it never appeared; it now
+  counts live from the decor recipe data and is quality-tier aware -- a reagent you hold
+  in one quality (e.g. Dawn Crystal q2) still counts the recipes that list another tier
+  (-> "Used in 11 decor recipes").
+- Queueing a recipe from the Goblin scanner or Mogul "Queue All" now works correctly --
+  those rows previously landed in the craft queue mislabelled ("recipe 1262829") with no
+  readiness or materials. The whole recipe path (list, queue, materials, lumber) now reads
+  one curated decor recipe database, so every queue entry resolves the same way no matter
+  where you added it from.
+- Imported shopping lists now show a readable date ("2026-04-25") in the attribution
+  banner and import message, instead of a raw timestamp like "1777074521".
+- Architect (Projects) now renders the correct room shapes, labels, and placement
+  cost on non-English clients. Captured rooms were matched to a shape by their
+  localized name against an English-only table, so other locales fell back to
+  generic single-cell boxes with a 0 cost total. Rooms now resolve through the live
+  room catalog (locale-correct in every client), and the Entry is identified by its
+  game restriction instead of its name -- so German, French, and every other locale
+  get the same shaped layout English always had.
+- Primary action buttons (e.g. "Buy materials from Auction House" in Recipes) no
+  longer lose their label on mouse-over. The hover repaint used the wrong text color
+  for primary/danger buttons -- a dark "on light fill" tone that vanished against the
+  button's dark background -- so the words now stay light and legible.
+- The waypoint for Maku (the Harandar decor vendor in The Den) now leads to the
+  right spot. His coordinates were correct for The Den's own map but were tagged with
+  the Harandar overworld map, so the pin landed on the far side of the zone; it now
+  points into The Den.
+
 ## [3.1.0] - 2026-06-08 (June 2026)
 
 ADDED:

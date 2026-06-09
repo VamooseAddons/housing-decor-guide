@@ -49,11 +49,22 @@ end
 
 -- Reagent-usage line. Shows count of housing-decor recipes using this item,
 -- regardless of whether learned (flags useful bag reagents before recipe known).
--- HDGR_ReagentsDB[itemID].usedIn is the decor recipe-ID list.
+-- Counted live from DecorDB's reagent lists (ReagentsDB has no usedIn field).
 local function reagentLine(itemID)
-    local rdb = HDG.StaticData.Reagents:GetAll()
-    local entry = rdb and rdb[itemID]
-    local n = (entry and entry.usedIn and #entry.usedIn) or 0
+    local R = HDG.StaticData.Recipes
+    local seen, n = {}, 0
+    local function count(id)
+        local users = R:RecipesUsingReagent(id)
+        if not users then return end
+        for _, r in ipairs(users) do
+            if not seen[r] then seen[r] = true; n = n + 1 end
+        end
+    end
+    count(itemID)
+    -- Tiered reagents: recipes list one quality tier, the player may hold another --
+    -- union across the quality group so any tier shows the count (e.g. Dawn Crystal).
+    local variants = HDG.StaticData.Professions:GetQualityVariants(itemID)
+    if variants then for _, v in ipairs(variants) do count(v) end end
     if n == 0 then return nil end
     return string.format("%sUsed in %d decor recipe%s", ACCENT_PREFIX(), n, n == 1 and "" or "s")
 end

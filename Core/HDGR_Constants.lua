@@ -622,6 +622,7 @@ HDG.Constants = {
         SHOPPING_TOGGLE_EXPANDED   = "HDGR_SHOPPING_TOGGLE_EXPANDED",   -- payload: { bucket = "zones"|"vendors"|"wishList", key? }
         SHOPPING_ITEM_REMOVE       = "HDGR_SHOPPING_ITEM_REMOVE",       -- payload: { listID?, itemID, npcID? }
         SHOPPING_ITEM_SET_QTY      = "HDGR_SHOPPING_ITEM_SET_QTY",      -- payload: { listID?, itemID, npcID?, qty }
+        SHOPPING_RESOLVE_VENDORS   = "HDGR_SHOPPING_RESOLVE_VENDORS",   -- payload: { listID, resolutions = {[itemID]=npcID} }
         SHOPPING_WIDGET_TOGGLE     = "HDGR_SHOPPING_WIDGET_TOGGLE",
 
         -- ===== Zone Scanner =====

@@ -134,7 +134,7 @@ end
 
 -- Accumulate lumber requirements for one recipe into `out`.
 local function _accumulateLumberFromRecipe(recipe, lumberSet, out)
-    HDG.StaticData.Professions:VisitBasicSlots(recipe, function(slot)
+    HDG.StaticData.Recipes:VisitReagents(recipe, function(slot)
         if slot.itemID and slot.qty and lumberSet[slot.itemID] then
             out[slot.itemID] = (out[slot.itemID] or 0) + slot.qty
         end
@@ -146,10 +146,10 @@ local function buildLumberRequiredMap(state)
     local byItemID  = HDG.HousingCatalogObserver.byItemID
     local lumberSet = _buildLumberItemSet()
     local out       = {}
-    local db = HDG.StaticData.Professions:GetAll()
+    local db = HDG.StaticData.Recipes:GetAll()
     if type(db) ~= "table" then return out end
     for _, recipe in pairs(db) do
-        if recipe.itemID and recipe.slots then
+        if recipe.itemID then
             local obsRow  = byItemID[recipe.itemID]
             local decorID = obsRow and obsRow.decorID
             if decorID and not owned[decorID] then
@@ -164,15 +164,14 @@ end
 local function buildLumberQueueNeed(state)
     local out = {}
     local q   = state.account.craft.queue
-    local db  = HDG.StaticData.Professions:GetAll()
     if #q == 0 then return out end
     local lumberSet = {}
     for _, l in ipairs(HDG.Constants.LUMBER_DATA) do
         if l.id then lumberSet[l.id] = true end
     end
     for _, row in ipairs(q) do
-        local recipe = db[row.recipeID]
-        HDG.StaticData.Professions:VisitBasicSlots(recipe, function(slot)
+        local recipe = HDG.StaticData.Recipes:Get(row.recipeID)
+        HDG.StaticData.Recipes:VisitReagents(recipe, function(slot)
             if slot.itemID and slot.qty and lumberSet[slot.itemID] then
                 out[slot.itemID] = (out[slot.itemID] or 0)
                     + slot.qty * (row.remaining or 1)  -- exception(boundary): queue row from SVars may lack remaining
@@ -225,10 +224,10 @@ Selectors:Register("warehouse.lumberRows", {
 
 -- Collect distinct basic reagents: { [itemID] = displayName }.
 -- slot.name preferred; falls back to reagentName(). First-occurrence wins.
-local function _collectDistinctBasicReagents(recipes, db)
+local function _collectDistinctBasicReagents(recipes)
     local distinct = {}
     for _, r in ipairs(recipes) do
-        HDG.StaticData.Professions:VisitBasicSlots(db and db[r.recipeID], function(slot)
+        HDG.StaticData.Recipes:VisitReagents(HDG.StaticData.Recipes:Get(r.recipeID), function(slot)
             if slot.itemID and not distinct[slot.itemID] then
                 distinct[slot.itemID] = slot.name or reagentName(slot.itemID)
             end
@@ -238,11 +237,11 @@ local function _collectDistinctBasicReagents(recipes, db)
 end
 
 -- Sum needed reagents across the queue: { [itemID] = totalQty }.
-local function _buildNeedMapFromQueue(queue, db)
+local function _buildNeedMapFromQueue(queue)
     local need = {}
     if #queue == 0 then return need end
     for _, row in ipairs(queue) do
-        HDG.StaticData.Professions:VisitBasicSlots(db[row.recipeID], function(slot)
+        HDG.StaticData.Recipes:VisitReagents(HDG.StaticData.Recipes:Get(row.recipeID), function(slot)
             if slot.itemID and slot.qty then
                 need[slot.itemID] = (need[slot.itemID] or 0)
                     + slot.qty * (row.remaining or 1)  -- exception(boundary): queue row from SVars may lack remaining
@@ -272,9 +271,8 @@ Selectors:Register("warehouse.allMaterialsRows", {
     fn = function(state, ctx)
         local recipes  = Selectors:Call("recipes.filteredRecipes",       state, ctx)
         local query    = Selectors:Call("warehouse.matSearch",           state, ctx):lower()
-        local db       = HDG.StaticData.Professions:GetAll()
-        local distinct = _collectDistinctBasicReagents(recipes, db)
-        local need     = _buildNeedMapFromQueue(state.account.craft.queue, db)
+        local distinct = _collectDistinctBasicReagents(recipes)
+        local need     = _buildNeedMapFromQueue(state.account.craft.queue)
         local counts   = HDG.BagObserver:GetCounts()
         local bo       = HDG.BagObserver
         local out = {}
@@ -310,10 +308,9 @@ Selectors:Register("warehouse.usedInRows", {
             return { { kind = "usedInEmpty", label = "Click a material -> uses" } }
         end
         local all = Selectors:Call("recipes.filteredRecipes", state, ctx)
-        local db  = HDG.StaticData.Professions:GetAll()
         local out = {}
         for _, r in ipairs(all) do
-            HDG.StaticData.Professions:VisitBasicSlots(db and db[r.recipeID], function(slot)
+            HDG.StaticData.Recipes:VisitReagents(HDG.StaticData.Recipes:Get(r.recipeID), function(slot)
                 if slot.itemID == materialID then
                     out[#out + 1] = {
                         kind           = "usedInRow",
@@ -384,26 +381,31 @@ Selectors:Register("recipes.allRecipes", {
         "session.catalog.sweepGeneration",
     },
     fn = function(state)
-        local db = HDG.StaticData.Professions:GetAll()
+        -- DecorDB (curated, decor-only) is the source of truth; ProfessionsDB is
+        -- PowerCrafter-only now. recipeID == produced itemID (DecorDB's top-level key
+        -- is a synthetic build ID -- emit r.itemID). expansion is a profession
+        -- skill-line ("Classic Alchemy") -> normalize; icon comes from the item.
+        local db = HDG.StaticData.Recipes:GetAll()
         if type(db) ~= "table" then return {} end
         -- EnsureStateShape guarantees account.recipes + account.collection. Strict read.
         local knownByItem = state.account.recipes
         local owned       = state.account.collection.ownedDecorIDs
         local byItemID    = HDG.HousingCatalogObserver.byItemID
         local out = {}
-        for recipeID, r in pairs(db) do
+        for _, r in pairs(db) do
             if r.itemID then
                 local known   = knownByItem[r.itemID]
                 local obsRow  = byItemID[r.itemID]
                 local decorID = obsRow and obsRow.decorID
+                local exp     = HDG.Expansion.FromSkillLine(r.expansion)
                 out[#out + 1] = {
-                    recipeID         = recipeID,
+                    recipeID         = r.itemID,
                     itemID           = r.itemID,
-                    name             = r.name or ("recipe " .. recipeID),
+                    name             = r.name or ("recipe " .. r.itemID),
                     profession       = r.profession or "",
-                    expansion        = r.expansion,
-                    expansionShort   = expansionShort(r.expansion),
-                    icon             = r.icon,
+                    expansion        = exp,
+                    expansionShort   = expansionShort(exp),
+                    icon             = HDG.ItemNameResolver:ResolveIcon(r.itemID),
                     isKnown          = (known and (known.selfKnown or known.altKnown)) and true or false,
                     -- True when the produced decor is owned. Drives green-name treatment.
                     isDecorCollected = (decorID ~= nil) and owned[decorID] and true or false,
@@ -713,16 +715,15 @@ Selectors:Register("recipes.queueRows", {
              "account.recipes"},
     fn = function(state)
         local q        = state.account.craft.queue
-        local db       = HDG.StaticData.Professions:GetAll()
         local known    = state.account.recipes
         local counts   = HDG.BagObserver:GetCounts()
         local out = {}
         for pos, row in ipairs(q) do
-            local recipe     = db and db[row.recipeID]
+            local recipe     = HDG.StaticData.Recipes:Get(row.recipeID)
             local recipeName = (recipe and recipe.name)
                 or ("recipe " .. tostring(row.recipeID))
             local knownRow   = recipe and known[recipe.itemID]
-            local spellID    = recipe and recipe.recipeID   -- ProfessionsDB: recipeID IS the spellID
+            local spellID    = recipe and recipe.spellID
             local selfKnown  = (knownRow and knownRow.selfKnown) and true or false
             -- pct: 0..1 ratio of materials covered.
             local pct        = (recipe and spellID)
@@ -732,7 +733,7 @@ Selectors:Register("recipes.queueRows", {
             local maxCraftable = 0
             if canCraft and recipe then
                 maxCraftable = 999999
-                HDG.StaticData.Professions:VisitBasicSlots(recipe, function(slot)
+                HDG.StaticData.Recipes:VisitReagents(recipe, function(slot)
                     if slot.itemID and slot.qty and slot.qty > 0 then
                         local have = counts[slot.itemID] or 0  -- exception(boundary): sparse bag map
                         local possible = math.floor(have / slot.qty)
@@ -750,7 +751,7 @@ Selectors:Register("recipes.queueRows", {
                 requested    = row.requested,
                 name         = recipeName,
                 profession   = recipe and recipe.profession or "",
-                icon         = recipe and recipe.icon,
+                icon         = HDG.ItemNameResolver:ResolveIcon(row.recipeID),
                 spellID      = spellID,
                 selfKnown    = selfKnown,
                 canCraft     = canCraft,
@@ -840,10 +841,9 @@ Selectors:Register("recipes.queueReadinessRows", {
         if not q or #q == 0 then return {} end
         local bagCounts = HDG.BagObserver:GetCounts()
         local craftableState = Selectors:Call("decor.craftableState", state, ctx)
-        local db = HDG.StaticData.Professions:GetAll()
         local out = {}
         for _, row in ipairs(q) do
-            local recipe = db and db[row.recipeID]
+            local recipe = HDG.StaticData.Recipes:Get(row.recipeID)
             local s = HDG.PowerCrafter:GetRecipeShortage(
                 row.recipeID, row.remaining or 1, bagCounts)  -- migration: old SVars may lack `remaining`
             out[#out + 1] = {
@@ -1044,15 +1044,14 @@ Selectors:Register("recipes.countLabel", {
 })
 
 -- ---------- Selected-recipe panel --------------------------------------------
--- ADR-003a: ProfessionsDB read inside closure (deterministic post-init).
+-- ADR-003a: DecorDB read inside closure (deterministic post-init).
 Selectors:Register("recipes.selectedRecipe", {
     reads = {"session.staticData.tick"},
     calls = {"recipes.selectedRecipeID"},
     fn = function(state, ctx)
         local rid = Selectors:Call("recipes.selectedRecipeID", state, ctx)
         if not rid then return nil end
-        local db = HDG.StaticData.Professions:GetAll()
-        return db and db[rid] or nil
+        return HDG.StaticData.Recipes:Get(rid)
     end,
 })
 
@@ -1133,7 +1132,7 @@ Selectors:Register("recipes.queueLabel", {
 local function syntheticQueueFromSelection(state, ctx)
     local r = Selectors:Call("recipes.selectedRecipe", state, ctx)
     if not r then return nil end
-    return { { recipeID = r.recipeID, itemID = r.itemID, remaining = 1 } }
+    return { { recipeID = r.itemID, itemID = r.itemID, remaining = 1 } }
 end
 
 -- Effective queue: real queue if non-empty; else selection-derived fallback.
@@ -1246,10 +1245,9 @@ Selectors:Register("recipes.materials.direct", {
     fn = function(state, ctx)
         local queue = effectiveQueue(state, ctx)
         if not queue then return {} end
-        local db = HDG.StaticData.Professions:GetAll()
         local qtyMap = {}
         for _, row in ipairs(queue) do
-            HDG.StaticData.Professions:VisitBasicSlots(db and db[row.recipeID], function(slot)
+            HDG.StaticData.Recipes:VisitReagents(HDG.StaticData.Recipes:Get(row.recipeID), function(slot)
                 if slot.itemID and slot.qty then
                     qtyMap[slot.itemID] = (qtyMap[slot.itemID] or 0)
                         + slot.qty * (row.remaining or 1)  -- exception(boundary): queue row from SVars may lack remaining
@@ -1277,13 +1275,12 @@ Selectors:Register("recipes.materials.raw", {
 -- so same-itemID-across-recipes doesn't collide in the scrollbox key map.
 local function emitByRecipeGroups(queue, groups)
     local counts = HDG.BagObserver:GetCounts()
-    local db = HDG.StaticData.Professions:GetAll()
     local out = {}
     for pos = 1, #queue do
         local group = groups[pos]
         if group and group.materials then
             local row = queue[pos]
-            local recipe = db and db[group.recipeID]
+            local recipe = HDG.StaticData.Recipes:Get(group.recipeID)
             local recipeName = (recipe and recipe.name)
                 or ("recipe " .. tostring(group.recipeID))
             local remaining = (row and row.remaining) or 1

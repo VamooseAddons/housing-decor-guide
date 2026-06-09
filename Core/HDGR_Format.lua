@@ -15,6 +15,18 @@ local F = HDG.Format
 -- drift between surfaces.
 F.BRAND_PREFIX = "|cff0070dd[HDG]|r"
 
+-- Import dates arrive as a unix timestamp (wowdb: 1777074521) or an already-
+-- formatted string (wowhead: "2026-03-10"). Render both as YYYY-MM-DD; a string
+-- date (has dashes -> tonumber nil) passes through unchanged. nil/empty -> nil.
+function F.FriendlyDate(d)
+    if d == nil or d == "" then return nil end
+    local n = tonumber(d)
+    if n and n > 1000000000 and _G.date then  -- exception(boundary): unix ts -> date(); date() absent in headless tests
+        return _G.date("%Y-%m-%d", n)
+    end
+    return tostring(d)
+end
+
 -- Returns "" for zero/nil. FormatGoldZero is the zero-visible variant (column-aligned tables).
 --   FormatAmount(n)              -> "1,234"  (commas, suppress zero)
 --   FormatCurrency(amount, cid)  -> "1,234 <icon>"
