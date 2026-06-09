@@ -1,4 +1,54 @@
-## [Unreleased]
+## [3.1.2] - 2026-06-10 (June 2026)
+
+ADDED:
+- New "Font" picker in Settings > Advanced (below Language): Default (your client's
+  locale font) or Arial Narrow (crisper, also covers Cyrillic). Applies live. Both
+  choices are glyph-complete on every locale.
+- Recipes filter is now a full-width dropdown (was four chips) with a new "Decor
+  not collected" option that shows only recipes whose decoration you haven't
+  collected yet. Options: All Recipes (default), Known Recipes, Ready to Craft,
+  Unknown Recipes, Decor not collected.
+- Settings now has a "Lumber Tracker" section with an "Auto-open Lumber Tracker"
+  checkbox -- the same toggle that lives on the Warehouse tab, so flipping either
+  one updates both.
+- Move Planner: hovering the A/B/C/D plot-filter chips or the refresh icon now
+  shows a tooltip explaining them (click a letter to filter the plot list; refresh
+  to clear).
+
+CHANGED:
+- The Blizzard Settings panel's "HDG window scale" slider and "Waypoint provider"
+  dropdown moved from the Interface page to the Advanced page (Interface keeps the
+  General + Zone Scanner sections).
+- Mouse-action hints (row tooltips + the header hint popups) now lead with the same
+  left/right click glyphs used elsewhere instead of the words "Left-click:" /
+  "Right-click:", and the Decor Browser hints are tighter ("Select a decor item" /
+  "Favorite or unfavorite" / "Send to craft queue").
+- Style Curator now lists only decor you actually own (have collected), matching the
+  in-game House Editor's gate -- a Style is a grouping of pieces you can place, so
+  un-collected catalog entries no longer clutter the source list or the
+  "unassigned" count.
+- Shopping List header summary now counts the Crafting / Auction House lane
+  separately ("... - 2 AH - 5 wish") instead of lumping those crafted items in with
+  the Wishlist tally. The redundant "Shopping" heading on the count row is gone --
+  the window title already says "Shopping List".
+
+FIXED:
+- Russian (and other non-Latin) clients no longer show item names as boxes. The
+  addon was hardcoding the Latin-only FRIZQT font; it now uses the client's own
+  per-locale font (STANDARD_TEXT_FONT), which is the Cyrillic FRIZQT on ruRU and
+  the regional face on CJK clients. English/Latin locales are unchanged.
+- "Buy Mats from AH" no longer adds lumber to the Auctionator list -- lumber is
+  Bind-on-Pickup (you farm it; it's never on the AH), so it's dropped from the
+  buy-list. Materials whose names hadn't loaded yet were also being sent as a
+  useless "item <id>" search term that Auctionator couldn't find; they now fall
+  back to the catalog name (the same one the Materials panel shows).
+- Shopping List +/- quantity buttons now apply a relative change to the live count,
+  so clicking quickly accumulates correctly (previously rapid clicks could collapse
+  into a single step because the button captured a stale quantity between redraws).
+- Lumber Tracker: removed the redundant "Back" button from the bottom bar -- the
+  [X] already closes the tracker, and it's a standalone window, so there was nothing
+  to go "back" to. The Warehouse tab's lumber toggle is now clearly labeled
+  "Auto-open Lumber Tracker" (was "Auto-show on harvest").
 
 ## [3.1.1] - 2026-06-09 (June 2026)
 

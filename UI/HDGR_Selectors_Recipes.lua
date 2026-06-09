@@ -90,8 +90,30 @@ Selectors:Register("recipes.listFilter", {
     reads = {"session.ui.recipes.listFilter"},
     fn = function(state) return state.session.ui.recipes.listFilter end,
 })
-Selectors:DefineEnumOver("recipes.isListFilter", "recipes.listFilter",
-                         { "all", "known", "ready", "unknown" })
+-- Full-width filter dropdown options (single-select). Default "all".
+-- "decorUncollected" keeps recipes whose produced decor isn't collected yet
+-- (the tooltip's "Decor: Not collected"). Static set; labels from Locale.
+Selectors:Register("recipes.listFilterMenuItems", {
+    reads = { "account.config.scheme" },   -- dim suffix recolors on theme switch
+    fn = function()
+        local L   = HDG.Locale
+        local dim = HDG.Theme:ColorCode("text.dim")
+        -- descKey nil/empty -> label only (no dim suffix).
+        local function item(value, labelKey, descKey)
+            local label = L:Get(labelKey)
+            local desc  = descKey and L:Get(descKey)
+            if not desc or desc == "" then return { value = value, text = label } end
+            return { value = value, text = label .. "   " .. dim .. desc .. "|r" }
+        end
+        return {
+            item("all",              "REC_FILTER_ALL",              "REC_FILTER_ALL_DESC"),
+            item("known",            "REC_FILTER_KNOWN",            "REC_FILTER_KNOWN_DESC"),
+            item("ready",            "REC_FILTER_READY",            "REC_FILTER_READY_DESC"),
+            item("unknown",          "REC_FILTER_UNKNOWN",          "REC_FILTER_UNKNOWN_DESC"),
+            item("decorUncollected", "REC_FILTER_DECOR_UNCOLLECTED", nil),
+        }
+    end,
+})
 
 -- Warehouse material selection + search (extracted from Recipes tab).
 Selectors:DefinePath("warehouse.selectedMaterialID", "session.ui.warehouse.selectedMaterialID")
@@ -914,6 +936,14 @@ Selectors:Register("recipes.groupedRows", {
             local kept, UNKNOWN = {}, HDG.Constants.RECIPE_STATE.UnknownOnAccount
             for _, r in ipairs(pre) do
                 if craftableState(r.itemID) == UNKNOWN then kept[#kept + 1] = r end
+            end
+            pre = kept
+        elseif listFilter == "decorUncollected" then
+            -- Keep recipes whose produced decor you haven't collected yet
+            -- (isDecorCollected is stamped by allRecipes off ownedDecorIDs).
+            local kept = {}
+            for _, r in ipairs(pre) do
+                if not r.isDecorCollected then kept[#kept + 1] = r end
             end
             pre = kept
         end

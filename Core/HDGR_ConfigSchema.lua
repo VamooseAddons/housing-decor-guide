@@ -35,6 +35,7 @@ local schema = {
     -- override); other values are housing background atlas names applied over it.
     DECOR_PREVIEW_BG   = { key = "decorPreviewBg",    default = "default",  scope = Scope.Profile },
     SCALE              = { key = "scale",             default = 1.0,        scope = Scope.Profile },
+    FONT               = { key = "fontFamily",        default = "default",  scope = Scope.Profile },
 
     -- ===== Locale ==========================================================
     -- Sentinel "" means "use GetLocale() at first read". A player picking a

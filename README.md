@@ -141,6 +141,23 @@ placement-cost display, and dye variants handled for you.
 - **Discord:** https://discord.gg/RWZaxJaHFP
 - **Issues / requests:** [open an issue](../../issues) or post in Discord
 
+## Name & branding
+
+The **code** in this repository is free to use, modify, and redistribute under the
+[MIT License](LICENSE). The **"Vamoose" name, the addon name ("Vamoose's Housing Decor
+Guide"), and the logo/artwork are not** -- they identify the official addon and aren't
+granted by the code license.
+
+If you fork or redistribute:
+- **Rename** your version and use your own branding. Don't ship it under the Vamoose
+  name or present it as the official Housing Decor Guide.
+- Don't re-upload it to CurseForge, Wago, or elsewhere as if it were this addon.
+- A credit/link back is appreciated but not required (the MIT notice already covers
+  attribution).
+
+This is the normal open-source split: the license covers the code; the name and identity
+stay with the project.
+
 ## License
 
 MIT -- see [LICENSE](LICENSE).

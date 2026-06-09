@@ -140,12 +140,8 @@ LC.widgets["shoppingHeaderPanel.close"] = {
 
 -- ===== Widgets -- content panel header slot ==================================
 
-LC.widgets["shoppingPanel.title"] = {
-    tooltip = false,
-    kind = "label", role = "TextHeading", ["in"] = "shoppingPanel", slot = "header",
-    text = "locale:SHOP_PANEL_TITLE", font = "heading",
-    height = 18, width = "auto", order = 10,
-}
+-- (No panel title: the window titlebar already reads "Shopping List", so a
+--  second "Shopping" heading in the content header was redundant.)
 -- Summary: width="fill" absorbs slack and truncates gracefully
 -- (auto+spacer shrank to 0 on long text, pushing the dropdown out of the slot).
 LC.widgets["shoppingPanel.summary"] = {

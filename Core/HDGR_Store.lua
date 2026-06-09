@@ -40,6 +40,11 @@ local function NewConfig()
         -- Subscriber in HDGR_Window forwards account.config.scale changes
         -- to MainFrame:SetScale. Range 0.5 -- 1.5 (clamped at write).
         scale              = 1.0,
+        -- fontFamily: addon-text font face. "default" = the client's per-locale
+        -- STANDARD_TEXT_FONT (glyph-complete everywhere); "arialn" = Arial Narrow
+        -- (crisper sub-12px, also carries Cyrillic). Both are glyph-safe on every
+        -- locale -- Theme:BuildFontObjects resolves the face, subscriber re-applies live.
+        fontFamily         = "default",
         -- Locale follows the same generic CONFIG_SET { key, value } dispatch
         -- pattern as scheme. HDGR_Locale subscribes to invalidation on this
         -- path and forwards to Locale:SetLocale + RefreshMainWindow.
@@ -3385,6 +3390,27 @@ function HDG.Store:_RawDispatch(action)
             for _, entry in ipairs(list.items) do
                 if entry.itemID == payload.itemID and entry.npcID == payload.npcID then
                     entry.qty = math.max(1, math.floor(tonumber(payload.qty) or 1))  -- exception(boundary): string-input qty from EditBox
+                    break
+                end
+            end
+        end
+
+    elseif action.type == A.SHOPPING_ITEM_ADJUST_QTY then
+        -- Relative delta applied to CURRENT state, so rapid +/- clicks accumulate:
+        -- the row buttons can't snapshot qty (re-render is deferred a frame, so a
+        -- captured absolute qty collides). Remove-at-zero lives here, not the
+        -- controller, so the whole transition is atomic.
+        local listID = payload.listID or self.state.account.activeShoppingListId
+        local list = self.state.account.vendorShoppingLists[listID]
+        if list then
+            for i, entry in ipairs(list.items) do
+                if entry.itemID == payload.itemID and entry.npcID == payload.npcID then
+                    local nextQty = (entry.qty or 1) + payload.delta  -- exception(boundary): legacy shopping entry pre-qty
+                    if nextQty <= 0 then
+                        table.remove(list.items, i)
+                    else
+                        entry.qty = nextQty
+                    end
                     break
                 end
             end

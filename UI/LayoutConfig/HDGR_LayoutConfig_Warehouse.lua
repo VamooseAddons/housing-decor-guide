@@ -41,7 +41,7 @@ LC.widgets["warehousePanel.title"] = {
 LC.widgets["warehousePanel.autoShowToggle"] = {
     tooltip = { recipe = "LumberAutoShow" },
     kind = "checkbox", ["in"] = "warehousePanel", slot = "header", font = "button",
-    text = "locale:WARE_AUTOSHOW_TOGGLE", width = 170, height = 22, order = 20,
+    text = "locale:WARE_AUTOSHOW_TOGGLE", width = 200, height = 22, order = 20,
     binding = { checked = "warehouse.autoShowLumber" },
 }
 

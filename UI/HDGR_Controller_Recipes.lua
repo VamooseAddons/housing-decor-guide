@@ -42,6 +42,8 @@ local function buildFilterChain(state)
     if s.listFilter and s.listFilter ~= "all" then
         if s.listFilter == "known" then parts[#parts + 1] = "Known"
         elseif s.listFilter == "ready" then parts[#parts + 1] = "Ready to Craft"
+        elseif s.listFilter == "unknown" then parts[#parts + 1] = "Unknown"
+        elseif s.listFilter == "decorUncollected" then parts[#parts + 1] = "Decor not collected"
         end
     end
     return "Filter: " .. table.concat(parts, " -> ")
@@ -703,17 +705,8 @@ function RecipesController:Wire(rootFrame)
         pushFilterToast()
     end)
 
-    -- List filter chips: All / Known / Ready / Unknown. Single-select.
-    for _, filter in ipairs({ "All", "Known", "Ready", "Unknown" }) do
-        local captured = filter:lower()
-        HDG.UI.OnClick(rootFrame, "recipesListPanel.filter" .. filter, function()
-            HDG.Store:Dispatch({
-                type    = HDG.Constants.ACTIONS.RECIPES_SET_LIST_FILTER,
-                payload = { filter = captured },
-            })
-            pushFilterToast()
-        end)
-    end
+    -- List filter is a full-width dropdown now -- it self-dispatches
+    -- RECIPES_SET_LIST_FILTER via its `dispatch` spec (no controller wiring).
 
     -- Expansion + Materials-mode dropdowns self-wire via kind="dropdown"
     -- (see LayoutConfig_Recipes.lua); they dispatch directly.

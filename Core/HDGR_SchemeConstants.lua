@@ -46,17 +46,16 @@ local function hex(s, a)
     return { r = r / 255, g = g / 255, b = b / 255, a = a or 1 }  -- exception(boundary): palette factory optional alpha arg
 end
 
--- Fonts are shared across all themes. FRIZQT across every role keeps typography
--- unified; ARIALN is slightly crisper sub-12px but the family swap reads as inconsistent.
--- Locale-aware base: FRIZQT covers Latin + Cyrillic (deDE/frFR/esES/ruRU/...), but has
--- NO CJK glyphs -- on zhCN/zhTW/koKR clients it renders tofu boxes. STANDARD_TEXT_FONT is
--- WoW's per-locale font (the regional CJK face on those clients), so CJK locales use it.
--- (Old HDG lesson: a hardcoded FRIZQT gave CJK users glyph-fallback boxes.)
-local CJK_LOCALES = { zhCN = true, zhTW = true, koKR = true }
-local _baseFont = "Fonts\\FRIZQT__.TTF"
-if CJK_LOCALES[(GetLocale and GetLocale()) or ""] and STANDARD_TEXT_FONT then
-    _baseFont = STANDARD_TEXT_FONT
-end
+-- Fonts are shared across all themes. We use Blizzard's per-locale STANDARD_TEXT_FONT
+-- as the base so we render every glyph the client can. Hardcoding "Fonts\FRIZQT__.TTF"
+-- is a LATIN-ONLY file and shows tofu boxes wherever the client points its standard
+-- font at a different file (verified against Blizzard_Fonts_Shared/GameFonts.xml):
+--   ruRU -> Fonts\FRIZQT___CYR.TTF (Cyrillic -- FRIZQT__ has NO Cyrillic, despite the name)
+--   koKR -> 2002.TTF   zhCN -> ARKai_T.ttf   zhTW -> blei00d.TTF   (CJK)
+-- On enUS + every Latin locale STANDARD_TEXT_FONT IS Fonts\FRIZQT__.TTF, so the look is
+-- unchanged there, and the FRIZQT family (incl. its _CYR sibling) keeps typography
+-- unified. (STANDARD_TEXT_FONT is set by Blizzard_Fonts_Shared, before addons load.)
+local _baseFont = STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF"  -- exception(boundary): Blizzard global; FRIZQT fallback if somehow unset
 local FONT_HEADING = _baseFont
 local FONT_BODY    = _baseFont
 local FONT_SMALL   = _baseFont

@@ -73,18 +73,6 @@ function HDG.LumberController:Wire(rootFrame)
         HDG.LumberObserver:FinalizeSession()
     end)
 
-    -- Back: dismisses lumber window + opens main window (if currently hidden).
-    HDG.UI.OnClick(rootFrame, "lumberActionPanel.backToMain", function()
-        HDG.Store:Dispatch({
-            type    = HDG.Constants.ACTIONS.LUMBER_WINDOW_TOGGLE,
-            payload = { visible = false },
-        })
-        local state = HDG.Store:GetState()  -- exception(false-positive): top-level controller method (not a row factory)
-        if not (state.account.ui.mainWindowShown == true) then
-            HDG.Store:Dispatch({ type = HDG.Constants.ACTIONS.MAIN_WINDOW_TOGGLE })
-        end
-    end)
-
     -- Close [X]: hides lumber window only (no main-window side effect).
     HDG.UI.OnClick(rootFrame, "lumberPanel.close", function()
         HDG.Store:Dispatch({

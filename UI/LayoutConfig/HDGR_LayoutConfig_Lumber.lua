@@ -186,7 +186,7 @@ LC.widgets["lumberRadarPanel.radar"] = {
 }
 
 -- ===== Action bar widgets ====================================================
--- Spacer + End Session + Back. End Session finalizes but keeps window open; [X] dismisses.
+-- Spacer + End Session. End Session finalizes but keeps window open; [X] dismisses.
 LC.widgets["lumberActionPanel.spacer"] = {
     tooltip = false,
     kind = "spacer", ["in"] = "lumber.action.bar",
@@ -196,11 +196,6 @@ LC.widgets["lumberActionPanel.endSession"] = {
     tooltip = false,
     kind = "button", ["in"] = "lumber.action.bar", font = "small",
     text = "locale:LUM_END_SESSION", width = "auto", height = 20, order = 20, variant = "tertiary",
-}
-LC.widgets["lumberActionPanel.backToMain"] = {
-    tooltip = false,
-    kind = "button", ["in"] = "lumber.action.bar", font = "small",
-    text = "locale:COMMON_BACK", width = "auto", height = 20, order = 30, variant = "tertiary",
 }
 
 -- ===== Satellite window (HDG-ADR-025 step 5) ============================

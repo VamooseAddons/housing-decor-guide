@@ -124,28 +124,22 @@ local function _showItemChrome(row, ed)
     row._iconTex:Show()
     -- Chips -- reuse Acquire's exact same renderer (single derivation point).
     row._chipsFs:SetText(HDG.UI.GateChips(ed.itemID))
-    -- Wire +/- and X. ed values captured per Configure so handlers always
-    -- see the row's current (itemID, npcID, qty).
-    local itemID, npcID, qty = ed.itemID, ed.npcID, ed.qty or 1  -- migration (legacy shopping entries pre-qty)
+    -- Wire +/- and X. Only (itemID, npcID) are captured per Configure; qty is NOT
+    -- snapshotted -- the buttons dispatch a relative ADJUST_QTY intent so rapid
+    -- clicks accumulate against current state (re-render is deferred a frame, so a
+    -- captured absolute qty would collide). The reducer removes the row at qty <=0.
+    local itemID, npcID = ed.itemID, ed.npcID
     row._plusBtn:SetScript("OnClick", function()
         HDG.Store:Dispatch({
-            type = A.SHOPPING_ITEM_SET_QTY,
-            payload = { itemID = itemID, npcID = npcID, qty = qty + 1 },
+            type = A.SHOPPING_ITEM_ADJUST_QTY,
+            payload = { itemID = itemID, npcID = npcID, delta = 1 },
         })
     end)
     row._minusBtn:SetScript("OnClick", function()
-        local nextQty = qty - 1
-        if nextQty <= 0 then
-            HDG.Store:Dispatch({
-                type = A.SHOPPING_ITEM_REMOVE,
-                payload = { itemID = itemID, npcID = npcID },
-            })
-        else
-            HDG.Store:Dispatch({
-                type = A.SHOPPING_ITEM_SET_QTY,
-                payload = { itemID = itemID, npcID = npcID, qty = nextQty },
-            })
-        end
+        HDG.Store:Dispatch({
+            type = A.SHOPPING_ITEM_ADJUST_QTY,
+            payload = { itemID = itemID, npcID = npcID, delta = -1 },
+        })
     end)
     row._deleteBtn:SetScript("OnClick", function()
         HDG.Store:Dispatch({

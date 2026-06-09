@@ -12,29 +12,24 @@
 
 ---
 
-## What's New in v3.1.1
+## What's New in v3.1.2
 
-Since the v3.0 ground-up rebuild, a steady run of additions and fixes:
+Localization and font fixes, plus a few Shopping List and Recipes updates.
 
 **New**
 
-- **Localization is back** -- the interface and tooltips are now translatable, with first-pass German, Spanish (Spain & Latin America), French, Italian, Korean, Portuguese (Brazil), Russian, and Chinese (Simplified & Traditional). Leave it on Auto to follow your client or pick a language in the addon options; decoration, vendor, and zone names always come straight from the game.
-- **Shift-click to queue** -- Shift-click any recipe, Goblin profit row, or craftable in Find Decor to send it straight to the craft queue.
-- **Multi-select Acquire filters** -- tick several values in the Expansion / Zone / Reputation / Sources / faction menus to widen a search (e.g. Cataclysm *and* Pandaria), shared across Shop by Vendor and Find Decor.
-- **Shopping List auto-sorts into three lanes** -- vendor-bought (matched to their seller from the live catalog, even on import), a "Crafting / Auction House" section for crafted decor (one-click send the batch to the queue *or* to Auctionator), and a Wishlist for what you truly can't buy.
-- **Recipe status at a glance** -- recipe and Goblin tooltips now show whether you already own the decor it makes and whether you've learned the recipe.
-- **Goblin auction velocity** -- three new sortable columns: TSM sale Rate and per-day average, plus current #AH listings on your realm.
+- **Font picker** -- Settings > Advanced has a new Font option: keep your client's default font, or switch to Arial Narrow, which is more compact and also covers Cyrillic. The change applies right away.
+- **Recipes filter dropdown** -- the All / Known / Ready / Unknown buttons are now a single dropdown, with a new "Decor not collected" entry that lists only recipes whose decoration you don't own yet.
+- **Lumber Tracker toggle** -- the addon settings now have a Lumber Tracker option to turn its auto-open on or off; it mirrors the toggle on the Warehouse tab.
+- **Move Planner tooltips** -- hovering the A/B/C/D plot filters or the refresh button now explains what each one does.
 
 **Fixes**
 
-- **Non-English clients** now render correct room shapes, labels, and placement cost in the Architect (rooms had been matched by localized name against an English-only table).
-- **Lumber Tracker** session and history counts now reflect only what you gather into your bags -- bank/warband stock loading in no longer shows as phantom "+N this session" or fake sessions.
-- **Send to Auctionator** again exports the buy *gap* -- each missing reagent with the quantity you still need, as an exact-name search.
-- **Find Decor's "Crafted" filter** lists only truly craftable decor, and vendor locations always come from the curated data so Find-by-Item and Shop-by-Vendor agree on where a seller is.
-- **Architect captures** no longer duplicate multi-floor rooms (stairwells, gardens), and a room's door points at the room it actually shares a wall with.
-- **Vendor waypoints** land in the right place (e.g. Maku now points into The Den, not across Harandar), and primary action buttons keep their label on hover.
+- **Non-Latin item names** -- on Russian (and other non-Latin) clients, item names that used to show as empty boxes now display correctly. HDG was using a Latin-only font and now uses your client's own per-locale font. If you still want a different face, pick Arial Narrow in the new Font option.
+- **Buy Mats from AH** -- no longer adds lumber to the Auctionator list (lumber is bound to you and can't be bought), and it now uses real item names so Auctionator can find them.
+- **Shopping List counts** -- the quantity buttons step correctly when clicked quickly, and the header lists auction-house items separately from your wishlist.
 
-> Upgrading from v2.x: your data carries over automatically; settings reset to new defaults (re-apply your theme/minimap in **Config**), and house projects need re-capturing from inside your house.
+Also: the window scale and waypoint provider settings moved to the Advanced page, mouse-action hints now use the left/right click icons, and the Style Curator lists only decor you own.
 
 ---
 
@@ -118,7 +113,7 @@ A companion window injects into Blizzard's House Editor so you can **place decor
 ---
 
 **Author:** Vamoose
-**Version:** 3.1.1
+**Version:** 3.1.2
 **Game Version:** 12.0.5+ (Midnight)
 **Source / Issues:** https://github.com/VamooseAddons/housing-decor-guide
 **Discord:** https://discord.gg/RWZaxJaHFP

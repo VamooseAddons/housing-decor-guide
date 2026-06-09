@@ -473,6 +473,10 @@ local function _stripChip(host, L, x, sz)
     chip:SetScript("OnClick", function()
         HDG.Store:Dispatch({ type = A.REMOVALIST_SET_LETTER_FILTER, payload = { letter = L } })
     end)
+    HDG.TooltipEngine:Attach(chip, {
+        title = "locale:TIP_REMOVALIST_FILTER_TITLE",
+        body  = "locale:TIP_REMOVALIST_FILTER_BODY",
+    })
     return chip
 end
 
@@ -494,6 +498,10 @@ local function buildRemovalistLetterStrip(parent, _spec)
     refresh:SetScript("OnClick", function()
         HDG.Store:Dispatch({ type = A.REMOVALIST_SET_LETTER_FILTER, payload = { letter = nil } })
     end)
+    HDG.TooltipEngine:Attach(refresh, {
+        title = "locale:TIP_REMOVALIST_RESET_TITLE",
+        body  = "locale:TIP_REMOVALIST_RESET_BODY",
+    })
     host._refresh = refresh
     return host
 end

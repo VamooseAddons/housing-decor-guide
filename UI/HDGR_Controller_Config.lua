@@ -144,6 +144,13 @@ function ConfigController:Wire(rootFrame)
         dispatch("CONFIG_SCALE_STEP", { direction = "inc" })
     end)
 
+    -- ===== Lumber Tracker: auto-open toggle ==================================
+    -- Mirrors the Warehouse-tab toggle (same action + bound selector, so both
+    -- checkboxes stay in sync through the binding engine).
+    HDG.UI.OnClick(rootFrame, "configPanel.lumberAutoShowToggle", function()
+        dispatch("LUMBER_AUTOSHOW_TOGGLE")
+    end)
+
     -- ===== Auction: source pills + TSM mode + Refresh from AH ================
     -- Relocated to the Goblin (Mogul) header/footer; wired in MogulController.
 

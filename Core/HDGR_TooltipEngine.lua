@@ -56,16 +56,20 @@ local function _loc(s)
 end
 
 -- ===== Click-hint lines (shared: clickHints widget + row tooltips) ==========
--- Build "Left-click: ...", "Right-click: ...", "Shift-click: ..." display lines
--- from a {leftText/dragText/rightText/shiftText} spec, resolving any "locale:KEY"
--- values at call time. One source of truth so the header clickHints widget and
--- the per-row tooltips never word the same action differently.
+-- Build the click-hint display lines from a {leftText/dragText/rightText/shiftText}
+-- spec, resolving any "locale:KEY" values at call time. Mouse actions are prefixed
+-- with the same housing-hotkey glyphs the header clickHints widget shows (inline
+-- atlas markup); Shift-click reads as "Shift-" + the left-click glyph, since the
+-- actual input is shift held while left-clicking. One source of truth so the
+-- header widget and per-row tooltips never word the same action differently.
+local GLYPH_LEFT  = "|A:housing-hotkey-icon-leftclick:14:14|a "
+local GLYPH_RIGHT = "|A:housing-hotkey-icon-rightclick:14:14|a "
 function TE.ClickHintLines(spec)
     local out = {}
-    if spec.leftText  then out[#out + 1] = "Left-click: "   .. _loc(spec.leftText)  end
-    if spec.dragText  then out[#out + 1] = "Click + drag: " .. _loc(spec.dragText)  end
-    if spec.rightText then out[#out + 1] = "Right-click: "  .. _loc(spec.rightText) end
-    if spec.shiftText then out[#out + 1] = "Shift-click: "  .. _loc(spec.shiftText) end
+    if spec.leftText  then out[#out + 1] = GLYPH_LEFT  .. _loc(spec.leftText)  end
+    if spec.dragText  then out[#out + 1] = GLYPH_LEFT  .. "drag: " .. _loc(spec.dragText) end
+    if spec.rightText then out[#out + 1] = GLYPH_RIGHT .. _loc(spec.rightText) end
+    if spec.shiftText then out[#out + 1] = "Shift-" .. GLYPH_LEFT .. _loc(spec.shiftText) end
     return out
 end
 

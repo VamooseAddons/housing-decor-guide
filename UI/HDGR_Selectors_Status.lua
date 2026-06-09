@@ -201,6 +201,10 @@ Selectors:Register("config.theme", {
     end,
 })
 
+-- (Font picker lives in Blizzard Settings -> Advanced, wired via BindSetting -- no
+-- selector needed. The font face itself is resolved in Theme:BuildFontObjects from
+-- account.config.fontFamily.)
+
 -- Decor 3D-preview background picker (config-theme dropdown pattern). current =
 -- the chosen atlas name, or "default" = the dark bgTile backdrop (no atlas override).
 Selectors:Register("decor.previewBg", {

@@ -299,12 +299,41 @@ function UI.GateChips(itemID, questDone, achEarned, repMet)
     return table.concat(out, " ")
 end
 
+-- Housing lumber is Bind-on-Pickup -- it's farmed via mounted harvest, never sold
+-- on the Auction House -- so it must never land in an Auctionator buy-list. Set
+-- built once from Constants.LUMBER_DATA (the 12 lumber types).
+local _lumberIDSet
+local function _isLumber(itemID)
+    if not _lumberIDSet then
+        _lumberIDSet = {}
+        for _, l in ipairs(HDG.Constants.LUMBER_DATA) do _lumberIDSet[l.id] = true end
+    end
+    return _lumberIDSet[itemID] == true
+end
+
+-- Resolve a reagent's name for an Auctionator search term. Auctionator searches by
+-- NAME, so an unresolved "item <id>" placeholder finds nothing. Live cache first
+-- (authoritative, exact AH name), then the curated ReagentsDB name (always present
+-- for housing reagents -- it's what the Materials panel shows), then the placeholder.
+local function _reagentSearchName(itemID)
+    local name = HDG.ItemNameResolver:ResolveName(itemID)
+    if (not name or name == "") and C_Item and C_Item.GetItemInfo then  -- exception(boundary): uncached item
+        name = (C_Item.GetItemInfo(itemID))
+    end
+    if not name or name == "" then
+        local row = HDG.StaticData.Reagents:Get(itemID)   -- exception(nullable): not every item is a known reagent
+        name = row and row[2]
+    end
+    if not name or name == "" then name = "item:" .. tostring(itemID) end
+    return name
+end
+
 -- Send a reagent buy-list to Auctionator as a shopping list. Each reagent is
 -- { id = itemID, qty = stillNeeded } (qty = the gap between what's needed and held).
--- When Auctionator exposes ConvertToSearchString we emit an exact-name search that
--- carries that quantity, so the list reflects the buy gap (not a fuzzy name search) --
--- parity with HDG v2.45. Bare-name fallback (older Auctionator). "item:<id>" fallback
--- so the list is never silently empty. Returns (count, present).
+-- BoP lumber is dropped (can't be AH-bought). When Auctionator exposes
+-- ConvertToSearchString we emit an exact-name search that carries that quantity, so
+-- the list reflects the buy gap (not a fuzzy name search) -- parity with HDG v2.45.
+-- Bare-name fallback (older Auctionator). Returns (count, present).
 function UI.SendReagentsToAuctionator(listName, reagents)
     local API = _G.Auctionator and _G.Auctionator.API and _G.Auctionator.API.v1  -- exception(boundary): optional addon
     if not (API and API.CreateShoppingList) then return 0, false end
@@ -312,19 +341,17 @@ function UI.SendReagentsToAuctionator(listName, reagents)
     local hasQty   = API.ConvertToSearchString ~= nil
     local terms = {}
     for _, mat in ipairs(reagents) do
-        local name = HDG.ItemNameResolver:ResolveName(mat.id)
-        if (not name or name == "") and C_Item and C_Item.GetItemInfo then  -- exception(boundary): uncached item
-            name = (C_Item.GetItemInfo(mat.id))
-        end
-        if not name or name == "" then name = "item:" .. tostring(mat.id) end
-        if hasQty then
-            terms[#terms + 1] = API.ConvertToSearchString(callerID, {
-                searchString = name,
-                isExact      = true,
-                quantity     = (mat.qty and mat.qty > 0) and mat.qty or nil,
-            })
-        else
-            terms[#terms + 1] = name
+        if not _isLumber(mat.id) then   -- BoP: farmed, never on the AH
+            local name = _reagentSearchName(mat.id)
+            if hasQty then
+                terms[#terms + 1] = API.ConvertToSearchString(callerID, {
+                    searchString = name,
+                    isExact      = true,
+                    quantity     = (mat.qty and mat.qty > 0) and mat.qty or nil,
+                })
+            else
+                terms[#terms + 1] = name
+            end
         end
     end
     if #terms > 0 then

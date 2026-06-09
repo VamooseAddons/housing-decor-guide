@@ -91,6 +91,22 @@ LC.sections["config.scaleRow"] = {
     height = 24, gap = "md", order = 20,
 }
 
+-- ---- Lumber Tracker section header + content --------------------------------
+
+LC.sections["config.lumberHeader"] = {
+    ["in"] = "config.body", layout = "horizontal",
+    height = 20, gap = "md", order = 20,
+}
+LC.sections["config.lumber"] = {
+    ["in"] = "config.body", layout = "vertical",
+    height = "content",   -- prevent flex distribution
+    gap = 8, order = 21,
+}
+LC.sections["config.lumberAutoShowRow"] = {
+    ["in"] = "config.lumber", layout = "horizontal",
+    height = 24, gap = "md", order = 10,
+}
+
 -- ---- Auction / Shopping section: REMOVED (moved to Goblin header/footer) -----
 -- See the widget-section note below; no auction sections remain on Config.
 
@@ -196,6 +212,8 @@ LC.widgets["configPanel.themeDropdown"] = {
     setConfig = { key = "scheme" },
 }
 
+-- (Font picker lives in Blizzard Settings -> Advanced, below Language.)
+
 -- Scale row: label + +/- pair. Quick-access surface; same CONFIG_SET{key="scale"} as Blizzard Settings.
 LC.widgets["configPanel.scaleLabel"] = {
     tooltip = false,
@@ -217,6 +235,23 @@ LC.widgets["configPanel.scaleIncBtn"] = {
     tooltip = false,
     kind = "button", ["in"] = "config.scaleRow", font = "small",
     text = "+", width = 24, height = 22, order = 40, variant = "tertiary",
+}
+
+-- ---- Lumber Tracker section --------------------------------------------------
+-- Auto-open toggle. Mirrors the Warehouse-tab toggle: same selector
+-- (warehouse.autoShowLumber) + same action (LUMBER_AUTOSHOW_TOGGLE), so the two
+-- stay in sync automatically via the binding engine.
+LC.widgets["configPanel.lumberSectionLabel"] = {
+    tooltip = false,
+    kind = "label", role = "TextHeading", ["in"] = "config.lumberHeader",
+    text = "locale:CFG_LUMBER_SECTION", font = "small",
+    width = "fill", height = 16, order = 10,
+}
+LC.widgets["configPanel.lumberAutoShowToggle"] = {
+    tooltip = { recipe = "LumberAutoShow" },
+    kind = "checkbox", ["in"] = "config.lumberAutoShowRow", font = "body",
+    text = "locale:WARE_AUTOSHOW_TOGGLE", width = 240, height = 22, order = 10,
+    binding = { checked = "warehouse.autoShowLumber" },
 }
 
 -- ---- Auction / Shopping ------------------------------------------------------

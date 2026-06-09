@@ -4,7 +4,7 @@
 --   shopping.activeList          -> active list record or nil
 --   shopping.activeListId        -> primitive id ("" or "Lnnn")
 --   shopping.activeListMenuItems -> dropdown menu items for the switcher
---   shopping.summary             -> { itemCount, vendorCount, wishCount, goldCost }
+--   shopping.summary             -> { itemCount, vendorCount, wishCount, ahCount, goldCost }
 --   shopping.summaryText         -> display text for header
 --   shopping.attribution         -> { source, url, desc, date, author } from list.meta
 --   shopping.hasAttribution      -> bool (visibility gate for banner)
@@ -81,13 +81,17 @@ Selectors:Register("shopping.summary", {
     calls = { "shopping.activeListEntries" },
     fn = function(state, ctx)
         local entries = Selectors:Call("shopping.activeListEntries", state, ctx)
-        local out = { itemCount = 0, vendorCount = 0, wishCount = 0, goldCost = 0 }
+        local out = { itemCount = 0, vendorCount = 0, wishCount = 0, ahCount = 0, goldCost = 0 }
         local vendors = {}
         for _, entry in ipairs(entries) do
             local qty = entry.qty or 1   -- migration: legacy imports may omit qty
             out.itemCount = out.itemCount + qty
+            -- Three lanes (mirrors _bucketShoppingEntries): vendor (npcID) | AH
+            -- (no npcID + tradeable BoE/crafted) | wishlist (everything else).
             if entry.npcID then
                 vendors[entry.npcID] = true
+            elseif entry.isTradeable then
+                out.ahCount = out.ahCount + qty
             else
                 out.wishCount = out.wishCount + qty
             end
@@ -97,7 +101,7 @@ Selectors:Register("shopping.summary", {
     end,
 })
 
--- Display text: "12 items - 3 vendors - 5 wish" or "0 items". Reads scheme for future color.
+-- Display text: "12 items - 3 vendors - 2 AH - 5 wish" or "0 items". Reads scheme for future color.
 Selectors:Register("shopping.summaryText", {
     reads = { "account.config.scheme" },
     calls = { "shopping.summary" },
@@ -108,6 +112,9 @@ Selectors:Register("shopping.summaryText", {
         if s.vendorCount > 0 then
             parts[#parts + 1] = string.format("%d vendor%s",
                 s.vendorCount, s.vendorCount == 1 and "" or "s")
+        end
+        if s.ahCount > 0 then
+            parts[#parts + 1] = string.format("%d AH", s.ahCount)
         end
         if s.wishCount > 0 then
             parts[#parts + 1] = string.format("%d wish", s.wishCount)

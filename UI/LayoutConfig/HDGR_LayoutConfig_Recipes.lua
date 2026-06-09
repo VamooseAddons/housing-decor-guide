@@ -110,12 +110,13 @@ LC.sections["recipes.listBody"] = {
     gap = "sm",
     order = 10,
 }
--- Recipe-list filter: All | Known | Ready | Unknown. Ready mode drives bucketed
--- grouping; Unknown keeps only recipes no account character has learned.
+-- Recipe-list filter: full-width dropdown (All / Known / Ready / Unknown / Decor
+-- not collected). Ready mode drives bucketed grouping; Unknown keeps only recipes
+-- no account character has learned; Decor-not-collected keeps uncollected decor.
 LC.sections["recipes.listFilterStrip"] = {
     ["in"] = "recipes.listBody",
     layout = "horizontal",
-    height = 22,
+    height = 26,
     gap = "sm",
     order = 7,
 }
@@ -343,31 +344,16 @@ LC.widgets["recipesListPanel.clickHints"] = {
     shiftText = "locale:REC_LIST_HINTS_SHIFT",
     width = 16, height = 16, order = 25,
 }
-LC.widgets["recipesListPanel.filterAll"] = {
+-- Full-width filter dropdown (All / Known / Ready / Unknown / Decor not
+-- collected). Self-wires: selecting an option dispatches RECIPES_SET_LIST_FILTER.
+-- "Ready" drives bucketed grouping; the others profession-group.
+LC.widgets["recipesListPanel.listFilterDropdown"] = {
     tooltip = false,
-    kind = "button", ["in"] = "recipes.listFilterStrip", font = "small",
-    text = "locale:COMMON_ALL", width = "auto", height = 20, order = 10, variant = "tertiary",
-    binding = { active = "recipes.isListFilter_all" },
-}
-LC.widgets["recipesListPanel.filterKnown"] = {
-    tooltip = false,
-    kind = "button", ["in"] = "recipes.listFilterStrip", font = "small",
-    text = "locale:REC_FILTER_KNOWN", width = "auto", height = 20, order = 20, variant = "tertiary",
-    binding = { active = "recipes.isListFilter_known" },
-}
-LC.widgets["recipesListPanel.filterReady"] = {
-    tooltip = false,
-    kind = "button", ["in"] = "recipes.listFilterStrip", font = "small",
-    text = "locale:REC_FILTER_READY", width = "auto", height = 20, order = 30, variant = "tertiary",
-    binding = { active = "recipes.isListFilter_ready" },
-}
--- Unknown = recipes NO character on the account has learned (craftableState =
--- UnknownOnAccount). Distinct from "Known" (current character).
-LC.widgets["recipesListPanel.filterUnknown"] = {
-    tooltip = { recipe = "RecipeFilterUnknown" },
-    kind = "button", ["in"] = "recipes.listFilterStrip", font = "small",
-    text = "locale:REC_FILTER_UNKNOWN", width = "auto", height = 20, order = 40, variant = "tertiary",
-    binding = { active = "recipes.isListFilter_unknown" },
+    kind = "dropdown", ["in"] = "recipes.listFilterStrip",
+    width = "fill", height = 25, order = 10,
+    selectionStripSuffix = true,   -- closed trigger shows the label only (rows keep the dim description)
+    binding  = { menu = "recipes.listFilterMenuItems", current = "recipes.listFilter" },
+    dispatch = { type = "RECIPES_SET_LIST_FILTER", payloadKey = "filter" },
 }
 LC.widgets["recipesListPanel.search"] = {
     tooltip = false,

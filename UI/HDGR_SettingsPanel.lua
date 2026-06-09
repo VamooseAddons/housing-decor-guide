@@ -7,9 +7,9 @@
 --   Housing Decor Guide (main category)
 --     Open / Reset buttons (Special Thanks moved to the Config tab)
 --   Housing Decor Guide / Interface (subcategory)
---     General: minimap, compartment, profession buttons, tooltip, scale, waypoint
+--     General: minimap, compartment, profession buttons, tooltip
 --     Zone Scanner: master toggle + popup/chat/sound sub-flags
---   Housing Decor Guide / Advanced: debug, mockTSM, locale
+--   Housing Decor Guide / Advanced: debug, mockTSM, scale, waypoint, locale, font
 --   Housing Decor Guide / Profiles: active profile dropdown + New/Delete
 --
 -- All controls have AddSearchTags for Blizzard's settings search.
@@ -68,7 +68,7 @@ local SCALE_MAX  = 1.5
 local RESETTABLE_KEYS = {
     "showMinimapButton", "showCompartment", "showProfessionButtons", "tooltipDecorTag",
     "hideInCombat", "waypointProvider", "scale",
-    "debug", "mockTSM", "locale",
+    "debug", "mockTSM", "locale", "fontFamily",
     "zoneScannerEnabled", "zoneScannerPopup", "zoneScannerPopupShopping",
     "zoneScannerChat", "zoneScannerSound",
 }
@@ -85,6 +85,7 @@ local SEARCH_TAGS = {
     debug                  = { "debug", "log", "verbose" },
     mockTSM                = { "tsm", "mock", "price", "auction", "debug" },
     locale                 = { "language", "locale", "translation" },
+    fontFamily             = { "font", "arial", "narrow", "typeface", "cyrillic" },
     zoneScannerEnabled     = { "zone", "alert", "scanner", "vendor" },
     zoneScannerPopup       = { "zone", "popup", "alert" },
     zoneScannerPopupShopping = { "zone", "popup", "shopping", "list", "alert" },
@@ -289,30 +290,7 @@ local function _buildInterfaceSubcategory(category)
         BindProxyBool(sub, layout, entry.key, entry.name, entry.desc)
     end
 
-    -- UI scale slider (same range + dispatch path as in-window +/- buttons).
-    local scaleSetting = BindSetting(sub, "scale", "HDG window scale", Settings.VarType.Number)
-    local sliderOpts   = Settings.CreateSliderOptions(SCALE_MIN, SCALE_MAX, SCALE_STEP)
-    sliderOpts:SetLabelFormatter(MinimalSliderWithSteppersMixin.Label.Right)
-    local scaleInit = Settings.CreateSlider(
-        sub, scaleSetting, sliderOpts,
-        "Scale of the Housing Decor Guide window only. Does NOT affect Blizzard's UI scale."
-    )
-    ApplyTags(scaleInit, "scale")
-
-    -- Waypoint provider dropdown.
-    local waypointSetting = BindSetting(sub, "waypointProvider", "Waypoint provider", Settings.VarType.String)
-    local function buildWaypointOptions()
-        local container = Settings.CreateControlTextContainer()
-        container:Add("auto",     "Auto (TomTom if loaded, else Blizzard)")
-        container:Add("tomtom",   "TomTom (falls back to Blizzard if not installed)")
-        container:Add("blizzard", "Blizzard")
-        return container:GetData()
-    end
-    local waypointInit = Settings.CreateDropdown(
-        sub, waypointSetting, buildWaypointOptions,
-        "Choose how HDG sets map waypoints. 'Auto' uses TomTom when loaded."
-    )
-    ApplyTags(waypointInit, "waypointProvider")
+    -- (HDG window scale + Waypoint provider moved to the Advanced subcategory.)
 
     -- Zone Scanner: master toggle + sub-flags greyed out when master is off
     -- (SetParentInitializer, matching ZoneAlertEngine's short-circuit).
@@ -347,6 +325,31 @@ local function _buildAdvancedSubcategory(category)
         "Debug: pretend TSM is installed and price every item at a flat 100g, so the TSM "
         .. "price path (Goblin profit columns, Profit calc) can be tested without TSM.")
 
+    -- UI scale slider (same range + dispatch path as the in-window +/- buttons).
+    local scaleSetting = BindSetting(sub, "scale", "HDG window scale", Settings.VarType.Number)
+    local sliderOpts   = Settings.CreateSliderOptions(SCALE_MIN, SCALE_MAX, SCALE_STEP)
+    sliderOpts:SetLabelFormatter(MinimalSliderWithSteppersMixin.Label.Right)
+    local scaleInit = Settings.CreateSlider(
+        sub, scaleSetting, sliderOpts,
+        "Scale of the Housing Decor Guide window only. Does NOT affect Blizzard's UI scale."
+    )
+    ApplyTags(scaleInit, "scale")
+
+    -- Waypoint provider dropdown.
+    local waypointSetting = BindSetting(sub, "waypointProvider", "Waypoint provider", Settings.VarType.String)
+    local function buildWaypointOptions()
+        local container = Settings.CreateControlTextContainer()
+        container:Add("auto",     "Auto (TomTom if loaded, else Blizzard)")
+        container:Add("tomtom",   "TomTom (falls back to Blizzard if not installed)")
+        container:Add("blizzard", "Blizzard")
+        return container:GetData()
+    end
+    local waypointInit = Settings.CreateDropdown(
+        sub, waypointSetting, buildWaypointOptions,
+        "Choose how HDG sets map waypoints. 'Auto' uses TomTom when loaded."
+    )
+    ApplyTags(waypointInit, "waypointProvider")
+
     -- exception(boundary): Locale module presence is load-order-dependent; minimal fallback when absent.
     local localeOptions
     if HDG.Locale and HDG.Locale.GetAvailableLocales then  -- exception(boundary): module optional (load-order)
@@ -374,6 +377,23 @@ local function _buildAdvancedSubcategory(category)
         "Language override. 'Auto' uses your WoW client locale. Changes take effect after /reload."
     )
     ApplyTags(localeInit, "locale")
+
+    -- Font face dropdown (just below Language). Only glyph-safe faces: "Default"
+    -- = the client's per-locale font, "Arial Narrow" = crisper + carries Cyrillic.
+    -- Applies live; never exposes a Latin-only face (would tofu on ruRU/CJK).
+    local fontSetting = BindSetting(sub, "fontFamily", "Font", Settings.VarType.String)
+    local function buildFontOptions()
+        local container = Settings.CreateControlTextContainer()
+        container:Add("default", "Default (locale)")
+        container:Add("arialn",  "Arial Narrow")
+        return container:GetData()
+    end
+    local fontInit = Settings.CreateDropdown(
+        sub, fontSetting, buildFontOptions,
+        "Font for HDG's text. 'Default' uses your client's locale font; 'Arial Narrow' is "
+        .. "crisper at small sizes and also covers Cyrillic. Applies immediately."
+    )
+    ApplyTags(fontInit, "fontFamily")
 end
 
 -- (Zone Scanner standalone subcategory removed: merged into Interface under "Zone Scanner" header.)

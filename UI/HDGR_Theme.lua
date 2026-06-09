@@ -111,7 +111,7 @@ function HDG.Theme:Initialize()
     self:_InstallSchemeSubscriber()
 end
 
--- Reacts to CONFIG_SET scheme changes; owns the post-dispatch repaint.
+-- Reacts to CONFIG_SET scheme / fontFamily changes; owns the post-dispatch repaint.
 -- Idempotent: duplicate dispatch re-LoadSchemes (cheap; ApplyAll is weak-keyed).
 function HDG.Theme:_InstallSchemeSubscriber()
     if self._schemeSubscriberInstalled then return end
@@ -119,9 +119,10 @@ function HDG.Theme:_InstallSchemeSubscriber()
     local A = HDG.Constants.ACTIONS
     HDG.Store:Subscribe(function(actionType, invalidation)
         if actionType ~= A.CONFIG_SET then return end
-        -- Filter on the invalidation set so we don't re-LoadScheme on every
-        -- CONFIG_SET (debug toggle, price preferences, etc).
-        if not HDG.Paths.MatchesAny({ "account.config.scheme" }, invalidation) then return end
+        -- Filter on the invalidation set so we don't repaint on every CONFIG_SET
+        -- (debug toggle, price preferences, etc). Both scheme and font-face changes
+        -- need the same rebuild-fonts + ApplyAll + full re-render.
+        if not HDG.Paths.MatchesAny({ "account.config.scheme", "account.config.fontFamily" }, invalidation) then return end
         local newScheme = HDG.Store:GetState().account.config.scheme
         if type(newScheme) ~= "string" or newScheme == "" then return end
         local scheme = HDGR_SchemeConstants[newScheme]
@@ -130,13 +131,12 @@ function HDG.Theme:_InstallSchemeSubscriber()
             return
         end
         self.currentScheme = scheme
-        self:BuildFontObjects()
+        self:BuildFontObjects()   -- resolves the (possibly newly-overridden) font face
         self:ApplyAll()
         -- ApplyAll only repaints Theme:Register'd widgets. Pooled data rows read
         -- Theme:GetColor at Configure-time and would keep the old scheme until
         -- the next data refresh. Force a full re-render.
         if HDG.RefreshMainWindow then HDG:RefreshMainWindow("*") end  -- exception(boundary): RefreshMainWindow nil in tests / partial load-order
-        HDG.Log:Info("theme", "Theme changed to " .. newScheme)
     end)
 end
 
@@ -274,8 +274,23 @@ function HDG.Theme:GetFont(role)
     return scheme and scheme.fonts and scheme.fonts[role] or nil
 end
 
+-- User font-face override (Config -> Appearance). Only GLYPH-SAFE faces here:
+-- "default" = the scheme face (per-locale STANDARD_TEXT_FONT), "arialn" = Arial
+-- Narrow (crisper sub-12px, carries Latin + Cyrillic). Never expose a Latin-only
+-- face (e.g. raw FRIZQT__) -- that re-introduces tofu on ruRU/CJK.
+local FONT_FACE_FILES = { arialn = "Fonts\\ARIALN.TTF" }
+
+-- Resolve the actual font file for a role: the user's override if set + known,
+-- else the scheme's own face (size/flags always come from the scheme descriptor).
+function HDG.Theme:_FontFileFor(defaultFile)
+    local store = HDG.Store
+    if not store then return defaultFile end  -- exception(boundary): Theme builds fonts before Store init (early boot / tests)
+    local family = store:GetState().account.config.fontFamily
+    return FONT_FACE_FILES[family] or defaultFile
+end
+
 -- BuildFontObjects: creates real FontObjects from scheme.fonts. Re-callable;
--- second call repoints existing objects to new font files.
+-- second call repoints existing objects to new font files (scheme OR font-face swap).
 function HDG.Theme:BuildFontObjects()
     local scheme = self:GetScheme()
     local fonts = scheme and scheme.fonts or {}
@@ -293,7 +308,7 @@ function HDG.Theme:BuildFontObjects()
             error(("Theme:BuildFontObjects: scheme font role %q must declare {file, size, flags}"):format(role), 2)
         end
         if fo and fo.SetFont then
-            fo:SetFont(desc.file, desc.size, desc.flags or "")
+            fo:SetFont(self:_FontFileFor(desc.file), desc.size, desc.flags or "")
         end
     end
 end

@@ -876,12 +876,28 @@ end
 -- For style1/style2 dropdowns, attach a SelectionTranslator that prefixes
 -- the auto-rendered selection text. Filter variant doesn't get this --
 -- it manually SetTexts the label via dispatchDropdown.
+-- SetSelectionTranslator's fn is called ONCE PER selected element with the single
+-- element description (NOT an array) -- read its label via MenuUtil.GetElementText
+-- (same accessor Blizzard's DefaultSelectionTranslator uses).
 local function _attachDropdownSelectionPrefix(dd, prefix)
     if not (prefix and dd.SetSelectionTranslator) then return end
-    dd:SetSelectionTranslator(function(selections)
-        local first = selections and selections[1]
-        local label = (first and first.text) or ""
-        return prefix .. tostring(label)
+    dd:SetSelectionTranslator(function(selection)
+        return prefix .. tostring(MenuUtil.GetElementText(selection) or "")
+    end)
+end
+
+-- Strip a dim trailing description from the closed trigger. Menu rows bake the
+-- description into the radio text as "label   |cXXXXXXXX desc|r"; the trigger
+-- auto-renders that, which clutters the button. This translator drops everything
+-- from the 2+space + color-code separator onward, so the trigger shows the label
+-- alone while the open rows keep the description. (A label that is colored from
+-- its START -- e.g. themeMenuItems' gold "Housing" -- has no leading double-space
+-- before its |c, so it is left intact.)
+local function _attachDropdownSuffixStrip(dd)
+    if not dd.SetSelectionTranslator then return end
+    dd:SetSelectionTranslator(function(selection)
+        local label = MenuUtil.GetElementText(selection) or ""
+        return (label:gsub("%s%s+|c.*$", ""))
     end)
 end
 
@@ -914,6 +930,9 @@ local function buildDropdown(parent, spec)
     else
         dd:SetDefaultText(dd._hdgrPlaceholder)
         _attachDropdownSelectionPrefix(dd, spec.selectionPrefix)
+        if spec.selectionStripSuffix and not spec.selectionPrefix then
+            _attachDropdownSuffixStrip(dd)
+        end
     end
 
     if spec.minWidth then dd.resizeToTextMinWidth = spec.minWidth end
@@ -1297,7 +1316,7 @@ HDG.WidgetTypes:Register("dropdown", {
     destroy = destroyWidget,
     requiresFont = function() return false end,
     specFields = {
-        "placeholder", "selectionPrefix", "variant", "multi",
+        "placeholder", "selectionPrefix", "selectionStripSuffix", "variant", "multi",
         "minWidth", "width", "height",
         "setTransient", "setConfig", "dispatch",
     },

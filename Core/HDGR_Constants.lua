@@ -621,7 +621,8 @@ HDG.Constants = {
         SHOPPING_ITEM_ADD          = "HDGR_SHOPPING_ITEM_ADD",          -- payload: { listID?, itemID, npcID?, qty? }
         SHOPPING_TOGGLE_EXPANDED   = "HDGR_SHOPPING_TOGGLE_EXPANDED",   -- payload: { bucket = "zones"|"vendors"|"wishList", key? }
         SHOPPING_ITEM_REMOVE       = "HDGR_SHOPPING_ITEM_REMOVE",       -- payload: { listID?, itemID, npcID? }
-        SHOPPING_ITEM_SET_QTY      = "HDGR_SHOPPING_ITEM_SET_QTY",      -- payload: { listID?, itemID, npcID?, qty }
+        SHOPPING_ITEM_SET_QTY      = "HDGR_SHOPPING_ITEM_SET_QTY",      -- payload: { listID?, itemID, npcID?, qty }  (absolute; EditBox direct entry)
+        SHOPPING_ITEM_ADJUST_QTY   = "HDGR_SHOPPING_ITEM_ADJUST_QTY",   -- payload: { listID?, itemID, npcID?, delta }  (relative; +/- buttons, removes at <=0)
         SHOPPING_RESOLVE_VENDORS   = "HDGR_SHOPPING_RESOLVE_VENDORS",   -- payload: { listID, resolutions = {[itemID]=npcID} }
         SHOPPING_WIDGET_TOGGLE     = "HDGR_SHOPPING_WIDGET_TOGGLE",
 
