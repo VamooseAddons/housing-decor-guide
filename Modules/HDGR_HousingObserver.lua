@@ -369,7 +369,12 @@ function HO:CurrentHouseID() return _currentHouseID() end
 
 function HO:IsCapturing() return _capture and _capture.active or false end
 function HO:IsSweeping()  return _activeSweep ~= nil end
-function HO:CancelSweep() if _activeSweep then _activeSweep.cancelled = true end end
+function HO:CancelSweep()
+    -- Flag AND drop: in-flight C_Timer closures check cancelled/nil; leaving
+    -- _activeSweep set wedges CaptureAllFloors ("already in progress") until
+    -- reload (review 17 #5).
+    if _activeSweep then _activeSweep.cancelled = true; _activeSweep = nil end
+end
 
 -- Editor-mode + location accessors for consumers (e.g. HouseEditorCompanion).
 -- HO owns C_HouseEditor + C_Housing (invariant 9); boundary: editor C_* exists only while open.
@@ -462,19 +467,22 @@ end
 -- Every existing room ID on a floor -- compared against a recapture's
 -- deterministic IDs to find genuinely-removed rooms (see _FinalizeCapture).
 local function _existingRoomIDsForFloor(floorID)
-    -- Rooms live under the house's CURRENT (reality-mirror) version now -- recapture
-    -- diffs against that version's rooms, not a flat map. boundary: a never-captured
-    -- house has no version yet -> nothing existing to diff.
-    local IDs     = HDG.Projects.IDs
-    local parsed  = IDs.parsePath(floorID)
-    local p       = HDG.Store:GetState().account.projects
-    local house   = parsed and parsed.houseID and p.houses[parsed.houseID]
-    local version = house and house.currentVersionID and p.versions[house.currentVersionID]
+    -- Recapture diffs against the live LAYOUT's placements by their captured
+    -- identity: slots carry capturedID directly; matched rooms carry it as the
+    -- room record's lineage (legacyID). boundary: a never-captured house has
+    -- no layout yet -> nothing existing to diff.
+    local IDs    = HDG.Projects.IDs
+    local parsed = IDs.parsePath(floorID)
+    local state  = HDG.Store:GetState()
+    local p      = state.account.projects
+    local house  = parsed and parsed.houseID and p.houses[parsed.houseID]
+    local layout = house and house.currentVersionID and p.layouts[house.currentVersionID]
     local out = {}
-    if not version then return out end
-    for roomID in pairs(version.rooms) do
-        local rp = IDs.parsePath(roomID)
-        if rp and rp.floorID == floorID then out[#out + 1] = roomID end
+    if not layout then return out end
+    -- v8: lineage lives on the placement (capturedID) -- direct read.
+    for _, pl in pairs(layout.placements) do
+        local rp = pl.capturedID and IDs.parsePath(pl.capturedID)
+        if rp and rp.floorID == floorID then out[#out + 1] = pl.capturedID end
     end
     return out
 end
@@ -572,24 +580,35 @@ end
 
 -- After an all-floors sweep: each multi-floor room was committed once (its base section)
 -- and _FinalizeCapture tracked how high the same shape re-appeared. Stamp that observed
--- span onto the base room's `floors` field so FloorMap projects it to exactly the floors
--- it occupies -- the ShapeAtlas default (tall_room=2, garden=3, ...) is only the fallback
--- when uncaptured, and a stairwell can legitimately run 1->3.
+-- span onto the base PLACEMENT's `floors` field so FloorMap projects it to exactly the
+-- floors it occupies -- the ShapeAtlas default (tall_room=2, garden=3, ...) is only the
+-- fallback when uncaptured, and a stairwell can legitimately run 1->3.
 function HO:_ApplyMultiFloorSpans()
     if not (_activeSweep and _activeSweep.mfSpan) then return end
     local IDs, Atlas = HDG.Projects.IDs, HDG.Projects.ShapeAtlas
-    local p     = HDG.Store:GetState().account.projects
-    local house = _activeSweep.houseID and p.houses[_activeSweep.houseID]
-    local vid   = house and house.currentVersionID
-    if not vid then return end
+    local state  = HDG.Store:GetState()
+    local p      = state.account.projects
+    local house  = _activeSweep.houseID and p.houses[_activeSweep.houseID]
+    local lid    = house and house.currentVersionID
+    local layout = lid and p.layouts[lid]
+    if not layout then return end
     for shape, s in pairs(_activeSweep.mfSpan) do
         local span = s.maxFloor - s.baseFloor + 1
         if span > 1 and span ~= Atlas.GetFloors(shape) then
-            local roomID = IDs.makeRoomID(s.floorID, tostring(s.captureIndex))
-            if roomID then
+            local capturedID = IDs.makeRoomID(s.floorID, tostring(s.captureIndex))
+            -- Resolve the placement ApplyCapture wrote for this captured room.
+            -- v8: every committed placement carries capturedID (tagged or not),
+            -- so the lineage match is direct -- no room.legacyID fallback.
+            local key
+            if capturedID then
+                for k, pl in pairs(layout.placements) do
+                    if pl.capturedID == capturedID then key = k break end
+                end
+            end
+            if key then
                 HDG.Store:Dispatch({
-                    type    = HDG.Constants.ACTIONS.PROJECTS_UPSERT_ROOM,
-                    payload = { versionID = vid, roomID = roomID, fields = { floors = span } },
+                    type    = HDG.Constants.ACTIONS.LAYOUT_MOVE,
+                    payload = { layoutID = lid, key = key, floors = span },
                 })
             end
         end
@@ -630,7 +649,23 @@ local function _stepSweep()
     if nextFloor > _activeSweep.maxFloor then
         HO:_ApplyMultiFloorSpans()   -- stamp observed vertical spans onto base rooms before teardown
         if C_HouseEditor and C_HouseEditor.LeaveHouseEditor then C_HouseEditor.LeaveHouseEditor() end
+        local floors = _activeSweep.maxFloor
         _activeSweep = nil
+        -- Capture summary off the ApplyCapture echo (matched vs to-assign vs
+        -- unplaced rooms). Rooms/furnishings persist by construction -- the
+        -- "removed" count is placements only, never lost work.
+        local cap   = HDG.Store:GetState().session.furn.lastCapture or {}   -- exception(boundary): echo absent pre-first-commit
+        local total = (cap.matched or 0) + (cap.slots or 0)
+        local msg   = ("House captured (%d floor%s) -- %d room%s"):format(
+            floors, floors == 1 and "" or "s", total, total == 1 and "" or "s")
+        local parts = {}
+        if (cap.matched or 0) > 0 then parts[#parts + 1] = cap.matched .. " matched" end
+        if (cap.slots or 0) > 0 then parts[#parts + 1] = cap.slots .. " to assign (click a * room)" end
+        if (cap.removed or 0) > 0 then
+            parts[#parts + 1] = cap.removed .. " no longer placed (furnishings safe in My Designs)"
+        end
+        if #parts > 0 then msg = msg .. ": " .. table.concat(parts, ", ") end
+        HDG.Log:Success("projects_save", msg)
         return
     end
     _activeSweep.floor = nextFloor
@@ -654,17 +689,20 @@ function HO:CaptureAllFloors()
     if not houseID then return false, "could not determine faction" end
     if self:IsCapturing() then self:_EndCapture() end
 
-    -- Wipe stored layout up front so deleted floors don't linger; sweep re-adds current floors.
+    -- Recapture prep (v8): placements persist so tags survive; CLEAR prunes
+    -- only capture-owned placements above the current floor count + resets
+    -- the capture echo. Per-floor diffs handle removals on surviving floors.
+    local maxFloor = (C_HousingLayout and C_HousingLayout.GetNumFloors and C_HousingLayout.GetNumFloors()) or 1  -- exception(boundary): C_HousingLayout is a Blizzard API namespace; nil in headless tests
     HDG.Store:Dispatch({
         type    = HDG.Constants.ACTIONS.PROJECTS_CLEAR_HOUSE,
-        payload = { houseID = houseID, clearedAt = (time and time() or 0) },  -- exception(boundary): GetTime/time absent in headless harness
+        payload = { houseID = houseID, clearedAt = (time and time() or 0), maxFloor = maxFloor },  -- exception(boundary): GetTime/time absent in headless harness
     })
 
     if C_HouseEditor.EnterHouseEditor then C_HouseEditor.EnterHouseEditor() end  -- exception(boundary): C_HouseEditor is a Blizzard API namespace; nil in headless tests
     if C_HouseEditor.ActivateHouseEditorMode then C_HouseEditor.ActivateHouseEditorMode(_decorateMode()) end  -- exception(boundary): C_HouseEditor is a Blizzard API namespace; nil in headless tests
     _activeSweep = {
         houseID = houseID, floor = 1,
-        maxFloor = (C_HousingLayout and C_HousingLayout.GetNumFloors and C_HousingLayout.GetNumFloors()) or 1,  -- exception(boundary): C_HousingLayout is a Blizzard API namespace; nil in headless tests
+        maxFloor = maxFloor,
         settleSeconds = 1.5, cancelled = false,
         seenLowerMF = {},   -- multi-floor SHAPES committed on a lower floor -> skip their upper sections
         mfSpan      = {},    -- shape -> { floorID, captureIndex, baseFloor, maxFloor } observed vertical span
@@ -789,6 +827,7 @@ HDG.Modules:Declare({
         -- Only clear placed-decor map when leaving a house context.
         -- C_Housing.IsInsideHouse catches both house + plot.
         if C_Housing and not C_Housing.IsInsideHouse() then
+            HO:CancelSweep()   -- hearth//reload mid-sweep must not wedge the next capture
             HO:ClearPlaced()
         end
     end,

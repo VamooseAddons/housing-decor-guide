@@ -170,6 +170,12 @@ local BAR_HALF_GAP           = BAR_PERCENTAGE_COVERED / 2   -- 0.11
 local BAR_ANIM_TIME          = 1.0
 
 -- Wrap HDGRHousingLevelRingTemplate with SetLevel/SetProgress/UpdateFill/ResetForReplay.
+-- exception(false-positive): sweep nesting-cliff hit -- the depth is nested function
+-- DEFINITIONS (SetLevel/UpdateFill/SetProgress/ResetForReplay as behavioral units),
+-- not control-flow nesting; applyDisplayPct/UpdateBar are closures over Blizzard frame
+-- children and not decomposable without losing the capture. Pass-2 verified 2026-06-10:
+-- no shared consumers (_adoptLevelRing / ScriptAnimationUtil / CooldownFrame_* appear
+-- only in this file).
 local function _adoptLevelRing(ringFrame)
     local cd       = ringFrame.HouseBarFrame and ringFrame.HouseBarFrame.Bar
                      and ringFrame.HouseBarFrame.Bar.BarFill

@@ -40,7 +40,9 @@ function C.Encode(version)
         local p    = IDs.parsePath(rid)
         local cell = room.cell or {}
         lines[#lines + 1] = table.concat({
-            (p and p.floor) or 1, room.shape, cell.x or 0, cell.y or 0, cell.rotation or 0,
+            -- Floor: record-carried (v7 LayoutView keys don't encode it) with
+            -- legacy floor-encoded-key parse as the fallback.
+            room.floor or (p and p.floor) or 1, room.shape, cell.x or 0, cell.y or 0, cell.rotation or 0,
             room.floors or 0,   -- per-room span override; 0 = shape default
         }, ",")
     end

@@ -562,9 +562,14 @@ local function NewProjectsSessionUI()
         -- (activeMode removed with the Reflect/Plan reshape -- the canvas always renders
         -- the active version; arrangement is by drag / Auto-fill, not a mode toggle.)
         -- Decor picker: crate being added to + search/selection.
-        pickerCrateID        = nil,    -- non-nil while the picker is open (the target crate)
+        pickerCrateID        = nil,    -- non-nil while the picker is open (the target local set)
         pickerSearch         = "",     -- catalog name filter
-        pickerSelectedItemID = nil,    -- drives the modelPreview right pane
+        pickerSource         = "all",  -- "all" | "style:<collID>" | "shop:<listID>" (the source axis)
+        pickerReturn         = "projectsArchitect",  -- view the picker's Back returns to
+        furnCollapsed        = {},     -- [setID] = true -> folded in the room detail (session-only)
+        landingRoomID        = nil,    -- landing Rooms-box selection (drives its action rail)
+        landingSetID         = nil,    -- landing Sets-box selection (drives its action rail)
+        pickerSelectedItemID = nil,    -- drives the modelPreview right pane (hover-driven)
         -- Blizzard category-nav focus (vertical rail in the decor picker). nil = "All".
         focusedCategoryID    = nil,
         focusedSubcategoryID = nil,
@@ -572,6 +577,10 @@ local function NewProjectsSessionUI()
         -- Seeded empty so projects.ambiguousMatches strict-reads; the recapture
         -- observer overwrites via UI_SET_TRANSIENT{key="ambiguous"} when E8 lands.
         ambiguous            = {},
+        -- Help workspace (the workflow cycle diagram): selected stage + the
+        -- view the Back button returns to (Help! opens from landing AND architect).
+        helpStage            = 1,
+        helpReturn           = "projectsLanding",
     }
 end
 
@@ -713,6 +722,11 @@ local function NewDefaultSession()
         identity       = NewIdentitySession(),
         daily          = { bestowed = nil, orcQuote = nil },  -- seeded here; EnsureSession no longer needs or-guard
         house          = NewHouseSession(),  -- seeded here; EnsureSession no longer needs or-guard
+        -- Furnishings (v7): reducer-minted ID echoes (controllers read the id
+        -- of what they just created) + derived reverse indexes (rebuilt on
+        -- hydrate, maintained by the FURN_*/LAYOUT_* reducer cases).
+        furn           = { lastSetID = nil, lastRoomID = nil, tick = 0 },
+        furnIndex      = { setRooms = {}, roomLayouts = {} },  -- [setID]={[roomID]=true} / [roomID]={[layoutID]=true}
     }
 end
 
@@ -878,16 +892,15 @@ local function _ensureHouseVersion(p, houseID, createdAt)
 end
 
 local function NewProjectsState()
-    -- Persisted house topology (account-shared). Rooms live under
-    -- versions[versionID].rooms (house -> version -> room -> crate); crates + Library
-    -- live in account.collections (type="crate"/"library"). connections stay
-    -- floor-keyed (captured-reality topology, tied to the current version).
+    -- Persisted house topology (account-shared). v7: layouts hold placements;
+    -- persistent rooms live in account.rooms, furnishing sets in
+    -- account.furnishingSets (Core/HDGR_StoreFurnishings.lua).
     return {
         schemaVersion = 2,
-        versionSeq  = 0,    -- monotonic version-ID counter (reducer-pure, collision-free minting)
+        versionSeq  = 0,    -- monotonic layout-ID counter (reducer-pure, collision-free minting)
         houseFocusSeq = 0,  -- monotonic focus counter: the house with the highest house.focusSeq is the one the Architect shows
         houses      = {},   -- [houseID]   = { name, plotID, neighborhoodName, lastCapturedAt, currentVersionID, activeVersionID, focusSeq }
-        versions    = {},   -- [versionID] = { houseID, name, createdAt, basedOn, rooms = { [roomID] = RoomRecord } }
+        layouts     = {},   -- [layoutID]  = { houseID, name, createdAt, basedOn, slotSeq, placements = { [slot:N] = { floor, x, y, rotation, floors?, shape?, capturedID?, capturedName? } } }
         -- (connectivity is DERIVED from cell-adjacency at render -- not stored)
     }
 end
@@ -965,8 +978,14 @@ local function NewDefaultState()
             craft                = NewCraft(),        -- queue + history
             characters           = NewCharacters(),   -- alts roster
             prices               = NewPrices(),       -- price cache
-            collections          = {},                -- Styles / Snapshots / Shopping / Crates / etc., keyed by "<type>:<id>"
+            collections          = {},                -- Styles / Snapshots / Shopping / etc., keyed by "<type>:<id>" (crates retired in v7)
             collectionSeq        = 0,                 -- monotonic counter -> collision-free smartset ids + "<Char> Style N" labels
+            -- Furnishings model (v7, docs/crate-redesign/10-FINAL-MODEL.md):
+            -- free-standing quantified sets + persistent rooms; layouts hold placements.
+            furnishingSets       = {},                -- [setID "set:N"] = { id, name, items = {{id,count},...}, isLocal, ownerRoom, createdAt }
+            furnishingSetSeq     = 0,                 -- monotonic set-ID counter
+            rooms                = {},                -- [roomID "room:N"] = { id, name, shape, furnishingSetIDs = {...}, legacyID?, createdAt }
+            roomSeq              = 0,                 -- monotonic room-ID counter
             projects             = NewProjectsState(),
             questCompletions      = {},                -- account-wide quest completions: [questID] = { name, class } (first char to record wins; QUEST_COMPLETION_RECORDED)
                 vendorShoppingLists  = NewVendorShoppingLists(),
@@ -1105,11 +1124,13 @@ end
 -- (ADDON_LOADED), where HDG.Projects.IDs is loaded. Pre-release + cheap (no live users).
 local function MigrateProjectsToVersions(state)
     local p = state.account.projects
-    p.versions = p.versions or {}
     if (p.schemaVersion or 1) >= 2 then
         p.rooms = nil   -- guarantee the legacy flat map is gone even on an already-migrated DB
         return
     end
+    -- Seed the (pre-v7) versions container ONLY while actually migrating --
+    -- post-v7 it stays retired (MigrateToFurnishings consumes + removes it).
+    p.versions = p.versions or {}
     local nowTS = (time and time()) or 0   -- exception(boundary): createdAt stamp for seeded versions
     -- Seed a current version for every known house first, then fold each flat room into
     -- its house's current version (minting the house on demand if a room references a
@@ -1161,10 +1182,10 @@ local function EnsureStateShape(state)
     -- Projects topology: re-ensure sub-fields so saves predating a field get it backfilled (SV migration).
     state.account.projects = state.account.projects or NewProjectsState()
     state.account.projects.houses      = state.account.projects.houses      or {}
-    state.account.projects.versions    = state.account.projects.versions    or {}
     state.account.projects.versionSeq  = state.account.projects.versionSeq  or 0
     state.account.projects.houseFocusSeq = state.account.projects.houseFocusSeq or 0
     MigrateProjectsToVersions(state)   -- schemaVersion 1->2: flat rooms -> versions[current].rooms
+    HDG.StoreFurnishings.EnsureShape(state)   -- furnishings shape + v6->7 migration (domain store file)
     state.account.questCompletions = state.account.questCompletions or {}   -- exception(boundary): SV migration
     -- Lumber tracker config + per-char sessions. Config key-by-key from NewLumberConfig
     -- so new defaults flow to existing users (SV migration).
@@ -1319,41 +1340,6 @@ function HDG.Store:FlushNotifications()
         for _, fn in ipairs(snapshot) do
             fn(n.type, n.invalidation, n.action)
         end
-    end
-end
-
--- ===== Projects reducer helpers ===============================================
--- Orphan ONE crate off its current room: stamp last-known provenance (so the re-attach
--- UI can suggest a home + the crate ledger can show "was <room>"), then clear .parent +
--- .versionID so it drops to the orphan bay. Shared by the room-delete sweep below and
--- the single-crate CRATE_DETACH action.
-local function _orphanCrate(state, coll, nowTS)
-    local version = coll.versionID and state.account.projects.versions[coll.versionID]
-    local rec     = version and coll.parent and version.rooms[coll.parent]
-    coll.lastKnownRoomID    = coll.parent
-    coll.lastKnownVersionID = coll.versionID
-    coll.lastKnownShape     = rec and rec.shape
-    coll.lastKnownRoomName  = rec and rec.name
-    coll.orphanedAt         = nowTS
-    coll.parent             = nil
-    coll.versionID          = nil
-end
-
--- Detach every crate parented to a demolished room. Crates are scoped by (versionID,
--- roomID) -- a room only exists within a version, so the orphan filter must match BOTH
--- (a same-roomID room in a sibling what-if keeps its crate).
-local function _orphanCratesForRoom(state, versionID, roomID, nowTS)
-    for _, coll in pairs(state.account.collections) do
-        if coll.type == "crate" and coll.versionID == versionID and coll.parent == roomID then
-            _orphanCrate(state, coll, nowTS)
-        end
-    end
-end
-
--- Ordered decor-list index lookup for a crate (records deduped by .id).
-local function _crateDecorIndex(crate, decorID)
-    for i, rec in ipairs(crate.decor or {}) do
-        if rec.id == decorID then return i end
     end
 end
 
@@ -2034,7 +2020,11 @@ function HDG.Store:_RawDispatch(action)
                 owned[guid].name             = h.neighborhoodName or owned[guid].name
                 owned[guid].faction          = h.faction          or owned[guid].faction
                 owned[guid].neighborhoodGUID = h.neighborhoodGUID or owned[guid].neighborhoodGUID
-                owned[guid].houseName        = h.houseName        or owned[guid].houseName
+                -- exception(boundary): HouseInfo.houseName is 0 (number, truthy) for
+                -- unnamed houses -- a bare `or` would overwrite a previously-captured
+                -- real name with 0 on re-fires (_SIGNATURES.md HouseInfo gotcha).
+                local hn = (type(h.houseName) == "string" and h.houseName ~= "") and h.houseName or nil
+                owned[guid].houseName        = hn                 or owned[guid].houseName
                 owned[guid].plotID           = h.plotID           or owned[guid].plotID
             end
         end
@@ -3490,44 +3480,6 @@ function HDG.Store:_RawDispatch(action)
             p.houses[payload.houseID] = house
         end
 
-    elseif action.type == A.PROJECTS_UPSERT_ROOM then
-        -- versionID is required: roomID does NOT encode version (what-if reuses parent roomIDs).
-        -- Strict read of versions[versionID]: a bogus id surfaces the controller bug.
-        if payload.roomID and payload.versionID then
-            local version = self.state.account.projects.versions[payload.versionID]
-            local room = version.rooms[payload.roomID] or {}
-            for k, v in pairs(payload.fields or {}) do room[k] = v end
-            room.cell = room.cell or { x = 0, y = 0, rotation = 0, locked = false }
-            version.rooms[payload.roomID] = room
-        end
-
-    elseif action.type == A.PROJECTS_MOVE_ROOM then
-        -- Mutate an existing room's cell in place: move menu = dx/dy deltas, rotate = drotation,
-        -- drag-drop = absolute x/y + locked. Reading the current cell means partial writes never
-        -- drop fields (the seed-on-new gap PROJECTS_UPSERT_ROOM has). versionID strict (controller
-        -- resolved the active version); room may be nil if the tile points at a removed room.
-        if payload.roomID and payload.versionID then
-            local version = self.state.account.projects.versions[payload.versionID]
-            local room = version.rooms[payload.roomID]
-            if room and room.cell then   -- exception(boundary): tile may reference a since-removed room
-                local c = room.cell
-                if payload.x ~= nil then c.x = payload.x elseif payload.dx ~= nil then c.x = c.x + payload.dx end
-                if payload.y ~= nil then c.y = payload.y elseif payload.dy ~= nil then c.y = c.y + payload.dy end
-                if payload.drotation ~= nil then c.rotation = ((c.rotation or 0) + payload.drotation) % 4 end
-                if payload.locked ~= nil then c.locked = payload.locked end
-                -- One record per room (multi-floor span is derived) -> nothing else to move.
-            end
-        end
-
-    elseif action.type == A.PROJECTS_DELETE_ROOM then
-        -- One record per room (multi-floor span is derived) -> delete just this record.
-        if payload.roomID and payload.versionID then
-            local nowTS   = payload.ts or (_G.GetTime and _G.GetTime() or 0)  -- exception(boundary): GetTime/time absent in headless harness
-            local version = self.state.account.projects.versions[payload.versionID]
-            _orphanCratesForRoom(self.state, payload.versionID, payload.roomID, nowTS)
-            version.rooms[payload.roomID] = nil
-        end
-
     elseif action.type == A.PROJECTS_CAPTURE_COMMIT then
         -- Atomic apply of a finalized capture; observer pre-computes matched/new/orphan + connections.
         local p = self.state.account.projects
@@ -3539,23 +3491,11 @@ function HDG.Store:_RawDispatch(action)
             if payload.neighborhoodName then house.neighborhoodName  = payload.neighborhoodName end
             p.houses[payload.houseID] = house
         end
-        -- CAPTURE path mirrors REALITY -> the house's CURRENT version (never the active
-        -- version, so a recapture taken while viewing a what-if can't clobber it).
+        -- CAPTURE path mirrors REALITY -> the house's CURRENT layout (never the
+        -- active one). v7 truth lives in StoreFurnishings.ApplyCapture: placements
+        -- ONLY -- capture can never touch rooms' furnishing fields.
         if payload.houseID then
-            local vid     = _ensureHouseVersion(p, payload.houseID, payload.lastCapturedAt or 0)
-            local version = p.versions[vid]
-            for roomID, record in pairs(payload.rooms or {}) do
-                record.cell = record.cell or { x = 0, y = 0, rotation = 0, locked = false }
-                version.rooms[roomID] = record
-            end
-            for _, roomID in ipairs(payload.deleteRoomIDs or {}) do
-                -- Orphan-stamp the room's crates BEFORE deleting (same contract as
-                -- PROJECTS_DELETE_ROOM) -- recapture-driven removal is the primary
-                -- delete path; without this, crates point at a dead room + vanish
-                -- from both crateRows buckets.
-                _orphanCratesForRoom(self.state, vid, roomID, payload.lastCapturedAt or 0)
-                version.rooms[roomID] = nil
-            end
+            HDG.StoreFurnishings.ApplyCapture(self.state, payload)
         end
 
     elseif action.type == A.PROJECTS_HOUSE_TICK then
@@ -3582,20 +3522,12 @@ function HDG.Store:_RawDispatch(action)
         ct.tick       = ct.tick + 1
 
     elseif action.type == A.PROJECTS_CLEAR_HOUSE then
-        -- Full re-capture wipes the house's stored layout up front (the sweep then
-        -- re-adds exactly the floors that currently exist) -- so a deleted floor's
-        -- rooms can't linger. Crates fall to the orphan bay (same as DELETE_ROOM).
+        -- Recapture prep. v8: placements persist (ApplyCapture matches by
+        -- capturedID in place, so roomID tags survive); only capture-owned
+        -- placements above payload.maxFloor are pruned (deleted floors never
+        -- get swept). Resets the capture summary echo.
         if payload.houseID then
-            local p     = self.state.account.projects
-            local house = p.houses[payload.houseID]
-            local vid   = house and house.currentVersionID
-            local version = vid and p.versions[vid]
-            if version then   -- exception(boundary): first capture fires CLEAR before the house/version exists
-                for roomID in pairs(version.rooms) do
-                    _orphanCratesForRoom(self.state, vid, roomID, payload.clearedAt or 0)
-                end
-                version.rooms = {}
-            end
+            HDG.StoreFurnishings.ClearLayout(self.state, payload)
         end
 
     elseif action.type == A.PROJECTS_SET_ACTIVE_VERSION then
@@ -3606,39 +3538,71 @@ function HDG.Store:_RawDispatch(action)
         end
 
     elseif action.type == A.PROJECTS_CREATE_VERSION then
-        -- Branch a what-if: deep-copy basedOn's rooms (independent tables) + activate.
-        -- versionID minted reducer-side from the counter (deterministic, collision-free).
+        -- v7: branch a what-if LAYOUT. Placements copy; ROOMS ARE SHARED BY
+        -- REFERENCE (10-FINAL-MODEL: vary a room in a what-if by placing a
+        -- room VARIANT, never per-layout copies). layoutID minted from the
+        -- shared versionSeq counter.
         if payload.houseID then
             local p     = self.state.account.projects
             local house = p.houses[payload.houseID]
             if house then
-                local vid   = _nextVersionID(p)
-                local src   = payload.basedOn and p.versions[payload.basedOn]
-                local rooms = {}
-                if src then for rid, room in pairs(src.rooms) do rooms[rid] = DeepCopy(room) end end
-                p.versions[vid] = {
+                local lid = _nextVersionID(p)
+                local srcLayout  = payload.basedOn and p.layouts[payload.basedOn]   -- exception(nullable): from-scratch designs have no basis
+                local placements, slotSeq = {}, 0
+                if srcLayout then
+                    for key, pl in pairs(srcLayout.placements) do
+                        placements[key] = { floor = pl.floor, x = pl.x, y = pl.y,
+                                            rotation = pl.rotation, shape = pl.shape, floors = pl.floors,
+                                            roomID = pl.roomID,   -- v8: tags copy; rooms shared by reference
+                                            capturedID = pl.capturedID, capturedName = pl.capturedName }
+                    end
+                    slotSeq = srcLayout.slotSeq or 0
+                else
+                    -- From-scratch design: every layout needs exactly one Entry
+                    -- (the anchor; the palette never offers it) -- seed it
+                    -- centre-canvas so building starts from the door.
+                    slotSeq = 1
+                    placements["slot:1"] = { floor = 1, x = 10, y = 10, rotation = 0, shape = "entry" }
+                end
+                p.layouts[lid] = {
                     houseID   = payload.houseID, name = payload.name or "What-if",  -- exception(boundary): CREATE_VERSION payload may omit name
-                    createdAt = payload.createdAt, basedOn = payload.basedOn, rooms = rooms,
+                    createdAt = payload.createdAt, basedOn = payload.basedOn,
+                    placements = placements, slotSeq = slotSeq,
                 }
-                house.activeVersionID = vid
+                house.activeVersionID = lid
+                -- Reverse index: v8 placements are slot-keyed -- the design
+                -- rides as the roomID TAG. Count every copied tag into the
+                -- new layout (review 17 #1: keying by placement KEY matched
+                -- account.rooms never, so branching silently skipped this).
+                local idx = self.state.session.furnIndex
+                for _, pl in pairs(placements) do
+                    if pl.roomID then
+                        idx.roomLayouts[pl.roomID] = idx.roomLayouts[pl.roomID] or {}
+                        idx.roomLayouts[pl.roomID][lid] = (idx.roomLayouts[pl.roomID][lid] or 0) + 1
+                    end
+                end
             end
         end
 
     elseif action.type == A.PROJECTS_DELETE_VERSION then
-        -- Remove a what-if (NEVER the live/current version). If active, fall back to live.
+        -- v7: remove a what-if LAYOUT (NEVER the live/current one). Rooms and
+        -- their furnishings persist by construction -- only references die.
+        -- Reverse-index GC prevents phantom "in N layouts" counts (12 #4).
         if payload.houseID and payload.versionID then
             local p     = self.state.account.projects
             local house = p.houses[payload.houseID]
-            if house and payload.versionID ~= house.currentVersionID and p.versions[payload.versionID] then
-                for _, coll in pairs(self.state.account.collections) do
-                    if coll.type == "crate" and coll.versionID == payload.versionID then
-                        coll.parent, coll.versionID, coll.orphanedAt = nil, nil, payload.ts or 0
-                    end
+            local lid   = payload.versionID
+            if house and lid ~= house.currentVersionID and p.layouts[lid] then
+                local idx = self.state.session.furnIndex
+                -- v8: tags, not keys (review 17 #2 -- the key form was a no-op GC).
+                for _, pl in pairs(p.layouts[lid].placements) do
+                    if pl.roomID and idx.roomLayouts[pl.roomID] then idx.roomLayouts[pl.roomID][lid] = nil end
                 end
-                p.versions[payload.versionID] = nil
-                if house.activeVersionID == payload.versionID then
+                p.layouts[lid] = nil
+                if house.activeVersionID == lid then
                     house.activeVersionID = house.currentVersionID
                 end
+                self.state.session.furn.tick = self.state.session.furn.tick + 1
             end
         end
 
@@ -3647,18 +3611,18 @@ function HDG.Store:_RawDispatch(action)
         -- the controller, so the store never holds an out-of-range value). nil clears the
         -- override -> floorTabs falls back to scanning room IDs + session.house.numFloors.
         if payload.versionID and payload.numFloors ~= nil then
-            local version = self.state.account.projects.versions[payload.versionID]
-            if version then
+            local layout = self.state.account.projects.layouts[payload.versionID]   -- exception(nullable): stale UI layout id
+            if layout then
                 local n = math.max(1, math.min(3, math.floor(payload.numFloors)))
-                version.numFloors = n
+                layout.numFloors = n
             end
         end
 
     elseif action.type == A.PROJECTS_RENAME_VERSION then
         -- Rename a version (name only; structural fields stay locked).
         if payload.versionID and payload.name then
-            local version = self.state.account.projects.versions[payload.versionID]
-            if version then version.name = payload.name end
+            local layout = self.state.account.projects.layouts[payload.versionID]   -- exception(nullable): stale UI layout id
+            if layout then layout.name = payload.name end
         end
 
     elseif action.type == A.PROJECTS_IMPORT_LAYOUT then
@@ -3671,9 +3635,15 @@ function HDG.Store:_RawDispatch(action)
             local house = p.houses[payload.houseID]
             -- Importing into an owned-but-uncaptured house creates its record.
             if not house then house = {}; p.houses[payload.houseID] = house end
-            local vid = _nextVersionID(p)
-            p.versions[vid] = payload.version
-            house.activeVersionID = vid
+            -- Stamp the display name the chooser carried; a captured name
+            -- (richer: plot-prefixed) is never overwritten.
+            if payload.houseName and (not house.name or house.name == "") then
+                house.name = payload.houseName
+            end
+            local lid = _nextVersionID(p)
+            payload.version.placements = payload.version.placements or {}   -- exception(boundary): controller-built record
+            p.layouts[lid] = payload.version
+            house.activeVersionID = lid
         end
 
     elseif action.type == A.PROJECTS_FOCUS_HOUSE then
@@ -3690,111 +3660,24 @@ function HDG.Store:_RawDispatch(action)
             house.focusSeq  = p.houseFocusSeq
         end
 
+    elseif action.type == A.PROJECTS_PICKER_SET_SOURCE then
+        -- Picker source axis (dropdown intent; scalar session write).
+        self.state.session.ui.projects.pickerSource = payload.source or "all"
+
+    elseif action.type == A.PROJECTS_FURN_TOGGLE_COLLAPSE then
+        -- Fold/unfold one set group in the room detail (reducer-owned flip;
+        -- session-only -- the panel is a workspace, not a dashboard).
+        if payload.setID then
+            local c = self.state.session.ui.projects.furnCollapsed
+            c[payload.setID] = not c[payload.setID] or nil
+        end
+
     -- ===== Projects: crates ===================================================
-    elseif action.type == A.CRATE_UPSERT then
-        if payload.crateID then
-            local colls = self.state.account.collections
-            local crate = colls[payload.crateID] or { id = payload.crateID, type = "crate", decor = {} }
-            for k, v in pairs(payload.fields or {}) do
-                if k ~= "id" and k ~= "type" and k ~= "decor" then crate[k] = v end
-            end
-            crate.id, crate.type = payload.crateID, "crate"
-            crate.decor = crate.decor or {}   -- exception(boundary): SV-migrated crate may predate the decor field
-            colls[payload.crateID] = crate
-        end
+    elseif HDG.StoreFurnishings.HANDLED[action.type] then
+        -- Furnishings domain cases live in Core/HDGR_StoreFurnishings.lua --
+        -- same single dispatch path, housed with their domain.
+        HDG.StoreFurnishings.Reduce(self.state, action)
 
-    elseif action.type == A.CRATE_ADD_DECOR then
-        local crate = payload.crateID and self.state.account.collections[payload.crateID]
-        if crate and payload.decorID then
-            crate.decor = crate.decor or {}   -- exception(boundary): SV-migrated crate may predate the decor field
-            local i = _crateDecorIndex(crate, payload.decorID)
-            if i then
-                -- Existing entry: an explicit count SETS it (import / stepper set);
-                -- no count INCREMENTS (re-clicking "+ add" / the stepper plus = +1).
-                if payload.count ~= nil then
-                    crate.decor[i].count = payload.count
-                else
-                    crate.decor[i].count = (crate.decor[i].count or 1) + 1
-                end
-                if payload.notes ~= nil then crate.decor[i].notes = payload.notes end
-            else
-                local cnt = payload.count
-                if cnt == nil then cnt = 1 end   -- default 1; honor an explicit 0
-                crate.decor[#crate.decor + 1] = { id = payload.decorID, count = cnt, notes = payload.notes }
-            end
-        end
-
-    elseif action.type == A.CRATE_DECREMENT_DECOR then
-        -- Stepper minus: count - 1, removing the entry when it hits 0.
-        local crate = payload.crateID and self.state.account.collections[payload.crateID]
-        if crate and payload.decorID and crate.decor then
-            local i = _crateDecorIndex(crate, payload.decorID)
-            if i then
-                local n = (crate.decor[i].count or 1) - 1
-                if n <= 0 then table.remove(crate.decor, i) else crate.decor[i].count = n end
-            end
-        end
-
-    elseif action.type == A.CRATE_REMOVE_DECOR then
-        local crate = payload.crateID and self.state.account.collections[payload.crateID]
-        if crate and payload.decorID and crate.decor then
-            local i = _crateDecorIndex(crate, payload.decorID)
-            if i then table.remove(crate.decor, i) end
-        end
-
-    elseif action.type == A.CRATE_SET_FIELD then
-        local crate = payload.crateID and self.state.account.collections[payload.crateID]
-        -- id/type/decor are protected (structural); everything else is free.
-        if crate and payload.field and payload.field ~= "id"
-           and payload.field ~= "type" and payload.field ~= "decor" then
-            crate[payload.field] = payload.value
-        end
-
-    elseif action.type == A.CRATE_REATTACH then
-        -- Re-scope an orphan crate onto a room in a version. A crate is keyed by BOTH
-        -- (versionID, parent), and orphaning stamps orphanedAt (see PROJECTS_DELETE_VERSION ~3364);
-        -- re-attach is the exact inverse and must clear all three together. That rule lives HERE,
-        -- not in the view. roomID + versionID are both supplied by the caller in the payload --
-        -- the reducer derives nothing from ambient session state (self-contained action).
-        local crate = payload.crateID and self.state.account.collections[payload.crateID]
-        if crate and payload.roomID and payload.versionID then
-            crate.parent     = payload.roomID
-            crate.versionID  = payload.versionID
-            crate.orphanedAt = nil
-        end
-
-    elseif action.type == A.CRATE_DETACH then
-        -- Orphan a single crate off its room (parent -> nil); it lands in the orphan bay,
-        -- reattachable via CRATE_REATTACH. Same provenance-stamp as the room-delete sweep.
-        local crate = payload.crateID and self.state.account.collections[payload.crateID]
-        if crate and crate.type == "crate" and crate.parent then
-            _orphanCrate(self.state, crate, payload.ts or (time and time()) or 0)
-        end
-
-    elseif action.type == A.CRATE_DELETE then
-        if payload.crateID then self.state.account.collections[payload.crateID] = nil end
-
-    elseif action.type == A.LIBRARY_STAMP then
-        -- Clone a library template's decor into a fresh independent crate
-        -- (cloning-not-references: editing one never affects another).
-        local colls = self.state.account.collections
-        local lib = payload.libID and colls[payload.libID]
-        if lib and payload.crateID then
-            local decorCopy = {}
-            for _, rec in ipairs(lib.decor or {}) do
-                decorCopy[#decorCopy + 1] = { id = rec.id, count = rec.count, notes = rec.notes }
-            end
-            colls[payload.crateID] = {
-                id = payload.crateID, type = "crate", parent = payload.parent,
-                name = payload.name or lib.name, derivedFrom = payload.libID,
-                decor = decorCopy, createdAt = payload.ts,
-            }
-        end
-
-    -- ===== Projects: shipping crates ==========================================
-    -- { id, type="shippingCrate", name, houseID, packedAt, captureLevel="manifest",
-    --   topology, contents, placementsByRoom=nil, houseLayoutBlob=nil }
-    -- placementsByRoom + houseLayoutBlob are reserved-nil (avoid SV migration when placement API ships).
     elseif action.type == A.SHIPPING_CRATE_PACK then
         -- DeepCopy: topology.rooms / connections / contents[].decor are live refs; raw storage
         -- would make the "backup" silently track future mutations.
@@ -3804,23 +3687,6 @@ function HDG.Store:_RawDispatch(action)
 
     elseif action.type == A.SHIPPING_CRATE_DELETE then
         if payload.shipID then self.state.account.collections[payload.shipID] = nil end
-
-    elseif action.type == A.PROJECTS_REMAP_ROOM then
-        -- Re-key captured room to existing ID + re-parent its crates (resolves ambiguous fingerprint matches).
-        local p       = self.state.account.projects
-        local parsed  = payload.fromRoomID and HDG.Projects.IDs.parsePath(payload.fromRoomID)
-        local house   = parsed and parsed.houseID and p.houses[parsed.houseID]
-        local vid     = house and house.currentVersionID
-        local version = vid and p.versions[vid]
-        if payload.fromRoomID and payload.toRoomID and version and version.rooms[payload.fromRoomID] then
-            version.rooms[payload.toRoomID] = version.rooms[payload.fromRoomID]
-            version.rooms[payload.fromRoomID] = nil
-            for _, coll in pairs(self.state.account.collections) do
-                if coll.type == "crate" and coll.versionID == vid and coll.parent == payload.fromRoomID then
-                    coll.parent = payload.toRoomID
-                end
-            end
-        end
 
     else
         -- Closed action taxonomy (spec section 12): unknown types are typos; fail loud at dispatch.
@@ -3859,6 +3725,8 @@ function HDG.Store:LoadFromSavedVariables()
         self.state.account = _G.HDG_DB.account
     end
     EnsureStateShape(self.state)
+    HDG.StoreFurnishings.ScrubFossilPlacements(self.state)   -- hydrate-only: drop pre-v8 room-keyed placements (shape-gated, not version-gated)
+    HDG.StoreFurnishings.RebuildIndexes(self.state)   -- hydrate-only: session-derived; reducer cases maintain incrementally
 end
 
 -- Coalesced save: dispatches within a frame share one write.
@@ -3881,3 +3749,4 @@ function HDG.Store:Flush()
     _G.HDG_DB = _G.HDG_DB or {}
     _G.HDG_DB.account = self.state.account
 end
+

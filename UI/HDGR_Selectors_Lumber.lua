@@ -90,14 +90,19 @@ Selectors:Register("lumber.counterRows", {
     -- ITEM_INFO_RESOLVED bumps it so cold-cache rows re-bind with the real icon.
     reads = { "session.bag.tick",
               "session.itemNames.tick",
-              "session.lumber.activeFarmingID" },
-    calls = { "lumber.activeFarmingID", "lumber.queueNeed" },
+              "session.lumber.activeFarmingID",
+              "account.collection.ownedDecorIDs",      -- denominator drops as decor is collected
+              "session.catalog.sweepGeneration" },     -- recipe->decorID map warms async
+    calls = { "lumber.activeFarmingID", "lumber.queueNeed", "warehouse.lumberRequired" },
     fn = function(state, ctx)
         local Bag       = HDG.BagObserver
         local Resolver  = HDG.ItemNameResolver
         local LUMBER    = HDG.Constants.LUMBER_DATA
         local activeID  = Selectors:Call("lumber.activeFarmingID", state, ctx)
         local queueNeed = Selectors:Call("lumber.queueNeed", state, ctx)
+        -- Same algorithm as the Warehouse Need column: lumber for UNCOLLECTED
+        -- decor only (owner call 2026-06-11) -- one shared selector, no drift.
+        local decorNeed = Selectors:Call("warehouse.lumberRequired", state, ctx)
 
         local out = {}
         for i, row in ipairs(LUMBER) do
@@ -118,6 +123,7 @@ Selectors:Register("lumber.counterRows", {
                 icon         = icon,
                 held         = held,
                 queueNeed    = queueNeed[row.id],       -- dense map pre-seeded 0 for all LUMBER_DATA ids
+                decorNeed    = decorNeed[row.id] or 0,  -- exception(boundary): sparse map (uncollected-decor need)
                 isActive     = isActive,
                 order        = i,
             }

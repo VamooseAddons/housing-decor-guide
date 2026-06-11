@@ -1,7 +1,9 @@
 -- HDG.LumberController
 -- ============================================================================
 -- Lumber Tracker: lumberCounterRow factory + Wire (End Session / Back / Close / toggles).
--- Row: 16px icon | shortName | stock/queue-need (right). Active row highlighted.
+-- Row: 16px icon | shortName | held/all-decor-need (right). Active row
+-- highlighted. Queue need rides the tooltip (Discord 2026-06-11: the row
+-- number is the long-horizon farming goal, not the session queue).
 
 HDG = HDG or {}
 HDG.LumberController = HDG.LumberController or {}
@@ -29,6 +31,19 @@ local function _layoutLumberCounterRow(row)
 
     -- Name fills the remaining gap between icon and held.
     name:SetPoint("RIGHT", held, "LEFT", -8, 0)
+
+    -- Tooltip reads live row fields (one Attach covers all pooled binds).
+    HDG.TooltipEngine:Attach(row, function(self)
+        if not self._tipName then return nil end
+        local lines = { "In bags + bank: " .. tostring(self._tipHeld or 0) }
+        if (self._tipDecorNeed or 0) > 0 then
+            lines[#lines + 1] = "Uncollected decor needs: " .. self._tipDecorNeed
+        end
+        if (self._tipQueueNeed or 0) > 0 then
+            lines[#lines + 1] = "Queued crafts need: " .. self._tipQueueNeed
+        end
+        return { title = self._tipName, extraLines = lines }
+    end)
 end
 
 local function _paintLumberCounterRow(row, ed)
@@ -36,14 +51,16 @@ local function _paintLumberCounterRow(row, ed)
     HDG.UI.applyFontRole(row._nameFs,
         ed.isActive and "body_strong" or "body")
 
-    -- "44/12" when queueNeed > 0; "44" otherwise.
-    local heldText = ed.queueNeed > 0
-        and string.format("%d/%d", ed.held, ed.queueNeed)
+    -- "44/520" against the ALL-DECOR total when one exists; bare held otherwise.
+    local heldText = (ed.decorNeed or 0) > 0
+        and string.format("%d/%d", ed.held, ed.decorNeed)
         or tostring(ed.held)
 
     row._iconTex:SetTexture(ed.icon)
     row._nameFs:SetText(ed.displayName)
     row._heldFs:SetText(heldText)
+    row._tipName, row._tipHeld = ed.name, ed.held
+    row._tipDecorNeed, row._tipQueueNeed = ed.decorNeed, ed.queueNeed
 end
 
 HDG.Rows:Register("lumberCounterRow", {
@@ -68,9 +85,13 @@ HDG.Rows:Register("lumberCounterRow", {
 -- from lumber.windowVisible; rootFrame is the floating lumber window (not the main frame).
 
 function HDG.LumberController:Wire(rootFrame)
+    if not HDG.Log:HasTag("lumber_action") then
+        HDG.Log:RegisterTags({ lumber_action = { user = true, level = "info", duration = 3 } })
+    end
     -- End Session: finalizes (stamps finalizedAt) but leaves the window open.
     HDG.UI.OnClick(rootFrame, "lumberActionPanel.endSession", function()
         HDG.LumberObserver:FinalizeSession()
+        HDG.Log:Success("lumber_action", "Lumber session finalized")
     end)
 
     -- Close [X]: hides lumber window only (no main-window side effect).

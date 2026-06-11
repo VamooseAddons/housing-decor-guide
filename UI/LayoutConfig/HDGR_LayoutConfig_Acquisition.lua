@@ -348,7 +348,7 @@ LC.widgets["acquisitionListPanel.mapAllBtn"] = {
     visible = "acq.isViewMode_vendor",
 }
 LC.widgets["acquisitionListPanel.clearPinsBtn"] = {
-    tooltip = false,
+    tooltip = { recipe = "WarnClearPins" },
     kind = "button", ["in"] = "acq.filterBar", font = "small",
     text = "X", width = "auto", height = 22, order = 30, variant = "tertiary",
     visible = "acq.isViewMode_vendor",
@@ -695,7 +695,7 @@ LC._activeFilterTags = ACTIVE_FILTER_TAGS
 -- Acquire preset chips: single-select. Generated from ACQ_PRESETS -- add/remove = one-line edit there.
 for i, p in ipairs(HDG.Constants.ACQ_PRESETS or {}) do
     LC.widgets["acquisitionListPanel.preset_" .. p.value] = {
-    tooltip = false,
+        tooltip = { recipe = "AcqPreset_" .. p.value },
         kind = "button", ["in"] = "acq.presetStrip", font = "button",
         text = p.label, width = "auto", height = 22, order = 10 + i, variant = "tertiary",
         binding = { active = "acq.preset.active_" .. p.value },
@@ -708,7 +708,7 @@ LC.widgets["acquisitionListPanel.presetDivider"] = {
     width = 1, height = 16, order = 20,
 }
 LC.widgets["acquisitionListPanel.missingToggle"] = {
-    tooltip = false,
+    tooltip = { recipe = "AcqMissingToggle" },
     kind = "checkbox", ["in"] = "acq.presetStrip", font = "button",
     text = "locale:ACQ_MISSING_TOGGLE", width = 86, height = 22, order = 21,
     binding = { checked = "acq.missingOnly" },

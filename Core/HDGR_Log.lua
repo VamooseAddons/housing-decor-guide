@@ -166,6 +166,7 @@ local ENGINE_TAGS = {
     decor_action = { user = true,  level = "info",    duration = 2    },  -- decor tab "Favorited X" toasts
     queue        = { user = true,  level = "info",    duration = 3    },  -- crafting queue add/remove/clear toasts
     filter       = { user = true,  level = "info",    duration = 3    },  -- recipe filter chain changes
+    ui_action    = { user = true,  level = "info",    duration = 2    },  -- chrome-level acks (view switch via slash, etc.)
 }
 Log:RegisterTags(ENGINE_TAGS)
 

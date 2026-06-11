@@ -115,7 +115,23 @@ R.ConfigDebugToggle    = { title = "locale:TIP_CONFIG_DEBUG_TITLE",    body = "l
 R.ConfigMinimapToggle  = { title = "locale:TIP_CONFIG_MINIMAP_TITLE",  body = "locale:TIP_CONFIG_MINIMAP_BODY" }
 R.OpenDebugLog         = { title = "locale:TIP_OPEN_DEBUG_LOG_TITLE",  body = "locale:TIP_OPEN_DEBUG_LOG_BODY" }
 R.WowheadLink          = { title = "locale:TIP_WOWHEAD_TITLE",         body = "locale:TIP_WOWHEAD_BODY" }
-R.ProjectsAddCrate     = { title = "locale:TIP_PROJECTS_ADD_CRATE_TITLE",    body = "locale:TIP_PROJECTS_ADD_CRATE_BODY" }
+R.ProjectsNewRoom      = { title = "locale:TIP_PROJECTS_NEW_ROOM_TITLE",     body = "locale:TIP_PROJECTS_NEW_ROOM_BODY" }
+R.ProjectsOpenArchitect = { title = "locale:TIP_PROJECTS_OPEN_ARCHITECT_TITLE", body = "locale:TIP_PROJECTS_OPEN_ARCHITECT_BODY" }
+R.ProjectsLandingEquip = { title = "locale:TIP_PROJECTS_LANDING_EQUIP_TITLE", body = "locale:TIP_PROJECTS_LANDING_EQUIP_BODY" }
+R.ProjectsUnassign     = { title = "locale:TIP_PROJECTS_UNASSIGN_TITLE",     body = "locale:TIP_PROJECTS_UNASSIGN_BODY" }
+R.ProjectsHelp         = { title = "locale:TIP_PROJECTS_HELP_TITLE",         body = "locale:TIP_PROJECTS_HELP_BODY" }
+R.ProjectsAutoAssign   = { title = "locale:TIP_PROJECTS_AUTO_ASSIGN_TITLE",   body = "locale:TIP_PROJECTS_AUTO_ASSIGN_BODY" }
+R.ProjectsForkDesign   = { title = "locale:TIP_PROJECTS_FORK_TITLE",          body = "locale:TIP_PROJECTS_FORK_BODY" }
+R.ProjectsQueueCraft   = { title = "locale:TIP_PROJECTS_QUEUE_CRAFT_TITLE",   body = "locale:TIP_PROJECTS_QUEUE_CRAFT_BODY" }
+R.ProjectsAddShopping  = { title = "locale:TIP_PROJECTS_ADD_SHOPPING_TITLE",  body = "locale:TIP_PROJECTS_ADD_SHOPPING_BODY" }
+R.ProjectsNewSet       = { title = "locale:TIP_PROJECTS_NEW_SET_TITLE",      body = "locale:TIP_PROJECTS_NEW_SET_BODY" }
+R.ProjectsRoomMore     = { title = "locale:TIP_PROJECTS_ROOM_MORE_TITLE",    body = "locale:TIP_PROJECTS_ROOM_MORE_BODY" }
+R.ProjectsSetMore      = { title = "locale:TIP_PROJECTS_SET_MORE_TITLE",     body = "locale:TIP_PROJECTS_SET_MORE_BODY" }
+R.ProjectsNewRoomHere  = { title = "locale:TIP_PROJECTS_NEW_ROOM_HERE_TITLE",  body = "locale:TIP_PROJECTS_NEW_ROOM_HERE_BODY" }
+R.ProjectsPickerSource = { title = "locale:TIP_PROJECTS_PICKER_SOURCE_TITLE", body = "locale:TIP_PROJECTS_PICKER_SOURCE_BODY" }
+R.ProjectsSaveAsSet    = { title = "locale:TIP_PROJECTS_SAVE_AS_SET_TITLE",  body = "locale:TIP_PROJECTS_SAVE_AS_SET_BODY" }
+R.ProjectsEquipSet     = { title = "locale:TIP_PROJECTS_EQUIP_SET_TITLE",    body = "locale:TIP_PROJECTS_EQUIP_SET_BODY" }
+R.ProjectsImportSet    = { title = "locale:TIP_PROJECTS_IMPORT_SET_TITLE",   body = "locale:TIP_PROJECTS_IMPORT_SET_BODY" }
 R.ProjectsDetachCrate  = { title = "locale:TIP_PROJECTS_DETACH_CRATE_TITLE", body = "locale:TIP_PROJECTS_DETACH_CRATE_BODY" }
 R.ProjectsCaptureAll   = { title = "locale:TIP_PROJECTS_CAPTURE_ALL_TITLE",  body = "locale:TIP_PROJECTS_CAPTURE_ALL_BODY" }
 R.LumberAutoShow       = { title = "locale:TIP_LUMBER_AUTO_SHOW_TITLE",      body = "locale:TIP_LUMBER_AUTO_SHOW_BODY" }
@@ -135,6 +151,51 @@ R.GoblinSaleRate   = { title = "locale:TIP_GOBLIN_SALE_RATE_TITLE",    body = "l
 R.GoblinSoldPerDay = { title = "locale:TIP_GOBLIN_SOLD_PER_DAY_TITLE", body = "locale:TIP_GOBLIN_SOLD_PER_DAY_BODY" }
 R.GoblinAhQty      = { title = "locale:TIP_GOBLIN_AH_QTY_TITLE",       body = "locale:TIP_GOBLIN_AH_QTY_BODY" }
 
+-- ===== Styles ===============================================================
+-- Save Snapshot explains its disabled state; severity chips define the
+-- HDG-specific band vocabulary (UX review 2026-06-10 #4 + #5).
+R.StylesSnapshot = { title = "locale:TIP_STY_SNAPSHOT_TITLE", body = "locale:TIP_STY_SNAPSHOT_BODY", anchor = "ANCHOR_BOTTOMRIGHT" }
+R.StylesSeverity_all       = { title = "locale:TIP_STY_SEV_ALL_TITLE",       body = "locale:TIP_STY_SEV_ALL_BODY",       anchor = "ANCHOR_BOTTOMRIGHT" }
+R.StylesSeverity_signature = { title = "locale:TIP_STY_SEV_SIGNATURE_TITLE", body = "locale:TIP_STY_SEV_SIGNATURE_BODY", anchor = "ANCHOR_BOTTOMRIGHT" }
+R.StylesSeverity_accent    = { title = "locale:TIP_STY_SEV_ACCENT_TITLE",    body = "locale:TIP_STY_SEV_ACCENT_BODY",    anchor = "ANCHOR_BOTTOMRIGHT" }
+R.StylesSeverity_versatile = { title = "locale:TIP_STY_SEV_VERSATILE_TITLE", body = "locale:TIP_STY_SEV_VERSATILE_BODY", anchor = "ANCHOR_BOTTOMRIGHT" }
+R.StylesSeverity_clashing  = { title = "locale:TIP_STY_SEV_CLASHING_TITLE",  body = "locale:TIP_STY_SEV_CLASHING_BODY",  anchor = "ANCHOR_BOTTOMRIGHT" }
+
+-- ===== Acquisition filter strip (UX tooltip audit 2026-06-10) ==============
+-- Preset chips are HDG vocabulary (source-axis filters); one recipe per chip,
+-- names match the LayoutConfig loop key "AcqPreset_" .. p.value.
+R.AcqPreset_achievement = { title = "locale:TIP_ACQ_PRESET_ACH_TITLE",  body = "locale:TIP_ACQ_PRESET_ACH_BODY",  anchor = "ANCHOR_BOTTOM" }
+R.AcqPreset_reputation  = { title = "locale:TIP_ACQ_PRESET_REP_TITLE",  body = "locale:TIP_ACQ_PRESET_REP_BODY",  anchor = "ANCHOR_BOTTOM" }
+R.AcqPreset_endeavor    = { title = "locale:TIP_ACQ_PRESET_END_TITLE",  body = "locale:TIP_ACQ_PRESET_END_BODY",  anchor = "ANCHOR_BOTTOM" }
+R.AcqPreset_quest       = { title = "locale:TIP_ACQ_PRESET_QST_TITLE",  body = "locale:TIP_ACQ_PRESET_QST_BODY",  anchor = "ANCHOR_BOTTOM" }
+R.AcqPreset_recipes     = { title = "locale:TIP_ACQ_PRESET_REC_TITLE",  body = "locale:TIP_ACQ_PRESET_REC_BODY",  anchor = "ANCHOR_BOTTOM" }
+R.AcqMissingToggle      = { title = "locale:TIP_ACQ_MISSING_TITLE",     body = "locale:TIP_ACQ_MISSING_BODY",     anchor = "ANCHOR_BOTTOM" }
+
+-- ===== Decor browser controls ===============================================
+R.DecorWishlist     = { title = "locale:TIP_DECOR_WISHLIST_TITLE",      body = "locale:TIP_DECOR_WISHLIST_BODY",      anchor = "ANCHOR_TOP" }
+R.DecorDestroy      = { title = "locale:TIP_DECOR_DESTROY_TITLE",       body = "locale:TIP_DECOR_DESTROY_BODY",       anchor = "ANCHOR_TOP" }
+R.DecorStoredFilter = { title = "locale:TIP_DECOR_STORED_FILTER_TITLE", body = "locale:TIP_DECOR_STORED_FILTER_BODY", anchor = "ANCHOR_BOTTOM" }
+
+-- ===== Goblin price-source + actions ========================================
+R.GoblinSrcAuto   = { title = "locale:TIP_GOBLIN_SRC_AUTO_TITLE",   body = "locale:TIP_GOBLIN_SRC_AUTO_BODY",   anchor = "ANCHOR_BOTTOMRIGHT" }
+R.GoblinSrcDirect = { title = "locale:TIP_GOBLIN_SRC_DIRECT_TITLE", body = "locale:TIP_GOBLIN_SRC_DIRECT_BODY", anchor = "ANCHOR_BOTTOMRIGHT" }
+R.GoblinTsmPct    = { title = "locale:TIP_GOBLIN_TSM_PCT_TITLE",    body = "locale:TIP_GOBLIN_TSM_PCT_BODY",    anchor = "ANCHOR_BOTTOMRIGHT" }
+R.MogulQueueAll   = { title = "locale:TIP_MOGUL_QUEUE_ALL_TITLE",   body = "locale:TIP_MOGUL_QUEUE_ALL_BODY",   anchor = "ANCHOR_BOTTOMRIGHT" }
+R.MogulSendToAH   = { title = "locale:TIP_MOGUL_SEND_AH_TITLE",     body = "locale:TIP_MOGUL_SEND_AH_BODY",     anchor = "ANCHOR_BOTTOMRIGHT" }
+
+-- ===== Recipes materials controls ===========================================
+R.RecipesGroupingToggle = { title = "locale:TIP_REC_GROUPING_TITLE", body = "locale:TIP_REC_GROUPING_BODY", anchor = "ANCHOR_BOTTOMRIGHT" }
+R.RecipesDepth          = { title = "locale:TIP_REC_DEPTH_TITLE",    body = "locale:TIP_REC_DEPTH_BODY",    anchor = "ANCHOR_BOTTOMRIGHT" }
+R.RecipesAddAllToAH     = { title = "locale:TIP_REC_ADD_ALL_TITLE",  body = "locale:TIP_REC_ADD_ALL_BODY",  anchor = "ANCHOR_BOTTOMRIGHT" }
+
+-- ===== Config: collection cache reset (NOT WarnResetConfig -- that copy is
+-- about display options; this button forces a rescan, not a wipe) ============
+R.ConfigCollectionReset = { title = "locale:TIP_CONFIG_COLL_RESET_TITLE", body = "locale:TIP_CONFIG_COLL_RESET_BODY", anchor = "ANCHOR_BOTTOM" }
+
+-- ===== Styles curator controls ==============================================
+R.CuratorMove = { title = "locale:TIP_CUR_MOVE_TITLE", body = "locale:TIP_CUR_MOVE_BODY", anchor = "ANCHOR_BOTTOM" }
+R.CuratorUndo = { title = "locale:TIP_CUR_UNDO_TITLE", body = "locale:TIP_CUR_UNDO_BODY", anchor = "ANCHOR_BOTTOM" }
+
 -- ===== Mogul optimizer controls ============================================
 -- Effect guidance (what the toggle does FOR you), not the mechanics. Kept short.
 R.MogulModeProfit     = { title = "locale:TIP_MOGUL_MODE_PROFIT_TITLE",      body = "locale:TIP_MOGUL_MODE_PROFIT_BODY",      anchor = "ANCHOR_BOTTOMRIGHT" }
@@ -152,7 +213,7 @@ R.RedeemableTag       = { title = "locale:TIP_REDEEMABLE_TAG_TITLE",         bod
 
 -- ===== House-editor companion: mode tabs ===================================
 R.CompanionStyles      = { title = "locale:TIP_COMPANION_STYLES_TITLE",      body = "locale:TIP_COMPANION_STYLES_BODY",      anchor = "ANCHOR_BOTTOM" }
-R.CompanionShopping    = { title = "locale:TIP_COMPANION_SHOPPING_TITLE",    body = "locale:TIP_COMPANION_SHOPPING_BODY",    anchor = "ANCHOR_BOTTOM" }
+R.CompanionRooms       = { title = "locale:TIP_COMPANION_ROOMS_TITLE",       body = "locale:TIP_COMPANION_ROOMS_BODY",       anchor = "ANCHOR_BOTTOM" }
 R.CompanionSnapshots   = { title = "locale:TIP_COMPANION_SNAPSHOTS_TITLE",   body = "locale:TIP_COMPANION_SNAPSHOTS_BODY",   anchor = "ANCHOR_BOTTOM" }
 R.CompanionThemes      = { title = "locale:TIP_COMPANION_THEMES_TITLE",      body = "locale:TIP_COMPANION_THEMES_BODY",      anchor = "ANCHOR_BOTTOM" }
 R.CompanionCollections = { title = "locale:TIP_COMPANION_COLLECTIONS_TITLE", body = "locale:TIP_COMPANION_COLLECTIONS_BODY", anchor = "ANCHOR_BOTTOM" }

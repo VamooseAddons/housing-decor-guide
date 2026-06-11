@@ -177,7 +177,7 @@ LC.widgets["companionPanel.close"] = {
 -- Mode chips: each binds active to companion.isMode_<key>. Clicks -> COMPANION_SET_MODE.
 local MODE_CHIPS = {
     { value = "styles",      label = "Your Styles", recipe = "CompanionStyles" },
-    { value = "shopping",    label = "Shopping",    recipe = "CompanionShopping" },
+    { value = "rooms",       label = "Designs",     recipe = "CompanionRooms" },
     { value = "snapshots",   label = "Snapshots",   recipe = "CompanionSnapshots" },
     { value = "themes",      label = "Themes",      recipe = "CompanionThemes" },
     { value = "collections", label = "Collections", recipe = "CompanionCollections" },

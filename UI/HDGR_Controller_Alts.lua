@@ -20,6 +20,9 @@ local function SetCharsPopulation(p)
 end
 
 function AltsController:Wire(rootFrame)
+    if not HDG.Log:HasTag("alts_action") then
+        HDG.Log:RegisterTags({ alts_action = { user = true, level = "info", duration = 3 } })
+    end
     HDG.UI.OnClick(rootFrame, "altsPanel.charsPill_active", function()
         SetCharsPopulation("active")
     end)
@@ -366,6 +369,7 @@ local function _onCharDelClick(capturedKey, displayName)
                     type    = HDG.Constants.ACTIONS.CHARACTER_DELETED,
                     payload = { charKey = capturedKey },
                 })
+                HDG.Log:Info("alts_action", "Removed " .. label .. " from the alts list")
             end,
         })
     end

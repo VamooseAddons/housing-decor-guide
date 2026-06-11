@@ -203,6 +203,22 @@ local function buildLumberQueueNeed(state)
     return out
 end
 
+-- Shared algorithm (warehouse "Need" + the Lumber Tracker denominator):
+-- lumber required across recipes whose produced decor is NOT collected.
+-- Registered so both surfaces call ONE implementation and can never drift
+-- (owner call 2026-06-11: tracker showed the all-recipes sum, warehouse
+-- showed uncollected-only -- 1438 vs 888 on Thalassian).
+Selectors:Register("warehouse.lumberRequired", {
+    reads = {
+        "account.collection.ownedDecorIDs",
+        "session.catalog.sweepGeneration",   -- recipe itemID -> decorID via HousingCatalogObserver.byItemID (warms async)
+        "session.staticData.tick",
+    },
+    fn = function(state)
+        return buildLumberRequiredMap(state)
+    end,
+})
+
 Selectors:Register("warehouse.lumberRows", {
     reads = {
         "session.bag.tick",
@@ -211,10 +227,11 @@ Selectors:Register("warehouse.lumberRows", {
         "session.catalog.sweepGeneration",
         "session.achievementStatus.tick",   -- exp-acronym gold = lumber milestone earned (live IsEarned)
     },
-    fn = function(state)
+    calls = { "warehouse.lumberRequired" },
+    fn = function(state, ctx)
         local data = HDG.Constants.LUMBER_DATA
         if type(data) ~= "table" then return {} end
-        local required = buildLumberRequiredMap(state)
+        local required = Selectors:Call("warehouse.lumberRequired", state, ctx)
         local queueNeed = buildLumberQueueNeed(state)
         local bo = HDG.BagObserver
         local out = {}

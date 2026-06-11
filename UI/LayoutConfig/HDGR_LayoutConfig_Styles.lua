@@ -465,7 +465,7 @@ LC.widgets["stylesPanel.heroTagline"] = {
     height = 22, width = "fill", order = 10,
 }
 LC.widgets["stylesPanel.saveSnapshot"] = {
-    tooltip = false,
+    tooltip = { recipe = "StylesSnapshot" },
     kind = "button", ["in"] = "styles.landing.heroRow", font = "small",
     text = "locale:STY_SAVE_PLACED_DECOR", width = "auto", height = 22, order = 17, variant = "tertiary",
     binding = { enabled = "styles.snapshot.canSave" },
@@ -574,7 +574,7 @@ LC.widgets["stylesPanel.curatorTargetList"] = {
 }
 -- Move: requires selectedItems > 0 AND selectedTargetID; label reads "Move (N)".
 LC.widgets["stylesPanel.curatorMove"] = {
-    tooltip = false,
+    tooltip = { recipe = "CuratorMove" },
     kind = "button", ["in"] = "styles.curator.controls", font = "small",
     text = "locale:STY_CURATOR_MOVE", width = "auto", height = 22, order = 5, variant = "primary",
     binding = { text = "styles.curator.moveButtonLabel",
@@ -592,7 +592,7 @@ LC.widgets["stylesPanel.curatorClearSelection"] = {
     text = "locale:STY_CURATOR_CLEAR_SELECTION", width = "auto", height = 22, order = 20, variant = "tertiary",
 }
 LC.widgets["stylesPanel.curatorUndoBtn"] = {
-    tooltip = false,
+    tooltip = { recipe = "CuratorUndo" },
     kind = "button", ["in"] = "styles.curator.controls", font = "small",
     text = "locale:STY_CURATOR_UNDO_LAST_MOVE", width = "auto", height = 22, order = 30, variant = "tertiary",
     binding = { enabled = "styles.curator.canUndo" },
@@ -863,7 +863,7 @@ for i, c in ipairs(STYLES_SMARTSET_SEVERITY_CHIPS) do
     local bind = { active = "styles.smartset.isSeverity_" .. c.value }
     if c.value ~= "all" then bind.text = "styles.smartset.bandLabel_" .. c.value end
     LC.widgets["stylesPanel.smartsetSeverity_" .. c.value] = {
-        tooltip = false,
+        tooltip = { recipe = "StylesSeverity_" .. c.value },
         kind = "button", ["in"] = "styles.smartset.severityRow", font = "caption",
         text = c.label, width = "auto", height = 20, order = i, variant = "chip",
         binding = bind,

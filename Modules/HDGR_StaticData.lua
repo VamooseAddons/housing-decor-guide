@@ -258,15 +258,18 @@ end
 -- rebuilt when the source table identity changes. Last-wins on the rare
 -- item-with-multiple-recipes (any recipe that yields the item suffices).
 local _itemToRecipeCache, _itemToRecipeSource
+local function _ensureItemToRecipe()
+    local db = _table("HDGR_ProfessionsDB")
+    if _itemToRecipeSource == db then return end
+    _itemToRecipeCache, _itemToRecipeSource = {}, db
+    for recipeID, recipe in pairs(db) do
+        if recipe.itemID then _itemToRecipeCache[recipe.itemID] = recipeID end
+    end
+end
+
 function S.Professions:GetByItemID(itemID)
     if not itemID then return nil end
-    local db = _table("HDGR_ProfessionsDB")
-    if _itemToRecipeSource ~= db then
-        _itemToRecipeCache, _itemToRecipeSource = {}, db
-        for recipeID, recipe in pairs(db) do
-            if recipe.itemID then _itemToRecipeCache[recipe.itemID] = recipeID end
-        end
-    end
+    _ensureItemToRecipe()
     return _itemToRecipeCache[itemID]
 end
 
@@ -276,33 +279,49 @@ end
 -- Returns { otherSiblingID, ... } or nil. Lazily built; rebuilt when the
 -- source table identity changes.
 local _qvCache, _qvSource
-function S.Professions:GetQualityVariants(itemID)
-    if not itemID then return nil end
+
+-- Sibling list for group[i]: every other id in the quality group.
+local function _buildSiblings(group, i)
+    local others = {}
+    for j, other in ipairs(group) do
+        if j ~= i then others[#others + 1] = other end
+    end
+    return others
+end
+
+-- Index one variant-bearing slot into _qvCache: each member of the quality
+-- group maps to its sibling list.
+local function _indexVariantSlot(slot)
+    local group = { slot.itemID }
+    for _, v in ipairs(slot.variants) do group[#group + 1] = v end
+    for i, id in ipairs(group) do
+        local others = _buildSiblings(group, i)
+        -- A reagent can appear in slots listing partial sibling sets;
+        -- keep the largest group seen.
+        if not _qvCache[id] or #others > #_qvCache[id] then
+            _qvCache[id] = others
+        end
+    end
+end
+
+local function _ensureQualityVariants()
     local db = _table("HDGR_ProfessionsDB")
-    if _qvSource ~= db then
-        _qvCache, _qvSource = {}, db
-        for _, recipe in pairs(db) do
-            if recipe.slots then
-                for _, slot in ipairs(recipe.slots) do
-                    if slot.itemID and slot.variants and #slot.variants > 0 then
-                        local group = { slot.itemID }
-                        for _, v in ipairs(slot.variants) do group[#group + 1] = v end
-                        for i, id in ipairs(group) do
-                            local others = {}
-                            for j, other in ipairs(group) do
-                                if j ~= i then others[#others + 1] = other end
-                            end
-                            -- A reagent can appear in slots listing partial
-                            -- sibling sets; keep the largest group seen.
-                            if not _qvCache[id] or #others > #_qvCache[id] then
-                                _qvCache[id] = others
-                            end
-                        end
-                    end
+    if _qvSource == db then return end
+    _qvCache, _qvSource = {}, db
+    for _, recipe in pairs(db) do
+        if recipe.slots then
+            for _, slot in ipairs(recipe.slots) do
+                if slot.itemID and slot.variants and #slot.variants > 0 then
+                    _indexVariantSlot(slot)
                 end
             end
         end
     end
+end
+
+function S.Professions:GetQualityVariants(itemID)
+    if not itemID then return nil end
+    _ensureQualityVariants()
     return _qvCache[itemID]
 end
 

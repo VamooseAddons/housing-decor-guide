@@ -616,6 +616,7 @@ function ShoppingController:Wire(rootFrame)
         local dialog = HDG.UI:CopyDialog()
         if dialog and dialog.Open then
             dialog:Open("Export: " .. (list.name or "?"), encoded)
+            HDG.Log:Info("shopping", "Export ready -- copy the text from the dialog")
         end
     end)
 
@@ -673,6 +674,7 @@ function ShoppingController:_RegisterPopups()
         onAccept = function(value)
             if value == "" then return end
             HDG.Store:Dispatch({ type = A.SHOPPING_LIST_CREATE, payload = { name = value } })
+            HDG.Log:Success("shopping", "Created shopping list '" .. value .. "'")
         end,
     })
 

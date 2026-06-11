@@ -271,7 +271,7 @@ LC.widgets["configPanel.aboutSectionLabel"] = {
 
 -- Discord link.
 LC.widgets["configPanel.discordLink"] = {
-    tooltip = false,
+    tooltip = { recipe = "Discord" },
     kind = "linkRow", ["in"] = "config.discordRow",
     icon  = HDG.Constants.DISCORD_TEXTURE,
     label = "locale:CFG_DISCORD_LABEL",
@@ -281,7 +281,7 @@ LC.widgets["configPanel.discordLink"] = {
 
 -- Coffee link.
 LC.widgets["configPanel.coffeeLink"] = {
-    tooltip = false,
+    tooltip = { recipe = "Coffee" },
     kind = "linkRow", ["in"] = "config.coffeeRow",
     iconAtlas = "auctionhouse-icon-coin",
     label = "locale:CFG_COFFEE_LABEL",
@@ -302,7 +302,7 @@ LC.widgets["configPanel.dangerSectionLabel"] = {
 
 -- Collection reset: single click dispatches COLLECTION_RESET + ReconcileFull.
 LC.widgets["configPanel.collectionResetBtn"] = {
-    tooltip = false,
+    tooltip = { recipe = "ConfigCollectionReset" },
     kind = "button", ["in"] = "config.collectionResetRow", font = "body",
     text = "locale:CFG_COLLECTION_RESET_BTN", width = 200, height = 24, order = 10,
     variant = "tertiary",
@@ -316,7 +316,7 @@ LC.widgets["configPanel.collectionResetHint"] = {
 
 -- Hard reset (click-again confirm).
 LC.widgets["configPanel.hardReset"] = {
-    tooltip = false,
+    tooltip = { recipe = "WarnHardReset" },
     kind = "button", ["in"] = "config.hardResetRow", font = "body",
     text = "locale:CFG_HARD_RESET_BTN", width = 160, height = 24, order = 10,
     textTone = "error",

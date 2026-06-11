@@ -504,9 +504,48 @@ function DecorController:Wire(rootFrame)
     end
 
     self:_wireWishlist(rootFrame)
+    self:_wireVendorHyperlink(rootFrame)
 end
 
 -- ===== Wire sub-wirings (extracted from DecorController:Wire) ===============
+
+-- |Hhdgrvendor:<npcID>|h click: route to this vendor in Acquire (vendor view).
+-- Closes the #1 cross-tab journey (UX review 2026-06-10): source line -> vendor.
+local function _parseVendorLink(link)
+    local kind, payload = strsplit(":", link or "", 2)
+    if kind ~= "hdgrvendor" or not payload or payload == "" then return nil end
+    return tonumber(payload)
+end
+
+function DecorController:_wireVendorHyperlink(rootFrame)
+    local sourceLabel = HDG.UI.W(rootFrame, "decorDetailPanel.itemSource")
+    local hyperHost   = sourceLabel and sourceLabel.GetParent and sourceLabel:GetParent()
+    if not (hyperHost and hyperHost.SetHyperlinksEnabled) then return end  -- exception(false-positive): mock-fidelity guard (mirrors acq hdgrach wiring)
+    hyperHost:EnableMouse(true)
+    hyperHost:SetHyperlinksEnabled(true)
+    hyperHost:SetScript("OnHyperlinkClick", function(_, link)
+        local npcID = _parseVendorLink(link)
+        if not npcID then return end
+        -- Transients first so the acquisition view paints in vendor mode with the
+        -- vendor already selected when the view switch lands.
+        CH.Mechanics.SetUITransientView("acquisition", "viewMode", "vendor")
+        CH.Mechanics.SetUITransientView("acquisition", "selectedNpcID", npcID)
+        HDG.Store:Dispatch({
+            type    = HDG.Constants.ACTIONS.UI_SET_PERSISTENT,
+            payload = { key = "view", value = "acquisition" },
+        })
+    end)
+    hyperHost:SetScript("OnHyperlinkEnter", function(self, link)
+        if not _parseVendorLink(link) then return end
+        HDG.TooltipEngine:Show(self, {
+            anchor     = "ANCHOR_CURSOR",
+            extraLines = {
+                { text = "Click to view this vendor in Acquire", r = 0.7, g = 0.7, b = 0.7 },
+            },
+        })
+    end)
+    hyperHost:SetScript("OnHyperlinkLeave", function() HDG.TooltipEngine:Hide() end)
+end
 
 -- List box: arrow-key navigation + SelectionBehaviorMixin store-sync.
 function DecorController:_wireListBox(rootFrame)

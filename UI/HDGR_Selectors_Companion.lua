@@ -62,7 +62,7 @@ Selectors:Register("companion.ioLabel", {
 
 -- Per-mode active-state selectors for the mode chip strip (companion.isMode_<key>).
 Selectors:DefineEnum("companion.isMode", "session.ui.companion.mode",
-    { "styles", "shopping", "snapshots", "themes", "collections", "recent" })
+    { "styles", "rooms", "snapshots", "themes", "collections", "recent" })
 
 -- ============================================================================
 -- Mode -> collection-type mapping
@@ -70,7 +70,7 @@ Selectors:DefineEnum("companion.isMode", "session.ui.companion.mode",
 
 local MODE_TO_TYPES = {
     styles      = { style = true, smartset = true },   -- user-created styles + smart sets
-    shopping    = { shopping = true },
+    -- "rooms" handled separately -- sourced from account.rooms, not collections
     snapshots   = { snapshot = true },
     themes      = { concept = true },                  -- pre-authored Room Concepts
     collections = { collection = true },               -- pre-authored Useful Collections
@@ -190,8 +190,10 @@ Selectors:Register("companion.sidebarRows", {
         "session.ui.companion.search",
         "session.ui.companion.selectedItemID",
         "account.collections",
-        "account.vendorShoppingLists",       -- shopping-mode sidebar: one row per list
-        "account.activeShoppingListId",      -- shopping-mode default selection
+        "account.rooms",                     -- rooms-mode sidebar: one row per room
+        "account.furnishingSets",            -- rooms-mode counts
+        "session.furn",                      -- rooms-mode change tick
+        "session.house.roomCatalog",         -- rooms-mode blueprint tiles
         "session.styles.cacheTick",
         "session.staticData.tick",
         "session.catalog.sweepGeneration",   -- cost-bucket owned counts
@@ -222,29 +224,38 @@ Selectors:Register("companion.sidebarRows", {
             return out
         end
 
-        if mode == "shopping" then
-            -- Shopping lists live in account.vendorShoppingLists, NOT account.collections.
-            -- One row per list; default-select the active list when nothing is picked.
-            local lists = state.account.vendorShoppingLists
-            local sel   = selected
-            if sel == nil or not lists[sel] then
-                local activeId = state.account.activeShoppingListId
-                sel = (activeId ~= "" and activeId) or nil
-            end
-            for id, list in pairs(lists) do
-                local name = (type(list.name) == "string" and list.name ~= "" and list.name) or id
+        if mode == "rooms" then
+            -- One row per persistent Furnishings room; count = effective decor
+            -- total across its equipped sets + own pieces. Blueprint tile from
+            -- the live room catalog (ShapeAtlas glyph pre-snapshot).
+            local cat = state.session.house.roomCatalog.byShapeID
+            for rid, room in pairs(state.account.rooms) do
+                local name = (room.name and room.name ~= "" and room.name)
+                    or (room.shape and HDG.Projects.ShapeAtlas.GetLabel(room.shape)) or "Room"
                 if not needle or name:lower():find(needle, 1, true) then
+                    local n = 0
+                    for _, sid in ipairs(room.furnishingSetIDs) do
+                        local set = state.account.furnishingSets[sid]
+                        if set then   -- exception(nullable): set deleted out from under the room
+                            for _, it in ipairs(set.items) do n = n + (it.count or 1) end
+                        end
+                    end
+                    local e = room.shape and cat[room.shape]   -- exception(nullable): shapeless rooms have no tile
                     out[#out + 1] = {
-                        id          = id,
-                        type        = "shopping",
+                        id          = rid,
+                        type        = "room",
                         displayName = name,
-                        count       = (type(list.items) == "table") and #list.items or nil,
-                        isSelected  = sel == id,
+                        count       = n,
+                        iconAtlas   = (e and e.iconAtlas)
+                            or (room.shape and HDG.Projects.ShapeAtlas.GetAtlas(room.shape)) or nil,
+                        isSelected  = selected == rid,
                     }
                 end
             end
             table.sort(out, function(a, b)
-                return tostring(a.displayName):lower() < tostring(b.displayName):lower()
+                local an, bn = tostring(a.displayName):lower(), tostring(b.displayName):lower()
+                if an ~= bn then return an < bn end
+                return a.id < b.id
             end)
             return out
         end
@@ -404,8 +415,8 @@ Selectors:Register("companion.gridItems", {
         "session.ui.companion.showCost",    -- cell cost-badge gate (stamped per cell)
         "account.recentActivity",
         "account.collections",
-        "account.vendorShoppingLists",      -- shopping-mode grid: the selected list's items
-        "account.activeShoppingListId",     -- shopping-mode default list
+        "account.rooms",                    -- rooms-mode grid: the selected room
+        "account.furnishingSets",           -- rooms-mode grid: its effective furnishings
         "session.styles.cacheTick",
         "session.staticData.tick",          -- StyleResolve reads pre-authored defs
         "session.catalog.sweepGeneration",
@@ -465,21 +476,22 @@ Selectors:Register("companion.gridItems", {
             return _stampShowCost(out, showCost)
         end
 
-        if mode == "shopping" then
-            -- Selected shopping list's items as placement cards (default to active list).
-            -- Resolves through the same observer + _emitDecorCells path as other modes.
-            local lists = state.account.vendorShoppingLists
-            local sel   = state.session.ui.companion.selectedItemID
-            local list  = (sel ~= nil) and lists[sel] or nil
-            if not list then
-                local activeId = state.account.activeShoppingListId
-                list = (activeId ~= "" and lists[activeId]) or nil
-            end
-            if list and type(list.items) == "table" then
-                for _, entry in ipairs(list.items) do
-                    if entry.itemID then
-                        local row = HDG.HousingCatalogObserver:GetRow(entry.itemID)
-                        _emitDecorCells(out, entry.itemID, row, needle, ioFilter)
+        if mode == "rooms" then
+            -- Selected room's EFFECTIVE furnishings (equipped sets + own
+            -- pieces) as placement cards -- place straight from your plan.
+            local room = state.account.rooms[state.session.ui.companion.selectedItemID or ""]   -- exception(nullable): nothing selected yet
+            if room then
+                local seen = {}
+                for _, sid in ipairs(room.furnishingSetIDs) do
+                    local set = state.account.furnishingSets[sid]
+                    if set then   -- exception(nullable): set deleted out from under the room
+                        for _, it in ipairs(set.items) do
+                            if not seen[it.id] then
+                                seen[it.id] = true
+                                local row = HDG.HousingCatalogObserver:GetRow(it.id)
+                                _emitDecorCells(out, it.id, row, needle, ioFilter)
+                            end
+                        end
                     end
                 end
             end
@@ -604,7 +616,7 @@ Selectors:Register("companion.recentSessions", {
 
 local MODE_LABELS = {
     styles       = "Your Styles",
-    shopping     = "Shopping Lists",
+    rooms        = "My Rooms",
     snapshots    = "Snapshots",
     themes       = "Room Concepts",
     collections  = "Useful Collections",

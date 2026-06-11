@@ -35,10 +35,10 @@ function M.OccupiedCells(rooms, floor, exclude)
     local SA, IDs, occ = HDG.Projects.ShapeAtlas, HDG.Projects.IDs, {}
     for rid, room in pairs(rooms) do
         if not (exclude and exclude[rid]) then
-            local p = IDs.parsePath(rid)
+            local base = room.floor or ((IDs.parsePath(rid) or {}).floor)   -- v7 entries carry .floor; legacy keys encode it
             local span = _effectiveSpan(room)
-            local top = p and (span > 1 and (p.floor + span - 1) or p.floor)
-            if p and floor >= p.floor and floor <= top then
+            local top = base and (span > 1 and (base + span - 1) or base)
+            if base and floor >= base and floor <= top then
                 local cells = SA.GetCells(room.shape)
                 for _, m in ipairs(SA.RotateMask(SA.GetMask(room.shape), room.cell.rotation or 0, cells[1], cells[2])) do
                     occ[(room.cell.x + m[1]) .. "," .. (room.cell.y + m[2])] = true
@@ -56,8 +56,9 @@ end
 function M.ProjectedRooms(rooms, floor)
     local IDs, out = HDG.Projects.IDs, {}
     for rid, room in pairs(rooms) do
-        local p, span = IDs.parsePath(rid), _effectiveSpan(room)
-        if p and span > 1 and p.floor < floor and floor <= p.floor + span - 1 then
+        local base = room.floor or ((IDs.parsePath(rid) or {}).floor)   -- v7 entries carry .floor
+        local span = _effectiveSpan(room)
+        if base and span > 1 and base < floor and floor <= base + span - 1 then
             out[#out + 1] = { roomID = rid, shape = room.shape, cell = room.cell }
         end
     end
@@ -71,13 +72,13 @@ function M.CanMoveTo(rooms, roomID, x, y)
     local SA, IDs = HDG.Projects.ShapeAtlas, HDG.Projects.IDs
     local room = rooms[roomID]
     if not room then return false end
-    local p = IDs.parsePath(roomID)
-    if not p then return false end
+    local base = room.floor or ((IDs.parsePath(roomID) or {}).floor)   -- v7 entries carry .floor
+    if not base then return false end
     local span    = _effectiveSpan(room)
     local cells   = SA.GetCells(room.shape)
     local mask    = SA.RotateMask(SA.GetMask(room.shape), room.cell.rotation or 0, cells[1], cells[2])
     local exclude = { [roomID] = true }
-    for f = p.floor, p.floor + span - 1 do
+    for f = base, base + span - 1 do
         local occ = M.OccupiedCells(rooms, f, exclude)
         for _, m in ipairs(mask) do
             if occ[(x + m[1]) .. "," .. (y + m[2])] then return false end
@@ -100,7 +101,7 @@ function M.FloatingDoorCardinal(rooms, roomID)
     local c       = room.cell
     local rc      = SA.RotateCells(SA.GetCells(room.shape), c.rotation or 0)
     local w, d    = rc[1], rc[2]
-    local base    = IDs.parsePath(roomID).floor or 1
+    local base    = room.floor or (IDs.parsePath(roomID) or {}).floor or 1   -- v7 entries carry .floor
     local exclude = { [roomID] = true }
     local SCAN    = 64   -- max cells to look outward for the nearest neighbour
 

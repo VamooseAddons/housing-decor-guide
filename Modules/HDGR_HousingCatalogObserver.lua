@@ -50,6 +50,7 @@ local function resolveCategoryName(catID)
     local cached = _categoryNameCache[catID]
     if cached then return cached end
     local info = _G.C_HousingCatalog.GetCatalogCategoryInfo(catID)
+    if not info then return nil end  -- exception(boundary): nullable while catalog streams in; Blizzard's OnCategoryUpdated nil-checks the same call. Miss stays uncached so the next sweep retries.
     local name = info.name
     if name then _categoryNameCache[catID] = name end
     return name
@@ -59,6 +60,7 @@ local function resolveSubcategoryName(subID)
     local cached = _subcategoryNameCache[subID]
     if cached then return cached end
     local info = _G.C_HousingCatalog.GetCatalogSubcategoryInfo(subID)
+    if not info then return nil end  -- exception(boundary): nullable while catalog streams in; see resolveCategoryName.
     local name = info.name
     if name then _subcategoryNameCache[subID] = name end
     return name

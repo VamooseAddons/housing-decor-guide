@@ -7,9 +7,14 @@ local HDG = _G.HDG
 
 HDG.Waypoints = {}
 
--- Log tag registered at file-load (no Modules:Declare block;
--- tag must exist before the first Warn call; HDGR_Log.lua loads first in TOC).
-HDG.Log:RegisterTags({ waypoints = { level = "warn", user = false } })
+-- Log tags registered at file-load (no Modules:Declare block;
+-- tags must exist before the first Warn call; HDGR_Log.lua loads first in TOC).
+--   waypoints      -- internal diagnostics (debug tab only)
+--   waypoints_user -- player-facing waypoint acks (status rail)
+HDG.Log:RegisterTags({
+    waypoints      = { level = "warn", user = false },
+    waypoints_user = { level = "info", user = true, duration = 3 },
+})
 
 -- ============================================================================
 -- PROVIDER SELECTION
@@ -202,39 +207,51 @@ end
 -- FEEDBACK MESSAGES
 -- ============================================================================
 
--- Print a [HDG]-prefixed chat line in a state-themed color. State maps
--- via Theme:GetTextStateColorToken (success/warning/error/uncollected).
-local function chatLine(state, msg)
-    print(HDG.Theme:GetTextStateColorToken(state) .. "[HDG]|r " .. msg)
+-- Failure feedback: Log:Warn on the user tag -> status rail toast, AND the Log
+-- engine auto-chats warn-level entries (shouldTrace), so failures stay visible
+-- even with the window closed. No direct print needed.
+local function warnLine(msg)
+    HDG.Log:Warn("waypoints_user", msg)
+end
+
+-- Success feedback: status rail toast. Chat ONLY when the main window (which
+-- hosts the rail) is hidden -- waypoints can be set from the standalone zone
+-- scanner / shopping windows / map pins, and feedback must not be lost there.
+-- Chat stays quiet whenever the rail can show the ack.
+local function successLine(msg)
+    HDG.Log:Success("waypoints_user", msg)
+    if not HDG.Store:GetState().account.ui.mainWindowShown then
+        print(HDG.Theme:GetTextStateColorToken("success") .. "[HDG]|r " .. msg)  -- exception(boundary): rail not visible; chat is the only feedback surface
+    end
 end
 
 function HDG.Waypoints:PrintResult(ok, provider, title, count, vendorFaction)
     if not ok then
         if provider == "combat" then
-            chatLine("error", "Cannot set waypoints during combat.")
+            warnLine("Cannot set waypoints during combat.")
         elseif provider == "no_tomtom" then
-            chatLine("warning", "TomTom is not installed. Set Waypoint Provider to Auto or Blizzard in HDG settings.")
+            warnLine("TomTom is not installed. Set Waypoint Provider to Auto or Blizzard in HDG settings.")
         elseif provider == "unsupported_map" then
-            chatLine("warning", "Cannot set waypoint for this zone.")
+            warnLine("Cannot set waypoint for this zone.")
         elseif provider == "no_map" then
-            chatLine("warning", "No valid coordinates for this vendor.")
+            warnLine("No valid coordinates for this vendor.")
         else
-            chatLine("warning", "Could not set waypoint.")
+            warnLine("Could not set waypoint.")
         end
         return
     end
     if count then
         if provider == "tomtom" then
-            chatLine("success", string.format("Set %d TomTom waypoints.", count))
+            successLine(string.format("Set %d TomTom waypoints.", count))
         else
-            chatLine("success", string.format("%d vendor pins added to map. Navigating to closest.", count))
+            successLine(string.format("%d vendor pins added to map. Navigating to closest.", count))
         end
     else
         local name = title or "vendor"
         if provider == "tomtom" then
-            chatLine("success", "TomTom waypoint set for " .. name)
+            successLine("TomTom waypoint set for " .. name)
         else
-            chatLine("success", "Waypoint set for " .. name)
+            successLine("Waypoint set for " .. name)
         end
     end
     -- Opposite-faction vendor warning
@@ -244,7 +261,7 @@ function HDG.Waypoints:PrintResult(ok, provider, title, count, vendorFaction)
         local vendorIsHorde = vendorFaction == "H"
         if (playerFaction == "Alliance" and vendorIsHorde) or (playerFaction == "Horde" and vendorIsAlliance) then
             local label = vendorIsAlliance and "Alliance" or "Horde"
-            chatLine("warning", "Note: This is a " .. label .. "-only vendor.")
+            warnLine("Note: This is a " .. label .. "-only vendor.")
         end
     end
 end
@@ -419,6 +436,10 @@ function HDG.Waypoints:InitMapPins()
         f:SetScript("OnMouseUp", f.OnClick)
         HDG.TooltipEngine:Attach(f, _vendorPinTooltipDef)
     end
+    -- exception(false-positive): CreateFramePool is safe here -- the 12.x taint trap is
+    -- SecureActionButtonTemplate DESCENDANTS (protection propagates upward; pool Hide() on
+    -- release is combat-locked). Pins are plain insecure frames (texture + OnMouseUp), no
+    -- secure children, so CreateUnsecuredRegionPoolInstance is not required.
     _pinPool = CreateFramePool("FRAME", _mapFrame, nil, _onPinReleased, false, frameInitFunc)
 
     -- MapCanvas.MapSet fires BEFORE canvas geometry settles; poll for non-zero

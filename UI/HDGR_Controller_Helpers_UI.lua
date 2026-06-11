@@ -141,25 +141,6 @@ end
 
 -- ===== Row factory builders ==============================================
 
--- Lazily create a row FontString. Font MUST be applied before SetText (no inheritsFrom -> error).
-function UI.ensureRowText(row, font)
-    if row.vfnText or not row.CreateFontString then return end
-    row.vfnText = row:CreateFontString(nil, "OVERLAY")
-    if row.vfnText.SetPoint then  -- exception(false-positive): FontString always has SetPoint; mock-fidelity guard
-        row.vfnText:SetPoint("LEFT", 8, 0); row.vfnText:SetPoint("RIGHT", -8, 0)
-    end
-    row.vfnText:SetJustifyH("LEFT")
-    row.vfnText:SetWordWrap(false)
-    HDG.UI.applyFontRole(row.vfnText, font)
-    HDG.Theme:Register(row.vfnText, "Text")
-end
-
-function UI.clearRow(row)
-    row:SetScript("OnClick", nil)
-    if row.vfnText then row.vfnText:SetText("") end
-    row:SetText("")
-end
-
 -- Create + theme a row FontString in one call (create-role-register triple).
 -- Anchoring/width/wrap stay at call site; justify is optional 4th arg.
 function UI.RowText(row, fontRole, themeRole, justify)
@@ -271,15 +252,6 @@ function UI.PaintRowChrome(row, selected)
     if not row then return end
     HDG.UI:EnsureRowChrome(row)
     HDG.Theme:Register(row, "RowChrome", { selected = selected and true or false })
-end
-
-function UI.PaintRowBadge(row, text)
-    if not row then return end
-    HDG.UI:EnsureRowBadge(row)
-    HDG.Theme:Register(row, "BadgePill", {
-        text = (text ~= nil and text ~= "") and text or nil,
-        variant = "count",
-    })
 end
 
 -- ===== Source-type chip strip =============================================

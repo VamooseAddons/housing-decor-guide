@@ -467,7 +467,7 @@ LC.widgets["recipesMaterialsPanel.title"] = {
 }
 -- Materials controls: grouping toggle (Totals / By Recipe) + depth radio (Direct / Raw).
 LC.widgets["recipesMaterialsPanel.groupingToggle"] = {
-    tooltip = false,
+    tooltip = { recipe = "RecipesGroupingToggle" },
     kind = "button", ["in"] = "recipes.materialsModeStrip",
     variant = "chip", height = 20, order = 10, font = "caption",
     binding = { text = "recipes.materialsGroupingLabel",
@@ -475,7 +475,7 @@ LC.widgets["recipesMaterialsPanel.groupingToggle"] = {
     -- OnClick -> RECIPES_TOGGLE_MATERIALS_GROUPING (wired in the controller)
 }
 LC.widgets["recipesMaterialsPanel.depthRadio"] = {
-    tooltip = false,
+    tooltip = { recipe = "RecipesDepth" },
     kind = "radioGroup", ["in"] = "recipes.materialsModeStrip",
     width = 150, height = 20, order = 20, orientation = "horizontal", font = "caption",
     binding  = { menu = "recipes.materialsDepthOptions", current = "recipes.materialsDepth" },
@@ -511,7 +511,7 @@ LC.widgets["recipesMaterialsPanel.costLabel"] = {
     binding = "recipes.materials.cost",
 }
 LC.widgets["recipesMaterialsPanel.addAll"] = {
-    tooltip = false,
+    tooltip = { recipe = "RecipesAddAllToAH" },
     kind = "button", ["in"] = "recipes.materialsCostBar", font = "small",
     text = "locale:REC_BUY_MATS_FROM_AH", width = "auto", height = 22, order = 20,
     variant = "primary",

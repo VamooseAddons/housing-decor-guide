@@ -1128,6 +1128,12 @@ local function _makeBuildKind(env)
         -- Central tooltip wiring: single point of attach for every kind.
         -- TE handles false (no-op), {recipe=…} (registry), and inline shapes.
         -- TE:Attach's _hdgrTooltipAttached guard prevents double-wire.
+        -- Tooltips must also show on DISABLED buttons (they often explain WHY
+        -- the button is disabled); OnEnter doesn't fire while disabled unless
+        -- motion scripts stay on.
+        if spec.tooltip and widget.SetMotionScriptsWhileDisabled then  -- exception(false-positive): mock-fidelity (only Buttons carry the method)
+            widget:SetMotionScriptsWhileDisabled(true)
+        end
         HDG.TooltipEngine:Attach(widget, spec.tooltip)
         return widget
     end

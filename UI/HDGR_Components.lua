@@ -3292,25 +3292,6 @@ function HDG.UI:EnsureRowChrome(row)
     return row._hdgrChrome
 end
 
-function HDG.UI:EnsureRowBadge(row)
-    if not row then return nil end
-    if row._hdgrBadge then return row._hdgrBadge end
-    if not (row.CreateTexture and row.CreateFontString) then return nil end
-
-    local frame = row:CreateTexture(nil, "OVERLAY")
-    frame:SetPoint("TOPRIGHT", -8, -7)
-    frame:SetSize(28, 16)
-    frame:SetTexture(WHITE_TEX)
-    frame:Hide()
-    local fs = row:CreateFontString(nil, "OVERLAY")
-    fs:SetPoint("CENTER", frame, "CENTER", 0, 0)
-    applyFontRole(fs, "small")
-    fs:SetJustifyH("CENTER")
-    fs:Hide()
-    row._hdgrBadge = { frame = frame, text = fs }
-    return row._hdgrBadge
-end
-
 -- MapPin: pin frame for the drawer map. Pure construction -- positions, sizes,
 -- and pin colours are driven by DrawerController at refresh time (via the
 -- Theme tokens it reads). Lives in Components so controllers don't construct

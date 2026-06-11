@@ -560,6 +560,7 @@ function AcquisitionController:_wireShowOnMap(rootFrame)
         end
         HDG.Waypoints:AddMapPin(uiMapID, mapX, mapY, vendor.name)
         HDG.AcquisitionController:OpenWorldMapAt(uiMapID)
+        HDG.Log:Info("waypoints_user", "Showing " .. vendor.name .. " on map")
     end)
 end
 
@@ -741,12 +742,12 @@ function AcquisitionController:Wire(rootFrame)
                 end
             end
         end
-        HDG.Log:Info("waypoints", string.format("Mapped %d vendor%s.", placed, placed == 1 and "" or "s"))
+        HDG.Log:Info("waypoints_user", string.format("Mapped %d vendor%s.", placed, placed == 1 and "" or "s"))
     end)
 
     HDG.UI.OnClick(rootFrame, "acquisitionListPanel.clearPinsBtn", function()
         HDG.Waypoints:ClearAllMapPins()
-        HDG.Log:Info("waypoints", "Map pins cleared.")
+        HDG.Log:Info("waypoints_user", "Map pins cleared.")
     end)
 end
 

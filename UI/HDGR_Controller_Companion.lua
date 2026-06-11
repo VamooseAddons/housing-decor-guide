@@ -11,7 +11,7 @@ local A = HDG.Constants.ACTIONS
 
 -- Mode chip keys (order = chip order in the toolbar). Drives the click wiring
 -- here; the matching companion.isMode_<key> active bindings live in Selectors.
-local MODE_KEYS = { "styles", "shopping", "snapshots", "themes", "collections", "recent" }
+local MODE_KEYS = { "styles", "rooms", "snapshots", "themes", "collections", "recent" }
 
 -- ===== Sidebar row factory ==================================================
 
@@ -28,8 +28,14 @@ local function _formatSessionLabel(ed)
     return _G.date("%b %d", ts) .. " (" .. n .. ")"
 end
 
--- One-time chrome: label (left) + count (right).
+-- One-time chrome: optional shape icon + label (left) + count (right).
 local function _layoutSidebarRow(row)
+    local icon = row:CreateTexture(nil, "ARTWORK", nil, 2)   -- rooms-mode blueprint tile
+    icon:SetPoint("LEFT", row, "LEFT", 4, 0)
+    icon:SetSize(18, 18)
+    icon:Hide()
+    row._iconTex = icon
+
     local fs = HDG.UI.RowText(row, "body", "Text", "LEFT")
     fs:SetPoint("LEFT", row, "LEFT", 6, 0)
     fs:SetPoint("RIGHT", row, "RIGHT", -34, 0)   -- leave room for the count
@@ -85,6 +91,16 @@ local function _paintSelectableRow(row, ed)
         row._labelFs:SetText(ed.displayName or ed.id)
         row._countFs:SetText(ed.count and tostring(ed.count) or "")
     end
+    -- Rooms-mode rows carry the shape's blueprint tile; label shifts right.
+    row._labelFs:ClearAllPoints()
+    if ed.iconAtlas then
+        row._iconTex:SetAtlas(ed.iconAtlas, false); row._iconTex:Show()
+        row._labelFs:SetPoint("LEFT", row._iconTex, "RIGHT", 4, 0)
+    else
+        row._iconTex:Hide()
+        row._labelFs:SetPoint("LEFT", row, "LEFT", 6, 0)
+    end
+    row._labelFs:SetPoint("RIGHT", row, "RIGHT", -34, 0)
     HDG.Theme:Register(row, "RowChrome", { selected = ed.isSelected == true })
     local id = ed.id
     row:SetScript("OnClick", function()

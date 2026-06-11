@@ -69,14 +69,17 @@ function MogulController:_wireQueueAll(rootFrame)
         local plan = HDG.Selectors:Call("mogul.plan", HDG.Store:GetState(), {})  -- exception(false-positive): top-level controller method (not a row factory)
         if not (plan and plan.rows and #plan.rows > 0) then return end
         local A = HDG.Constants.ACTIONS
+        local n = 0
         for _, row in ipairs(plan.rows) do
             local r = row.recipe
             if r and r.itemID and row.crafts > 0 then  -- plan row: crafts is planner-stamped numeric
                 HDG.Store:Dispatch({ type = A.CRAFT_QUEUE_ADD,
                     payload = { recipeID = r.itemID, itemID = r.itemID, qty = row.crafts, source = "mogul" } })
+                n = n + 1
             end
         end
         HDG.Store:Dispatch({ type = A.UI_SET_PERSISTENT, payload = { key = "view", value = "recipes" } })
+        HDG.Log:Success("queue", ("Queued %d recipe%s from plan"):format(n, n == 1 and "" or "s"))
     end)
 end
 
@@ -86,6 +89,8 @@ function MogulController:_wireSendToAH(rootFrame)
         local plan = HDG.Selectors:Call("mogul.plan", HDG.Store:GetState(), {})  -- exception(false-positive): top-level controller method (not a row factory)
         if not (plan and plan.shoppingList and #plan.shoppingList > 0) then return end
         HDG.UI.SendReagentsToAuctionator("HDG Mogul Reagents", plan.shoppingList)
+        HDG.Log:Success("shopping", ("Sent %d reagent%s to Auctionator"):format(
+            #plan.shoppingList, #plan.shoppingList == 1 and "" or "s"))
     end)
 end
 
@@ -116,11 +121,19 @@ function MogulController:_wireGoblinSource(rootFrame)
                 end
             end
         end
-        HDG.PriceSource:StartDirectScan(ids)
+        if HDG.PriceSource:StartDirectScan(ids) then
+            HDG.Log:Info("mogul_action", "Price scan started...")
+        else
+            -- Previously a SILENT no-op away from the AH -- worst kind of dead button.
+            HDG.Log:Warn("mogul_action", "Price scan needs the Auction House window open.")
+        end
     end)
 end
 
 function MogulController:Wire(rootFrame)
+    if not HDG.Log:HasTag("mogul_action") then
+        HDG.Log:RegisterTabTags("mogul")
+    end
     HDG.UI.OnClick(rootFrame, "mogulPanel.modeProfit",     function() dispatch("MOGUL_SET_MODE",        { mode = "profit"     }) end)
     HDG.UI.OnClick(rootFrame, "mogulPanel.modeCollection", function() dispatch("MOGUL_SET_MODE",        { mode = "collection" }) end)
     HDG.UI.OnClick(rootFrame, "mogulPanel.viewChar",       function() dispatch("MOGUL_SET_VIEW",        { viewMode = "char"    }) end)

@@ -53,19 +53,9 @@ end
 local function _ensureSelection()
     local state = HDG.Store:GetState()  -- exception(false-positive): top-level controller helper, not a row factory
     local sel   = state.session.ui.projects.layoutSelectedVersionID
-    if sel and state.account.projects.versions[sel] then return end
+    if sel and state.account.projects.layouts[sel] then return end
     local fallback = _defaultVersionID()
     if fallback then _selectVersion(fallback) end
-end
-
--- Mint a fresh roomID for an imported room, collision-avoiding.
-local function _mintImportRoomID(rooms, floorID)
-    local IDs = HDG.Projects.IDs
-    for _ = 1, 32 do
-        local id = IDs.makeRoomID(floorID, IDs.shortUUID(4))
-        if not rooms[id] then return id end
-    end
-    return IDs.makeRoomID(floorID, IDs.shortUUID(8))
 end
 
 -- ===== Row factory: projectsLayoutGroupRow ==================================
@@ -413,16 +403,21 @@ local function _shareCode()
     local state  = HDG.Store:GetState()  -- exception(false-positive): top-level controller helper, not a row factory
     local detail = HDG.Selectors:Call("projects.layoutDetail", state, {})
     if not detail.hasSelection then return end
-    local version = state.account.projects.versions[detail.versionID]  -- exception(false-positive): top-level controller read
-    local code = HDG.Projects.LayoutCodec.Encode(version)
+    local layout = state.account.projects.layouts[detail.versionID]  -- exception(false-positive): top-level controller read
+    -- Encode geometry off the materialized view: records carry floor/shape/cell/
+    -- floors for rooms AND unassigned slots alike (codec stays key-agnostic).
+    local code = HDG.Projects.LayoutCodec.Encode({
+        name = layout.name, numFloors = layout.numFloors,
+        rooms = HDG.StoreFurnishings.LayoutView(state, detail.versionID),
+    })
     if not code then return end
     local dialog = HDG.UI:CopyDialog()   -- exception(boundary): UI helper may be unbuilt pre-first-open
-    if dialog and dialog.Open then dialog:Open("Layout code: " .. (version.name or "Layout"), code) end
+    if dialog and dialog.Open then dialog:Open("Layout code: " .. (layout.name or "Layout"), code) end
 end
 
 -- Import the decoded layout as a NEW what-if under `targetHouseID` (chosen by
 -- _beginImport: the only house, or the one picked from the >1-house menu).
-local function _doImport(text, targetHouseID)
+local function _doImport(text, targetHouseID, targetHouseName)
     if not (text and text ~= "" and targetHouseID) then return end
     local decoded = HDG.Projects.LayoutCodec.Decode(text)
     if not decoded then
@@ -432,34 +427,43 @@ local function _doImport(text, targetHouseID)
         return
     end
 
-    -- Build a fresh version record in the controller (reducer receives it thin). Each
-    -- decoded descriptor -> ONE room record, re-keyed to the target house's floors. A
+    -- Build a fresh layout record in the controller (reducer receives it thin).
+    -- Each decoded descriptor -> ONE unassigned slot placement (a sanctioned
+    -- doodle: shape + cell, no roomID -- the importer curates rooms lazily). A
     -- multi-floor room carries only its `floors` span override; FloorMap derives the rest.
-    local rooms = {}
-    local SA    = HDG.Projects.ShapeAtlas
-    local IDs   = HDG.Projects.IDs
+    -- exception(boundary): shared codes are user input -- clamp every decoded
+    -- numeric to sane ranges (a hostile/corrupt code could carry floor=99 or
+    -- x=32767 verbatim into placements, bypassing the 3-floor cap).
+    local function clampN(v, lo, hi, dflt)
+        v = tonumber(v) or dflt
+        if v < lo then return lo elseif v > hi then return hi end
+        return v
+    end
+    local placements, slotSeq = {}, 0
     for _, d in ipairs(decoded.rooms or {}) do
-        local floorID = IDs.makeFloorID(targetHouseID, d.floor)
-        local rid     = _mintImportRoomID(rooms, floorID)
-        rooms[rid] = {
-            shape  = d.shape,
-            name   = SA.GetLabel(d.shape),
-            cell   = { x = d.x, y = d.y, rotation = d.rotation or 0, locked = false },
-            floors = d.floors,
+        slotSeq = slotSeq + 1
+        placements["slot:" .. slotSeq] = {
+            floor    = clampN(d.floor, 1, 3, 1),
+            x        = clampN(d.x, 0, 40, 0),
+            y        = clampN(d.y, 0, 40, 0),
+            rotation = clampN(d.rotation, 0, 270, 0),
+            shape    = d.shape,
+            floors   = d.floors and clampN(d.floors, 1, 3, 1) or nil,
         }
     end
 
-    local version = {
-        houseID   = targetHouseID,
-        name      = decoded.name or "Imported",
-        createdAt = (time and time()) or 0,   -- exception(boundary): time()
-        basedOn   = nil,
-        rooms     = rooms,
-        numFloors = decoded.numFloors,
+    local layout = {
+        houseID    = targetHouseID,
+        name       = decoded.name or "Imported",
+        createdAt  = (time and time()) or 0,   -- exception(boundary): time()
+        basedOn    = nil,
+        placements = placements,
+        slotSeq    = slotSeq,
+        numFloors  = decoded.numFloors,
     }
 
     HDG.Store:Dispatch({ type = A.PROJECTS_IMPORT_LAYOUT,
-        payload = { houseID = targetHouseID, version = version } })
+        payload = { houseID = targetHouseID, version = layout, houseName = targetHouseName } })
 
     -- Select the newly-activated version (reducer wrote house.activeVersionID).
     local newState = HDG.Store:GetState()  -- exception(false-positive): top-level controller helper, not a row factory
@@ -470,12 +474,14 @@ local function _doImport(text, targetHouseID)
 end
 
 -- Pop the themed paste dialog targeting a specific house (carried in the closure).
-local function _showImportPopup(houseID)
+-- houseName rides along so an imported-before-captured house still gets its
+-- display name stamped (the chooser knows it; the bare record doesn't).
+local function _showImportPopup(houseID, houseName)
     if not houseID then return end
     HDG.UI:PromptInput("Import Layout", {
         hint       = "Paste a layout code, then Import.",
         acceptText = "Import",
-        onAccept   = function(value) _doImport(value, houseID) end,
+        onAccept   = function(value) _doImport(value, houseID, houseName) end,
     })
 end
 
@@ -488,11 +494,11 @@ local function _beginImport(owner)
         if _G.UIErrorsFrame then _G.UIErrorsFrame:AddMessage("Projects: no house found -- visit one first", 1, 0.3, 0.3) end  -- exception(boundary): Blizzard toast
         return
     end
-    if #houses == 1 then _showImportPopup(houses[1].value); return end
+    if #houses == 1 then _showImportPopup(houses[1].value, houses[1].text); return end
     local items = { { isTitle = true, text = "Import into which house?" } }
     for _, h in ipairs(houses) do
-        local hid = h.value
-        items[#items + 1] = { text = h.text, callback = function() _showImportPopup(hid) end }
+        local hid, hname = h.value, h.text
+        items[#items + 1] = { text = h.text, callback = function() _showImportPopup(hid, hname) end }
     end
     HDG.UI.ShowMenu(owner, items)
 end

@@ -10,8 +10,10 @@ HDG.Constants = {
     -- snapshot->snapshot type, query-only->smartset, crates dropped);
     -- v5 = re-key migrated snapshots/smartsets to the "snapshot:"/"smartset:" id prefix
     -- (the landing + Detail route by id prefix, not def.type);
-    -- v6 = drop library-type collections (empty curated templates + player saves).
-    SCHEMA_VERSION = 6,
+    -- v6 = drop library-type collections (empty curated templates + player saves);
+    -- v7 = Furnishings model: crates -> sets, version.rooms -> account.rooms +
+    --      layout placements (docs/crate-redesign/10-FINAL-MODEL.md).
+    SCHEMA_VERSION = 8,
     -- Catalog row schema version. Bump when the observer row shape changes.
     -- No migration needed -- catalog is fully re-fetched from C_HousingCatalog on every sweep.
     CATALOG_SCHEMA_VERSION = 3,
@@ -664,40 +666,48 @@ HDG.Constants = {
         -- ===== Projects: house topology =====
         -- house -> version -> room model. EDITOR writers carry versionID; CAPTURE writers carry houseID.
         PROJECTS_UPSERT_HOUSE      = "HDGR_PROJECTS_UPSERT_HOUSE",      -- payload: { houseID, fields }
-        PROJECTS_UPSERT_ROOM       = "HDGR_PROJECTS_UPSERT_ROOM",       -- payload: { versionID, roomID, fields }
-        PROJECTS_MOVE_ROOM         = "HDGR_PROJECTS_MOVE_ROOM",         -- payload: { versionID, roomID, dx?, dy?, drotation?, locked? }
-        PROJECTS_DELETE_ROOM       = "HDGR_PROJECTS_DELETE_ROOM",       -- payload: { versionID, roomID, ts? }
         -- Multi-floor rooms (stairs/tall=2, garden=3) are ONE record; FloorMap derives the
-        -- vertical span + projects it up. "Expand stairwell" sets a per-room `floors` override.
+        -- vertical span + projects it up. "Expand stairwell" sets a per-placement `floors` override (LAYOUT_MOVE).
         PROJECTS_SET_ACTIVE_VERSION = "HDGR_PROJECTS_SET_ACTIVE_VERSION", -- payload: { houseID, versionID }
         PROJECTS_CREATE_VERSION    = "HDGR_PROJECTS_CREATE_VERSION",    -- payload: { houseID, versionID, name?, basedOn?, createdAt? }
         PROJECTS_DELETE_VERSION    = "HDGR_PROJECTS_DELETE_VERSION",    -- payload: { houseID, versionID, ts? }
         PROJECTS_CAPTURE_COMMIT    = "HDGR_PROJECTS_CAPTURE_COMMIT",    -- payload: { houseID, rooms, deleteRoomIDs, lastCapturedAt }
         PROJECTS_HOUSE_TICK        = "HDGR_PROJECTS_HOUSE_TICK",        -- payload: { budget?, numFloors?, editorActive? }
         PROJECTS_ROOM_CATALOG_UPDATED = "HDGR_PROJECTS_ROOM_CATALOG_UPDATED", -- payload: { byShapeID, entries }
-        PROJECTS_REMAP_ROOM        = "HDGR_PROJECTS_REMAP_ROOM",        -- payload: { fromRoomID, toRoomID }
-        PROJECTS_CLEAR_HOUSE       = "HDGR_PROJECTS_CLEAR_HOUSE",       -- payload: { houseID }
+        PROJECTS_CLEAR_HOUSE       = "HDGR_PROJECTS_CLEAR_HOUSE",       -- payload: { houseID, maxFloor? } (v8 recapture prep: prune capture-owned placements above maxFloor + reset echo; tags survive)
         PROJECTS_SET_VERSION_FLOORS = "HDGR_PROJECTS_SET_VERSION_FLOORS", -- payload: { versionID, numFloors }
         PROJECTS_RENAME_VERSION    = "HDGR_PROJECTS_RENAME_VERSION",    -- payload: { versionID, name }
-        PROJECTS_IMPORT_LAYOUT     = "HDGR_PROJECTS_IMPORT_LAYOUT",     -- payload: { houseID, version } (controller-built record; reducer mints id + activates)
+        PROJECTS_IMPORT_LAYOUT     = "HDGR_PROJECTS_IMPORT_LAYOUT",     -- payload: { houseID, version, houseName? } (controller-built record; reducer mints id + activates; houseName stamps an uncaptured house)
         PROJECTS_FOCUS_HOUSE       = "HDGR_PROJECTS_FOCUS_HOUSE",       -- payload: { houseID } (which house the Architect/Projects views focus)
-
-        -- ===== Projects: crates =====
-        -- type="crate"/"library" in account.collections. Ordered `decor` records, NOT Styles `items` set.
-        CRATE_UPSERT               = "HDGR_CRATE_UPSERT",               -- payload: { crateID, fields }
-        CRATE_ADD_DECOR            = "HDGR_CRATE_ADD_DECOR",            -- payload: { crateID, decorID, count?, notes? }
-        CRATE_DECREMENT_DECOR      = "HDGR_CRATE_DECREMENT_DECOR",      -- payload: { crateID, decorID }
-        CRATE_REMOVE_DECOR         = "HDGR_CRATE_REMOVE_DECOR",         -- payload: { crateID, decorID }
-        CRATE_SET_FIELD            = "HDGR_CRATE_SET_FIELD",            -- payload: { crateID, field, value }
-        CRATE_REATTACH             = "HDGR_CRATE_REATTACH",             -- payload: { crateID, versionID, roomID }
-        CRATE_DETACH               = "HDGR_CRATE_DETACH",               -- payload: { crateID, ts? } (orphan one crate off its room)
-        CRATE_DELETE               = "HDGR_CRATE_DELETE",               -- payload: { crateID }
-        LIBRARY_STAMP              = "HDGR_LIBRARY_STAMP",              -- payload: { libID, crateID, parent?, name?, ts? }
+        PROJECTS_PICKER_SET_SOURCE = "HDGR_PROJECTS_PICKER_SET_SOURCE", -- payload: { source } ("all" | "style:<id>" | "shop:<id>")
+        PROJECTS_FURN_TOGGLE_COLLAPSE = "HDGR_PROJECTS_FURN_TOGGLE_COLLAPSE", -- payload: { setID } (fold/unfold a set group in the room detail)
 
         -- ===== Projects: shipping crates =====
         -- Whole-house manifest snapshot. Controller builds the record; reducer just writes it.
         SHIPPING_CRATE_PACK        = "HDGR_SHIPPING_CRATE_PACK",        -- payload: { shipID, record }
         SHIPPING_CRATE_DELETE      = "HDGR_SHIPPING_CRATE_DELETE",      -- payload: { shipID }
+
+        -- ===== Furnishings (v7 model: docs/crate-redesign/10-FINAL-MODEL.md) =====
+        -- Sets are free-standing quantified plans; rooms are persistent identities;
+        -- layouts hold placements. IDs counter-minted reducer-side (set:N / room:N / slot:N).
+        FURN_SET_CREATE            = "HDGR_FURN_SET_CREATE",            -- payload: { name, items?, isLocal?, ownerRoom? }
+        FURN_SET_RENAME            = "HDGR_FURN_SET_RENAME",            -- payload: { setID, name }
+        FURN_SET_DELETE            = "HDGR_FURN_SET_DELETE",            -- payload: { setID } (cascades out of every room's equip list)
+        FURN_SET_ITEM_ADD          = "HDGR_FURN_SET_ITEM_ADD",          -- payload: { setID, itemID, count? } (count sets; absent increments)
+        FURN_SET_ITEM_REMOVE       = "HDGR_FURN_SET_ITEM_REMOVE",       -- payload: { setID, itemID, all? } (decrement; 0 or all removes)
+        FURN_SET_PROMOTE           = "HDGR_FURN_SET_PROMOTE",           -- payload: { setID, name } (local -> library)
+        FURN_ROOM_CREATE           = "HDGR_FURN_ROOM_CREATE",           -- payload: { shape, name?, layoutID?, slotKey? } (slotKey: create-in-place from an unassigned slot)
+        FURN_ROOM_RENAME           = "HDGR_FURN_ROOM_RENAME",           -- payload: { roomID, name }
+        FURN_ROOM_DELETE           = "HDGR_FURN_ROOM_DELETE",           -- payload: { roomID } (cascades placements across ALL layouts; local sets demote to library)
+        FURN_ROOM_EQUIP            = "HDGR_FURN_ROOM_EQUIP",            -- payload: { roomID, setID }
+        FURN_ROOM_UNEQUIP          = "HDGR_FURN_ROOM_UNEQUIP",          -- payload: { roomID, setID }
+        FURN_ROOM_DUPLICATE        = "HDGR_FURN_ROOM_DUPLICATE",        -- payload: { roomID, layoutID?, swap?, ts? } (variant: library sets shared, local pieces cloned; swap takes the source's placement in layoutID)
+        LAYOUT_PLACE               = "HDGR_LAYOUT_PLACE",               -- payload: { layoutID, floor, x, y, rotation?, roomID? | shape? } (roomID places a room; shape places an unassigned slot)
+        LAYOUT_MOVE                = "HDGR_LAYOUT_MOVE",                -- payload: { layoutID, key, floor?, x?, y?, rotation? }
+        LAYOUT_REMOVE_PLACEMENT    = "HDGR_LAYOUT_REMOVE_PLACEMENT",    -- payload: { layoutID, key }
+        LAYOUT_ASSIGN              = "HDGR_LAYOUT_ASSIGN",              -- payload: { layoutID, slotKey, roomID } (tag a slot with a room; multi-assign OK)
+        LAYOUT_UNASSIGN            = "HDGR_LAYOUT_UNASSIGN",            -- payload: { layoutID, key } (clear the tag; spot reverts to a bare shape)
+        LAYOUT_SWAP_ROOM           = "HDGR_LAYOUT_SWAP_ROOM",           -- payload: { layoutID, fromRoomID, toRoomID } (the placement changes hands; once-per-layout enforced)
     },
 
     -- ===== UI sizing constants =====

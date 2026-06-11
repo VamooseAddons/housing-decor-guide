@@ -132,7 +132,9 @@ local function debouncedFire(sub, event, ...)
     for i = 1, args.n do args[i] = select(i, ...) end
     BE._debounceTimers[key] = args
 
-    C_Timer.After(sub.opts.debounce, function()
+    -- NewTimer (not After) so _Reset can cancel in-flight timers; otherwise a
+    -- reset + same-key resubscribe within the window double-fires the dispatch.
+    args.timer = C_Timer.NewTimer(sub.opts.debounce, function()
         local current = BE._debounceTimers[key]
         if not current then return end
         BE._debounceTimers[key] = nil
@@ -329,6 +331,9 @@ function BE:_Reset()
     self._frame = nil
     self._subscribers = {}
     self._internalSubs = {}
+    for _, pending in pairs(self._debounceTimers) do
+        if pending.timer then pending.timer:Cancel() end
+    end
     self._debounceTimers = {}
     self._hookInstalled = {}
     self._registeredEvents = {}

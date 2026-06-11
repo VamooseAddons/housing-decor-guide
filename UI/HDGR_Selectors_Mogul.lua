@@ -691,6 +691,20 @@ do
 end
 
 -- Footer label: "N items" (post-filter count).
+-- Cold-start CTA gate: Direct cache never scanned AND no external price addon
+-- to fall back to -> every profit column renders "-" with no guidance. Drives
+-- the scan-hint banner above the Goblin list (UX review 2026-06-10 #3).
+Selectors:Register("goblin.needsScanHint", {
+    reads = { "account.prices.directCacheTime",
+              "session.prices.auctionatorLoaded", "session.prices.tsmLoaded" },
+    fn = function(state)
+        if state.account.prices.directCacheTime then return false end
+        if state.session.prices.auctionatorLoaded then return false end
+        if state.session.prices.tsmLoaded then return false end
+        return true
+    end,
+})
+
 Selectors:Register("goblin.statusLabel", {
     calls = {"goblin.rows"},
     fn = function(state, ctx)

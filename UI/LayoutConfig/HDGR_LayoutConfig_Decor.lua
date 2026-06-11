@@ -444,7 +444,7 @@ LC.widgets["decorDetailPanel.itemTags"] = {
 }
 -- Destroy button: visible when Stored filter + destroyable item selected.
 LC.widgets["decorDetailPanel.destroyBtn"] = {
-    tooltip = false,
+    tooltip = { recipe = "DecorDestroy" },
     kind = "button", ["in"] = "decor.detailMeta", font = "small",
     text = "locale:DECOR_DESTROY_BTN", width = "auto", height = 22,
     order = 45, variant = "tertiary",
@@ -454,7 +454,7 @@ LC.widgets["decorDetailPanel.destroyBtn"] = {
 -- + Wishlist: adds selected item as wishlist entry (npcID=nil). Wired in HDGR_Controller_Decor.
 -- Lives in the note column (above the note editbox) so the left meta column isn't squeezed.
 LC.widgets["decorDetailPanel.wishlistBtn"] = {
-    tooltip = false,
+    tooltip = { recipe = "DecorWishlist" },
     kind = "button", ["in"] = "decor.noteCard", font = "small",
     text = "locale:DECOR_WISHLIST_BTN", width = "fill", height = 22,
     order = 5, variant = "tertiary",
@@ -527,7 +527,7 @@ LC.widgets["decorPanel.onlyUncollectedToggle"] = {
 }
 -- "Destroy decor" chip: textTone="error" telegraphs the destructive intent.
 LC.widgets["decorPanel.onlyStoredToggle"] = {
-    tooltip = false,
+    tooltip = { recipe = "DecorStoredFilter" },
     kind = "button", ["in"] = "decor.filterRowBottom", font = "button",
     text = "locale:DECOR_DESTROY_TOGGLE", width = "auto", height = 22, order = 50, variant = "tertiary",
     textTone = "error",

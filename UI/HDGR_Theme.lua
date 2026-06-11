@@ -742,46 +742,6 @@ HDG.Theme.Skinners = {
         row._woodBeamBg:SetAlpha(state.alpha)
     end,
 
-    -- BadgePill: count or selection chip. state: { text, variant, selected? }.
-    -- "count" = amber static; "selection" = accent vs panel_header by state.selected.
-    BadgePill = function(host, _scheme, state)
-        if not (host and host._hdgrBadge) then return end
-        local badge = host._hdgrBadge
-        local text = state and state.text
-        if not text or text == "" then
-            if badge.frame and badge.frame.Hide then badge.frame:Hide() end
-            if badge.text  and badge.text.Hide  then badge.text:Hide()  end
-            return
-        end
-        if badge.frame and badge.frame.Show then badge.frame:Show() end
-        if badge.text  and badge.text.Show  then badge.text:Show()  end
-        if badge.text and badge.text.SetText then badge.text:SetText(tostring(text)) end
-
-        local variant = (state and state.variant) or "count"
-        if variant == "selection" then
-            local selected = state and state.selected
-            local bgC = selected and HDG.Theme:GetColor("semantic.accent")
-                or HDG.Theme:GetColor("surface.panel_header")
-            local txC = selected and HDG.Theme:GetColor("text.inverse")
-                or HDG.Theme:GetColor("text.primary")
-            if badge.frame and badge.frame.SetColorTexture then
-                badge.frame:SetColorTexture(bgC.r, bgC.g, bgC.b, bgC.a)
-            end
-            if badge.text and badge.text.SetTextColor then
-                badge.text:SetTextColor(txC.r, txC.g, txC.b, 1)
-            end
-        else
-            -- "count" -- amber static.
-            local c = HDG.Theme:GetColor("semantic.warning")
-            if badge.frame and badge.frame.SetVertexColor then
-                badge.frame:SetVertexColor(c.r, c.g, c.b, 0.16)
-            end
-            if badge.text and badge.text.SetTextColor then
-                badge.text:SetTextColor(c.r, c.g, c.b, 1)
-            end
-        end
-    end,
-
     -- AccentBg: semantic.accent fill at 8.5% alpha (status banner body, etc).
     AccentBg = function(tex, _scheme)
         if not (tex and tex.SetColorTexture) then return end

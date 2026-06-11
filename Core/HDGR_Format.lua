@@ -54,9 +54,9 @@ function F.FormatCurrency(amount, currencyID, iconOverride)
             end
         end
         icon = _trackedCurrencyIcon[currencyID]
-        if not icon and _G.C_CurrencyInfo and _G.C_CurrencyInfo.GetCurrencyInfo then
+        if not icon and _G.C_CurrencyInfo and _G.C_CurrencyInfo.GetCurrencyInfo then  -- exception(boundary): C_CurrencyInfo absent in headless tests
             local info = _G.C_CurrencyInfo.GetCurrencyInfo(currencyID)
-            icon = info and info.iconFileID
+            icon = info and info.iconFileID  -- exception(boundary): GetCurrencyInfo nil for unknown currencyIDs
         end
     end
     if icon then return n .. " |T" .. icon .. ":14:14|t" end

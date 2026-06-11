@@ -12,24 +12,32 @@
 
 ---
 
-## What's New in v3.1.2
+## What's New in v3.2.0
 
-Localization and font fixes, plus a few Shopping List and Recipes updates.
+Projects has been rebuilt around Designs, a clearer way to plan what goes in every room, plus Lumber Tracker fixes and a built-in workflow guide.
 
-**New**
+**Projects: Designs**
 
-- **Font picker** -- Settings > Advanced has a new Font option: keep your client's default font, or switch to Arial Narrow, which is more compact and also covers Cyrillic. The change applies right away.
-- **Recipes filter dropdown** -- the All / Known / Ready / Unknown buttons are now a single dropdown, with a new "Decor not collected" entry that lists only recipes whose decoration you don't own yet.
-- **Lumber Tracker toggle** -- the addon settings now have a Lumber Tracker option to turn its auto-open on or off; it mirrors the toggle on the Warehouse tab.
-- **Move Planner tooltips** -- hovering the A/B/C/D plot filters or the refresh button now explains what each one does.
+- **Designs are permanent.** A design is your customised room: its name and its furnishings, independent of where it physically lives. Deleting a layout never costs you a design; deleting a design saves its pieces to your library. The crate and orphan system is gone.
+- **One design can fill several rooms.** Assign "Basement" to all three closets and they share its furnishings. Unassign clears a room back to an empty shape, and Fork splits one room off as a copy when it should look different.
+- **Auto-assign.** After a capture, one click fills every unassigned room with your best matching design (same shape, most decor first). The status bar lists exactly what was assigned.
+- **Furnishing Sets.** Reusable decor plans kept in your library. Equip a set into any number of designs; editing the set updates every design using it. Share codes are compatible with old crate exports.
+- **The decor picker shows everything.** Plan with pieces you don't own yet (they show dimmed). Hover an unowned piece and one click queues a craft or adds it to your shopping list. A dedicated "Unowned decor" source lists exactly what you are missing.
+- **Place from the plan.** The House Editor companion's Designs tab shows each design's pieces so you can place decor room by room.
+- **Help button.** A workflow diagram of the whole loop (capture, arrange, assign, furnish, plan, build) with a short explanation for each stage.
 
-**Fixes**
+**Lumber Tracker fixes**
 
-- **Non-Latin item names** -- on Russian (and other non-Latin) clients, item names that used to show as empty boxes now display correctly. HDG was using a Latin-only font and now uses your client's own per-locale font. If you still want a different face, pick Arial Narrow in the new Font option.
-- **Buy Mats from AH** -- no longer adds lumber to the Auctionator list (lumber is bound to you and can't be bought), and it now uses real item names so Auctionator can find them.
-- **Shopping List counts** -- the quantity buttons step correctly when clicked quickly, and the header lists auction-house items separately from your wishlist.
+- Counts update live while you farm. They previously froze until you ended the session or opened the main window.
+- Each row shows held versus what your uncollected decor still needs, the same number as the Warehouse Need column, shrinking as you collect. Hover a row for the full breakdown.
 
-Also: the window scale and waypoint provider settings moved to the Advanced page, mouse-action hints now use the left/right click icons, and the Style Curator lists only decor you own.
+**Also in this release**
+
+- Capturing your house reports what happened: rooms matched, rooms waiting for a design, and any that lost their placement.
+- The what-if footer "House changes" lists the rooms to build or remove to make your real house match the plan.
+- Layouts tab: Load in Architect moved to the title bar, "Share code" is now Export (pairing the Import button), and imported houses show their real name.
+- Waypoint confirmations show in the status bar instead of chat, the status bar acknowledges many more actions, tooltips now show on disabled buttons to explain why, and 21 controls gained explanatory tooltips.
+- Existing crates and rooms migrate automatically into designs and sets; your layouts keep their geometry.
 
 ---
 
@@ -74,8 +82,9 @@ Housing crafting runs on lumber, so there's a dedicated **Lumber Tracker** -- a 
 
 ## Projects -- plan your house before you build
 
-- **Architect** -- a drag-and-drop blueprint canvas: lay out rooms across floors, watch live room and decor budget bars, and assign decor "crates" to each room. Branch "what-if" versions to experiment freely.
-- **Layouts** -- manage every saved version, load one into the Architect, and **share** a layout as a compact code (or import someone else's).
+- **Architect** -- a drag-and-drop blueprint canvas: capture your real house onto the grid, lay out rooms across floors, watch live room and decor budget bars, and give each room a **Design** (its name plus its furnishings). One design can fill several rooms, and Auto-assign fills a whole capture in one click. Branch what-if layouts to experiment freely.
+- **Designs and Furnishing Sets** -- designs persist across every layout and renovation; sets are reusable decor plans you equip into any number of designs. Plan with decor you don't own yet and send the gaps straight to your craft queue or shopping list.
+- **Layouts** -- manage every saved layout, load one into the Architect, and **share** it as a compact code (or import someone else's).
 - **Move Planner** -- moving plots? Pick source and target and get the exact rotation (degrees + compass direction) your house and yard will need, with neighborhood maps and door-facing diagrams. *(Rotation key courtesy of Blue, Art of Azeroth.)*
 
 ## House -- your collection at a glance
@@ -84,7 +93,7 @@ A personal dashboard: decorator profile with house level, favor, and Collector t
 
 ## Right inside the House Editor
 
-A companion window injects into Blizzard's House Editor so you can **place decor with one click** -- browse by your styles, shopping lists, snapshots, room concepts, or what you've placed recently. Indoor/outdoor filtering, placement-cost display, and dye variants are all handled for you.
+A companion window injects into Blizzard's House Editor so you can **place decor with one click** -- browse by your designs (each room's plan), your styles, shopping lists, snapshots, room concepts, or what you've placed recently. Indoor/outdoor filtering, placement-cost display, and dye variants are all handled for you.
 
 ## Tools
 
@@ -113,7 +122,7 @@ A companion window injects into Blizzard's House Editor so you can **place decor
 ---
 
 **Author:** Vamoose
-**Version:** 3.1.2
+**Version:** 3.2.0
 **Game Version:** 12.0.5+ (Midnight)
 **Source / Issues:** https://github.com/VamooseAddons/housing-decor-guide
 **Discord:** https://discord.gg/RWZaxJaHFP

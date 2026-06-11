@@ -210,6 +210,96 @@ local function _resolveCollectionItems(id, def, t, state)
     return {}
 end
 
+-- Display name for a collection entry (def.displayName > def.name > id).
+local function _entryDisplayName(entry)
+    return (entry.def and (entry.def.displayName or entry.def.name)) or entry.id
+end
+
+-- Bucket collections by type (O(1) per section at render); each bucket sorted
+-- by displayName for stable rendering.
+local function _buildSectionBuckets(state)
+    local byType = { style = {}, smartset = {}, shopping = {}, snapshot = {}, concept = {}, collection = {} }
+    for _, entry in ipairs(iterAllCollections(state)) do
+        byType[entry.type] = byType[entry.type] or {}
+        byType[entry.type][#byType[entry.type] + 1] = entry
+    end
+    for _, list in pairs(byType) do
+        table.sort(list, function(a, b)
+            return tostring(_entryDisplayName(a)):lower() < tostring(_entryDisplayName(b)):lower()
+        end)
+    end
+    return byType
+end
+
+-- Card icon resolution. Priority: sample decor item (previewIcons[1]) for
+-- collection/style (their def.icon is a generic category glyph -- matches My
+-- Styles) > def.iconAtlas > def.icon > first preview. Empty shopping lists
+-- have no decor sample -> shopping-cart glyph (matches the Shopping tab
+-- header) instead of the red "?" placeholder.
+local function _resolveCardIcon(entry, def, previewIcons)
+    local preferSample = entry.type == "collection" or entry.type == "style"
+    local icon, iconAtlas
+    if preferSample and previewIcons[1] then
+        icon      = previewIcons[1].iconTexture
+        iconAtlas = previewIcons[1].iconAtlas
+    elseif def.iconAtlas and def.iconAtlas ~= "" then
+        iconAtlas = def.iconAtlas
+    elseif def.icon and def.icon ~= "" then
+        icon = def.icon
+    elseif previewIcons[1] then
+        icon      = previewIcons[1].iconTexture
+        iconAtlas = previewIcons[1].iconAtlas
+    end
+    if not icon and not iconAtlas and entry.type == "shopping" then
+        iconAtlas = HDG.Constants.SHOPPING_LIST_ICON_ATLAS
+    end
+    return icon, iconAtlas
+end
+
+-- Build one landing card row.
+local function _buildCardRow(entry, displayName, state, catalogReady, selectedID)
+    local def = entry.def or {}
+    -- Useful Collections resolve items by name-pattern/resolver, not a static
+    -- items[] -- resolve via the shared helper so they get the same preview
+    -- strip + collected count as My Styles.
+    local itemList = _resolveCollectionItems(entry.id, def, entry.type, state)
+    -- Pre-authored types (collection/concept) come from StaticData, not
+    -- account.collections -- edit/export/delete are all dead no-ops there,
+    -- so mark read-only (hides all three buttons; not deletable).
+    local isReadOnly = def.isReadOnly == true
+        or entry.type == "collection" or entry.type == "concept"
+    -- preview icons + counts only when catalog is ready
+    local previewIcons = {}
+    local collected, total, pct = 0, #itemList, 0
+    if catalogReady and #itemList > 0 then
+        previewIcons = _resolvePreviewIcons(itemList)
+        collected, total, pct = _resolveCollectedCounts(itemList)
+    end
+    local icon, iconAtlas = _resolveCardIcon(entry, def, previewIcons)
+    return {
+        kind         = "card",
+        collectionID = entry.id,
+        type         = entry.type,
+        displayName  = displayName,
+        subtitle     = def.description or nil,
+        isSelected   = selectedID == entry.id,
+        -- HDG-parity detail fields:
+        icon         = icon,
+        iconAtlas    = iconAtlas,
+        hideIcon     = entry.type == "smartset",  -- rule-based: no item to draw
+        previewIcons = previewIcons,
+        collected    = collected,
+        total        = total,
+        pct          = pct,
+        color        = def.color,
+        url          = def.url,
+        isSnapshot   = entry.type == "snapshot",
+        canEdit      = not isReadOnly and entry.type == "style",
+        canExport    = not isReadOnly,
+        canDelete    = not isReadOnly,
+    }
+end
+
 Selectors:Register("styles.landing.rows", {
     reads = {
         "session.ui.styles.landing.filter",
@@ -231,20 +321,7 @@ Selectors:Register("styles.landing.rows", {
         local selectedID    = state.session.ui.styles.selectedID
         local counts        = Selectors:Call("styles.collectionsByType", state, {})
         local catalogReady  = HDG.HousingCatalogObserver:IsReady()
-        -- Bucket collections by type so card rendering is O(1) per section.
-        local byType = { style = {}, smartset = {}, shopping = {}, snapshot = {}, concept = {}, collection = {} }
-        for _, entry in ipairs(iterAllCollections(state)) do
-            byType[entry.type] = byType[entry.type] or {}
-            byType[entry.type][#byType[entry.type] + 1] = entry
-        end
-        -- Sort each bucket by displayName for stable rendering.
-        for _, list in pairs(byType) do
-            table.sort(list, function(a, b)
-                local na = (a.def and (a.def.displayName or a.def.name)) or a.id
-                local nb = (b.def and (b.def.displayName or b.def.name)) or b.id
-                return tostring(na):lower() < tostring(nb):lower()
-            end)
-        end
+        local byType = _buildSectionBuckets(state)
         local needle = search ~= "" and search or nil
         local out = {}
         for _, s in ipairs(LANDING_SECTIONS) do
@@ -264,69 +341,9 @@ Selectors:Register("styles.landing.rows", {
                 local sectionExpanded = expanded[s.type] == true or filter == s.type
                 if sectionExpanded then
                     for _, entry in ipairs(byType[s.type] or {}) do
-                        local displayName = (entry.def and (entry.def.displayName or entry.def.name)) or entry.id
+                        local displayName = _entryDisplayName(entry)
                         if not needle or tostring(displayName):lower():find(needle, 1, true) then
-                            local def        = entry.def or {}
-                            -- Useful Collections resolve items by name-pattern/resolver, not a
-                            -- static items[] -- resolve via the shared helper so they get the
-                            -- same preview strip + collected count as My Styles.
-                            local itemList   = _resolveCollectionItems(entry.id, def, entry.type, state)
-                            -- Pre-authored types (collection/concept) come from StaticData, not
-                            -- account.collections -- edit/export/delete are all dead no-ops there,
-                            -- so mark read-only (hides all three buttons; not deletable).
-                            local isReadOnly = def.isReadOnly == true
-                                or entry.type == "collection" or entry.type == "concept"
-                            -- preview icons + counts only when catalog is ready
-                            local previewIcons = {}
-                            local collected, total, pct = 0, #itemList, 0
-                            if catalogReady and #itemList > 0 then
-                                previewIcons = _resolvePreviewIcons(itemList)
-                                collected, total, pct = _resolveCollectedCounts(itemList)
-                            end
-                            -- icon: lead with a sample decor item (previewIcons[1]) for
-                            -- collections -- matches My Styles; their def.icon is a generic
-                            -- category glyph. Else def.iconAtlas/icon, else first preview.
-                            local preferSample = entry.type == "collection" or entry.type == "style"
-                            local icon, iconAtlas
-                            if preferSample and previewIcons[1] then
-                                icon      = previewIcons[1].iconTexture
-                                iconAtlas = previewIcons[1].iconAtlas
-                            elseif def.iconAtlas and def.iconAtlas ~= "" then
-                                iconAtlas = def.iconAtlas
-                            elseif def.icon and def.icon ~= "" then
-                                icon = def.icon
-                            elseif previewIcons[1] then
-                                icon      = previewIcons[1].iconTexture
-                                iconAtlas = previewIcons[1].iconAtlas
-                            end
-                            -- Empty shopping lists have no decor sample -> use the
-                            -- shopping-cart glyph (matches the Shopping tab header)
-                            -- instead of the red "?" placeholder.
-                            if not icon and not iconAtlas and entry.type == "shopping" then
-                                iconAtlas = HDG.Constants.SHOPPING_LIST_ICON_ATLAS
-                            end
-                            out[#out + 1] = {
-                                kind         = "card",
-                                collectionID = entry.id,
-                                type         = entry.type,
-                                displayName  = displayName,
-                                subtitle     = def.description or nil,
-                                isSelected   = selectedID == entry.id,
-                                -- HDG-parity detail fields:
-                                icon         = icon,
-                                iconAtlas    = iconAtlas,
-                                hideIcon     = entry.type == "smartset",  -- rule-based: no item to draw
-                                previewIcons = previewIcons,
-                                collected    = collected,
-                                total        = total,
-                                pct          = pct,
-                                color        = def.color,
-                                url          = def.url,
-                                isSnapshot   = entry.type == "snapshot",
-                                canEdit      = not isReadOnly and entry.type == "style",
-                                canExport    = not isReadOnly,
-                                canDelete    = not isReadOnly,
-                            }
+                            out[#out + 1] = _buildCardRow(entry, displayName, state, catalogReady, selectedID)
                         end
                     end
                 end

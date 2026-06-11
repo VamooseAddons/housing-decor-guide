@@ -80,6 +80,25 @@ LC.widgets["houseTabPanel.designBtn"] = {
     visible = false,
 }
 
+-- Blank state: shown while no dashboard widget has data to render (fresh
+-- install / house not captured yet). Same icon+label shape as decorBlankPanel.
+LC.widgets["houseTabPanel.blankIcon"] = {
+    tooltip = false,
+    kind = "atlas", ["in"] = "houseTabPanel",
+    visible = "house.isBlank",
+    atlas = "PlayerPartyBlip", tone = "text.dim",
+    width = 24, height = 24, order = 5,
+}
+LC.widgets["houseTabPanel.blankLabel"] = {
+    tooltip = false,
+    kind = "label", ["in"] = "houseTabPanel",
+    visible = "house.isBlank",
+    role = "TextDim",
+    text = "locale:HT_BLANK_DASHBOARD",
+    font = "body", justifyH = "CENTER",
+    width = "fill", height = 22, order = 6,
+}
+
 -- Dashboard scrollbox: spacing=1 matches the row factory's CELL_GAP for uniform whitespace.
 LC.widgets["houseTabPanel.list"] = {
     tooltip = false,

@@ -11,7 +11,7 @@
 --     -- HDG.ShoppingCodec exactly (same pure-Lua base64, header-vs-line split).
 --
 -- crate decor `id` is the ITEMID (the value crateDetail's ResolveName/Icon take),
--- so a round-trip is itemID-faithful; the importer feeds CRATE_ADD_DECOR{decorID=id}.
+-- so a round-trip is itemID-faithful; the importer feeds FURN_SET_ITEM_ADD{itemID=id}.
 
 HDG = HDG or {}
 HDG.Projects = HDG.Projects or {}

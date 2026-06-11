@@ -16,9 +16,8 @@ local MIN_TILE, MAX_TILE, GAP, ORB_PX = 15, 52, 6, 14
 -- The active version's rooms map + its versionID (editor dispatches carry versionID).
 -- nil version -> empty rooms + nil vid (the canvas is empty; nothing to act on).
 local function _activeRooms(state)
-    local vid     = HDG.Selectors:Call("projects.activeVersionID", state, {})
-    local version = vid and state.account.projects.versions[vid]
-    return (version and version.rooms) or {}, vid
+    local lid = HDG.Selectors:Call("projects.activeVersionID", state, {})
+    return HDG.StoreFurnishings.LayoutView(state, lid), lid
 end
 
 -- ===== keyed mark/sweep pools ==============================================
@@ -78,7 +77,10 @@ local function _tileFactory(host)
     -- Attach HookScripts OnEnter/OnLeave + guards against pool re-attach.
     HDG.TooltipEngine:Attach(tile, function(self)
         if not self._tipName then return nil end
-        return { title = self._tipName, extraLines = self._tipSub and { self._tipSub } or nil }
+        local lines = {}
+        if self._tipShape then lines[#lines + 1] = self._tipShape end   -- shape under a custom name
+        if self._tipSub then lines[#lines + 1] = self._tipSub end
+        return { title = self._tipName, extraLines = #lines > 0 and lines or nil }
     end)
     return tile
 end
@@ -110,8 +112,8 @@ end
 
 -- ===== status -> a short sub-label for the room tooltip ====================
 local STATUS_SUB = {
-    ["in-progress"] = "Crate attached",
-    unconfigured    = "No crate yet",
+    ["in-progress"] = "Has furnishings",
+    unconfigured    = "No furnishings yet",
 }
 
 -- ===== render ==============================================================
@@ -358,11 +360,21 @@ function C:Render(host, model)
         t:EnableMouse(not r.projected)           -- ...and non-interactive (no drag/menu)
         t._label:SetWidth(math.max(8, tw + 4))   -- allow ~4px overflow so short names + chest stay one line
         t._roomID = r.roomID
-        local label = r.name or HDG.Projects.ShapeAtlas.GetLabel(r.shape)
-        t._tipName, t._tipSub = label, STATUS_SUB[r.status]
-        -- crate-attached indicator: an INLINE chest after the name -- it centers + wraps
-        -- WITH the text, so it never gets pushed outside small rooms. Hidden when no crate.
-        if r.status ~= "unconfigured" then label = label .. " |A:house-chest-icon:12:12|a" end
+        local shapeLabel = HDG.Projects.ShapeAtlas.GetLabel(r.shape)
+        local label = r.name or shapeLabel
+        t._tipName = label
+        -- Named rooms keep the underlying shape readable in the tooltip.
+        t._tipShape = (r.name and r.name ~= shapeLabel) and shapeLabel or nil
+        if r.unassigned then
+            -- Unassigned slot: shape label + badge; tooltip invites curation.
+            t._tipSub = "Unassigned -- click to assign one of My Designs, or create a new one"
+            label = label .. " *"
+        else
+            t._tipSub = STATUS_SUB[r.status]
+            -- furnished indicator: an INLINE chest after the name -- it centers + wraps
+            -- WITH the text, so it never gets pushed outside small rooms.
+            if r.status ~= "unconfigured" then label = label .. " |A:house-chest-icon:12:12|a" end
+        end
         t._label:SetText(label)
         -- Geometric shapes use a line outline; circles fall back to masked photo atlas.
         -- Icon sized to canonical (unrotated) footprint so rotation doesn't stretch.
@@ -425,15 +437,18 @@ function C:_OnRoomMenu(tile)
     local room = rooms[roomID]
     if not (room and vid) then return end   -- exception(boundary): tile points at a since-removed room
     local A = HDG.Constants.ACTIONS
-    -- Deltas: reducer applies dx/dy/drotation in place (PROJECTS_MOVE_ROOM).
+    -- Absolute moves: the LayoutView cell in hand is the current truth; LAYOUT_MOVE
+    -- writes only the fields supplied (rotation omitted on pure translation).
     local function move(dx, dy, drot)
         -- Block a directional move that would overlap (rotate stays in place -> allowed).
         if (dx ~= 0 or dy ~= 0)
            and not HDG.Projects.FloorMap.CanMoveTo(rooms, roomID, room.cell.x + dx, room.cell.y + dy) then
             return
         end
-        HDG.Store:Dispatch({ type = A.PROJECTS_MOVE_ROOM,
-            payload = { versionID = vid, roomID = roomID, dx = dx, dy = dy, drotation = drot } })
+        HDG.Store:Dispatch({ type = A.LAYOUT_MOVE,
+            payload = { layoutID = vid, key = roomID,
+                        x = room.cell.x + dx, y = room.cell.y + dy,
+                        rotation = drot ~= 0 and ((room.cell.rotation + drot) % 4) or nil } })
     end
     local items = {
         { text = "Move up",    callback = function() move(0, -1, 0) end },
@@ -456,7 +471,7 @@ function C:_OnRoomMenu(tile)
     -- The Entry is the anchor room: there must always be exactly one, so it is undeletable.
     if room.shape ~= "entry" then
         items[#items + 1] = { text = "Remove", callback = function()
-            HDG.Store:Dispatch({ type = A.PROJECTS_DELETE_ROOM, payload = { versionID = vid, roomID = roomID } })
+            HDG.Store:Dispatch({ type = A.LAYOUT_REMOVE_PLACEMENT, payload = { layoutID = vid, key = roomID } })
         end }
     end
     HDG.UI.ShowMenu(tile, items)
@@ -470,8 +485,8 @@ function C:_HideOrbs(host)
     end
 end
 
--- E4-drag: snap dropped tile to nearest cell + persist. locked=true marks
--- it user-positioned. Overlaps allowed (E5 flags them).
+-- E4-drag: snap dropped tile to nearest cell + persist. Overlaps allowed
+-- (E5 flags them).
 function C:_DropRoom(tile)
     local host   = tile:GetParent()
     local ctx    = host and host._renderCtx
@@ -492,9 +507,9 @@ function C:_DropRoom(tile)
         if host._lastModel then C:Render(host, host._lastModel) end
         return
     end
-    -- Absolute snap; reducer preserves rotation. locked=true marks user-positioned.
-    HDG.Store:Dispatch({ type = HDG.Constants.ACTIONS.PROJECTS_MOVE_ROOM,
-        payload = { versionID = vid, roomID = roomID, x = cellX, y = cellY, locked = true } })
+    -- Absolute snap; reducer preserves rotation (only supplied fields are written).
+    HDG.Store:Dispatch({ type = HDG.Constants.ACTIONS.LAYOUT_MOVE,
+        payload = { layoutID = vid, key = roomID, x = cellX, y = cellY } })
 end
 
 -- ===== widget-kind: thin host frame =========================================

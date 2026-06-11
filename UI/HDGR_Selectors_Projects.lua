@@ -7,10 +7,11 @@
 HDG = HDG or {}
 local Selectors = HDG.Selectors
 
--- ===== Active-version resolution ============================================
--- Rooms live under versions[versionID].rooms. Active version = most-recently-captured
--- house's activeVersionID. Returns nil pre-capture (selectors fall back to empty rooms).
-local function _activeVersionContext(state)
+-- ===== Active-layout resolution (v7 Furnishings model) ======================
+-- Layouts hold placements; rooms are persistent (account.rooms). The active
+-- layout = focused house's activeVersionID (field name kept through the
+-- transition; the IDs are layout IDs). Returns nil pre-capture.
+local function _activeLayoutContext(state)
     local houses = state.account.projects.houses
     -- The Architect shows the FOCUSED house (highest focusSeq, set by the house
     -- switcher). Ties fall back to most-recently-captured, then the lexicographically
@@ -27,16 +28,39 @@ local function _activeVersionContext(state)
         end
     end
     if not house then return nil end
-    local vid     = house.activeVersionID
-    local version = vid and state.account.projects.versions[vid]
-    if not version then return nil end
-    return houseID, vid, version
+    -- Active = explicitly chosen (Load in Architect / version switch / import),
+    -- else the Live layout. VALIDATE the pointer: live SVs carry dangling
+    -- activeVersionIDs (the pre-v7 version-delete never cleared it), and
+    -- migrated v6 houses that never switched versions have only currentVersionID.
+    local layouts = state.account.projects.layouts
+    local lid     = house.activeVersionID
+    local layout  = lid and layouts[lid]
+    if not layout then
+        lid    = house.currentVersionID
+        layout = lid and layouts[lid]
+    end
+    if not layout then return nil end
+    return houseID, lid, layout
 end
 
--- Active version's rooms map (or empty). Callers declare the two projects reads.
+-- Active layout, materialized for the spatial pipeline (or empty): keys are
+-- placement keys (room:N / slot:N); records carry shape/name/floor/cell (+
+-- unassigned for doodle slots). Callers declare the layout + rooms reads.
 local function _activeRooms(state)
-    local _, _, version = _activeVersionContext(state)
-    return (version and version.rooms) or {}
+    local _, lid = _activeLayoutContext(state)
+    return HDG.StoreFurnishings.LayoutView(state, lid)
+end
+
+-- v8: canvas selections are SLOT KEYS; the landing may still pass a room id.
+-- Resolve the transient to (roomID, room record) whichever form it holds.
+local function _selectedRoom(state)
+    local key = state.session.ui.projects.selectedRoomID
+    if not key then return nil end
+    local rec = _activeRooms(state)[key]
+    local rid = (rec and rec.roomID) or key
+    local room = state.account.rooms[rid]   -- exception(nullable): bare slots / stale selections have no room
+    if room then return rid, room end
+    return nil
 end
 
 -- A room's door cardinals, DERIVED (Phase 2 -- no stored doorCardinals): a stairwell's
@@ -58,18 +82,29 @@ local function _roomDoorCardinals(rooms, roomID)
 end
 
 -- Any room in the active version? Drives landing <-> architect view switch.
+-- Landing content exists: persistent rooms, library sets, or any layout
+-- holding placements (slot doodles survive deleting every room) -- only a
+-- truly empty Projects shows the first-capture CTA.
+local function _hasLandingContent(state)
+    if next(state.account.rooms) then return true end
+    for _, set in pairs(state.account.furnishingSets) do
+        if not set.isLocal then return true end
+    end
+    for _, layout in pairs(state.account.projects.layouts) do
+        if next(layout.placements) then return true end
+    end
+    return false
+end
 Selectors:Register("projects.hasRooms", {
-    reads = { "account.projects.houses", "account.projects.versions" },
-    fn = function(state)
-        return next(_activeRooms(state)) ~= nil
-    end,
+    reads = { "account.rooms", "account.furnishingSets", "account.projects.layouts" },
+    fn = _hasLandingContent,
 })
 
 -- Currently shown/edited versionID (controllers need it since roomID doesn't encode it).
 Selectors:Register("projects.activeVersionID", {
-    reads = { "account.projects.houses", "account.projects.versions" },
+    reads = { "account.projects.houses", "account.projects.layouts", "account.rooms" },
     fn = function(state)
-        local _, vid = _activeVersionContext(state)
+        local _, vid = _activeLayoutContext(state)
         return vid
     end,
 })
@@ -77,12 +112,12 @@ Selectors:Register("projects.activeVersionID", {
 -- All versions of the active house, Live first then what-ifs by createdAt.
 -- { versionID, houseID, name, isActive, isCurrent }. Empty pre-capture.
 Selectors:Register("projects.versionTabs", {
-    reads = { "account.projects.houses", "account.projects.versions" },
+    reads = { "account.projects.houses", "account.projects.layouts", "account.rooms" },
     fn = function(state)
-        local houseID = _activeVersionContext(state)
+        local houseID = _activeLayoutContext(state)
         if not houseID then return {} end
         local house, out = state.account.projects.houses[houseID], {}
-        for vid, v in pairs(state.account.projects.versions) do
+        for vid, v in pairs(state.account.projects.layouts) do
             if v.houseID == houseID then
                 out[#out + 1] = {
                     versionID = vid, houseID = houseID, name = v.name or "?",
@@ -100,14 +135,14 @@ Selectors:Register("projects.versionTabs", {
     end,
 })
 
--- The active version's label for the switcher button: "Version: Live" / "Version: What-if 1".
+-- The active layout's label for the switcher button: "Layout: Live" / "Layout: What-if 1".
 Selectors:Register("projects.activeVersionLabel", {
-    reads = { "account.projects.houses", "account.projects.versions" },
+    reads = { "account.projects.houses", "account.projects.layouts", "account.rooms" },
     fn = function(state)
-        local houseID, vid, version = _activeVersionContext(state)
-        if not version then return "Version: -" end
+        local houseID, vid, layout = _activeLayoutContext(state)
+        if not layout then return "Layout: -" end
         local isCurrent = (vid == state.account.projects.houses[houseID].currentVersionID)
-        return "Version: " .. (version.name or "?") .. (isCurrent and " (Live)" or "")
+        return "Layout: " .. (layout.name or "?") .. (isCurrent and " (Live)" or "")
     end,
 })
 
@@ -135,7 +170,7 @@ Selectors:Register("projects.houseMenuItems", {
     end,
 })
 -- The focused house token (the dropdown's current value). Picks the highest focusSeq
--- house directly -- works even for a versionless focus stub (unlike _activeVersionContext,
+-- house directly -- works even for a versionless focus stub (unlike _activeLayoutContext,
 -- which needs a version), so the dropdown reflects the pick before capture.
 Selectors:Register("projects.activeHouseID", {
     reads = { "account.projects.houses" },
@@ -156,16 +191,16 @@ Selectors:Register("projects.activeHouseID", {
 -- what-if = branched (design freely). Both false pre-capture.
 -- `visible` bindings don't negate, hence two selectors.
 Selectors:Register("projects.isWhatIfMode", {
-    reads = { "account.projects.houses", "account.projects.versions" },
+    reads = { "account.projects.houses", "account.projects.layouts", "account.rooms" },
     fn = function(state)
-        local houseID, vid, version = _activeVersionContext(state)
+        local houseID, vid, version = _activeLayoutContext(state)
         return (version ~= nil) and (vid ~= state.account.projects.houses[houseID].currentVersionID)
     end,
 })
 Selectors:Register("projects.isStockMode", {
-    reads = { "account.projects.houses", "account.projects.versions" },
+    reads = { "account.projects.houses", "account.projects.layouts", "account.rooms" },
     fn = function(state)
-        local houseID, vid, version = _activeVersionContext(state)
+        local houseID, vid, version = _activeLayoutContext(state)
         return (version ~= nil) and (vid == state.account.projects.houses[houseID].currentVersionID)
     end,
 })
@@ -174,14 +209,13 @@ Selectors:Register("projects.isStockMode", {
 -- by explicit room.cell. One layout path (version IS the design; no plannedOnly/AutoLayout).
 Selectors:Register("projects.planLayout", {
     memoized = true,
-    reads = { "account.projects.houses", "account.projects.versions", "session.ui.projects.selectedFloor" },
+    reads = { "account.projects.houses", "account.projects.layouts", "account.rooms", "session.ui.projects.selectedFloor" },
     fn = function(state)
         local IDs, A = HDG.Projects.IDs, HDG.Projects.ShapeAtlas
         local floor = state.session.ui.projects.selectedFloor
         local layout, meta = {}, {}
         for roomID, room in pairs(_activeRooms(state)) do
-            local parsed = IDs.parsePath(roomID)
-            if parsed and parsed.floor == floor then
+            if room.floor == floor then
                 local rot, cells = room.cell.rotation or 0, A.GetCells(room.shape)
                 local rc = A.RotateCells(cells, rot)
                 layout[roomID] = {
@@ -208,7 +242,10 @@ Selectors:Register("projects.paletteShapes", {
                 local e = cat[shape]
                 out[#out + 1] = {
                     shape = shape, label = A.GetLabel(shape),
-                    budget = A.GetBudget(shape), atlas = A.GetAtlas(shape),
+                    -- Live catalog's blueprint tile when the snapshot has it;
+                    -- ShapeAtlas glyph is the pre-snapshot fallback.
+                    budget = A.GetBudget(shape),
+                    atlas = (e and e.iconAtlas) or A.GetAtlas(shape),
                     owned = (e and e.owned) or false,
                     numStored = (e and e.numStored) or 0,
                     numPlaced = (e and e.numPlaced) or 0,
@@ -228,16 +265,15 @@ Selectors:Register("projects.roomCatalog", {
 
 -- Plan validation: no footprint overlap AND within room budget (roomMax 0 = skip).
 Selectors:Register("projects.planValidation", {
-    reads = { "account.projects.houses", "account.projects.versions",
+    reads = { "account.projects.houses", "account.projects.layouts", "account.rooms",
               "session.ui.projects.selectedFloor" },
     calls = { "projects.placementCaps" },
     fn = function(state, ctx)
-        local IDs, A = HDG.Projects.IDs, HDG.Projects.ShapeAtlas
+        local A = HDG.Projects.ShapeAtlas
         local floor = state.session.ui.projects.selectedFloor
         local occ, collide, cost, count = {}, false, 0, 0
         for rid, room in pairs(_activeRooms(state)) do
-            local p = IDs.parsePath(rid)
-            if p and p.floor == floor then
+            if room.floor == floor then
                 count, cost = count + 1, cost + A.GetBudget(room.shape)
                 local rot, cells = room.cell.rotation or 0, A.GetCells(room.shape)
                 for _, m in ipairs(A.RotateMask(A.GetMask(room.shape), rot, cells[1], cells[2])) do
@@ -272,21 +308,19 @@ Selectors:Register("projects.planValidationSummary", {
 -- Active == current -> empty diff. Pure; no live API.
 Selectors:Register("projects.planDiff", {
     memoized = true,  -- O(rooms) double-walk; shoppingListRows + planDiffSummary bottom out here.
-    reads = { "account.projects.houses", "account.projects.versions", "session.ui.projects.selectedFloor" },
+    reads = { "account.projects.houses", "account.projects.layouts", "account.rooms", "session.ui.projects.selectedFloor" },
     fn = function(state)
-        local IDs, floor = HDG.Projects.IDs, state.session.ui.projects.selectedFloor
-        local houseID, _, version = _activeVersionContext(state)
-        if not version then return { rows = {}, added = 0, missing = 0 } end
-        local house      = state.account.projects.houses[houseID]
-        local curVersion = house.currentVersionID and state.account.projects.versions[house.currentVersionID]
+        local floor = state.session.ui.projects.selectedFloor
+        local houseID, lid, layout = _activeLayoutContext(state)
+        if not layout then return { rows = {}, added = 0, missing = 0 } end
+        local house   = state.account.projects.houses[houseID]
+        local curView = HDG.StoreFurnishings.LayoutView(state, house.currentVersionID)
         local plan, cap = {}, {}
-        for rid, room in pairs(version.rooms) do
-            local p = IDs.parsePath(rid)
-            if p and p.floor == floor then plan[room.shape] = (plan[room.shape] or 0) + 1 end
+        for _, room in pairs(_activeRooms(state)) do
+            if room.floor == floor then plan[room.shape] = (plan[room.shape] or 0) + 1 end
         end
-        for rid, room in pairs(curVersion and curVersion.rooms or {}) do
-            local p = IDs.parsePath(rid)
-            if p and p.floor == floor then cap[room.shape] = (cap[room.shape] or 0) + 1 end
+        for _, room in pairs(curView) do
+            if room.floor == floor then cap[room.shape] = (cap[room.shape] or 0) + 1 end
         end
         local shapes = {}
         for sh in pairs(plan) do shapes[sh] = true end
@@ -339,25 +373,21 @@ Selectors:Register("projects.hasShoppingList", {
     fn = function(state, ctx) return #Selectors:Call("projects.shoppingListRows", state, ctx) > 0 end,
 })
 
--- Crates for the selected room + orphan holding-bay (demolished rooms with parent cleared).
+-- v7: the selected room's furnishing sets, projected in the legacy panel shape
+-- (the Phase-2 UI replaces this surface; orphans no longer exist).
 Selectors:Register("projects.crateRows", {
     memoized = true,
-    reads = { "account.collections", "account.projects.houses", "account.projects.versions",
-              "session.ui.projects.selectedRoomID" },
+    reads = { "account.rooms", "account.furnishingSets", "session.ui.projects.selectedRoomID" },
     fn = function(state)
-        local roomID = state.session.ui.projects.selectedRoomID
-        local _, vid = _activeVersionContext(state)
-        local crates, orphans = {}, {}
-        for id, coll in pairs(state.account.collections) do
-            if coll.type == "crate" then
-                if roomID and vid and coll.versionID == vid and coll.parent == roomID then
-                    crates[#crates + 1] = { id = id, name = coll.name, decor = coll.decor }
-                elseif coll.parent == nil then
-                    orphans[#orphans + 1] = { id = id, name = coll.name, lastKnownShape = coll.lastKnownShape }
-                end
+        local roomID, room = _selectedRoom(state)
+        local crates = {}
+        if room then
+            for _, sid in ipairs(room.furnishingSetIDs) do
+                local set = state.account.furnishingSets[sid]
+                crates[#crates + 1] = { id = sid, name = set.name, decor = set.items }
             end
         end
-        return { crates = crates, orphans = orphans }
+        return { crates = crates, orphans = {} }
     end,
 })
 
@@ -393,7 +423,7 @@ Selectors:Register("projects.placementCaps", {
 -- Room placement budget: planned room weight vs roomMax cap (reward-derived).
 -- Whole-house (NOT per-floor like planValidation). over/overBy drive amber "+N over".
 Selectors:Register("projects.roomBudget", {
-    reads = { "account.projects.houses", "account.projects.versions" },
+    reads = { "account.projects.houses", "account.projects.layouts", "account.rooms" },
     calls = { "projects.placementCaps" },
     fn = function(state, ctx)
         local A, cost = HDG.Projects.ShapeAtlas, 0
@@ -446,18 +476,16 @@ Selectors:Register("projects.architectColumns", {
 -- Floor tab list: 1..max(live numFloors, version.numFloors, highest room floor).
 -- What-if: version.numFloors is the user-controlled count (1..3 cap).
 Selectors:Register("projects.floorTabs", {
-    reads = { "account.projects.houses", "account.projects.versions", "session.house.numFloors",
-              "session.ui.projects.selectedFloor" },
+    reads = { "account.projects.houses", "account.projects.layouts", "account.rooms",
+              "session.house.numFloors", "session.ui.projects.selectedFloor" },
     fn = function(state)
-        local IDs = HDG.Projects.IDs
-        local _, _, version = _activeVersionContext(state)
+        local _, _, layout = _activeLayoutContext(state)
         local maxFloor = state.session.house.numFloors
-        if version and version.numFloors and version.numFloors > maxFloor then
-            maxFloor = version.numFloors
+        if layout and layout.numFloors and layout.numFloors > maxFloor then
+            maxFloor = layout.numFloors
         end
-        for roomID in pairs(_activeRooms(state)) do
-            local parsed = IDs.parsePath(roomID)
-            if parsed and parsed.floor and parsed.floor > maxFloor then maxFloor = parsed.floor end
+        for _, room in pairs(_activeRooms(state)) do
+            if room.floor and room.floor > maxFloor then maxFloor = room.floor end
         end
         local active = state.session.ui.projects.selectedFloor
         local tabs = {}
@@ -468,18 +496,17 @@ Selectors:Register("projects.floorTabs", {
 
 -- What-if floor controls: + Floor (whatIf + count < 3) / - Floor (whatIf + count > 1).
 local function _whatIfFloorCount(state)
-    local _, _, version = _activeVersionContext(state)
-    if not version then return 0 end
-    if version.numFloors then return version.numFloors end
-    local IDs, maxFloor = HDG.Projects.IDs, 1
-    for roomID in pairs(_activeRooms(state)) do
-        local parsed = IDs.parsePath(roomID)
-        if parsed and parsed.floor and parsed.floor > maxFloor then maxFloor = parsed.floor end
+    local _, _, layout = _activeLayoutContext(state)
+    if not layout then return 0 end
+    if layout.numFloors then return layout.numFloors end
+    local maxFloor = 1
+    for _, room in pairs(_activeRooms(state)) do
+        if room.floor and room.floor > maxFloor then maxFloor = room.floor end
     end
     return maxFloor
 end
 Selectors:Register("projects.canAddWhatIfFloor", {
-    reads = { "account.projects.houses", "account.projects.versions" },
+    reads = { "account.projects.houses", "account.projects.layouts", "account.rooms" },
     calls = { "projects.isWhatIfMode" },
     fn = function(state, ctx)
         if not Selectors:Call("projects.isWhatIfMode", state, ctx) then return false end
@@ -487,7 +514,7 @@ Selectors:Register("projects.canAddWhatIfFloor", {
     end,
 })
 Selectors:Register("projects.canRemoveWhatIfFloor", {
-    reads = { "account.projects.houses", "account.projects.versions" },
+    reads = { "account.projects.houses", "account.projects.layouts", "account.rooms" },
     calls = { "projects.isWhatIfMode" },
     fn = function(state, ctx)
         if not Selectors:Call("projects.isWhatIfMode", state, ctx) then return false end
@@ -514,20 +541,15 @@ local function _roomLabel(room, floor)
     return _withRoomNumber(room.name or HDG.Projects.ShapeAtlas.GetLabel(room.shape), room, floor)
 end
 
--- SHORT label (CANVAS only): shape name only ("Square M", "T-Shape").
-local function _roomLabelShort(room)
-    if not room then return "?" end
-    return HDG.Projects.ShapeAtlas.GetLabel(room.shape)
-end
-
--- roomID -> "in-progress" for rooms with crates holding decor (scoped to vid).
--- Rooms absent from the map read as "unconfigured".
-local function _roomStatusMap(collections, vid)
+-- roomID -> "in-progress" for rooms whose furnishings hold any items.
+-- Keyed by REAL room ids -- v8 canvas keys are slot keys, so the model
+-- resolves through the placement's roomID tag before this lookup.
+local function _roomStatusMap(state)
     local out = {}
-    for _, coll in pairs(collections) do
-        if coll.type == "crate" and coll.versionID == vid and coll.parent
-           and coll.decor and #coll.decor > 0 then
-            out[coll.parent] = "in-progress"
+    for rid, room in pairs(state.account.rooms) do
+        for _, sid in ipairs(room.furnishingSetIDs) do
+            local set = state.account.furnishingSets[sid]
+            if set and #set.items > 0 then out[rid] = "in-progress" break end
         end
     end
     return out
@@ -584,11 +606,10 @@ end
 -- Same active-version rooms, one floor down (cells are explicit).
 local function _lowerFloorBackdrop(state, selectedFloor, bb)
     if selectedFloor <= 1 then return {} end
-    local IDs, A = HDG.Projects.IDs, HDG.Projects.ShapeAtlas
+    local A = HDG.Projects.ShapeAtlas
     local below, out = selectedFloor - 1, {}
     for rid, r in pairs(_activeRooms(state)) do
-        local p = IDs.parsePath(rid)
-        if p and p.floor == below then
+        if r.floor == below then
             local rot, cells = r.cell.rotation or 0, A.GetCells(r.shape)
             local rc = A.RotateCells(cells, rot)
             out[#out + 1] = { shape = r.shape, x = r.cell.x, y = r.cell.y,
@@ -604,16 +625,15 @@ end
 -- and bbox for auto-fit tiling. One layout path (active version IS the design).
 Selectors:Register("projects.canvasModel", {
     memoized = true,
-    reads = { "account.projects.houses", "account.projects.versions",
-              "account.collections", "session.ui.projects.selectedFloor",
+    reads = { "account.projects.houses", "account.projects.layouts", "account.rooms",
+              "account.furnishingSets", "session.ui.projects.selectedFloor",
               "session.ui.projects.selectedRoomID" },
     calls = { "projects.planLayout" },
     fn = function(state, ctx)
         local nav          = state.session.ui.projects
         local cur          = Selectors:Call("projects.planLayout", state, ctx)
-        local _, vid       = _activeVersionContext(state)
         local roomsByID    = _activeRooms(state)
-        local statusMap    = _roomStatusMap(state.account.collections, vid)
+        local statusMap    = _roomStatusMap(state)
         local rooms, orbs = {}, {}
         local bb = { minX = nil, maxX = nil, minY = nil, maxY = nil }
         local A = HDG.Projects.ShapeAtlas
@@ -622,12 +642,18 @@ Selectors:Register("projects.canvasModel", {
             local room = roomsByID[roomID]
             local canon = A.GetCells(meta.shape)
             rooms[#rooms + 1] = {
-                roomID = roomID, shape = meta.shape, name = _roomLabelShort(room),
+                roomID = roomID, shape = meta.shape,
+                -- 2.3: assigned rooms label by NAME (shape readable from the
+                -- outline); slots fall back to the shape label + badge at paint.
+                name = (room and not room.unassigned and room.name and room.name ~= "" and room.name) or nil,
+                unassigned = (room and room.unassigned) or nil,
                 x = cell.x, y = cell.y, w = placed.w, d = placed.d, rotation = placed.rotation or 0,
                 canonW = canon[1], canonD = canon[2],   -- unrotated footprint -> icon rotates without stretch
                 atlas = A.GetAtlas(meta.shape), circle = A.IsCircle(meta.shape),
                 isSelected = (roomID == nav.selectedRoomID),
-                status = statusMap[roomID] or "unconfigured",
+                -- v8: the canvas key is a slot key; furnishing status belongs
+                -- to the TAGGED room (room.roomID), not the key.
+                status = (room and room.roomID and statusMap[room.roomID]) or "unconfigured",
             }
             _extendFootprint(bb, cell.x, cell.y, placed.w, placed.d)
             -- Door orbs from SHAPE door slots (not the captured "occupied" subset);
@@ -719,7 +745,7 @@ Selectors:Register("projects.sidePanelOpen", {
 
 -- Selected room detail. Returns nil when nothing's selected (panel.visible gates render).
 Selectors:Register("projects.roomDetail", {
-    reads = { "account.projects.houses", "account.projects.versions", "session.ui.projects.selectedRoomID" },
+    reads = { "account.projects.houses", "account.projects.layouts", "account.rooms", "session.ui.projects.selectedRoomID" },
     fn = function(state)
         local roomID = state.session.ui.projects.selectedRoomID
         if not roomID then return nil end
@@ -740,52 +766,203 @@ Selectors:Register("projects.roomDetail", {
 -- wouldn't change on the tick, so cold rows stay on the fallback).
 Selectors:Register("projects.crateDetail", {
     memoized = true,
-    reads = { "account.collections", "account.projects.houses", "account.projects.versions",
+    reads = { "account.rooms", "account.furnishingSets",
               "session.ui.projects.selectedRoomID", "session.itemNames.tick" },
     fn = function(state)
-        local roomID = state.session.ui.projects.selectedRoomID
-        if not roomID then return { hasCrate = false } end
-        local _, vid = _activeVersionContext(state)
-        local crateID, coll
-        for id, c in pairs(state.account.collections) do
-            if c.type == "crate" and c.versionID == vid and c.parent == roomID then crateID, coll = id, c; break end
+        local roomID, room = _selectedRoom(state)
+        if not room then return { hasCrate = false } end
+        local setID, set
+        for _, sid in ipairs(room.furnishingSetIDs) do
+            local s = state.account.furnishingSets[sid]
+            if s and s.isLocal and s.ownerRoom == roomID then setID, set = sid, s break end
         end
-        if not coll then return { hasCrate = false } end
+        if not set then return { hasCrate = false } end
         local R, rows, total = HDG.ItemNameResolver, {}, 0
-        for _, d in ipairs(coll.decor or {}) do
+        for _, d in ipairs(set.items) do
             local cnt = d.count or 1
-            rows[#rows + 1] = { crateID = crateID, decorID = d.id, count = cnt,
+            -- projectsFurnRow envelope (item kind, local -> steppers paint).
+            rows[#rows + 1] = { kind = "item", isLocal = true, setID = setID,
+                                decorID = d.id, count = cnt,
                                 name = R:ResolveName(d.id), icon = R:ResolveIcon(d.id) }
             total = total + cnt
         end
-        return { hasCrate = true, crateID = crateID, crateName = coll.name or "Crate",
-                 completed = coll.completed and true or false, decorRows = rows, decorCount = total }
+        return { hasCrate = true, crateID = setID, crateName = set.name or "Furnishings",
+                 completed = false, decorRows = rows, decorCount = total }
     end,
 })
 
--- Thin composers (declarative widget bindings). per ADR-024.
-Selectors:Register("projects.crateDetailRows", {
-    calls = { "projects.crateDetail" },
-    fn = function(state, ctx) return Selectors:Call("projects.crateDetail", state, ctx).decorRows or {} end,
-})
-Selectors:Register("projects.crateDetailTitle", {
-    calls = { "projects.crateDetail" },
-    fn = function(state, ctx)
-        local cd = Selectors:Call("projects.crateDetail", state, ctx)
-        if not cd.hasCrate then return "" end
-        return (cd.crateName or "Crate") .. "  -  " .. cd.decorCount .. (cd.decorCount == 1 and " item" or " items")
-    end,
-})
+-- Thin composer (declarative widget binding). per ADR-024.
 Selectors:Register("projects.crateDetailHasCrate", {
     calls = { "projects.crateDetail" },
     fn = function(state, ctx) return Selectors:Call("projects.crateDetail", state, ctx).hasCrate == true end,
 })
--- Room selected but no crate yet -> drives the "+ Add Crate" CTA.
-Selectors:Register("projects.crateDetailNeedsCrate", {
-    calls = { "projects.crateDetail", "projects.sidePanelOpen" },
+-- (crateDetailNeedsCrate retired with the "+ Add Crate" CTA -- the local set
+-- is created implicitly by the first add; see _ensureLocalSet.)
+-- ===== Two-state curation panel (build plan 2.2) ============================
+-- The selected canvas key resolves to either an UNASSIGNED slot ("which
+-- room?" offer) or an ASSIGNED room (furnishings detail). One panel, two
+-- widget sets, gated by these two selectors.
+
+Selectors:Register("projects.slotPanelOpen", {
+    reads = { "account.projects.houses", "account.projects.layouts", "account.rooms",
+              "session.ui.projects.selectedRoomID" },
+    fn = function(state)
+        local key = state.session.ui.projects.selectedRoomID
+        local rec = key and _activeRooms(state)[key]   -- exception(nullable): stale selection
+        return (rec and rec.unassigned) == true
+    end,
+})
+Selectors:Register("projects.roomPanelOpen", {
+    reads = { "account.projects.houses", "account.projects.layouts", "account.rooms",
+              "session.ui.projects.selectedRoomID" },
+    fn = function(state)
+        local key = state.session.ui.projects.selectedRoomID
+        local rec = key and _activeRooms(state)[key]   -- exception(nullable): stale selection
+        return (rec ~= nil) and not rec.unassigned
+    end,
+})
+
+-- "Which room is this?" -- candidate rooms for the selected unassigned slot:
+-- same shape (or shapeless "+ New Room" creations), rooms already placed in
+-- this layout omitted (once-per-layout), ranked by use (most-placed first).
+Selectors:Register("projects.slotAssignOffer", {
+    memoized = true,
+    reads = { "account.projects.houses", "account.projects.layouts", "account.rooms",
+              "session.furnIndex", "session.furn", "session.ui.projects.selectedRoomID" },
+    fn = function(state)
+        local key  = state.session.ui.projects.selectedRoomID
+        local view = _activeRooms(state)
+        local slot = key and view[key]   -- exception(nullable): stale selection
+        if not (slot and slot.unassigned) then return {} end
+        local _, lid, layout = _activeLayoutContext(state)
+        if not layout then return {} end
+        -- v8: ALREADY-PLACED rooms stay in the offer (multi-assign is the
+        -- point); the spot count is the multiplicity signal (review condition a).
+        local idx, out = state.session.furnIndex, {}
+        for rid, room in pairs(state.account.rooms) do
+            if room.shape == nil or room.shape == slot.shape then
+                local hereCount = (idx.roomLayouts[rid] or {})[lid] or 0   -- exception(nullable): room may be placed nowhere
+                local layouts = 0
+                for _ in pairs(idx.roomLayouts[rid] or {}) do layouts = layouts + 1 end   -- exception(nullable): room may be placed nowhere
+                out[#out + 1] = {
+                    roomID = rid, slotKey = key, layoutID = lid,
+                    hereCount = hereCount, layouts = layouts,
+                    name = (room.name and room.name ~= "" and room.name)
+                        or (room.shape and HDG.Projects.ShapeAtlas.GetLabel(room.shape)) or "Design",
+                    noShape = room.shape == nil,
+                }
+            end
+        end
+        table.sort(out, function(a2, b2)
+            if a2.name ~= b2.name then return a2.name < b2.name end
+            return a2.roomID < b2.roomID
+        end)
+        return out
+    end,
+})
+
+-- "Changes apply everywhere" notice for the assigned-room detail.
+Selectors:Register("projects.roomInLayoutsText", {
+    reads = { "account.rooms", "account.projects.houses", "account.projects.layouts",
+              "session.furnIndex", "session.furn",
+              "session.ui.projects.selectedRoomID" },
+    fn = function(state)
+        local roomID, room = _selectedRoom(state)
+        if not room then return "" end
+        local lids = state.session.furnIndex.roomLayouts[roomID] or {}   -- exception(nullable): design may be placed nowhere
+        local layouts = 0
+        for _ in pairs(lids) do layouts = layouts + 1 end
+        local _, lid = _activeLayoutContext(state)
+        local here   = (lid and lids[lid]) or 0   -- exception(nullable): not placed in the active layout
+        -- Sharing surprise prevention (owner 2026-06-11: two Reviles, same
+        -- contents, no hint): lead with the in-THIS-layout share; fold the
+        -- cross-layout count in compactly. One line -- the label doesn't wrap.
+        if type(here) == "number" and here > 1 then
+            if layouts > 1 then
+                return ("Shared -- fills %d rooms here + %d other layout%s; edits affect all.")
+                    :format(here, layouts - 1, (layouts - 1) == 1 and "" or "s")
+            end
+            return ("Shared -- fills %d rooms here; edits affect %s.")
+                :format(here, here == 2 and "both" or "all of them")
+        end
+        if layouts <= 1 then return "" end
+        return ("In %d layouts -- changes apply everywhere."):format(layouts)
+    end,
+})
+
+-- Auto-assign gate: any unassigned SHAPED room in the active layout.
+Selectors:Register("projects.hasUnassignedRooms", {
+    reads = { "account.projects.houses", "account.projects.layouts", "account.rooms" },
+    fn = function(state)
+        for _, rec in pairs(_activeRooms(state)) do
+            if rec.unassigned and rec.shape then return true end
+        end
+        return false
+    end,
+})
+
+-- Empty-offer hint: the slot panel's list can legitimately be empty (every
+-- matching room is already placed in this layout, or none exists yet).
+Selectors:Register("projects.slotOfferIsEmpty", {
+    calls = { "projects.slotPanelOpen", "projects.slotAssignOffer" },
     fn = function(state, ctx)
-        return Selectors:Call("projects.sidePanelOpen", state, ctx)
-           and not Selectors:Call("projects.crateDetail", state, ctx).hasCrate
+        return Selectors:Call("projects.slotPanelOpen", state, ctx)
+           and #Selectors:Call("projects.slotAssignOffer", state, ctx) == 0
+    end,
+})
+-- The "which room?" prompt shows only when there ARE candidates -- the
+-- empty-state line replaces it entirely (the pair read as duplicates).
+Selectors:Register("projects.slotOfferHasRows", {
+    calls = { "projects.slotPanelOpen", "projects.slotAssignOffer" },
+    fn = function(state, ctx)
+        return Selectors:Call("projects.slotPanelOpen", state, ctx)
+           and #Selectors:Call("projects.slotAssignOffer", state, ctx) > 0
+    end,
+})
+
+-- Effective furnishings for the selected ASSIGNED room, grouped by set with
+-- per-item provenance. Row kinds:
+--   setHeader { setID, name, isLocal, count }  (Unequip paints on library sets)
+--   item      { setID, isLocal, decorID, count, name, icon }  (steppers on local only)
+-- Library sets first (alpha), the room's own pieces last. Name/icon stamped
+-- into the envelope (ADR-003b: paint-time resolve breaks the async re-render).
+Selectors:Register("projects.roomFurnishingsRows", {
+    memoized = true,
+    reads = { "account.rooms", "account.furnishingSets", "session.ui.projects.furnCollapsed",
+              "session.ui.projects.selectedRoomID", "session.itemNames.tick", "session.furn" },
+    fn = function(state)
+        local roomID, room = _selectedRoom(state)
+        if not room then return {} end
+        local R, folded = HDG.ItemNameResolver, state.session.ui.projects.furnCollapsed
+        local lib, localSet = {}, nil
+        for _, sid in ipairs(room.furnishingSetIDs) do
+            local set = state.account.furnishingSets[sid]
+            if set and set.isLocal and set.ownerRoom == roomID then localSet = set
+            elseif set then lib[#lib + 1] = set end   -- exception(nullable): set deleted out from under the room
+        end
+        table.sort(lib, function(a2, b2)
+            if (a2.name or "") ~= (b2.name or "") then return (a2.name or "") < (b2.name or "") end
+            return a2.id < b2.id
+        end)
+        local rows = {}
+        local function emit(set, isLocal)
+            -- Library groups fold (click the header); the room's own pieces never do.
+            local collapsed = (not isLocal) and folded[set.id] == true
+            local total = 0
+            for _, it in ipairs(set.items) do total = total + (it.count or 1) end
+            rows[#rows + 1] = { kind = "setHeader", setID = set.id, isLocal = isLocal,
+                                name = isLocal and "This room's pieces" or (set.name or "Set"),
+                                count = total, collapsed = collapsed }
+            if collapsed then return end
+            for _, it in ipairs(set.items) do
+                rows[#rows + 1] = { kind = "item", setID = set.id, isLocal = isLocal,
+                                    decorID = it.id, count = it.count or 1,
+                                    name = R:ResolveName(it.id), icon = R:ResolveIcon(it.id) }
+            end
+        end
+        for _, set in ipairs(lib) do emit(set, false) end
+        if localSet then emit(localSet, true) end
+        return rows
     end,
 })
 
@@ -796,23 +973,46 @@ Selectors:Register("projects.crateDetailNeedsCrate", {
 -- ============================================================================
 Selectors:Register("projects.pickerResults", {
     memoized = true,
-    reads = { "account.collections", "session.ui.projects.pickerCrateID",
-              "session.ui.projects.pickerSearch",
+    reads = { "account.furnishingSets", "session.ui.projects.pickerCrateID",
+              "session.ui.projects.pickerSearch", "session.ui.projects.pickerSource",
               "session.ui.projects.focusedCategoryID", "session.ui.projects.focusedSubcategoryID",
+              "account.collections", "account.vendorShoppingLists", "session.staticData.tick",
               "account.collection.ownedDecorIDs", "session.catalog.sweepGeneration" },
     calls = { "decor.allItems" },
     fn = function(state, ctx)
         local crateID = state.session.ui.projects.pickerCrateID
         if not crateID then return {} end   -- picker closed
-        local search = state.session.ui.projects.pickerSearch:lower()
+        local search  = state.session.ui.projects.pickerSearch:lower()
         local catFilt = state.session.ui.projects.focusedCategoryID    -- nil = All (rail)
         local subFilt = state.session.ui.projects.focusedSubcategoryID  -- nil = All within category
-        local crateCounts = {}   -- decorID -> count in the open crate (for the picker stepper)
-        local crate = state.account.collections[crateID]
-        if crate and crate.decor then for _, d in ipairs(crate.decor) do crateCounts[d.id] = d.count or 1 end end
+        local source  = state.session.ui.projects.pickerSource
+        -- Source axis ("whose list is this from"): nil membership table = All Decor;
+        -- otherwise only items in the chosen style bin / shopping list. Composes
+        -- (AND) with the rail's Blizzard-taxonomy axis, like the Curator.
+        local unownedOnly = (source == "unowned")
+        local inSource
+        if source and source ~= "all" and not unownedOnly then
+            inSource = {}
+            if source:sub(1, 6) == "style:" then
+                local coll = state.account.collections[source]   -- exception(nullable): style deleted since menu render
+                for _, itemID in ipairs((coll and coll.items) or {}) do inSource[itemID] = true end
+            elseif source:sub(1, 5) == "shop:" then
+                local list = state.account.vendorShoppingLists[source:sub(6)]   -- exception(nullable): list deleted since menu render
+                for _, rec in ipairs((list and list.items) or {}) do inSource[rec.itemID] = true end
+            elseif source:sub(1, 8) == "concept:" then
+                -- Pre-authored Room Concepts: rule-based; resolved like the companion grid.
+                for _, itemID in ipairs(HDG.StyleResolve.ItemsFor(source, state)) do inSource[itemID] = true end
+            end
+        end
+        local planned = {}   -- itemID -> count in the target set (card badge)
+        local set = state.account.furnishingSets[crateID]   -- exception(nullable): stale picker target
+        if set then for _, d in ipairs(set.items) do planned[d.id] = d.count or 1 end end
         local rows = {}
         for _, it in ipairs(Selectors:Call("decor.allItems", state, ctx)) do
-            -- Owned-only: crates hold decor you'll place (All/Owned/Missing toggle removed).
+            -- ALL decor (owner 2026-06-11): plans may hold decor you don't own
+            -- yet -- that's what feeds the acquisition stack. Unowned cards
+            -- paint dimmed; the hover pane carries Queue craft / Add to
+            -- Shopping for them.
             local nameOK = (search == "") or (it.name and it.name:lower():find(search, 1, true) ~= nil)
             -- Category nav filter (Blizzard categoryID; nil = All; 0 = Uncategorized).
             local row    = HDG.HousingCatalogObserver:GetRow(it.itemID)
@@ -820,12 +1020,14 @@ Selectors:Register("projects.pickerResults", {
             local subID  = (row and row.subcategoryID) or 0
             local catOK  = (catFilt == nil) or (catFilt == catID)
             local subOK  = (subFilt == nil) or (subFilt == subID)
-            if it.isOwned and nameOK and catOK and subOK then
-                local cc = crateCounts[it.itemID] or 0
+            local srcOK  = (inSource == nil) or inSource[it.itemID]
+            if unownedOnly and it.isOwned then srcOK = false end
+            if nameOK and catOK and subOK and srcOK then
                 rows[#rows + 1] = {
                     itemID = it.itemID, decorID = it.decorID, name = it.name,
                     iconTexture = it.iconTexture, iconAtlas = it.iconAtlas,
-                    isOwned = it.isOwned, inCrate = cc > 0, crateCount = cc,
+                    plannedCount = planned[it.itemID] or 0,
+                    owned = it.isOwned,
                 }
             end
         end
@@ -833,27 +1035,241 @@ Selectors:Register("projects.pickerResults", {
     end,
 })
 
--- (projects.pickerFilterChips removed: picker is owned-only; All/Owned/Missing toggle gone.)
--- Bulk-add gated on non-empty search (so "Add all" can't dump the whole catalog).
-Selectors:Register("projects.pickerBulkAddCount", {
-    calls = { "projects.pickerResults" },
-    reads = { "session.ui.projects.pickerSearch" },
-    fn = function(state, ctx)
-        if state.session.ui.projects.pickerSearch == "" then return 0 end
-        local n = 0
-        for _, r in ipairs(Selectors:Call("projects.pickerResults", state, ctx)) do
-            if not r.inCrate then n = n + 1 end
-        end
-        return n
+-- Hover acquisition gates: the preview pane offers Queue craft / Add to
+-- Shopping for the hovered item when it's UNOWNED (that's the acquisition
+-- loop: plan with decor you don't have, then click to go get it).
+local function _hoverUnowned(state)
+    local itemID = state.session.ui.projects.pickerSelectedItemID
+    if not itemID then return nil end
+    local row = HDG.HousingCatalogObserver:GetRow(itemID)
+    local decorID = row and row.decorID
+    if not decorID then return nil end   -- exception(nullable): catalog warms async
+    if state.account.collection.ownedDecorIDs[decorID] then return nil end
+    return itemID
+end
+Selectors:Register("projects.pickerHoverUnowned", {
+    reads = { "session.ui.projects.pickerSelectedItemID",
+              "account.collection.ownedDecorIDs", "session.catalog.sweepGeneration" },
+    fn = function(state) return _hoverUnowned(state) ~= nil end,
+})
+Selectors:Register("projects.pickerHoverCraftable", {
+    reads = { "session.ui.projects.pickerSelectedItemID",
+              "account.collection.ownedDecorIDs", "session.catalog.sweepGeneration",
+              "session.staticData.tick" },
+    fn = function(state)
+        local itemID = _hoverUnowned(state)
+        return itemID ~= nil and HDG.StaticData.Recipes:Get(itemID) ~= nil
     end,
 })
-Selectors:Register("projects.pickerCanBulkAdd", {
-    calls = { "projects.pickerBulkAddCount" },
-    fn = function(state, ctx) return Selectors:Call("projects.pickerBulkAddCount", state, ctx) > 0 end,
+
+-- Source dropdown ("Viewing: ..."): All Decor / style bins / shopping lists,
+-- each with counts. Values: "all" | "style:<collID>" | "shop:<listID>".
+Selectors:Register("projects.pickerSource", {
+    reads = { "session.ui.projects.pickerSource" },
+    fn = function(state) return state.session.ui.projects.pickerSource end,
 })
-Selectors:Register("projects.pickerBulkAddLabel", {
-    calls = { "projects.pickerBulkAddCount" },
-    fn = function(state, ctx) return "+ Add all " .. Selectors:Call("projects.pickerBulkAddCount", state, ctx) end,
+Selectors:Register("projects.pickerSourceMenuItems", {
+    reads = { "account.collections", "account.vendorShoppingLists", "session.staticData.tick" },
+    calls = { "decor.allItems" },
+    fn = function(state, ctx)
+        -- Counts on the catalog entries mirror the style entries' counts.
+        local all, unowned = Selectors:Call("decor.allItems", state, ctx), 0
+        for _, it in ipairs(all) do
+            if not it.isOwned then unowned = unowned + 1 end
+        end
+        local items = {
+            { text = ("All Decor (%d)"):format(#all),      value = "all" },
+            { text = ("Unowned decor (%d)"):format(unowned), value = "unowned" },
+        }
+        local styles = {}
+        for id, coll in pairs(state.account.collections) do
+            if coll.type == "style" and coll.items and #coll.items > 0 then
+                -- User styles store their name in displayName (STYLES_CREATE_STYLE).
+                styles[#styles + 1] = { text = (coll.displayName or coll.name or "Style")
+                    .. " (" .. #coll.items .. ")", value = id, sort = (coll.displayName or coll.name or "Style") }
+            end
+        end
+        table.sort(styles, function(a2, b2)
+            if a2.sort ~= b2.sort then return a2.sort < b2.sort end
+            return a2.value < b2.value
+        end)
+        if #styles > 0 then
+            items[#items + 1] = { kind = "title", text = "My Styles" }
+            for _, s in ipairs(styles) do items[#items + 1] = { text = s.text, value = s.value } end
+        end
+        local lists = {}
+        for lid, list in pairs(state.account.vendorShoppingLists) do
+            if list.items and #list.items > 0 then
+                lists[#lists + 1] = { text = (list.name or "List") .. " (" .. #list.items .. ")",
+                                      value = "shop:" .. lid, sort = list.name or "List" }
+            end
+        end
+        table.sort(lists, function(a2, b2)
+            if a2.sort ~= b2.sort then return a2.sort < b2.sort end
+            return a2.value < b2.value
+        end)
+        if #lists > 0 then
+            items[#items + 1] = { kind = "title", text = "Shopping Lists" }
+            for _, s in ipairs(lists) do items[#items + 1] = { text = s.text, value = s.value } end
+        end
+        -- Pre-authored Room Concepts (rule-based -- no cheap count; label only).
+        local concepts = {}
+        local sd = HDG.StaticData.Styles:GetDefinitions()
+        if type(sd) == "table" then
+            for sid, def in pairs(sd) do
+                if def.tier ~= "collection" then
+                    local nm = def.displayName or def.name or sid
+                    concepts[#concepts + 1] = { text = nm, value = "concept:" .. sid, sort = nm }
+                end
+            end
+        end
+        table.sort(concepts, function(a2, b2)
+            if a2.sort ~= b2.sort then return a2.sort < b2.sort end
+            return a2.value < b2.value
+        end)
+        if #concepts > 0 then
+            items[#items + 1] = { kind = "title", text = "Room Concepts" }
+            for _, s in ipairs(concepts) do items[#items + 1] = { text = s.text, value = s.value } end
+        end
+        return items
+    end,
+})
+
+-- Hover-driven info line under the 3D preview: "Owned N -- Planned here M".
+Selectors:Register("projects.pickerHoverName", {
+    reads = { "session.ui.projects.pickerSelectedItemID", "session.itemNames.tick" },
+    fn = function(state)
+        local itemID = state.session.ui.projects.pickerSelectedItemID
+        if not itemID then return "" end
+        return HDG.ItemNameResolver:ResolveName(itemID) or ""
+    end,
+})
+Selectors:Register("projects.pickerHoverLine", {
+    reads = { "session.ui.projects.pickerSelectedItemID", "session.ui.projects.pickerCrateID",
+              "account.furnishingSets", "session.catalog.sweepGeneration" },
+    fn = function(state)
+        local itemID = state.session.ui.projects.pickerSelectedItemID
+        if not itemID then return "" end
+        local row    = HDG.HousingCatalogObserver:GetRow(itemID)
+        local owned  = (row and ((row.numStored or 0) + (row.numPlaced or 0))) or 0
+        local planned = 0
+        local set = state.account.furnishingSets[state.session.ui.projects.pickerCrateID]   -- exception(nullable): stale picker target
+        if set then
+            for _, d in ipairs(set.items) do
+                if d.id == itemID then planned = d.count or 1 break end
+            end
+        end
+        return ("Owned %d  --  Planned here %d"):format(owned, planned)
+    end,
+})
+
+-- ===== Picker TARGET (the set being edited) =================================
+-- The picker edits whatever set pickerCrateID points at: a room's own pieces
+-- (local) OR a library set (the Rooms-list "Edit" entry). The right column is
+-- always the target set -- title, stepper rows, totals.
+local function _pickerTarget(state)
+    local sid = state.session.ui.projects.pickerCrateID
+    return sid, sid and state.account.furnishingSets[sid]   -- exception(nullable): stale picker target
+end
+Selectors:Register("projects.pickerTargetTitle", {
+    reads = { "session.ui.projects.pickerCrateID", "account.furnishingSets",
+              "account.rooms", "session.furnIndex", "session.furn" },
+    fn = function(state)
+        local _, set = _pickerTarget(state)
+        if not set then return "" end
+        if set.isLocal then
+            local room = set.ownerRoom and state.account.rooms[set.ownerRoom]   -- exception(nullable): owner deleted out from under the set
+            local name = (room and room.name and room.name ~= "" and room.name)
+                or (room and room.shape and HDG.Projects.ShapeAtlas.GetLabel(room.shape)) or "Design"
+            return name:upper() .. "  --  THIS DESIGN"
+        end
+        local n = 0
+        for _ in pairs(state.session.furnIndex.setRooms[set.id] or {}) do n = n + 1 end   -- exception(nullable): set may be equipped nowhere
+        return (set.name or "Set"):upper() .. "  --  LIBRARY SET"
+            .. (n > 0 and ("  (in " .. n .. (n == 1 and " room)" or " rooms)")) or "")
+    end,
+})
+Selectors:Register("projects.pickerTargetRows", {
+    memoized = true,
+    reads = { "session.ui.projects.pickerCrateID", "account.furnishingSets", "session.itemNames.tick" },
+    fn = function(state)
+        local sid, set = _pickerTarget(state)
+        if not set then return {} end
+        local R, rows = HDG.ItemNameResolver, {}
+        for _, d in ipairs(set.items) do
+            -- Always steppers: the picker EDITS the target (library edits
+            -- propagate to every room equipping the set -- by design).
+            rows[#rows + 1] = { kind = "item", isLocal = true, setID = sid,
+                                decorID = d.id, count = d.count or 1,
+                                name = R:ResolveName(d.id), icon = R:ResolveIcon(d.id) }
+        end
+        return rows
+    end,
+})
+Selectors:Register("projects.pickerTargetTotals", {
+    reads = { "session.ui.projects.pickerCrateID", "account.furnishingSets" },
+    fn = function(state)
+        local _, set = _pickerTarget(state)
+        if not set or #set.items == 0 then return "No pieces yet -- click a card to add" end
+        local kinds, pieces = #set.items, 0
+        for _, d in ipairs(set.items) do pieces = pieces + (d.count or 1) end
+        return ("%d item%s  -  %d piece%s"):format(
+            kinds, kinds == 1 and "" or "s", pieces, pieces == 1 and "" or "s")
+    end,
+})
+-- Gates Save-as-Set + Equip-set (room-context actions; meaningless on a library target).
+Selectors:Register("projects.pickerTargetIsLocal", {
+    reads = { "session.ui.projects.pickerCrateID", "account.furnishingSets" },
+    fn = function(state)
+        local _, set = _pickerTarget(state)
+        return (set and set.isLocal) == true
+    end,
+})
+-- Scope indicator: editing a LOCAL set whose room is placed in 2+ layouts.
+-- Total SPOTS a design fills across every layout (v8: index values are
+-- per-layout counts -- multi-assign means spots > layouts is normal).
+local function _designSpotCount(state, roomID)
+    local spots = 0
+    for _, c in pairs(state.session.furnIndex.roomLayouts[roomID] or {}) do   -- exception(nullable): design may be placed nowhere
+        spots = spots + (type(c) == "number" and c or 1)
+    end
+    return spots
+end
+
+Selectors:Register("projects.pickerScopeShared", {
+    reads = { "session.ui.projects.pickerCrateID", "account.furnishingSets",
+              "session.furnIndex", "session.furn" },
+    fn = function(state)
+        local _, set = _pickerTarget(state)
+        if not (set and set.isLocal and set.ownerRoom) then return false end
+        -- SPOTS, not layouts (owner 2026-06-11: two octagons in ONE layout
+        -- showed no copy affordance -- the gate predated multi-assign).
+        return _designSpotCount(state, set.ownerRoom) >= 2
+    end,
+})
+Selectors:Register("projects.pickerScopeText", {
+    reads = { "session.ui.projects.pickerCrateID", "account.furnishingSets",
+              "session.furnIndex", "session.furn" },
+    fn = function(state)
+        local _, set = _pickerTarget(state)
+        if not (set and set.isLocal and set.ownerRoom) then return "" end
+        local spots = _designSpotCount(state, set.ownerRoom)
+        if spots < 2 then return "" end
+        return ("This design fills %d rooms -- edits apply to all of them."):format(spots)
+    end,
+})
+
+-- Fork gate: the selected room's design fills 2+ spots (anywhere) -- forking
+-- a design that lives only here would just be a rename.
+Selectors:Register("projects.canForkSelection", {
+    reads = { "account.rooms", "account.projects.houses", "account.projects.layouts",
+              "session.furnIndex", "session.furn", "session.ui.projects.selectedRoomID" },
+    calls = { "projects.roomPanelOpen" },
+    fn = function(state, ctx)
+        if not Selectors:Call("projects.roomPanelOpen", state, ctx) then return false end
+        local roomID = _selectedRoom(state)
+        return roomID ~= nil and _designSpotCount(state, roomID) >= 2
+    end,
 })
 
 -- Saved Styles importable into the open crate. {} when picker is closed.
@@ -868,32 +1284,12 @@ Selectors:Register("projects.pickerRail", {
     },
     fn = function(state)
         local p = state.session.ui.projects
-        -- storedOnly = true: owned-only categories (the picker only adds decor you own),
-        -- matching the Style Curator's rail. (false showed empty categories -- one read as
-        -- a second "All".)
+        -- storedOnly = false since the picker shows ALL decor (release-18
+        -- audit: owned-only rails hid categories whose every item is unowned,
+        -- making them unreachable from the Unowned-decor source).
         return HDG.CategoryNav.BuildPickerRail(
-            state.session.house.categoryTree, p.focusedCategoryID, p.focusedSubcategoryID, true)
+            state.session.house.categoryTree, p.focusedCategoryID, p.focusedSubcategoryID, false)
     end,
-})
-
-Selectors:Register("projects.pickerStyleRows", {
-    reads = { "account.collections", "session.ui.projects.pickerCrateID" },
-    fn = function(state)
-        if not state.session.ui.projects.pickerCrateID then return {} end
-        local rows = {}
-        for id, coll in pairs(state.account.collections) do
-            if coll.type == "style" and coll.items and #coll.items > 0 then
-                -- User styles store their name in displayName (STYLES_CREATE_STYLE), not name.
-                rows[#rows + 1] = { id = id, name = coll.displayName or coll.name or "Style", count = #coll.items }
-            end
-        end
-        table.sort(rows, function(a, b) return a.name < b.name end)
-        return rows
-    end,
-})
-Selectors:Register("projects.pickerHasStyles", {
-    calls = { "projects.pickerStyleRows" },
-    fn = function(state, ctx) return #Selectors:Call("projects.pickerStyleRows", state, ctx) > 0 end,
 })
 
 -- Picker open when a target crate is set.
@@ -907,26 +1303,9 @@ Selectors:Register("projects.pickerSelectedItemID", {
     fn = function(state) return state.session.ui.projects.pickerSelectedItemID end,
 })
 
--- ============================================================================
--- Orphan crates: crates whose room was removed on recapture (parent cleared).
--- Re-attach targets the selected room.
--- ============================================================================
-Selectors:Register("projects.orphanRows", {
-    calls = { "projects.crateRows" },
-    fn = function(state, ctx) return Selectors:Call("projects.crateRows", state, ctx).orphans or {} end,
-})
--- Show orphan section when a room is selected AND orphans exist.
-Selectors:Register("projects.orphansAttachable", {
-    calls = { "projects.crateRows", "projects.sidePanelOpen" },
-    fn = function(state, ctx)
-        return Selectors:Call("projects.sidePanelOpen", state, ctx)
-           and #(Selectors:Call("projects.crateRows", state, ctx).orphans or {}) > 0
-    end,
-})
-
 -- Breadcrumb chips: House > Floor N > [Room].
 Selectors:Register("projects.breadcrumb", {
-    reads = { "account.projects.houses", "account.projects.versions",
+    reads = { "account.projects.houses", "account.projects.layouts", "account.rooms",
               "session.ui.projects.selectedFloor", "session.ui.projects.selectedRoomID" },
     fn = function(state)
         local nav, houses = state.session.ui.projects, state.account.projects.houses
@@ -937,8 +1316,7 @@ Selectors:Register("projects.breadcrumb", {
         if nav.selectedRoomID then
             local room = _activeRooms(state)[nav.selectedRoomID]
             if room then
-                local p = HDG.Projects.IDs.parsePath(nav.selectedRoomID)
-                chips[#chips + 1] = { id = "room", label = _roomLabel(room, p and p.floor) }
+                chips[#chips + 1] = { id = "room", label = _roomLabel(room, room.floor) }
             end
         end
         return chips
@@ -953,123 +1331,147 @@ Selectors:Register("projects.ambiguousMatches", {
     end,
 })
 
--- ===== Crate ledger (landing) ===============================================
--- Orphans are GLOBAL (parent cleared -> not house/version-scoped); the inventory is
--- the ACTIVE version's rooms that hold decor. Both feed the landing's one scrollbox.
+-- ===== Rooms list (landing) =================================================
 
--- Count of orphaned crates (decor from demolished rooms). Drives the header alert.
-Selectors:Register("projects.orphanCount", {
-    memoized = true,
-    reads = { "account.collections" },
-    fn = function(state)
-        local n = 0
-        for _, coll in pairs(state.account.collections) do
-            if coll.type == "crate" and coll.parent == nil then n = n + 1 end
-        end
-        return n
-    end,
-})
-Selectors:Register("projects.hasOrphans", {
-    calls = { "projects.orphanCount" },
-    fn = function(state, ctx) return Selectors:Call("projects.orphanCount", state, ctx) > 0 end,
-})
-Selectors:Register("projects.orphanAlertText", {
-    calls = { "projects.orphanCount" },
-    fn = function(state, ctx)
-        local n = Selectors:Call("projects.orphanCount", state, ctx)
-        if n <= 0 then return "" end
-        return "! " .. n .. " orphaned"
-    end,
-})
+-- Shared room-row comparator: floor ascending, then label.
+local function _sortByFloorThenLabel(a, b)
+    if a.floor ~= b.floor then return a.floor < b.floor end
+    return a.label < b.label
+end
 
--- Rooms in the active version, ordered by floor then label -- the reclaim-target menu.
+-- Rooms placed in the active layout, ordered by floor then label (room-target menus).
 Selectors:Register("projects.reclaimTargets", {
     memoized = true,
-    reads = { "account.projects.houses", "account.projects.versions" },
+    reads = { "account.projects.houses", "account.projects.layouts", "account.rooms" },
     fn = function(state)
-        local IDs = HDG.Projects.IDs
-        local _, _, version = _activeVersionContext(state)
         local out = {}
-        if not version then return out end
-        for roomID, room in pairs(version.rooms) do
-            local p = IDs.parsePath(roomID)
-            if p then out[#out + 1] = { roomID = roomID, label = _roomLabel(room, p.floor), floor = p.floor } end
+        local seen = {}
+        for _, room in pairs(_activeRooms(state)) do
+            if not room.unassigned and room.roomID and not seen[room.roomID] then
+                seen[room.roomID] = true
+                out[#out + 1] = { roomID = room.roomID, label = _roomLabel(room, room.floor), floor = room.floor }
+            end
         end
-        table.sort(out, function(a, b)
-            if a.floor ~= b.floor then return a.floor < b.floor end
-            return a.label < b.label
-        end)
+        table.sort(out, _sortByFloorThenLabel)
         return out
     end,
 })
 
--- Flat ledger rows: orphan bay (or "all clear") + crate inventory (rooms holding decor).
--- Kinds: orphanHeader{count,orphanIDs} | orphan{crateID,name,decorCount,was,orphanedAt} |
---        orphanEmpty | inventoryHeader{count} | inventoryRoom{roomID,label,floor,decorCount}.
--- NOT room-scoped (no selectedRoomID read) -- this is a global ledger, not a detail panel.
-Selectors:Register("projects.crateLedgerRows", {
+-- v7 Rooms list (landing, top box): EVERY persistent room -- name, shape,
+-- equipped library sets, effective decor total, "in N layouts" (furnIndex).
+-- A room placed in zero layouts is an ordinary row. Header row leads; click
+-- selects (drives the box's action rail).
+Selectors:Register("projects.roomsRows", {
     memoized = true,
-    reads = { "account.collections", "account.projects.houses", "account.projects.versions" },
+    reads = { "account.rooms", "account.furnishingSets", "session.furnIndex", "session.furn",
+              "session.ui.projects.landingRoomID" },
     fn = function(state)
-        local IDs, SA = HDG.Projects.IDs, HDG.Projects.ShapeAtlas
-        local _, vid, version = _activeVersionContext(state)
-        local colls = state.account.collections
-
-        -- Orphans: parent cleared. Decor summed; "was <room>" + age. Newest first.
-        local orphans, orphanIDs = {}, {}
-        for id, coll in pairs(colls) do
-            if coll.type == "crate" and coll.parent == nil then
-                local n = 0
-                for _, d in ipairs(coll.decor or {}) do n = n + (d.count or 1) end
-                orphans[#orphans + 1] = {
-                    crateID = id, name = coll.name or "Crate", decorCount = n,
-                    was = coll.lastKnownRoomName or (coll.lastKnownShape and SA.GetLabel(coll.lastKnownShape)),
-                    orphanedAt = coll.orphanedAt,
-                }
-            end
-        end
-        table.sort(orphans, function(a, b) return (a.orphanedAt or 0) > (b.orphanedAt or 0) end)
-        for _, o in ipairs(orphans) do orphanIDs[#orphanIDs + 1] = o.crateID end
-
-        -- Inventory: active-version rooms whose crate holds decor (empty rooms excluded).
-        local inv = {}
-        if version then
-            local byRoom = {}
-            for _, coll in pairs(colls) do
-                if coll.type == "crate" and coll.versionID == vid and coll.parent and coll.decor then
-                    local n = 0
-                    for _, d in ipairs(coll.decor) do n = n + (d.count or 1) end
-                    if n > 0 then byRoom[coll.parent] = (byRoom[coll.parent] or 0) + n end
+        local SA  = HDG.Projects.ShapeAtlas
+        local idx = state.session.furnIndex
+        local sel = state.session.ui.projects.landingRoomID
+        local list = {}
+        for rid, room in pairs(state.account.rooms) do
+            local n, chips = 0, {}
+            for _, sid in ipairs(room.furnishingSetIDs) do
+                local set = state.account.furnishingSets[sid]
+                if set then   -- exception(nullable): set deleted out from under the room (repairable ref)
+                    for _, it in ipairs(set.items) do n = n + (it.count or 1) end
+                    if not set.isLocal then chips[#chips + 1] = set.name end
                 end
             end
-            for roomID, n in pairs(byRoom) do
-                local room, p = version.rooms[roomID], IDs.parsePath(roomID)
-                if room and p then
-                    inv[#inv + 1] = { roomID = roomID, label = _roomLabel(room, p.floor), floor = p.floor, decorCount = n }
-                end
+            local spots, layoutCount = 0, 0
+            for _, n in pairs(idx.roomLayouts[rid] or {}) do   -- exception(nullable): room may be placed nowhere
+                layoutCount = layoutCount + 1
+                spots = spots + (type(n) == "number" and n or 1)
             end
-            table.sort(inv, function(a, b)
-                if a.floor ~= b.floor then return a.floor < b.floor end
-                return a.label < b.label
-            end)
+            list[#list + 1] = {
+                kind = "room", roomID = rid, isSelected = sel == rid,
+                name = (room.name and room.name ~= "" and room.name)
+                    or (room.shape and SA.GetLabel(room.shape)) or "Design",
+                shapeLabel = room.shape and SA.GetLabel(room.shape) or "No shape yet",
+                setChips = chips, decorCount = n, layoutCount = layoutCount, spots = spots,
+            }
         end
+        table.sort(list, function(a2, b2)
+            if a2.name ~= b2.name then return a2.name < b2.name end
+            return a2.roomID < b2.roomID   -- stable tiebreak (memo determinism)
+        end)
+        return list   -- the header lives OUTSIDE the box (fixed section band)
+    end,
+})
+Selectors:Register("projects.roomsHeaderText", {
+    reads = { "account.rooms" },
+    fn = function(state)
+        local n = 0
+        for _ in pairs(state.account.rooms) do n = n + 1 end
+        return "MY DESIGNS (" .. n .. ")"
+    end,
+})
 
-        local rows = {}
-        if #orphans == 0 then
-            rows[#rows + 1] = { kind = "orphanEmpty" }
-        else
-            rows[#rows + 1] = { kind = "orphanHeader", count = #orphans, orphanIDs = orphanIDs }
-            for _, o in ipairs(orphans) do
-                rows[#rows + 1] = { kind = "orphan", crateID = o.crateID, name = o.name,
-                                    decorCount = o.decorCount, was = o.was, orphanedAt = o.orphanedAt }
+-- The LIBRARY (landing, bottom box): every saved Furnishing Set, with reach.
+Selectors:Register("projects.setsRows", {
+    memoized = true,
+    reads = { "account.furnishingSets", "session.furnIndex", "session.furn",
+              "session.ui.projects.landingSetID" },
+    fn = function(state)
+        local idx, sel = state.session.furnIndex, state.session.ui.projects.landingSetID
+        local sets = {}
+        for sid, set in pairs(state.account.furnishingSets) do
+            if not set.isLocal then
+                local roomCount = 0
+                for _ in pairs(idx.setRooms[sid] or {}) do roomCount = roomCount + 1 end   -- exception(nullable): set may be equipped nowhere
+                local pieces = 0
+                for _, it in ipairs(set.items) do pieces = pieces + (it.count or 1) end
+                sets[#sets + 1] = { kind = "set", setID = sid, isSelected = sel == sid,
+                                    name = set.name or "Set",
+                                    pieces = pieces, roomCount = roomCount }
             end
         end
-        rows[#rows + 1] = { kind = "inventoryHeader", count = #inv }
-        for _, r in ipairs(inv) do
-            rows[#rows + 1] = { kind = "inventoryRoom", roomID = r.roomID, label = r.label,
-                                floor = r.floor, decorCount = r.decorCount }
+        table.sort(sets, function(a2, b2)
+            if a2.name ~= b2.name then return a2.name < b2.name end
+            return a2.setID < b2.setID
+        end)
+        return sets   -- the header lives OUTSIDE the box (fixed section band)
+    end,
+})
+Selectors:Register("projects.setsHeaderText", {
+    reads = { "account.furnishingSets" },
+    fn = function(state)
+        local n = 0
+        for _, set in pairs(state.account.furnishingSets) do
+            if not set.isLocal then n = n + 1 end
         end
-        return rows
+        return "MY FURNISHING SETS (" .. n .. ")"
+    end,
+})
+
+-- Rail enabled-gates: a row of the matching kind is selected AND still exists.
+Selectors:Register("projects.landingRoomSelected", {
+    reads = { "account.rooms", "session.ui.projects.landingRoomID" },
+    fn = function(state)
+        return state.account.rooms[state.session.ui.projects.landingRoomID or ""] ~= nil
+    end,
+})
+Selectors:Register("projects.landingSetSelected", {
+    reads = { "account.furnishingSets", "session.ui.projects.landingSetID" },
+    fn = function(state)
+        local set = state.account.furnishingSets[state.session.ui.projects.landingSetID or ""]
+        return (set and not set.isLocal) == true
+    end,
+})
+-- Cross-section action: a room AND a set selected, set not already equipped there.
+Selectors:Register("projects.landingCanEquip", {
+    reads = { "account.rooms", "account.furnishingSets",
+              "session.ui.projects.landingRoomID", "session.ui.projects.landingSetID" },
+    fn = function(state)
+        local room = state.account.rooms[state.session.ui.projects.landingRoomID or ""]
+        local sid  = state.session.ui.projects.landingSetID
+        local set  = state.account.furnishingSets[sid or ""]
+        if not (room and set and not set.isLocal) then return false end
+        for _, equipped in ipairs(room.furnishingSetIDs) do
+            if equipped == sid then return false end
+        end
+        return true
     end,
 })
 
@@ -1115,15 +1517,28 @@ Selectors:Register("projects.breadcrumbText", {
 
 -- No rooms captured. Drives "Capture my house" CTA (visible bindings don't negate).
 Selectors:Register("projects.noRooms", {
-    reads = { "account.projects.houses", "account.projects.versions" },
-    fn = function(state)
-        return next(_activeRooms(state)) == nil
+    reads = { "account.rooms", "account.furnishingSets", "account.projects.layouts" },
+    fn = function(state) return not _hasLandingContent(state) end,
+})
+
+-- "Start a design" shows whenever the FOCUSED house has no layout yet --
+-- a second owned house must be designable without capturing it first.
+Selectors:Register("projects.canStartDesign", {
+    reads = { "account.projects.houses", "account.projects.layouts", "account.rooms",
+              "session.house.ownedHouses" },
+    calls = { "projects.activeHouseID" },
+    fn = function(state, ctx)
+        local focusedID = Selectors:Call("projects.activeHouseID", state, ctx)
+        if not focusedID then return true end   -- nothing focused = fresh Projects
+        local house = state.account.projects.houses[focusedID]
+        local lid   = house and (house.activeVersionID or house.currentVersionID)
+        return not (lid and state.account.projects.layouts[lid])
     end,
 })
 
 -- Selected room's name for the detail-panel title label binding.
 Selectors:Register("projects.roomDetailName", {
-    reads = { "account.projects.houses", "account.projects.versions", "session.ui.projects.selectedRoomID" },
+    reads = { "account.projects.houses", "account.projects.layouts", "account.rooms", "session.ui.projects.selectedRoomID" },
     fn = function(state)
         local roomID = state.session.ui.projects.selectedRoomID
         local room = roomID and _activeRooms(state)[roomID]
@@ -1135,15 +1550,14 @@ Selectors:Register("projects.roomDetailName", {
 
 -- Selected room meta: "Square M  -  Floor 1  -  doors: N/E".
 Selectors:Register("projects.roomDetailMeta", {
-    reads = { "account.projects.houses", "account.projects.versions", "session.ui.projects.selectedRoomID" },
+    reads = { "account.projects.houses", "account.projects.layouts", "account.rooms", "session.ui.projects.selectedRoomID" },
     fn = function(state)
         local roomID = state.session.ui.projects.selectedRoomID
         local room = roomID and _activeRooms(state)[roomID]
         if not room then return "" end   -- exception(boundary): stale or nil selection
-        local p = HDG.Projects.IDs.parsePath(roomID)
         local doors = table.concat(_roomDoorCardinals(_activeRooms(state), roomID), "/")
         return string.format("%s  -  Floor %d  -  doors: %s",
-            HDG.Projects.ShapeAtlas.GetLabel(room.shape), (p and p.floor) or 1,
+            HDG.Projects.ShapeAtlas.GetLabel(room.shape), room.floor or 1,
             (doors ~= "" and doors) or "none")
     end,
 })
@@ -1153,28 +1567,37 @@ Selectors:Register("projects.roomDetailMeta", {
 -- the SELECTED version (session.ui.projects.layoutSelectedVersionID) -- NOT the
 -- Architect's activeVersionID -- so browsing never disturbs editing.
 
--- Fallback label only -- the Layouts UI shows house.name; this covers houses captured
--- before a name was stamped. (House identity is a plot digest now, not a faction word.)
-local function _houseLabel(_houseID)
+-- Fallback label -- houses created by IMPORT (not yet captured) carry no
+-- stamped name. Reverse-resolve through the SAME deterministic id the house
+-- chooser mints from the owned-houses session list; "House" only when that
+-- list hasn't arrived yet.
+local function _houseLabel(state, houseID)
+    local IDs = HDG.Projects.IDs
+    for _, h in pairs(state.session.house.ownedHouses) do
+        if h.name and h.plotID
+           and IDs.makeHouseID(IDs.hashToken(h.name .. ":" .. tostring(h.plotID))) == houseID then
+            return h.name
+        end
+    end
     return "House"
 end
 
 -- Left list: houses -> their versions (Live first, then what-ifs by createdAt), the
 -- selected row flagged. Group header carries the faction label + level.
 Selectors:Register("projects.layoutGroups", {
-    reads = { "account.projects.houses", "account.projects.versions",
-              "session.ui.projects.layoutSelectedVersionID" },
+    reads = { "account.projects.houses", "account.projects.layouts", "account.rooms",
+              "session.ui.projects.layoutSelectedVersionID", "session.house.ownedHouses" },
     fn = function(state)
         local p   = state.account.projects
         local sel = state.session.ui.projects.layoutSelectedVersionID
         local byHouse = {}
-        for vid, v in pairs(p.versions) do
+        for vid, v in pairs(p.layouts) do
             local g = byHouse[v.houseID]
             if not g then
                 local house = p.houses[v.houseID]   -- strict: a version always belongs to a house
                 -- Show the real house name (matches the Architect breadcrumb); fall back
                 -- to the faction word only if the capture never stamped a name.
-                g = { houseID = v.houseID, label = house.name or _houseLabel(v.houseID),
+                g = { houseID = v.houseID, label = house.name or _houseLabel(state, v.houseID),
                       level = house.level, currentVersionID = house.currentVersionID, rows = {} }
                 byHouse[v.houseID] = g
             end
@@ -1200,24 +1623,23 @@ Selectors:Register("projects.layoutGroups", {
 -- footprints + a bbox for fit-to-frame. Floor count = max room floor or
 -- version.numFloors, capped at 3. The controller rotates each floor to fit its slot.
 Selectors:Register("projects.layoutPreviewModel", {
-    reads = { "account.projects.versions", "session.ui.projects.layoutSelectedVersionID" },
+    reads = { "account.projects.layouts", "account.rooms", "session.ui.projects.layoutSelectedVersionID" },
     fn = function(state)
-        local A, IDs = HDG.Projects.ShapeAtlas, HDG.Projects.IDs
+        local A   = HDG.Projects.ShapeAtlas
         local sel = state.session.ui.projects.layoutSelectedVersionID
-        local version = sel and state.account.projects.versions[sel]
+        local layout = sel and state.account.projects.layouts[sel]
         -- exception(nullable): nothing selected, or selection points at a deleted
-        -- version -- the controller (re)selects a default and paints empty meanwhile.
-        if not version then return { floors = {}, floorCount = 0 } end
+        -- layout -- the controller (re)selects a default and paints empty meanwhile.
+        if not layout then return { floors = {}, floorCount = 0 } end
         local byFloor, maxFloor = {}, 1
-        for rid, room in pairs(version.rooms) do
-            local pp = IDs.parsePath(rid)
-            if pp and pp.floor then
-                if pp.floor > maxFloor then maxFloor = pp.floor end
+        for _, room in pairs(HDG.StoreFurnishings.LayoutView(state, sel)) do
+            if room.floor then
+                if room.floor > maxFloor then maxFloor = room.floor end
                 local rot   = room.cell.rotation or 0
                 local cells = A.GetCells(room.shape)
                 local rc    = A.RotateCells(cells, rot)
-                local fl    = byFloor[pp.floor]
-                if not fl then fl = { rooms = {}, bb = {} }; byFloor[pp.floor] = fl end
+                local fl    = byFloor[room.floor]
+                if not fl then fl = { rooms = {}, bb = {} }; byFloor[room.floor] = fl end
                 fl.rooms[#fl.rooms + 1] = {
                     shape = room.shape, x = room.cell.x, y = room.cell.y,
                     w = rc[1], d = rc[2], rotation = rot,
@@ -1229,7 +1651,7 @@ Selectors:Register("projects.layoutPreviewModel", {
                 _extendFootprint(fl.bb, room.cell.x, room.cell.y, rc[1], rc[2])
             end
         end
-        if version.numFloors and version.numFloors > maxFloor then maxFloor = version.numFloors end
+        if layout.numFloors and layout.numFloors > maxFloor then maxFloor = layout.numFloors end
         if maxFloor > 3 then maxFloor = 3 end
         local floors = {}
         for f = 1, maxFloor do
@@ -1243,25 +1665,25 @@ Selectors:Register("projects.layoutPreviewModel", {
 -- Bottom detail: name / house label / live-or-what-if / room + floor counts / budget /
 -- canDelete (everything except the inviolable live version) for the SELECTED version.
 Selectors:Register("projects.layoutDetail", {
-    reads = { "account.projects.houses", "account.projects.versions",
-              "session.ui.projects.layoutSelectedVersionID" },
+    reads = { "account.projects.houses", "account.projects.layouts", "account.rooms",
+              "session.ui.projects.layoutSelectedVersionID", "session.house.ownedHouses" },
     calls = { "projects.placementCaps", "projects.layoutPreviewModel" },
     fn = function(state, ctx)
         local A   = HDG.Projects.ShapeAtlas
         local sel = state.session.ui.projects.layoutSelectedVersionID
-        local version = sel and state.account.projects.versions[sel]
-        if not version then return { hasSelection = false } end   -- exception(nullable): no/deleted selection
-        local house  = state.account.projects.houses[version.houseID]
+        local layout = sel and state.account.projects.layouts[sel]
+        if not layout then return { hasSelection = false } end   -- exception(nullable): no/deleted selection
+        local house  = state.account.projects.houses[layout.houseID]
         local isLive = (sel == house.currentVersionID)
         local cost, roomCount = 0, 0
-        for _, room in pairs(version.rooms) do
+        for _, room in pairs(HDG.StoreFurnishings.LayoutView(state, sel)) do
             cost = cost + A.GetBudget(room.shape)
             roomCount = roomCount + 1
         end
         local max = Selectors:Call("projects.placementCaps", state, ctx).roomMax
         return {
-            hasSelection = true, versionID = sel, houseID = version.houseID,
-            name = version.name or "?", houseLabel = house.name or _houseLabel(version.houseID),
+            hasSelection = true, versionID = sel, houseID = layout.houseID,
+            name = layout.name or "?", houseLabel = house.name or _houseLabel(state, layout.houseID),
             isLive = isLive, canDelete = not isLive, roomCount = roomCount,
             floorCount = Selectors:Call("projects.layoutPreviewModel", state, ctx).floorCount,
             budgetText = (max > 0) and string.format("%d / %d", cost, max) or "",
@@ -1271,22 +1693,24 @@ Selectors:Register("projects.layoutDetail", {
 
 -- Header label string for the right detail panel: "<name>  [LIVE]" or "<name>  [wif]".
 Selectors:Register("projects.layoutDetailHeader", {
-    reads = { "account.projects.houses", "account.projects.versions",
+    reads = { "account.projects.houses", "account.projects.layouts", "account.rooms",
               "session.ui.projects.layoutSelectedVersionID" },
     calls = { "projects.layoutDetail" },
     fn = function(state, ctx)
         local d = Selectors:Call("projects.layoutDetail", state, ctx)
         if not d.hasSelection then return "" end
-        local badge = d.isLive and "  [LIVE]" or "  [wif]"
-        -- House name first so the right pane says WHICH house this Live/what-if is.
-        return d.houseLabel .. "  -  " .. d.name .. badge
+        -- Layout name only (owner 2026-06-11): the list row beside the title
+        -- already carries the house group + wif badge. [LIVE] is the one state
+        -- worth repeating -- "this is captured reality, not a sketch" matters
+        -- right before Load in Architect.
+        return d.name .. (d.isLive and "  [LIVE]" or "")
     end,
 })
 
 -- Flat list for the layouts scrollbox: house group headers interleaved with
 -- version rows. Derived from layoutGroups. ed.kind="header"|"version".
 Selectors:Register("projects.layoutListRows", {
-    reads = { "account.projects.houses", "account.projects.versions",
+    reads = { "account.projects.houses", "account.projects.layouts", "account.rooms",
               "session.ui.projects.layoutSelectedVersionID" },
     calls = { "projects.layoutGroups" },
     fn = function(state, ctx)
@@ -1307,16 +1731,16 @@ Selectors:Register("projects.layoutListRows", {
 
 -- Boolean: true when there is a valid layout selection (used for `visible` bindings).
 Selectors:Register("projects.hasLayoutSelection", {
-    reads = { "account.projects.versions", "session.ui.projects.layoutSelectedVersionID" },
+    reads = { "account.projects.layouts", "account.rooms", "session.ui.projects.layoutSelectedVersionID" },
     fn = function(state)
         local sel = state.session.ui.projects.layoutSelectedVersionID
-        return sel ~= nil and state.account.projects.versions[sel] ~= nil
+        return sel ~= nil and state.account.projects.layouts[sel] ~= nil
     end,
 })
 
 -- Stats string for the right detail panel: "Rooms N  Floors N  Budget N/N".
 Selectors:Register("projects.layoutDetailStats", {
-    reads = { "account.projects.houses", "account.projects.versions",
+    reads = { "account.projects.houses", "account.projects.layouts", "account.rooms",
               "session.ui.projects.layoutSelectedVersionID" },
     calls = { "projects.layoutDetail", "projects.placementCaps" },
     fn = function(state, ctx)
@@ -1324,5 +1748,31 @@ Selectors:Register("projects.layoutDetailStats", {
         if not d.hasSelection then return "" end
         return string.format("Rooms %d  Floors %d  Budget %s",
             d.roomCount, d.floorCount, d.budgetText)
+    end,
+})
+
+-- ===== Help workspace (the workflow cycle diagram) ==========================
+-- helpStage drives both the diagram's selected card and the detail copy.
+-- Locale:Get is an in-memory table read (static data, enUS fallback) -- the
+-- locale switch path force-refreshes "*" so these re-evaluate (HDGR_Locale).
+
+Selectors:Register("projects.helpModel", {
+    reads = { "session.ui.projects.helpStage" },
+    fn = function(state)
+        return { stage = state.session.ui.projects.helpStage }
+    end,
+})
+
+Selectors:Register("projects.helpStageTitle", {
+    reads = { "session.ui.projects.helpStage" },
+    fn = function(state)
+        return HDG.Locale:Get("PROJ_HELP_S" .. state.session.ui.projects.helpStage .. "_TITLE")
+    end,
+})
+
+Selectors:Register("projects.helpStageBody", {
+    reads = { "session.ui.projects.helpStage" },
+    fn = function(state)
+        return HDG.Locale:Get("PROJ_HELP_S" .. state.session.ui.projects.helpStage .. "_BODY")
     end,
 })

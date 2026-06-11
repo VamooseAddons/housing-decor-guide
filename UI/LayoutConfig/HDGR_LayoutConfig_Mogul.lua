@@ -191,6 +191,15 @@ LC.sections["mogul.goblinColumnHeader"] = {
     gap = "sm",
     height = 16, order = 10,
 }
+-- Cold-start scan hint: visible until a Direct scan has run (and no price addon
+-- covers the gap). Collapses to zero height once price data exists.
+LC.widgets["mogulPanel.goblinScanHint"] = {
+    tooltip = false,
+    kind = "label", role = "TextDim", ["in"] = "mogul.subView_goblin",
+    text = "locale:MOG_SCAN_HINT", font = "body", justifyH = "CENTER",
+    width = "fill", height = 18, order = 15,
+    visible = "goblin.needsScanHint",
+}
 LC.sections["mogul.goblinList"] = {
     ["in"] = "mogul.subView_goblin",
     layout = "fill",
@@ -238,7 +247,7 @@ LC.widgets["mogulPanel.title"] = {
 -- + TSM are gated on the addon being installed. Bindings + click actions are the
 -- same ones the (former) Config pills used -- wired in MogulController:Wire.
 LC.widgets["mogulPanel.src_Auto"] = {
-    tooltip = false,
+    tooltip = { recipe = "GoblinSrcAuto" },
     kind = "button", ["in"] = "mogulPanel", slot = "header", font = "small",
     text = "locale:MOG_SRC_AUTO", width = "auto", height = 20, order = 11, variant = "tertiary",
     visible = "mogul.isSubView_goblin",
@@ -252,7 +261,7 @@ LC.widgets["mogulPanel.src_Auctionator"] = {
     binding = { active = "config.sourceActive_Auctionator" },
 }
 LC.widgets["mogulPanel.src_Direct"] = {
-    tooltip = false,
+    tooltip = { recipe = "GoblinSrcDirect" },
     kind = "button", ["in"] = "mogulPanel", slot = "header", font = "small",
     text = "locale:MOG_SRC_DIRECT", width = "auto", height = 20, order = 13, variant = "tertiary",
     visible = "mogul.isSubView_goblin",
@@ -358,7 +367,7 @@ LC.widgets["mogulPanel.totals"] = {
 }
 -- Queue All: sends every plan row to the Recipes-tab craft queue.
 LC.widgets["mogulPanel.queueAll"] = {
-    tooltip = false,
+    tooltip = { recipe = "MogulQueueAll" },
     kind = "button", ["in"] = "mogul.totalsRow", font = "small",
     text = "locale:MOG_QUEUE_ALL", width = "auto", height = 14, order = 20, variant = "tertiary",
     binding = { enabled = "mogul.queueAllEnabled" },
@@ -445,7 +454,7 @@ LC.widgets["mogulPanel.matsTitle"] = {
 }
 -- Send to Auctionator: pushes itemIDs to Auctionator's CreateShoppingList API.
 LC.widgets["mogulPanel.sendToAH"] = {
-    tooltip = false,
+    tooltip = { recipe = "MogulSendToAH" },
     kind = "button", ["in"] = "mogul.matsHeader", font = "small",
     text = "locale:MOG_SEND_TO_AUCTIONATOR", width = "auto", height = 14, order = 20, variant = "tertiary",
     binding = { enabled = "mogul.auctionatorEnabled" },
@@ -546,7 +555,7 @@ LC.widgets["mogulPanel.goblinCol_tsmRegion"] = {
     binding = { text = "goblin.sortHeader_tsmRegion", active = "goblin.sortActive_tsmRegion" },
 }
 LC.widgets["mogulPanel.goblinCol_tsmPct"] = {
-    tooltip = false,
+    tooltip = { recipe = "GoblinTsmPct" },
     kind = "button", ["in"] = "mogul.goblinColumnHeader",
     font = "small", variant = "tertiary",
     width = 50, height = 16, order = 88,

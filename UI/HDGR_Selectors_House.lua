@@ -501,6 +501,16 @@ end
 -- Cells carry per-widget data envelopes stamped from per-widget selectors.
 -- ============================================================================
 
+-- Dashboard blank state: no widget emitted any card (fresh install, nothing
+-- captured yet). Mirrors decor.isBlank -- gate on the rendered row list itself
+-- so the message is correct whatever the upstream cause.
+Selectors:Register("house.isBlank", {
+    calls = { "house.widgetRows" },
+    fn = function(state, ctx)
+        return #Selectors:Call("house.widgetRows", state, ctx) == 0
+    end,
+})
+
 Selectors:Register("house.widgetRows", {
     reads = {
         "account.ui.houseTab.enabled",

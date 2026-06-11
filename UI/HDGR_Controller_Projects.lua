@@ -19,12 +19,13 @@ local function _setView(view)
     HDG.Store:Dispatch({ type = A.UI_SET_PERSISTENT, payload = { key = "view", value = view } })
 end
 
--- Active version from projects.activeVersionID selector. Returns (versionID, version) or nil,nil.
+-- Active layout from projects.activeVersionID selector. Returns (layoutID, view)
+-- where view = the materialized placement map (LayoutView), or nil,nil.
 local function _activeVersion()
-    local state   = HDG.Store:GetState()  -- exception(false-positive): top-level controller helper, not a row factory
-    local vid     = HDG.Selectors:Call("projects.activeVersionID", state, {})
-    local version = vid and state.account.projects.versions[vid]
-    return vid, version
+    local state = HDG.Store:GetState()  -- exception(false-positive): top-level controller helper, not a row factory
+    local lid   = HDG.Selectors:Call("projects.activeVersionID", state, {})
+    if not lid then return nil, nil end
+    return lid, HDG.StoreFurnishings.LayoutView(state, lid)
 end
 
 -- ===== Version switcher: switch / branch / delete house versions ==============
@@ -35,11 +36,13 @@ local function _branchWhatIf(houseID, basedOn)
     HDG.Store:Dispatch({ type = A.PROJECTS_CREATE_VERSION, payload = {
         houseID = houseID,   -- versionID minted reducer-side from the counter
         name = "What-if " .. (n + 1), basedOn = basedOn, createdAt = (time and time()) or 0 } })  -- exception(boundary): time()
+    HDG.Log:Success("projects_save", "What-if " .. (n + 1) .. " created (copy of current)")
 end
 local function _deleteWhatIf(houseID, versionID)
     if not (houseID and versionID) then return end
     HDG.Store:Dispatch({ type = A.PROJECTS_DELETE_VERSION,
         payload = { houseID = houseID, versionID = versionID, ts = (time and time()) or 0 } })  -- exception(boundary): time()
+    HDG.Log:Info("projects_action", "Design version deleted")
 end
 -- Build + show the version menu: a radio per version (switch on pick), then New / Delete.
 local function _openVersionMenu(owner)
@@ -74,23 +77,22 @@ local function _newWhatIfFromPicker()
     _branchWhatIf(houseID, liveVid)
 end
 
--- What-if floor count: version.numFloors if set, else scan room IDs.
-local function _whatIfFloorCount(version)
-    if not version then return 1 end
-    if version.numFloors then return version.numFloors end
-    local IDs, maxFloor = HDG.Projects.IDs, 1
-    for roomID in pairs(version.rooms or {}) do
-        local p = IDs.parsePath(roomID)
-        if p and p.floor and p.floor > maxFloor then maxFloor = p.floor end
+-- What-if floor count: layout.numFloors if set, else scan placement floors.
+local function _whatIfFloorCount(lid, view)
+    local layout = lid and HDG.Store:GetState().account.projects.layouts[lid]  -- exception(false-positive): top-level controller read
+    if layout and layout.numFloors then return layout.numFloors end
+    local maxFloor = 1
+    for _, room in pairs(view or {}) do
+        if room.floor and room.floor > maxFloor then maxFloor = room.floor end
     end
     return maxFloor
 end
--- Dispatch a floor-count change for the active what-if version (clamped 1..3 here too).
+-- Dispatch a floor-count change for the active what-if layout (clamped 1..3 here too).
 local function _setWhatIfFloors(delta)
-    local vid, version = _activeVersion()
-    if not (vid and version) then return end
-    local n = math.max(1, math.min(3, _whatIfFloorCount(version) + delta))
-    HDG.Store:Dispatch({ type = A.PROJECTS_SET_VERSION_FLOORS, payload = { versionID = vid, numFloors = n } })
+    local lid, view = _activeVersion()
+    if not lid then return end
+    local n = math.max(1, math.min(3, _whatIfFloorCount(lid, view) + delta))
+    HDG.Store:Dispatch({ type = A.PROJECTS_SET_VERSION_FLOORS, payload = { versionID = lid, numFloors = n } })
 end
 
 -- Resolve which house a new design targets WITHOUT requiring you to stand inside it:
@@ -138,17 +140,10 @@ local function _startNewDesign()
         houseID = houseID,   -- versionID minted reducer-side from the counter
         name = "Design " .. (n + 1), basedOn = nil, createdAt = (time and time()) or 0 } })  -- exception(boundary): time()
     _setView("projectsArchitect")
+    HDG.Log:Success("projects_save", "New design started for " .. (houseName or "your house"))
 end
 
--- ===== Place a room: mint collision-free roomID, then dispatch PROJECTS_UPSERT_ROOM. ====
-local function _mintRoomID(rooms, floorID)
-    local IDs = HDG.Projects.IDs
-    for _ = 1, 32 do
-        local id = IDs.makeRoomID(floorID, IDs.shortUUID(4))
-        if id and not rooms[id] then return id end
-    end
-    return IDs.makeRoomID(floorID, IDs.shortUUID(8))
-end
+-- ===== Place a room: find a collision-free cell, then dispatch LAYOUT_PLACE. ====
 -- Occupied cells on a floor -> HDG.Projects.FloorMap (the SSoT collision +
 -- projection derivation, shared with the canvas render + drag/move guard).
 local function _occupiedCells(rooms, floor) return HDG.Projects.FloorMap.OccupiedCells(rooms, floor) end
@@ -184,13 +179,12 @@ local function _placePlannedRoom(shape)
     local floor = HDG.Store:GetState().session.ui.projects.selectedFloor  -- exception(false-positive): top-level controller read
     local span  = SA.GetFloors(shape)
     if floor + span - 1 > 3 then return end   -- the span would exceed the 3-floor cap
-    local x, y = _findFreeCellSpanning(version.rooms, floor, shape, span)
+    local x, y = _findFreeCellSpanning(version, floor, shape, span)
     if not x then return end   -- exception(nullable): no cell free across the span
-    HDG.Store:Dispatch({ type = A.PROJECTS_UPSERT_ROOM, payload = {
-        versionID = vid,
-        roomID = _mintRoomID(version.rooms, HDG.Projects.IDs.makeFloorID(version.houseID, floor)),
-        fields = { shape = shape, name = SA.GetLabel(shape),
-                   cell = { x = x, y = y, rotation = 0, locked = false } },
+    -- v7: placed shapes are unassigned slot placements (doodles); identity
+    -- attaches later via the right panel ("which room?").
+    HDG.Store:Dispatch({ type = A.LAYOUT_PLACE, payload = {
+        layoutID = vid, shape = shape, floor = floor, x = x, y = y, rotation = 0,
     } })
 end
 
@@ -198,40 +192,43 @@ end
 -- record -> just bump its `floors` override (capped at the 3-floor house limit), if
 -- the cell directly above is clear. FloorMap projects the new span automatically.
 function PC:ExpandStackUp(roomID)
-    local vid, version = _activeVersion()
-    if not (vid and version) then return end
-    local SA, IDs = HDG.Projects.ShapeAtlas, HDG.Projects.IDs
-    local room = version.rooms[roomID]
+    local vid, view = _activeVersion()
+    if not (vid and view) then return end
+    local SA   = HDG.Projects.ShapeAtlas
+    local room = view[roomID]
     if not room then return end
-    local p = IDs.parsePath(roomID)
-    if not p then return end
     local span     = room.floors or SA.GetFloors(room.shape)
-    local topFloor = p.floor + span - 1
+    local topFloor = room.floor + span - 1
     if topFloor + 1 > 3 then return end   -- 3-floor cap
 
     -- Cell directly above must be clear (exclude self).
     local cells = SA.GetCells(room.shape)
     local mask  = SA.RotateMask(SA.GetMask(room.shape), room.cell.rotation or 0, cells[1], cells[2])
-    local occ   = HDG.Projects.FloorMap.OccupiedCells(version.rooms, topFloor + 1, { [roomID] = true })
+    local occ   = HDG.Projects.FloorMap.OccupiedCells(view, topFloor + 1, { [roomID] = true })
     for _, m in ipairs(mask) do
         if occ[(room.cell.x + m[1]) .. "," .. (room.cell.y + m[2])] then return end   -- blocked above
     end
 
-    HDG.Store:Dispatch({ type = A.PROJECTS_UPSERT_ROOM,
-        payload = { versionID = vid, roomID = roomID, fields = { floors = span + 1 } } })
-end
-
--- Relative time for "captured/packed Xh ago". time() is a boundary read.
-local function _relTime(epoch)
-    if not epoch or epoch <= 0 then return "never" end
-    local now = (time and time()) or 0  -- exception(boundary): GetTime/time absent in headless harness
-    return HDG.Format.RelativeTime(now - epoch)
+    HDG.Store:Dispatch({ type = A.LAYOUT_MOVE,
+        payload = { layoutID = vid, key = roomID, floors = span + 1 } })
 end
 
 -- Kick the multi-floor capture sweep; surface its failure reason.
 local function _captureHouse()
+    -- Capture sweeps the house you're STANDING IN -- a mismatched focus would
+    -- silently capture the wrong house (or nothing). Fail loud at the click.
+    local current = HDG.HousingObserver:CurrentHouseID()
+    local focused = HDG.Selectors:Call("projects.activeHouseID", HDG.Store:GetState(), {})  -- exception(false-positive): top-level controller helper, not a row factory
+    if current and focused and current ~= focused then
+        HDG.Log:Warn("projects_action",
+            "Capture works on the house you're standing in -- switch the house dropdown back, or travel to the focused house first")
+        return
+    end
     local ok, err = HDG.HousingObserver:CaptureAllFloors()
-    if not ok and _G.UIErrorsFrame then
+    if ok then
+        -- Async sweep: completion ack fires from HousingObserver's _stepSweep.
+        HDG.Log:Info("projects_action", "Capturing house -- sweeping floors...")
+    elseif _G.UIErrorsFrame then
         _G.UIErrorsFrame:AddMessage("Projects: " .. tostring(err), 1, 0.3, 0.3)   -- exception(boundary): Blizzard toast
     end
 end
@@ -301,81 +298,55 @@ HDG.ChipStrip:RegisterCellKind("projectsRailIcon", {
     end,
 })
 
--- Bulk-add: all shown, not-in-crate picker items. Gated by pickerCanBulkAdd (non-empty search).
-local function _bulkAddPicker()
-    local state   = HDG.Store:GetState()  -- exception(false-positive): top-level controller helper, not a row factory
-    local crateID = state.session.ui.projects.pickerCrateID
-    if not crateID then return end
-    for _, r in ipairs(HDG.Selectors:Call("projects.pickerResults", state, {})) do
-        if not r.inCrate then
-            HDG.Store:Dispatch({ type = A.CRATE_ADD_DECOR, payload = { crateID = crateID, decorID = r.itemID } })
+-- (Bulk-add + style-import menu retired with the workspace rebuild: the source
+-- dropdown scopes the grid to a style/list and multi-click plans quantities.)
+
+-- ===== Rooms list (landing) =================================================
+-- One pooled row template, two kinds (roomsHeader/room); per-kind paint
+-- shows/hides + re-anchors. Identity CRUD lives here (create/rename/delete);
+-- contents = Furnishings workspace; space = Architect.
+
+local function _openRoomInArchitect(roomID)
+    if not roomID then return end
+    -- Floor: the room's placement in the ACTIVE layout (placed rooms only --
+    -- an unplaced room just opens the Architect on the current floor).
+    local _, view = _activeVersion()
+    local selKey = roomID
+    for key, rec in pairs(view or {}) do
+        if rec.roomID == roomID then
+            selKey = key
+            _dispatchTransient("selectedFloor", rec.floor)
+            break
         end
     end
+    _dispatchTransient("selectedRoomID", selKey)
+    _setView("projectsArchitect")
 end
 
--- Import a saved Style's decor into the open crate. missingOnly skips existing crate items.
-local function _importStyle(styleID, missingOnly)
-    local state   = HDG.Store:GetState()  -- exception(false-positive): top-level controller helper, not a row factory
-    local crateID = state.session.ui.projects.pickerCrateID
-    local style   = state.account.collections[styleID]
-    if not (crateID and style and style.items) then return end
-    local inCrate, crate = {}, state.account.collections[crateID]
-    if crate and crate.decor then for _, d in ipairs(crate.decor) do inCrate[d.id] = true end end
-    for _, itemID in ipairs(style.items) do
-        if not (missingOnly and inCrate[itemID]) then
-            HDG.Store:Dispatch({ type = A.CRATE_ADD_DECOR, payload = { crateID = crateID, decorID = itemID } })
-        end
-    end
-end
-
--- ===== Crate ledger (landing): orphan bay + crate inventory ================
--- One pooled row template, five kinds (orphanHeader/orphan/orphanEmpty/
--- inventoryHeader/inventoryRoom); per-kind paint shows/hides + re-anchors.
-
--- Reclaim menu: pick a target room (grouped by floor) for one orphan crate, or for ALL
--- (bulk, when orphanIDs given). Re-attach targets the active version.
-local function _openReclaimMenu(owner, crateID, orphanIDs)
-    local vid = _activeVersion()
-    if not vid then return end
-    local targets = HDG.Selectors:Call("projects.reclaimTargets", HDG.Store:GetState(), {})  -- exception(false-positive): top-level controller helper, not a row factory
-    if #targets == 0 then return end
-    local items, lastFloor = {}, nil
-    for _, t in ipairs(targets) do
-        if t.floor ~= lastFloor then
-            items[#items + 1] = { isTitle = true, text = "Floor " .. t.floor }
-            lastFloor = t.floor
-        end
-        local roomID = t.roomID
-        items[#items + 1] = { text = t.label, callback = function()
-            for _, cid in ipairs(orphanIDs or { crateID }) do
-                HDG.Store:Dispatch({ type = A.CRATE_REATTACH,
-                    payload = { crateID = cid, versionID = vid, roomID = roomID } })
-            end
-        end }
-    end
-    HDG.UI.ShowMenu(owner, items)
-end
-
--- Discard confirm: %s placeholders are baked once; crate name/count come via textArgs,
--- crateID via data (so the same dialog serves every orphan row -- no stale closure).
-local function _confirmDiscard(crateID, name, count)
+-- Delete confirm: %s placeholders baked once; name/count via textArgs, roomID
+-- via data (one dialog serves every row -- no stale closure).
+local function _confirmRoomDelete(roomID, name, spots, layoutCount)
+    -- v8 spec: the warning shows SPOTS and LAYOUTS (multi-assign makes them
+    -- different numbers). Composed here; the dialog text keeps one %s.
+    local where = (spots or 0) .. ((spots or 0) == 1 and " room" or " rooms")
+    if (layoutCount or 0) > 1 then where = where .. " across " .. layoutCount .. " layouts" end
     HDG.UI.Confirm({
-        id       = "HDGR_PROJECTS_DISCARD_CRATE",
-        text     = "Discard \"%s\"? It holds %s decor and can't be recovered.",
-        accept   = "Discard", cancel = "Cancel",
-        textArg1 = name or "Crate", textArg2 = tostring(count or 0), data = crateID,
+        id       = "HDGR_PROJECTS_DELETE_FURN_ROOM",
+        text     = "Delete design \"%s\"? It is cleared from %s -- those stay as unassigned shapes, and its own pieces are kept in your library.",
+        accept   = "Delete", cancel = "Cancel",
+        textArg1 = name or "Design", textArg2 = where, data = roomID,
         onAccept = function(_, data)
-            if data then HDG.Store:Dispatch({ type = A.CRATE_DELETE, payload = { crateID = data } }) end
+            if data then
+                HDG.Store:Dispatch({ type = A.FURN_ROOM_DELETE, payload = { roomID = data } })
+                HDG.Log:Success("projects_action", "Room deleted -- its pieces are saved in your library")
+            end
         end,
     })
 end
 
-local function _openRoomInArchitect(roomID)
-    if not roomID then return end
-    local p = HDG.Projects.IDs.parsePath(roomID)
-    if p then _dispatchTransient("selectedFloor", p.floor) end
-    _dispatchTransient("selectedRoomID", roomID)
-    _setView("projectsArchitect")
+local function _promptRenameRoom(roomID, currentName)
+    _G.StaticPopup_Show("HDGR_PROJECTS_RENAME_ROOM", nil, nil,
+        { name = currentName, roomID = roomID })
 end
 
 local function _layoutLedgerRow(row)
@@ -407,73 +378,107 @@ local function _nameFull(row)
     row._nameFs:SetPoint("RIGHT", row, "RIGHT", -8, 0)
 end
 
-local function _paintLedgerHeader(row, text)
-    HDG.UI.applyFontRole(row._nameFs, "caption")
-    row._nameFs:SetText(text)
-    _nameFull(row)
+-- Room-row glyph: artisanal room chest = empty, prefab variant = furnished
+-- (atlas names verified in-game by Vamoose, 2026-06-10).
+local function _roomGlyph(hasFurnishings)
+    local atlas = hasFurnishings and "house-chest-room-prefab-icon" or "house-chest-room-artisanal-icon"
+    if _G.C_Texture and _G.C_Texture.GetAtlasInfo and not _G.C_Texture.GetAtlasInfo(atlas) then
+        return ""   -- exception(boundary): atlas absent on this client build -> plain text beats a broken texture
+    end
+    return ("|A:%s:14:14|a "):format(atlas)
 end
 
-local function _paintOrphanHeaderRow(row, ed)
-    HDG.UI.applyFontRole(row._nameFs, "caption")
-    row._nameFs:SetText("ORPHANED CRATES (" .. ed.count .. ")")
-    row._actionBtn:SetText("Reclaim all into..."); row._actionBtn:SetWidth(130); row._actionBtn:Show()
-    row._actionBtn:ClearAllPoints(); row._actionBtn:SetPoint("RIGHT", row, "RIGHT", -8, 0)
-    local ids = ed.orphanIDs
-    row._actionBtn:SetScript("OnClick", function(self) _openReclaimMenu(self, nil, ids) end)
-    row._nameFs:ClearAllPoints()
-    row._nameFs:SetPoint("LEFT", row, "LEFT", 8, 0)
-    row._nameFs:SetPoint("RIGHT", row._actionBtn, "LEFT", -8, 0)
-end
-
-local function _paintOrphanRowL(row, ed)
+local function _paintRoomRow(row, ed)
     HDG.UI.applyFontRole(row._nameFs, "body")
-    row._nameFs:SetText(ed.name)
-    local meta = ed.decorCount .. " decor"
-    if ed.was then meta = meta .. "  -  was " .. ed.was end
-    if ed.orphanedAt then meta = meta .. "  -  " .. _relTime(ed.orphanedAt) end
-    row._metaFs:SetText(meta); row._metaFs:Show()
-    row._delBtn:Show()
-    row._actionBtn:SetText("Reclaim into..."); row._actionBtn:SetWidth(110); row._actionBtn:Show()
-    row._actionBtn:ClearAllPoints(); row._actionBtn:SetPoint("RIGHT", row._delBtn, "LEFT", -6, 0)
-    row._metaFs:ClearAllPoints(); row._metaFs:SetPoint("RIGHT", row._actionBtn, "LEFT", -8, 0)
-    row._nameFs:ClearAllPoints()
-    row._nameFs:SetPoint("LEFT", row, "LEFT", 8, 0)
-    row._nameFs:SetPoint("RIGHT", row._metaFs, "LEFT", -8, 0)
-    local crateID, name, count = ed.crateID, ed.name, ed.decorCount
-    row._actionBtn:SetScript("OnClick", function(self) _openReclaimMenu(self, crateID, nil) end)
-    row._delBtn:SetScript("OnClick", function() _confirmDiscard(crateID, name, count) end)
-end
-
-local function _paintInventoryRoomRow(row, ed)
-    HDG.UI.applyFontRole(row._nameFs, "body")
-    row._nameFs:SetText(ed.label)
-    row._metaFs:SetText("F" .. ed.floor .. "  -  " .. ed.decorCount .. " decor"); row._metaFs:Show()
-    row._actionBtn:SetText("Open >"); row._actionBtn:SetWidth(64); row._actionBtn:Show()
-    row._actionBtn:ClearAllPoints(); row._actionBtn:SetPoint("RIGHT", row, "RIGHT", -8, 0)
-    row._metaFs:ClearAllPoints(); row._metaFs:SetPoint("RIGHT", row._actionBtn, "LEFT", -8, 0)
+    row._nameFs:SetText(_roomGlyph(ed.decorCount > 0) .. ed.name)
+    -- Meta: shape + short numeric fields (set NAMES overflow the caption --
+    -- UI review 16 MUST-FIX 3 -- but the landing has no canvas, so the shape
+    -- itself belongs here).
+    local parts = { ed.shapeLabel }
+    if #ed.setChips > 0 then
+        parts[#parts + 1] = #ed.setChips .. (#ed.setChips == 1 and " set" or " sets")
+    end
+    parts[#parts + 1] = ed.decorCount .. " decor"
+    parts[#parts + 1] = (ed.spots == 0 and "unplaced")
+        or ("in " .. ed.spots .. (ed.spots == 1 and " room" or " rooms"))
+    row._metaFs:SetText(table.concat(parts, "  -  ")); row._metaFs:Show()
+    row._metaFs:ClearAllPoints(); row._metaFs:SetPoint("RIGHT", row, "RIGHT", -8, 0)
     row._nameFs:ClearAllPoints()
     row._nameFs:SetPoint("LEFT", row, "LEFT", 8, 0)
     row._nameFs:SetPoint("RIGHT", row._metaFs, "LEFT", -8, 0)
     local roomID = ed.roomID
     row._roomID = roomID
-    row._actionBtn:SetScript("OnClick", function() _openRoomInArchitect(roomID) end)
+    -- Click = select (drives the Rooms rail; Open in Architect lives there).
     row:RegisterForClicks("LeftButtonUp")
-    row:SetScript("OnClick", function() _openRoomInArchitect(roomID) end)
+    row:SetScript("OnClick", function()
+        _dispatchTransient("landingRoomID", roomID)
+    end)
+end
+
+-- Library set row: name + reach meta; right-click Rename / Export / Delete.
+local function _confirmSetDelete(setID, name, roomCount)
+    HDG.UI.Confirm({
+        id       = "HDGR_PROJECTS_DELETE_FURN_SET",
+        text     = "Delete set \"%s\"? It is unequipped from %s room(s); the rooms themselves are untouched.",
+        accept   = "Delete", cancel = "Cancel",
+        textArg1 = name or "Set", textArg2 = tostring(roomCount or 0), data = setID,
+        onAccept = function(_, data)
+            if data then
+                HDG.Store:Dispatch({ type = A.FURN_SET_DELETE, payload = { setID = data } })
+                HDG.Log:Info("projects_action", "Furnishing set deleted")
+            end
+        end,
+    })
+end
+
+local function _exportSet(setID)
+    local set = HDG.Store:GetState().account.furnishingSets[setID]  -- exception(nullable): stale row
+    if not set then return end
+    local code = HDG.Projects.CrateCodec.Encode({ name = set.name, decor = set.items })   -- HDGRCRATE: wire format unchanged
+    if not code then return end
+    local dialog = HDG.UI:CopyDialog()   -- exception(boundary): UI helper may be unbuilt pre-first-open
+    if dialog and dialog.Open then dialog:Open("Export set: " .. (set.name or "Furnishings"), code) end
+end
+
+-- Open the picker workspace targeting a SET (room-local or library). Back
+-- returns to where the picker was opened from (landing by default).
+local function _openPickerForSet(setID, returnView)
+    if not setID then return end
+    _dispatchTransient("pickerReturn", returnView or "projectsLanding")
+    _dispatchTransient("pickerCrateID", setID)
+    _dispatchTransient("pickerSearch", "")
+    _dispatchTransient("pickerSelectedItemID", nil)
+    _setView("projectsPicker")
+end
+
+local function _paintSetRow(row, ed)
+    HDG.UI.applyFontRole(row._nameFs, "body")
+    -- Chest glyph differentiates set rows from room rows at a glance.
+    row._nameFs:SetText("|A:house-chest-icon:12:12|a " .. ed.name)
+    local reach = (ed.roomCount == 0 and "not equipped anywhere")
+        or ("in " .. ed.roomCount .. (ed.roomCount == 1 and " room" or " rooms"))
+    row._metaFs:SetText(ed.pieces .. (ed.pieces == 1 and " piece" or " pieces") .. "  -  " .. reach)
+    row._metaFs:Show()
+    row._metaFs:ClearAllPoints(); row._metaFs:SetPoint("RIGHT", row, "RIGHT", -8, 0)
+    row._nameFs:ClearAllPoints()
+    row._nameFs:SetPoint("LEFT", row, "LEFT", 8, 0)
+    row._nameFs:SetPoint("RIGHT", row._metaFs, "LEFT", -8, 0)
+    local setID = ed.setID
+    -- Click = select (drives the Sets rail; Edit/Rename/Export/Delete live there).
+    row:RegisterForClicks("LeftButtonUp")
+    row:SetScript("OnClick", function()
+        _dispatchTransient("landingSetID", setID)
+    end)
 end
 
 local function _paintLedgerRow(row, ed, template)
-    HDG.Theme:Register(row, "RowChrome", { selected = false })
+    -- (Section headers live OUTSIDE the boxes now -- fixed chrome="card" bands.)
+    HDG.Theme:Register(row, "RowChrome", { selected = ed.isSelected == true })
     _ledgerClear(row)
-    if ed.kind == "orphanHeader" then
-        _paintOrphanHeaderRow(row, ed)
-    elseif ed.kind == "orphan" then
-        _paintOrphanRowL(row, ed)
-    elseif ed.kind == "orphanEmpty" then
-        _paintLedgerHeader(row, "All clear -- nothing orphaned")
-    elseif ed.kind == "inventoryHeader" then
-        _paintLedgerHeader(row, "CRATE INVENTORY (" .. ed.count .. (ed.count == 1 and " room packed)" or " rooms packed)"))
-    else  -- inventoryRoom
-        _paintInventoryRoomRow(row, ed)
+    if ed.kind == "set" then
+        _paintSetRow(row, ed)
+    else  -- room
+        _paintRoomRow(row, ed)
     end
     row:SetHeight(template.height)
 end
@@ -498,12 +503,60 @@ HDG.Rows:Register("projectsLedgerRow", {
     font = "body", height = 24, factory = _ledgerRowFactory,
     key  = function(ed)
         if not ed then return "ledger:?" end
-        return "ledger:" .. tostring(ed.kind) .. ":" .. tostring(ed.crateID or ed.roomID or "")
+        return "ledger:" .. tostring(ed.kind) .. ":" .. tostring(ed.setID or ed.roomID or "")
     end,
 })
 
--- ===== Crate-detail decor row factory (icon + name + count + remove) ========
-local function _layoutCrateRow(row)
+-- Resolve the selection transient to the DESIGN id it denotes. v8 canvas
+-- selections are SLOT KEYS (the design rides as the placement's roomID tag);
+-- landing flows still pass design ids. Mirrors the selectors' _selectedRoom
+-- resolver -- handlers must NEVER treat the raw transient as a design id
+-- (Equip set / Add decor / Unequip / copy-here all silently no-opped on
+-- canvas selections until review 17's follow-up).
+local function _selectedDesignID()
+    local state = HDG.Store:GetState()  -- exception(false-positive): top-level controller helper, not a row factory
+    local key = state.session.ui.projects.selectedRoomID
+    if not key then return nil end
+    local _, view = _activeVersion()
+    local rec = view and view[key]
+    local rid = (rec and rec.roomID) or key
+    if state.account.rooms[rid] then return rid end
+    return nil   -- exception(nullable): bare slots / stale selections denote no design
+end
+
+-- ===== Equip-a-set menu (Architect detail + workspace) ======================
+local function _openEquipMenu(owner)
+    local state  = HDG.Store:GetState()  -- exception(false-positive): top-level controller helper, not a row factory
+    local roomID = _selectedDesignID()
+    local room   = roomID and state.account.rooms[roomID]   -- exception(nullable): resolver already vetted; belt for stale state
+    if not room then return end
+    local equipped = {}
+    for _, sid in ipairs(room.furnishingSetIDs) do equipped[sid] = true end
+    local items = {}
+    for sid, set in pairs(state.account.furnishingSets) do
+        if not set.isLocal and not equipped[sid] then
+            local nm = set.name or "Set"
+            items[#items + 1] = { text = nm, callback = function()
+                HDG.Store:Dispatch({ type = A.FURN_ROOM_EQUIP,
+                    payload = { roomID = roomID, setID = sid } })
+                HDG.Log:Success("projects_save", ("\"%s\" equipped -- edits to the set reach every room using it"):format(nm))
+            end }
+        end
+    end
+    table.sort(items, function(a2, b2) return a2.text < b2.text end)
+    if #items == 0 then
+        HDG.Log:Info("projects_action", "No sets to equip -- \"Save as Set\" in the decor picker creates one")
+        return
+    end
+    HDG.UI.ShowMenu(owner, items)
+end
+
+-- ===== Effective-furnishings rows (setHeader / item; provenance grouped) ====
+-- One pooled template, two kinds. setHeader carries the provenance (set name +
+-- total; Unequip on library sets). item rows: steppers ONLY on the room's own
+-- pieces -- library contents change via the set, not the room (spec rule 2).
+local function _layoutFurnRow(row)
+    HDG.UI:EnsureRowChrome(row)
     local icon = row:CreateTexture(nil, "ARTWORK", nil, 2)
     icon:SetPoint("LEFT", row, "LEFT", 6, 0)
     icon:SetSize(18, 18)
@@ -511,190 +564,275 @@ local function _layoutCrateRow(row)
     -- Quantity stepper [- nn +] at the right edge. Button frames capture their own
     -- clicks so +/- don't trigger the row select. Defaults: rightInset=-4, size=16.
     HDG.UI.WireStepperCluster(row)
+    local unequip = HDG.UI.RowButton(row, "Unequip", 64, 18)
+    unequip:SetPoint("RIGHT", row, "RIGHT", -6, 0); unequip:RegisterForClicks("LeftButtonUp")
+    row._unequipBtn = unequip
+    local cnt = HDG.UI.RowText(row, "caption", "TextDim", "RIGHT")
+    cnt:SetPoint("RIGHT", row, "RIGHT", -8, 0)
+    row._cntFs = cnt
+    row._nameFs = HDG.UI.RowText(row, "body", "Text", "LEFT")
+end
+
+local function _furnRowClear(row)
+    row._iconTex:Hide()
+    row._plusBtn:Hide();  row._plusBtn:SetScript("OnClick", nil)
+    row._minusBtn:Hide(); row._minusBtn:SetScript("OnClick", nil)
+    row._qtyFs:SetText("")
+    row._unequipBtn:Hide(); row._unequipBtn:SetScript("OnClick", nil)
+    row._cntFs:SetText(""); row._cntFs:Hide()
+    row:SetScript("OnClick", nil)   -- header rows wire a fold toggle; items must not inherit it
+    row._setID, row._decorID = nil, nil
+end
+
+local function _paintFurnHeader(row, ed)
+    HDG.UI.applyFontRole(row._nameFs, "caption")
+    -- Library groups fold on click; the marker telegraphs it.
+    local marker = ed.isLocal and "" or (ed.collapsed and "+ " or "- ")
+    row._nameFs:SetText(marker .. ed.name .. "  (" .. ed.count .. ")")
+    row._nameFs:ClearAllPoints()
+    row._nameFs:SetPoint("LEFT", row, "LEFT", 8, 0)
+    if ed.isLocal then
+        row._nameFs:SetPoint("RIGHT", row, "RIGHT", -8, 0)
+    else
+        local setID = ed.setID
+        row:RegisterForClicks("LeftButtonUp")
+        row:SetScript("OnClick", function()
+            HDG.Store:Dispatch({ type = A.PROJECTS_FURN_TOGGLE_COLLAPSE,
+                payload = { setID = setID } })
+        end)
+        row._unequipBtn:Show()
+        row._nameFs:SetPoint("RIGHT", row._unequipBtn, "LEFT", -8, 0)
+        row._unequipBtn:SetScript("OnClick", function()
+            local roomID = _selectedDesignID()
+            if roomID then
+                HDG.Store:Dispatch({ type = A.FURN_ROOM_UNEQUIP,
+                    payload = { roomID = roomID, setID = setID } })
+                HDG.Log:Info("projects_action", "Set unequipped -- the set itself is untouched in your library")
+            end
+        end)
+    end
+end
+
+local function _paintFurnItem(row, ed)
+    HDG.UI.applyFontRole(row._nameFs, "body")
+    row._nameFs:SetText(ed.name or ("item " .. tostring(ed.decorID)))
+    -- ed.icon stamped by the selector (NOT resolved here) so the async-load ->
+    -- session.itemNames.tick -> selector re-run -> re-bind cycle works.
+    if ed.icon then row._iconTex:SetTexture(ed.icon); row._iconTex:Show() end
+    row._setID, row._decorID = ed.setID, ed.decorID
+    row._nameFs:ClearAllPoints()
+    row._nameFs:SetPoint("LEFT", row._iconTex, "RIGHT", 6, 0)
+    if ed.isLocal then
+        -- Stepper: + = +1 (FURN_SET_ITEM_ADD no-count increments); - = -1 (removes at 0).
+        row._qtyFs:SetText(tostring(ed.count))
+        row._plusBtn:Show(); row._minusBtn:Show()
+        row._nameFs:SetPoint("RIGHT", row._minusBtn, "LEFT", -6, 0)
+        row._plusBtn:SetScript("OnClick", function()
+            if not (row._setID and row._decorID) then return end
+            HDG.Store:Dispatch({ type = A.FURN_SET_ITEM_ADD,
+                payload = { setID = row._setID, itemID = row._decorID } })
+        end)
+        row._minusBtn:SetScript("OnClick", function()
+            if not (row._setID and row._decorID) then return end
+            HDG.Store:Dispatch({ type = A.FURN_SET_ITEM_REMOVE,
+                payload = { setID = row._setID, itemID = row._decorID } })
+        end)
+    else
+        row._cntFs:SetText("x" .. tostring(ed.count)); row._cntFs:Show()
+        row._nameFs:SetPoint("RIGHT", row._cntFs, "LEFT", -6, 0)
+    end
+end
+
+HDG.Rows:Register("projectsFurnRow", {
+    font = "body", height = 22,
+    factory = HDG.UI.MakeRowFactory({
+        layout     = _layoutFurnRow,
+        paint      = function(row, ed)
+            _furnRowClear(row)
+            if ed.kind == "setHeader" then _paintFurnHeader(row, ed)
+            else _paintFurnItem(row, ed) end
+        end,
+        laidOutTag = "_furnLaidOut",
+        resetText  = { "_nameFs", "_qtyFs", "_cntFs" },
+        reset      = _furnRowClear,
+    }),
+    key = function(ed)
+        if not ed then return "furn:?" end
+        return "furn:" .. tostring(ed.kind) .. ":" .. tostring(ed.setID) .. ":" .. tostring(ed.decorID or "")
+    end,
+})
+
+-- ===== Assign row ("which room?" offer for an unassigned slot) ==============
+local function _layoutAssignRow(row)
+    HDG.UI:EnsureRowChrome(row)
+    row._metaFs = HDG.UI.RowText(row, "caption", "TextDim", "RIGHT")
+    row._metaFs:SetPoint("RIGHT", row, "RIGHT", -8, 0)
     local name = HDG.UI.RowText(row, "body", "Text", "LEFT")
-    name:SetPoint("LEFT", icon, "RIGHT", 6, 0)
-    name:SetPoint("RIGHT", row._minusBtn, "LEFT", -6, 0)
+    name:SetPoint("LEFT", row, "LEFT", 8, 0)
+    name:SetPoint("RIGHT", row._metaFs, "LEFT", -8, 0)
     row._nameFs = name
 end
 
-local function _paintCrateRow(row, ed)
-    row._nameFs:SetText(ed.name or ("item " .. tostring(ed.decorID)))
-    -- ed.icon is stamped by the crateDetail selector (NOT resolved here) so the
-    -- async-load -> session.itemNames.tick -> selector re-run -> row re-bind cycle
-    -- works -- same contract as Lumber/Shopping. Resolving at paint breaks it.
-    if ed.icon then row._iconTex:SetTexture(ed.icon); row._iconTex:Show() else row._iconTex:Hide() end
-    row._crateID, row._decorID = ed.crateID, ed.decorID
-
-    -- Stepper: + = +1 (CRATE_ADD_DECOR no-count increments); - = -1 (removes at 0).
-    -- A crate entry is always >= 1, so the full [- nn +] always shows.
-    row._qtyFs:SetText(tostring(ed.count))
-    row._plusBtn:Show()
-    row._plusBtn:SetScript("OnClick", function()
-        if not (row._crateID and row._decorID) then return end
-        HDG.Store:Dispatch({ type = A.CRATE_ADD_DECOR,
-            payload = { crateID = row._crateID, decorID = row._decorID } })
-    end)
-    row._minusBtn:Show()
-    row._minusBtn:SetScript("OnClick", function()
-        if not (row._crateID and row._decorID) then return end
-        HDG.Store:Dispatch({ type = A.CRATE_DECREMENT_DECOR,
-            payload = { crateID = row._crateID, decorID = row._decorID } })
+local function _paintAssignRow(row, ed)
+    HDG.Theme:Register(row, "RowChrome", { selected = false })
+    row._nameFs:SetText(ed.name)
+    row._metaFs:SetText(ed.noShape and "new -- takes this shape"
+        or (ed.hereCount > 0 and ("already " .. ed.hereCount .. " here"))
+        or (ed.layouts == 0 and "unplaced"
+        or ("in " .. ed.layouts .. (ed.layouts == 1 and " layout" or " layouts"))))
+    local layoutID, slotKey, roomID, name = ed.layoutID, ed.slotKey, ed.roomID, ed.name
+    row:RegisterForClicks("LeftButtonUp")
+    row:SetScript("OnClick", function()
+        HDG.Store:Dispatch({ type = A.LAYOUT_ASSIGN,
+            payload = { layoutID = layoutID, slotKey = slotKey, roomID = roomID } })
+        -- v8: the slot key is stable -- keep it selected (panel flips to room state).
+        HDG.Log:Success("projects_save", ("Assigned \"%s\" to this room"):format(name))
     end)
 end
 
-HDG.Rows:Register("projectsCrateRow", {
+HDG.Rows:Register("projectsAssignRow", {
     font = "body", height = 22,
     factory = HDG.UI.MakeRowFactory({
-        layout     = _layoutCrateRow,
-        paint      = _paintCrateRow,
-        laidOutTag = "_crateLaidOut",
-        resetText  = { "_nameFs", "_qtyFs" },
-        reset      = function(row)
-            row._iconTex:Hide()
-            row._plusBtn:SetScript("OnClick", nil)
-            row._minusBtn:SetScript("OnClick", nil)
-            row._crateID, row._decorID = nil, nil
-        end,
+        layout     = _layoutAssignRow,
+        paint      = _paintAssignRow,
+        laidOutTag = "_assignLaidOut",
+        resetText  = { "_nameFs", "_metaFs" },
+        reset      = function(row) row:SetScript("OnClick", nil) end,
     }),
-    key = function(ed) return "crate:" .. tostring(ed and ed.decorID or "?") end,
+    key = function(ed) return "assign:" .. tostring(ed and ed.roomID or "?") end,
 })
 
--- Crate key = "crate:<versionID>:<roomID>" (version-scoped; what-if reuses parent roomIDs).
--- CRATE_UPSERT is idempotent; crate authoring works on any version (Live or what-if).
-local function _crateIDFor(vid, roomID) return "crate:" .. vid .. ":" .. roomID end
-local function _addCrateToSelectedRoom()
-    local roomID = HDG.Store:GetState().session.ui.projects.selectedRoomID  -- exception(false-positive): top-level controller read
-    if not roomID then return end
-    local vid = _activeVersion()
-    if not vid then return end
-    HDG.Store:Dispatch({
-        type    = A.CRATE_UPSERT,
-        payload = { crateID = _crateIDFor(vid, roomID),
-                    fields = { parent = roomID, versionID = vid, name = "Crate", createdAt = (time and time()) or 0 } },  -- exception(boundary): time()
-    })
+-- v7: a room's working container is its LOCAL furnishing set -- created
+-- implicitly on first use (the "+ Add Crate" ceremony is gone; this helper is
+-- the implicit-create seam used by the button AND the picker open).
+local function _ensureLocalSet(roomID)
+    local state = HDG.Store:GetState()  -- exception(false-positive): top-level controller helper, not a row factory
+    local room  = roomID and state.account.rooms[roomID]   -- exception(nullable): slot keys / stale selection have no room
+    if not room then return nil end
+    for _, sid in ipairs(room.furnishingSetIDs) do
+        local s = state.account.furnishingSets[sid]
+        if s and s.isLocal and s.ownerRoom == roomID then return sid end
+    end
+    HDG.Store:Dispatch({ type = A.FURN_SET_CREATE, payload = {
+        name = ((room.name and room.name ~= "" and room.name) or "Design") .. " furnishings",
+        isLocal = true, ownerRoom = roomID, ts = (time and time()) or 0 } })  -- exception(boundary): time()
+    local sid = HDG.Store:GetState().session.furn.lastSetID  -- exception(false-positive): top-level controller read
+    HDG.Store:Dispatch({ type = A.FURN_ROOM_EQUIP, payload = { roomID = roomID, setID = sid } })
+    return sid
+end
+-- ===== Curation-panel one-clicks (build plan 2.2) ===========================
+
+-- "+ New room here": create-in-place from the selected unassigned slot --
+-- the room mints with the slot's shape + placement, assigned immediately.
+local function _newRoomHere()
+    local state = HDG.Store:GetState()  -- exception(false-positive): top-level controller helper, not a row factory
+    local key   = state.session.ui.projects.selectedRoomID
+    local lid, view = _activeVersion()
+    local slot  = key and view and view[key]
+    if not (slot and slot.unassigned and lid) then return end
+    _G.StaticPopup_Show("HDGR_PROJECTS_NEW_ROOM_HERE", nil, nil,
+        { layoutID = lid, slotKey = key, shape = slot.shape, name = slot.capturedName })
 end
 
--- Detach the selected room's crate -> orphan bay (reattachable). Recoverable, so no confirm.
+-- Fork: make the SELECTED room its own design. Placement-scoped -- the old
+-- duplicate-swap retagged EVERY spot the design held in the layout, which
+-- multi-assign made wrong (both octagons flipped together). Library sets
+-- stay shared by reference; own pieces clone; only THIS spot retags.
+local function _forkSelectedSpot()
+    local state = HDG.Store:GetState()  -- exception(false-positive): top-level controller helper, not a row factory
+    local key   = state.session.ui.projects.selectedRoomID
+    local lid, view = _activeVersion()
+    local rec   = key and view and view[key]
+    local srcID = rec and rec.roomID
+    if not (srcID and lid) then return nil end
+    HDG.Store:Dispatch({ type = A.FURN_ROOM_DUPLICATE,
+        payload = { roomID = srcID, ts = (time and time()) or 0 } })  -- exception(boundary): time()
+    local copyID = HDG.Store:GetState().session.furn.lastRoomID  -- exception(false-positive): top-level controller read
+    if not copyID then return nil end
+    HDG.Store:Dispatch({ type = A.LAYOUT_ASSIGN,
+        payload = { layoutID = lid, slotKey = key, roomID = copyID } })
+    local name = HDG.Store:GetState().account.rooms[copyID].name  -- exception(false-positive): top-level controller read
+    HDG.Log:Success("projects_save",
+        ('Forked -- this room is now "%s"; the original keeps its other rooms'):format(name))
+    return copyID
+end
+
+-- Picker "Make a copy just here": fork + retarget the picker to the copy.
+local function _editCopyHere()
+    return _forkSelectedSpot()
+end
+
+-- (Swap-room menu removed with its button: remove-placement + the assign
+-- offer covers re-pointing; LAYOUT_SWAP_ROOM remains the duplicate engine.)
+
+-- v7 "Save for Later": promote the room's local set to the library (it stays
+-- equipped; the room keeps its furnishings -- the set just becomes reusable).
 local function _detachCrate()
     local cd = HDG.Selectors:Call("projects.crateDetail", HDG.Store:GetState(), {})  -- exception(false-positive): top-level controller helper, not a row factory
     if cd.hasCrate and cd.crateID then
-        HDG.Store:Dispatch({ type = A.CRATE_DETACH,
-            payload = { crateID = cd.crateID, ts = (time and time()) or 0 } })  -- exception(boundary): time()
+        HDG.Store:Dispatch({ type = A.FURN_SET_PROMOTE,
+            payload = { setID = cd.crateID } })
+        HDG.Log:Success("projects_save", "Furnishings saved to the library (still equipped here)")
     end
 end
 
--- ===== Decor picker row: icon + name + stepper =====
--- Row-body click selects for 3D preview; stepper adjusts the crate. - appears when crateCount > 0.
-local function _layoutPickerRow(row)
-    local icon = row:CreateTexture(nil, "ARTWORK", nil, 2)
-    icon:SetPoint("LEFT", row, "LEFT", 6, 0)
-    icon:SetSize(20, 20)
-    row._iconTex = icon
-    -- Picker uses rightInset=-6 (wider margin than the crate row's -4).
-    HDG.UI.WireStepperCluster(row, { rightInset = -6 })
-    local name = HDG.UI.RowText(row, "body", "Text", "LEFT")
-    name:SetPoint("LEFT", icon, "RIGHT", 6, 0)
-    name:SetPoint("RIGHT", row._minusBtn, "LEFT", -6, 0)
-    row._nameFs = name
-end
-
-local function _pickerAdjust(row, actionType)
-    local crateID = HDG.Store:GetState().session.ui.projects.pickerCrateID  -- exception(false-positive): top-level controller read
-    if crateID and row._itemID then
-        HDG.Store:Dispatch({ type = actionType, payload = { crateID = crateID, decorID = row._itemID } })
+-- ===== Decor picker card (Variant A grid) ===================================
+-- Gestures route to the room's local set: hover = 3D preview + info line;
+-- left-click = +1; right-click = -1 (0 removes); shift-right-click = remove
+-- entirely. The planned-count badge is the only chrome on the card.
+local function _pickerCardAdjust(itemID, actionType, all)
+    local setID = HDG.Store:GetState().session.ui.projects.pickerCrateID  -- exception(false-positive): top-level handler read
+    if setID and itemID then
+        HDG.Store:Dispatch({ type = actionType,
+            payload = { setID = setID, itemID = itemID, all = all } })
     end
 end
 
-local function _paintPickerRow(row, ed)
-    row._nameFs:SetText(ed.name or ("item " .. tostring(ed.itemID)))
-    if ed.iconAtlas then row._iconTex:SetAtlas(ed.iconAtlas); row._iconTex:Show()
-    elseif ed.iconTexture then row._iconTex:SetTexture(ed.iconTexture); row._iconTex:Show()
-    else row._iconTex:Hide() end
-    row._itemID = ed.itemID
-    local cc = ed.crateCount
-    row._plusBtn:Show()
-    row._plusBtn:SetScript("OnClick", function() _pickerAdjust(row, A.CRATE_ADD_DECOR) end)
-    if cc > 0 then
-        row._qtyFs:SetText(tostring(cc))
-        row._minusBtn:Show()
-        row._minusBtn:SetScript("OnClick", function() _pickerAdjust(row, A.CRATE_DECREMENT_DECOR) end)
-    else
-        row._qtyFs:SetText("")
-        row._minusBtn:Hide()
-        row._minusBtn:SetScript("OnClick", nil)
-    end
-end
-
-local function _wirePickerRow(row, ed)
-    row:SetScript("OnClick", function(self) _dispatchTransient("pickerSelectedItemID", self._itemID) end)
-end
-
-HDG.Rows:Register("projectsPickerRow", {
-    font = "body", height = 24,
-    factory = HDG.UI.MakeRowFactory({
-        layout     = _layoutPickerRow,
-        paint      = _paintPickerRow,
-        laidOutTag = "_pickerLaidOut",
-        clicks     = "LeftButtonUp",
-        wire       = _wirePickerRow,
-        resetText  = { "_nameFs", "_qtyFs" },
-        reset      = function(row)
-            row._iconTex:Hide()
-            row._plusBtn:SetScript("OnClick", nil)
-            row._minusBtn:SetScript("OnClick", nil)
-            row._itemID = nil
-        end,
-    }),
-    key = function(ed) return "pick:" .. tostring(ed and ed.itemID or "?") end,
-})
-
--- ===== Orphan crate row: re-attach to selected room or delete ================
-local function _layoutOrphanRow(row)
-    local del = CreateFrame("Button", nil, row)
-    del:SetSize(16, 16); del:SetPoint("RIGHT", row, "RIGHT", -6, 0); del:RegisterForClicks("LeftButtonUp")
-    local dx = del:CreateFontString(nil, "OVERLAY"); HDG.UI.applyFontRole(dx, "body")
-    dx:SetPoint("CENTER"); dx:SetText("x"); HDG.Theme:Register(dx, "TextDim")
-    row._delBtn = del
-    local attach = HDG.UI.RowButton(row, "Re-attach", 72, 18)
-    attach:SetPoint("RIGHT", del, "LEFT", -6, 0); attach:RegisterForClicks("LeftButtonUp")
-    row._attachBtn = attach
-    local name = HDG.UI.RowText(row, "body", "Text", "LEFT")
-    name:SetPoint("LEFT", row, "LEFT", 6, 0); name:SetPoint("RIGHT", attach, "LEFT", -6, 0)
-    row._nameFs = name
-end
-
-local function _paintOrphanRow(row, ed)
-    local label = ed.name or "Crate"
-    if ed.lastKnownShape then label = label .. "  (was " .. HDG.Projects.ShapeAtlas.GetLabel(ed.lastKnownShape) .. ")" end
-    row._nameFs:SetText(label)
-    row._orphanID = ed.id
-    row._attachBtn:SetScript("OnClick", function()
-        local vid    = _activeVersion()
-        local roomID = HDG.Store:GetState().session.ui.projects.selectedRoomID  -- exception(false-positive): top-level controller read
-        if vid and roomID and row._orphanID then
-            HDG.Store:Dispatch({ type = A.CRATE_REATTACH,
-                payload = { crateID = row._orphanID, versionID = vid, roomID = roomID } })
+HDG.CardGrid:RegisterCellKind("projectsPickerCard", {
+    template = "Button",
+    initFunc = function(cell, ed, cfg)
+        HDG.CardGrid:EnsureDefaultAnatomy(cell, cfg)
+        cell:Show()
+        HDG.CardGrid:PaintIcon(cell, ed.iconTexture, ed.iconAtlas)
+        if cell.icon then   -- unowned reads dimmed; PaintIcon resets both on reuse
+            cell.icon:SetDesaturated(not ed.owned)
+            cell.icon:SetAlpha(ed.owned and 1 or 0.45)
         end
-    end)
-    row._delBtn:SetScript("OnClick", function()
-        if row._orphanID then HDG.Store:Dispatch({ type = A.CRATE_DELETE, payload = { crateID = row._orphanID } }) end
-    end)
-end
-
-HDG.Rows:Register("projectsOrphanRow", {
-    font = "body", height = 22,
-    factory = HDG.UI.MakeRowFactory({
-        layout     = _layoutOrphanRow,
-        paint      = _paintOrphanRow,
-        laidOutTag = "_orphanLaidOut",
-        resetText  = { "_nameFs" },
-        reset      = function(row)
-            row._attachBtn:SetScript("OnClick", nil)
-            row._delBtn:SetScript("OnClick", nil)
-            row._orphanID = nil
-        end,
-    }),
-    key = function(ed) return "orphan:" .. tostring(ed and ed.id or "?") end,
+        HDG.CardGrid:PaintSelected(cell, false)
+        -- Planned-count badge (absent at 0).
+        HDG.CardGrid:PaintMemberBadge(cell, ed.plannedCount > 0 and ed.plannedCount or nil)
+        if cell.label then cell.label:Hide() end   -- name lives in the hover info line
+        cell:RegisterForClicks("LeftButtonUp", "RightButtonUp")
+        local itemID = ed.itemID
+        cell._hdgrItemID = itemID   -- resetFunc unpins the preview if reclaimed mid-hover
+        cell:SetScript("OnClick", function(_, btn)
+            if btn == "RightButton" then
+                _pickerCardAdjust(itemID, A.FURN_SET_ITEM_REMOVE, _G.IsShiftKeyDown and _G.IsShiftKeyDown() or nil)  -- exception(boundary): IsShiftKeyDown absent in headless harness
+            else
+                _pickerCardAdjust(itemID, A.FURN_SET_ITEM_ADD)
+            end
+        end)
+        cell:SetScript("OnEnter", function(self_)
+            if self_.hoverBg then self_.hoverBg:Show() end
+            _dispatchTransient("pickerSelectedItemID", itemID)
+        end)
+        cell:SetScript("OnLeave", function(self_)
+            if self_.hoverBg then self_.hoverBg:Hide() end
+        end)
+    end,
+    resetFunc = function(_pool, cell)
+        cell:SetScript("OnClick", nil)
+        cell:SetScript("OnEnter", nil)
+        cell:SetScript("OnLeave", nil)
+        if cell.hoverBg then cell.hoverBg:Hide() end
+        -- Fast scroll can reclaim a hovered cell WITHOUT OnLeave -- don't leave
+        -- the info line + 3D preview pinned to a card that scrolled away.
+        if cell._hdgrItemID
+           and HDG.Store:GetState().session.ui.projects.pickerSelectedItemID == cell._hdgrItemID then  -- exception(false-positive): pool reset callback, not a row factory
+            _dispatchTransient("pickerSelectedItemID", nil)
+        end
+        cell._hdgrItemID = nil
+    end,
 })
 
 -- ===== Room picker list row: blueprint icon + name + cost; click places =====
@@ -726,7 +864,7 @@ end
 local function _layoutRoomRow(row)
     local icon = row:CreateTexture(nil, "ARTWORK", nil, 2)   -- shape blueprint glyph
     icon:SetPoint("LEFT", row, "LEFT", 6, 0)
-    icon:SetSize(30, 30)
+    icon:SetSize(40, 40)
     row._iconTex = icon
     local name = HDG.UI.RowText(row, "body", "Text", "LEFT")
     name:SetPoint("TOPLEFT", icon, "TOPRIGHT", 8, -2)
@@ -738,7 +876,9 @@ local function _layoutRoomRow(row)
     row._costFs = cost
     HDG.TooltipEngine:Attach(row, _roomRowTooltipDef)   -- once; reads live row._shape
 end
-local function _paintRoomRow(row, ed)
+-- (Palette rows, NOT the landing ledger rows -- that painter is _paintRoomRow
+-- above; this one was shadowing it under the same name until review 17.)
+local function _paintPaletteRoomRow(row, ed)
     row._nameFs:SetText(ed.label)
     row._costFs:SetText("cost " .. tostring(ed.budget))
     if ed.atlas then row._iconTex:SetAtlas(ed.atlas, false); row._iconTex:Show() else row._iconTex:Hide() end
@@ -748,10 +888,10 @@ local function _wireRoomRow(row)
     row:SetScript("OnClick", function(self) _placePlannedRoom(self._shape) end)
 end
 HDG.Rows:Register("projectsRoomListRow", {
-    font = "body", height = 40,
+    font = "body", height = 48,
     factory = HDG.UI.MakeRowFactory({
         layout     = _layoutRoomRow,
-        paint      = _paintRoomRow,
+        paint      = _paintPaletteRoomRow,
         laidOutTag = "_roomRowLaidOut",
         clicks     = "LeftButtonUp",
         wire       = _wireRoomRow,
@@ -779,7 +919,9 @@ local function _paintShoppingRow(row, ed)
     local prefix = (ed.kind == "build") and "+" or "-"
     local cc = HDG.Theme:ColorCode(ed.kind == "build" and "semantic.success" or "semantic.warning")
     row._nameFs:SetText(cc .. prefix .. ed.count .. "  " .. ed.label .. "|r")
-    row._wtFs:SetText(ed.weight .. " wt")
+    -- Room weight wears the same atlas as the title bar's room budget (90/95),
+    -- so the number reads as "costs this much of THAT" without a unit word.
+    row._wtFs:SetText("|A:house-room-limit-icon:12:12|a " .. ed.weight)
 end
 HDG.Rows:Register("projectsShoppingRow", {
     font = "caption", height = 20,
@@ -792,91 +934,365 @@ HDG.Rows:Register("projectsShoppingRow", {
     key = function(ed) return "shop:" .. tostring(ed and (ed.kind .. ":" .. ed.shape) or "?") end,
 })
 
--- ===== Style-import menu: per style -> Add all / Add missing =================
--- Replaces the old style scrollbox (was stacked above the decor list). Reuses
--- projects.pickerStyleRows + _importStyle.
-local function _openStyleImportMenu(owner)
-    local rows = HDG.Selectors:Call("projects.pickerStyleRows", HDG.Store:GetState(), {})  -- exception(false-positive): top-level controller helper, not a row factory
-    if #rows == 0 then return end
-    local items = { { isTitle = true, text = "Import from a Style" } }
-    for _, s in ipairs(rows) do
-        local id = s.id
-        items[#items + 1] = { isTitle = true, text = s.name .. "  (" .. s.count .. ")" }
-        items[#items + 1] = { text = "Add all",          callback = function() _importStyle(id, false) end }
-        items[#items + 1] = { text = "Add missing only", callback = function() _importStyle(id, true)  end }
-    end
-    HDG.UI.ShowMenu(owner, items)
+-- Open the picker for the selected room's local set; Back closes it.
+local function _openPickerFor(roomID)
+    local setID = _ensureLocalSet(roomID)   -- implicit: no ceremony
+    if not setID then return end
+    _openPickerForSet(setID, "projectsArchitect")
 end
 
--- Open the picker for the selected room's crate; Back closes it.
+-- No interrupt (review 15 follow-up): the picker opens immediately; shared
+-- rooms get the inline scope indicator + "Make a copy just here" inside the
+-- picker right column instead -- the common case pays nothing.
 local function _openDecorPicker()
-    local cd = HDG.Selectors:Call("projects.crateDetail", HDG.Store:GetState(), {})  -- exception(false-positive): top-level controller helper, not a row factory
-    if not cd.hasCrate then return end
-    _dispatchTransient("pickerCrateID", cd.crateID)
-    _dispatchTransient("pickerSearch", "")
-    _dispatchTransient("pickerSelectedItemID", nil)
-    _setView("projectsPicker")
+    _openPickerFor(_selectedDesignID())   -- v8: resolve the slot-key selection to its design
 end
 local function _closeDecorPicker()
     _dispatchTransient("pickerCrateID", nil)
-    _setView("projectsArchitect")
+    _setView(HDG.Store:GetState().session.ui.projects.pickerReturn)  -- exception(false-positive): top-level controller read
+end
+
+-- ===== Auto-assign (v8 fast-follow; strategy unit 1) ========================
+-- One click after a capture: every unassigned room takes the best matching
+-- design -- same shape, most decor first (multi-assign makes reuse safe:
+-- three closets can all take the one "Basement"). Shapes with no candidate
+-- are left alone; the rail ack says exactly what happened.
+local function _designDecorCount(state, room)
+    local n = 0
+    for _, sid in ipairs(room.furnishingSetIDs) do
+        local set = state.account.furnishingSets[sid]
+        if set then
+            for _, it in ipairs(set.items) do n = n + (it.count or 1) end
+        end
+    end
+    return n
+end
+local function _autoAssign()
+    local state = HDG.Store:GetState()  -- exception(false-positive): top-level controller handler
+    local lid, view = _activeVersion()
+    if not (lid and view) then return end
+    -- Best candidate per shape: most decor, then name (deterministic).
+    local byShape = {}
+    for rid, room in pairs(state.account.rooms) do
+        if room.shape then
+            local b = byShape[room.shape] or {}
+            b[#b + 1] = { rid = rid, n = _designDecorCount(state, room),
+                          name = (room.name and room.name ~= "" and room.name) or rid }
+            byShape[room.shape] = b
+        end
+    end
+    for _, list in pairs(byShape) do
+        table.sort(list, function(a, b2)
+            if a.n ~= b2.n then return a.n > b2.n end
+            return a.name < b2.name
+        end)
+    end
+    local keys = {}
+    for key, rec in pairs(view) do
+        if rec.unassigned and rec.shape then keys[#keys + 1] = key end
+    end
+    table.sort(keys)
+    local assigned, skipped, tally = 0, 0, {}
+    for _, key in ipairs(keys) do
+        local best = byShape[view[key].shape] and byShape[view[key].shape][1]
+        if best then
+            HDG.Store:Dispatch({ type = A.LAYOUT_ASSIGN,
+                payload = { layoutID = lid, slotKey = key, roomID = best.rid } })
+            assigned = assigned + 1
+            tally[best.name] = (tally[best.name] or 0) + 1
+        else
+            skipped = skipped + 1
+        end
+    end
+    if assigned == 0 then
+        HDG.Log:Info("projects_action", skipped > 0
+            and "Auto-assign: no designs match these shapes -- create one and it can fill them all"
+            or "Auto-assign: nothing to do -- every room already has a design")
+        return
+    end
+    local parts = {}
+    for name, c in pairs(tally) do
+        parts[#parts + 1] = c > 1 and (name .. " x" .. c) or name
+    end
+    table.sort(parts)
+    local msg = ("Auto-assigned %d room%s: %s"):format(
+        assigned, assigned == 1 and "" or "s", table.concat(parts, ", "))
+    if skipped > 0 then msg = msg .. (" -- %d with no matching design"):format(skipped) end
+    HDG.Log:Success("projects_save", msg)
 end
 
 -- ===== Crate import / export ===============================================
 local function _exportCrate()
     local cd = HDG.Selectors:Call("projects.crateDetail", HDG.Store:GetState(), {})  -- exception(false-positive): top-level controller helper, not a row factory
     if not cd.hasCrate then return end
-    local crate = HDG.Store:GetState().account.collections[cd.crateID]  -- exception(false-positive): top-level controller read
-    local code  = HDG.Projects.CrateCodec.Encode(crate)
+    local set  = HDG.Store:GetState().account.furnishingSets[cd.crateID]  -- exception(false-positive): top-level controller read
+    local code = HDG.Projects.CrateCodec.Encode({ name = set.name, decor = set.items })   -- HDGRCRATE: wire format unchanged
     if not code then return end
     local dialog = HDG.UI:CopyDialog()   -- exception(boundary): UI helper may be unbuilt pre-first-open
-    if dialog and dialog.Open then dialog:Open("Export crate: " .. (crate.name or "Crate"), code) end
+    if dialog and dialog.Open then dialog:Open("Export furnishings: " .. (set.name or "Furnishings"), code) end
 end
 
--- Decode pasted code -> upsert crate + merge decor (CRATE_ADD_DECOR dedups by id).
-local function _importCrateString(value)
-    local decoded = HDG.Projects.CrateCodec.Decode(value)
-    if not decoded then
-        if _G.UIErrorsFrame then   -- exception(boundary): Blizzard toast
-            _G.UIErrorsFrame:AddMessage("Projects: unrecognised crate code (expected HDGRCRATE:1:...)", 1, 0.3, 0.3)
-        end
-        return
-    end
-    local roomID = HDG.Store:GetState().session.ui.projects.selectedRoomID  -- exception(false-positive): top-level controller read
-    if not roomID then return end
-    local vid = _activeVersion()
-    if not vid then return end
-    local crateID = _crateIDFor(vid, roomID)
-    HDG.Store:Dispatch({ type = A.CRATE_UPSERT, payload = { crateID = crateID,
-        fields = { parent = roomID, versionID = vid, name = decoded.name or "Crate", createdAt = (time and time()) or 0 } } })  -- exception(boundary): time()
-    for _, d in ipairs(decoded.decor or {}) do
-        HDG.Store:Dispatch({ type = A.CRATE_ADD_DECOR, payload = { crateID = crateID, decorID = d.id, count = d.count } })
-    end
-end
+-- (Merge-into-room import retired: the landing's Import creates a library
+-- set, which Equip-to-Room covers without duplicating decor records.)
 
 -- ===== Wire ================================================================
 function PC:Wire(rootFrame)
+    if not HDG.Log:HasTag("projects_action") then
+        HDG.Log:RegisterTabTags("projects")
+    end
     HDG.UI.OnClick(rootFrame, "projectsLandingPanel.newDesign",      _startNewDesign)
     HDG.UI.OnClick(rootFrame, "projectsLandingPanel.newWhatIf",      _newWhatIfFromPicker)
     HDG.UI.OnClick(rootFrame, "projectsLandingPanel.openArchitect",  function() _setView("projectsArchitect") end)
+    -- Help workspace: remember where it was opened from; Back returns there.
+    local function _openHelp(returnView)
+        return function()
+            _dispatchTransient("helpReturn", returnView)
+            _setView("projectsHelp")
+        end
+    end
+    HDG.UI.OnClick(rootFrame, "projectsLandingPanel.help", _openHelp("projectsLanding"))
+    HDG.UI.OnClick(rootFrame, "projectsNavPanel.help",     _openHelp("projectsArchitect"))
+    HDG.UI.OnClick(rootFrame, "projectsHelpPanel.back", function()
+        _setView(HDG.Store:GetState().session.ui.projects.helpReturn)  -- exception(false-positive): top-level controller read
+    end)
+    HDG.UI.OnClick(rootFrame, "projectsLandingPanel.newRoom", function()
+        _G.StaticPopup_Show("HDGR_PROJECTS_NEW_ROOM")
+    end)
+    -- Landing rails: act on the box's selected row (buttons gate on selection).
+    local function _selLandingRoom()
+        local state = HDG.Store:GetState()  -- exception(false-positive): top-level handler read
+        local rid   = state.session.ui.projects.landingRoomID
+        local room  = rid and state.account.rooms[rid]   -- exception(nullable): selection can go stale across deletes
+        if not room then return nil end
+        local name = (room.name and room.name ~= "" and room.name)
+            or (room.shape and HDG.Projects.ShapeAtlas.GetLabel(room.shape)) or "Design"
+        local spots, layouts = 0, 0
+        for _, c in pairs(state.session.furnIndex.roomLayouts[rid] or {}) do   -- exception(nullable): room may be placed nowhere
+            layouts = layouts + 1
+            spots   = spots + (type(c) == "number" and c or 1)
+        end
+        return rid, name, spots, layouts
+    end
+    local function _selLandingSet()
+        local state = HDG.Store:GetState()  -- exception(false-positive): top-level handler read
+        local sid   = state.session.ui.projects.landingSetID
+        local set   = sid and state.account.furnishingSets[sid]   -- exception(nullable): selection can go stale across deletes
+        if not (set and not set.isLocal) then return nil end
+        local n = 0
+        for _ in pairs(state.session.furnIndex.setRooms[sid] or {}) do n = n + 1 end   -- exception(nullable): set may be equipped nowhere
+        return sid, set.name or "Set", n
+    end
+    HDG.UI.OnClick(rootFrame, "projectsLandingPanel.roomMore", function(self)
+        local rid, name, n, nLayouts = _selLandingRoom()
+        if not rid then
+            HDG.Log:Info("projects_action", "Select a design first -- click a row above")
+            return
+        end
+        HDG.UI.ShowMenu(self, {
+            { text = "Rename",    callback = function() _promptRenameRoom(rid, name) end },
+            { text = "Duplicate", callback = function()
+                _G.StaticPopup_Show("HDGR_PROJECTS_DUPLICATE_ROOM", nil, nil, { roomID = rid, name = name }) end },
+            { text = "Delete",    callback = function() _confirmRoomDelete(rid, name, n, nLayouts) end },
+        })
+    end)
+    HDG.UI.OnClick(rootFrame, "projectsLandingPanel.roomOpen", function()
+        local rid = _selLandingRoom()
+        if rid then _openRoomInArchitect(rid) end
+    end)
+    HDG.UI.OnClick(rootFrame, "projectsLandingPanel.setEdit", function()
+        local sid = _selLandingSet()
+        if sid then _openPickerForSet(sid) end
+    end)
+    HDG.UI.OnClick(rootFrame, "projectsLandingPanel.newSet", function()
+        _G.StaticPopup_Show("HDGR_PROJECTS_NEW_SET")
+    end)
+    HDG.UI:RegisterInputDialog("HDGR_PROJECTS_NEW_SET", {
+        text       = "Name the new furnishing set:",
+        accept     = "Create",
+        maxLetters = 64,
+        onAccept   = function(value)
+            if not (value and value ~= "") then return end
+            HDG.Store:Dispatch({ type = A.FURN_SET_CREATE, payload = {
+                name = value, items = {}, ts = (time and time()) or 0 } })  -- exception(boundary): time absent in headless harness
+            local sid = HDG.Store:GetState().session.furn.lastSetID  -- exception(false-positive): top-level handler read
+            _dispatchTransient("landingSetID", sid)
+            HDG.Log:Success("projects_save", ("Set \"%s\" created -- pick its pieces"):format(value))
+            _openPickerForSet(sid)   -- an empty set's next step is always "add pieces"
+        end,
+    })
+    HDG.UI.OnClick(rootFrame, "projectsLandingPanel.setEquip", function()
+        local sid, setName = _selLandingSet()
+        local rid, roomName = _selLandingRoom()
+        if not (sid and rid) then return end
+        HDG.Store:Dispatch({ type = A.FURN_ROOM_EQUIP, payload = { roomID = rid, setID = sid } })
+        HDG.Log:Success("projects_save",
+            ("\"%s\" equipped to %s -- edits to the set reach every room using it"):format(setName, roomName))
+    end)
+    HDG.UI.OnClick(rootFrame, "projectsLandingPanel.setMore", function(self)
+        local sid, name, n = _selLandingSet()
+        if not sid then
+            HDG.Log:Info("projects_action", "Select a set first -- click a row above")
+            return
+        end
+        HDG.UI.ShowMenu(self, {
+            { text = "Rename", callback = function()
+                _G.StaticPopup_Show("HDGR_PROJECTS_RENAME_SET", nil, nil, { setID = sid }) end },
+            { text = "Export", callback = function() _exportSet(sid) end },
+            { text = "Delete", callback = function() _confirmSetDelete(sid, name, n) end },
+        })
+    end)
+    HDG.UI.OnClick(rootFrame, "projectsLandingPanel.importSet", function()
+        HDG.UI:PromptInput("Import Furnishing Set", {
+            hint = "Paste a set code, then Import.", acceptText = "Import",
+            onAccept = function(value)
+                local decoded = HDG.Projects.CrateCodec.Decode(value)
+                if not decoded then
+                    if _G.UIErrorsFrame then   -- exception(boundary): Blizzard toast
+                        _G.UIErrorsFrame:AddMessage("Projects: unrecognised set code (expected HDGRCRATE:1:...)", 1, 0.3, 0.3)
+                    end
+                    return
+                end
+                local items = {}
+                for i, d in ipairs(decoded.decor or {}) do items[i] = { id = d.id, count = d.count or 1 } end
+                HDG.Store:Dispatch({ type = A.FURN_SET_CREATE, payload = {
+                    name = decoded.name or "Imported Set", items = items,
+                    ts = (time and time()) or 0 } })  -- exception(boundary): time absent in headless harness
+                HDG.Log:Success("projects_save",
+                    ("Set \"%s\" imported to your library (%d items)"):format(
+                        tostring(decoded.name or "Imported Set"), #items))
+            end,
+        })
+    end)
+    -- Rooms-list identity dialogs (shared StaticPopups; data carries the roomID).
+    HDG.UI:RegisterInputDialog("HDGR_PROJECTS_NEW_ROOM", {
+        text       = "Name the new design:",
+        accept     = "Create",
+        maxLetters = 64,
+        onAccept   = function(value)
+            if not (value and value ~= "") then return end
+            HDG.Store:Dispatch({ type = A.FURN_ROOM_CREATE,
+                payload = { name = value, ts = (time and time()) or 0 } })  -- exception(boundary): time absent in headless harness
+            HDG.Log:Success("projects_save",
+                ("Design \"%s\" created -- it takes a shape when you assign it"):format(value))
+        end,
+    })
+    HDG.UI:RegisterInputDialog("HDGR_PROJECTS_RENAME_ROOM", {
+        text       = "Rename design:",
+        accept     = "Rename",
+        maxLetters = 64,
+        onAccept   = function(value, data)
+            if not (value and value ~= "" and data and data.roomID) then return end
+            HDG.Store:Dispatch({ type = A.FURN_ROOM_RENAME,
+                payload = { roomID = data.roomID, name = value } })
+        end,
+    })
+    HDG.UI:RegisterInputDialog("HDGR_PROJECTS_RENAME_SET", {
+        text       = "Rename set:",
+        accept     = "Rename",
+        maxLetters = 64,
+        onAccept   = function(value, data)
+            if not (value and value ~= "" and data and data.setID) then return end
+            HDG.Store:Dispatch({ type = A.FURN_SET_RENAME,
+                payload = { setID = data.setID, name = value } })
+        end,
+    })
+    HDG.UI.OnClick(rootFrame, "projectsDetailPanel.equipSet",        function(self) _openEquipMenu(self) end)
+    HDG.UI.OnClick(rootFrame, "projectsPickerPreviewPanel.equipSet", function(self) _openEquipMenu(self) end)
     HDG.UI.OnClick(rootFrame, "projectsNavPanel.captureAll",         _captureHouse)
+    HDG.UI.OnClick(rootFrame, "projectsNavPanel.autoAssign",         _autoAssign)
     HDG.UI.OnClick(rootFrame, "projectsNavPanel.addFloor",           function() _setWhatIfFloors(1) end)
     HDG.UI.OnClick(rootFrame, "projectsNavPanel.removeFloor",        function() _setWhatIfFloors(-1) end)
     HDG.UI.OnClick(rootFrame, "projectsNavPanel.versionMenu",        function(self) _openVersionMenu(self) end)
     HDG.UI.OnClick(rootFrame, "projectsPickerPanel.newWhatIf",       _newWhatIfFromPicker)
-    HDG.UI.OnClick(rootFrame, "projectsDetailPanel.addCrate",        _addCrateToSelectedRoom)
     HDG.UI.OnClick(rootFrame, "projectsDetailPanel.detachCrate",     _detachCrate)
     HDG.UI.OnClick(rootFrame, "projectsDetailPanel.addDecor",        _openDecorPicker)
-    HDG.UI.OnClick(rootFrame, "projectsDetailPanel.exportCrate",     _exportCrate)
-    HDG.UI.OnClick(rootFrame, "projectsDetailPanel.importCrate", function()
-        HDG.UI:PromptInput("Import Crate", {
-            hint = "Paste a crate code, then Import.", acceptText = "Import",
-            onAccept = function(value) _importCrateString(value) end,
-        })
+    HDG.UI.OnClick(rootFrame, "projectsDetailPanel.newRoomHere",     _newRoomHere)
+    HDG.UI.OnClick(rootFrame, "projectsDetailPanel.forkDesign", _forkSelectedSpot)
+    HDG.UI.OnClick(rootFrame, "projectsDetailPanel.unassignRoom", function()
+        local state = HDG.Store:GetState()  -- exception(false-positive): top-level handler read
+        local key   = state.session.ui.projects.selectedRoomID
+        local lid   = HDG.Selectors:Call("projects.activeVersionID", state, {})
+        if key and lid then
+            HDG.Store:Dispatch({ type = A.LAYOUT_UNASSIGN, payload = { layoutID = lid, key = key } })
+            HDG.Log:Info("projects_action", "Design unassigned -- the shape stays, and the design keeps its furnishings")
+        end
     end)
-    HDG.UI.OnClick(rootFrame, "projectsPickerListPanel.back",        _closeDecorPicker)
-    HDG.UI.OnClick(rootFrame, "projectsPickerListPanel.styleImport", function(self) _openStyleImportMenu(self) end)
-    HDG.UI.OnClick(rootFrame, "projectsPickerListPanel.addAll",      _bulkAddPicker)
+    HDG.UI:RegisterInputDialog("HDGR_PROJECTS_DUPLICATE_ROOM", {
+        text       = "Name the copy:",
+        accept     = "Duplicate",
+        maxLetters = 64,
+        onAccept   = function(value, data)
+            if not (data and data.roomID) then return end
+            HDG.Store:Dispatch({ type = A.FURN_ROOM_DUPLICATE, payload = {
+                roomID = data.roomID, name = (value ~= "" and value) or nil,
+                ts = (time and time()) or 0 } })  -- exception(boundary): time absent in headless harness
+            HDG.Log:Success("projects_save", "Design duplicated -- find it in My Designs (unplaced)")
+        end,
+    })
+    HDG.UI:RegisterInputDialog("HDGR_PROJECTS_NEW_ROOM_HERE", {
+        text       = "Name the new design:",
+        accept     = "Create",
+        maxLetters = 64,
+        onAccept   = function(value, data)
+            if not (data and data.layoutID and data.slotKey) then return end
+            local name = (value ~= "" and value) or data.name   -- captured name as the default
+            HDG.Store:Dispatch({ type = A.FURN_ROOM_CREATE, payload = {
+                name = name, shape = data.shape,
+                layoutID = data.layoutID, slotKey = data.slotKey,
+                ts = (time and time()) or 0 } })  -- exception(boundary): time absent in headless harness
+            -- v8: the slot key is stable -- the selection already points at it.
+            HDG.Log:Success("projects_save",
+                ("Design \"%s\" created and assigned"):format(tostring(name or "Design")))
+        end,
+    })
+    HDG.UI.OnClick(rootFrame, "projectsDetailPanel.exportCrate",     _exportCrate)
+    HDG.UI.OnClick(rootFrame, "projectsPickerPreviewPanel.back",     _closeDecorPicker)
+    -- Acquisition one-clicks for the hovered UNOWNED decor (strategy unit 2,
+    -- per-item slice): craftable -> craft queue; anything -> shopping wishlist.
+    HDG.UI.OnClick(rootFrame, "projectsPickerPreviewPanel.queueCraft", function()
+        local state  = HDG.Store:GetState()  -- exception(false-positive): top-level handler read
+        local itemID = state.session.ui.projects.pickerSelectedItemID
+        if not (itemID and HDG.StaticData.Recipes:Get(itemID)) then return end
+        HDG.Store:Dispatch({ type = A.CRAFT_QUEUE_ADD,
+            payload = { recipeID = itemID, itemID = itemID, qty = 1 } })   -- recipeID convention: produced itemID
+        HDG.Log:Success("projects_save",
+            ("%s queued -- reagents land in the Recipes material plan"):format(
+                HDG.ItemNameResolver:ResolveName(itemID) or "Item"))
+    end)
+    HDG.UI.OnClick(rootFrame, "projectsPickerPreviewPanel.addShopping", function()
+        local state  = HDG.Store:GetState()  -- exception(false-positive): top-level handler read
+        local itemID = state.session.ui.projects.pickerSelectedItemID
+        if not itemID then return end
+        if state.account.activeShoppingListId == "" then
+            HDG.Log:Warn("shopping", "No active shopping list -- open the Shopping tab to create one")
+            return
+        end
+        HDG.Store:Dispatch({ type = A.SHOPPING_ITEM_ADD, payload = { itemID = itemID, qty = 1 } })
+        HDG.Log:Success("shopping",
+            ("%s added to your shopping list"):format(HDG.ItemNameResolver:ResolveName(itemID) or "Item"))
+    end)
+    HDG.UI.OnClick(rootFrame, "projectsPickerPreviewPanel.makeCopyHere", function()
+        local copyID = _editCopyHere()
+        if copyID then _openPickerFor(copyID) end   -- retarget the picker to the copy's pieces
+    end)
+    HDG.UI.OnClick(rootFrame, "projectsPickerPreviewPanel.saveAsSet", function()
+        local cd = HDG.Selectors:Call("projects.crateDetail", HDG.Store:GetState(), {})  -- exception(false-positive): top-level handler read
+        if cd.hasCrate and cd.crateID then
+            _G.StaticPopup_Show("HDGR_PROJECTS_SAVE_AS_SET", nil, nil, { setID = cd.crateID })
+        end
+    end)
+    HDG.UI:RegisterInputDialog("HDGR_PROJECTS_SAVE_AS_SET", {
+        text       = "Name the furnishing set:",
+        accept     = "Save",
+        maxLetters = 64,
+        onAccept   = function(value, data)
+            if not (value and value ~= "" and data and data.setID) then return end
+            HDG.Store:Dispatch({ type = A.FURN_SET_PROMOTE,
+                payload = { setID = data.setID, name = value } })
+            HDG.Log:Success("projects_save",
+                ("Saved \"%s\" to your library -- it stays equipped here and can serve other rooms"):format(value))
+        end,
+    })
     HDG.UI.WireSearchBox(rootFrame, "projectsPickerListPanel.search", "projects", "pickerSearch")
 end
 

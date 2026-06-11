@@ -257,6 +257,7 @@ Selectors:Register("decor.selectedItem", {
             sourceType    = sourceType,
             sourceName    = (firstVendor and firstVendor.name) or "",
             sourceDetail  = (firstVendor and firstVendor.zone) or "",
+            sourceNpcID   = firstVendor and firstVendor.npcID or nil,  -- exception(nullable): non-vendor sources have no npc; drives the source-line vendor hyperlink
             sourceTags    = row.sourceTags,   -- full baked tag list for the detail chip strip
             canCustomize  = row.canCustomize or false,
             isOwned       = row.isOwned or false,
@@ -345,7 +346,15 @@ Selectors:Register("decor.selectedItem.sourceLabel", {
         end
         local pieces = (chip ~= "") and { chip } or {}
         if v.sourceName and v.sourceName ~= "" then
-            pieces[#pieces + 1] = v.sourceName
+            if v.sourceNpcID then
+                -- Vendor name as a custom hyperlink: click routes to this vendor in
+                -- Acquire (wired in DecorController:_wireVendorHyperlink). Same
+                -- pattern as the acq detail panel's hdgrach: achievement link.
+                pieces[#pieces + 1] = HDG.Theme:ColorCode("semantic.accent")
+                    .. "|Hhdgrvendor:" .. v.sourceNpcID .. "|h" .. v.sourceName .. "|h|r"
+            else
+                pieces[#pieces + 1] = v.sourceName
+            end
         end
         if v.sourceDetail and v.sourceDetail ~= "" and v.sourceDetail ~= v.sourceName then
             pieces[#pieces + 1] = "(" .. v.sourceDetail .. ")"

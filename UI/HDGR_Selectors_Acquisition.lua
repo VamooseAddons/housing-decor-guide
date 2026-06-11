@@ -21,6 +21,16 @@ local function _recordedCompletion(state, qid)
     return store[qid]
 end
 
+-- Quest completion via BOTH sources: account-wide recorded completion (any
+-- alt) and the current character's live flag. Returns rec, live -- rec is the
+-- { name, class } record or nil. The chip-dim stamp wants `rec ~= nil or live`;
+-- the detail source line renders the two cases differently (attributed vs bare
+-- checkmark). Single definition so the two-source semantics can't diverge.
+local function _questCompletion(state, qid)
+    local rec = _recordedCompletion(state, qid)
+    return rec, HDG.QuestNameResolver:IsComplete(qid) == true
+end
+
 -- Log tags used by selectors in this file.
 -- data_drift: a VendorDB itemID is missing from AllDecorDB (catalog ahead of
 -- static data); surfaced as a warn so data engineers catch it without crashing.
@@ -586,6 +596,66 @@ Selectors:Register("acq.matchesItemFilters", {
     end,
 })
 
+-- Needle match across the four searchable item fields.
+local function _matchesNeedle(item, needle)
+    return (item.name and item.name:lower():find(needle, 1, true))
+        or (item.profession and item.profession:lower():find(needle, 1, true))
+        or (item.expansion  and item.expansion:lower():find(needle, 1, true))
+        or (item.sourceName and item.sourceName:lower():find(needle, 1, true))
+end
+
+-- Vendor-axis filters (rep / zone / faction) in ITEM mode, by walking the
+-- item's baked row.vendors (the existing item->vendor index -- no new index).
+-- Rep is item-intrinsic (catalog factionGate; the vendor "reps" set is DERIVED
+-- from it). Zone/faction pass if ANY vendor matches -- display zone +
+-- FACTION_LABEL'd faction resolved via the baked npcID, mirroring allVendors.
+-- Vendor mode filters the vendor list itself, separately.
+local function _passesVendorAxes(item, hasRep, hasZone, hasFaction, repSet, zoneSet, factionSet, Aug)
+    local catRow = HDG.HousingCatalogObserver:GetRow(item.itemID)  -- exception(boundary): GetRow nil pre-bake
+    if hasRep then
+        local fg = catRow and catRow.factionGate
+        if not (fg and fg.factionName and repSet[fg.factionName]) then return false end
+    end
+    if hasZone or hasFaction then
+        for _, v in ipairs(catRow and catRow.vendors or {}) do  -- exception(boundary): row.vendors absent pre-bake
+            local meta   = v.npcID and Aug:Get(v.npcID)
+            local zoneOK = (not hasZone)    or zoneSet[((meta and meta.zone) or v.zone)] == true
+            local facOK  = (not hasFaction) or factionSet[(FACTION_LABEL[(meta and meta.faction) or "N"] or "Neutral")] == true
+            if zoneOK and facOK then return true end
+        end
+        return false
+    end
+    return true
+end
+
+-- Chip-dim stamps (questDone / achEarned / repMet) on a shallow-copied row.
+-- questDone is account-wide (any alt's recorded completion) OR the current
+-- char's live flag (via _questCompletion -- shared with the detail source
+-- line); achEarned is account-wide. GateChips fades the matching chip when
+-- false. The impure IsComplete/IsEarned/GetProgress calls are gated by the
+-- questStatus/achievementStatus/rep ticks in the calling selector's reads.
+local function _stampChipDim(stamped, item, state)
+    if item.questID then
+        local rec, live = _questCompletion(state, item.questID)
+        stamped.questDone = rec ~= nil or live
+    end
+    if item.achievementID then
+        stamped.achEarned = HDG.AchievementObserver:IsEarned(item.achievementID) == true
+    end
+    if item.requiresRep then
+        local catRow = HDG.HousingCatalogObserver:GetRow(item.itemID)
+        if catRow and catRow.sourceTags then  -- exception(boundary): GetRow nil + sourceTags absent pre-bake
+            for _, t in ipairs(catRow.sourceTags) do
+                if t.kind == "REP" and t.factionID and t.requiredCode then
+                    local prog = HDG.RepObserver:GetProgress(t.factionID, t.requiredCode)
+                    stamped.repMet = (prog and prog.met) == true
+                    break
+                end
+            end
+        end
+    end
+end
+
 -- Filtered items: search applies to name + profession + expansion + sourceName;
 -- source + expansion + preset compose on top via acq.matchesItemFilters.
 Selectors:Register("acq.items", {
@@ -617,69 +687,22 @@ Selectors:Register("acq.items", {
         for _, item in ipairs(all) do
             local pass = true
             if needle then
-                pass = (item.name and item.name:lower():find(needle, 1, true))
-                    or (item.profession and item.profession:lower():find(needle, 1, true))
-                    or (item.expansion  and item.expansion:lower():find(needle, 1, true))
-                    or (item.sourceName and item.sourceName:lower():find(needle, 1, true))
-                pass = pass and true or false
+                pass = _matchesNeedle(item, needle) and true or false
             end
             if pass and not matchItem(item.itemID) then pass = false end
-            -- Vendor-axis filters (rep / zone / faction) in ITEM mode, by walking the
-            -- item's baked row.vendors (the existing item->vendor index -- no new index).
-            -- Rep is item-intrinsic (catalog factionGate; the vendor "reps" set is
-            -- DERIVED from it). Zone/faction pass if ANY vendor matches -- display zone
-            -- + FACTION_LABEL'd faction resolved via the baked npcID, mirroring allVendors.
-            -- Vendor mode filters the vendor list itself, separately.
             if pass and (hasRep or hasZone or hasFaction) then
-                local catRow = HDG.HousingCatalogObserver:GetRow(item.itemID)  -- exception(boundary): GetRow nil pre-bake
-                if hasRep then
-                    local fg = catRow and catRow.factionGate
-                    if not (fg and fg.factionName and repSet[fg.factionName]) then pass = false end
-                end
-                if pass and (hasZone or hasFaction) then
-                    local matched = false
-                    for _, v in ipairs(catRow and catRow.vendors or {}) do  -- exception(boundary): row.vendors absent pre-bake
-                        local meta   = v.npcID and Aug:Get(v.npcID)
-                        local zoneOK = (not hasZone)    or zoneSet[((meta and meta.zone) or v.zone)] == true
-                        local facOK  = (not hasFaction) or factionSet[(FACTION_LABEL[(meta and meta.faction) or "N"] or "Neutral")] == true
-                        if zoneOK and facOK then matched = true; break end
-                    end
-                    if not matched then pass = false end
-                end
+                pass = _passesVendorAxes(item, hasRep, hasZone, hasFaction,
+                                         repSet, zoneSet, factionSet, Aug)
             end
             if pass then
                 -- Shallow-copy + stamp: acq.allItems is memoized; mutating
-                -- its rows would corrupt the shared cache.
+                -- its rows would corrupt the shared cache. Source chips: row
+                -- factories call UI.GateChips(ed.itemID, questDone, achEarned)
+                -- which reads row.sourceTags baked at BuildRow.
                 local stamped = {}
                 for k, v in pairs(item) do stamped[k] = v end
                 stamped.isCollected = isColl and isColl(item.itemID) or false
-                -- Chip-dim stamps: questDone is account-wide (any alt's recorded
-                -- completion) OR the current char's live flag; achEarned is
-                -- account-wide. GateChips fades the [QUST]/[ACH] chip when false.
-                if item.questID then
-                    stamped.questDone = _recordedCompletion(state, item.questID) ~= nil
-                        or HDG.QuestNameResolver:IsComplete(item.questID) == true
-                end
-                if item.achievementID then
-                    stamped.achEarned = HDG.AchievementObserver:IsEarned(item.achievementID) == true
-                end
-                -- repMet: live met-check via RepObserver (renown + friendship), read off
-                -- the row's REP sourceTag (factionID + requiredCode). GateChips fades the
-                -- [REP] chip when false. boundary: GetRow/GetProgress gated by session.rep.tick.
-                if item.requiresRep then
-                    local catRow = HDG.HousingCatalogObserver:GetRow(item.itemID)
-                    if catRow and catRow.sourceTags then  -- exception(boundary): GetRow nil + sourceTags absent pre-bake
-                        for _, t in ipairs(catRow.sourceTags) do
-                            if t.kind == "REP" and t.factionID and t.requiredCode then
-                                local prog = HDG.RepObserver:GetProgress(t.factionID, t.requiredCode)
-                                stamped.repMet = (prog and prog.met) == true
-                                break
-                            end
-                        end
-                    end
-                end
-                -- Source chips: row factories call UI.GateChips(ed.itemID, questDone,
-                -- achEarned) which reads row.sourceTags baked at BuildRow.
+                _stampChipDim(stamped, item, state)
                 out[#out + 1] = stamped
             end
         end
@@ -1687,11 +1710,11 @@ Selectors:Register("acq.selectedItem.sourceLine", {
                     -- completion the recorder hasn't persisted yet. row.questID is a
                     -- number OR an {ids} variant set.
                     if t.kind == "QUEST" and row.questID then
-                        local rec = _recordedCompletion(state, row.questID)
+                        local rec, live = _questCompletion(state, row.questID)
                         if rec then
                             line = line .. "  |A:common-icon-checkmark:14:14|a "
                                 .. HDG.Format.ClassColorName(rec.name, rec.class)
-                        elseif HDG.QuestNameResolver:IsComplete(row.questID) then
+                        elseif live then
                             line = line .. "  |A:common-icon-checkmark:14:14|a"
                         end
                     end

@@ -1,3 +1,149 @@
+## [3.2.0] - 2026-06-11 (June 2026)
+
+FIXED:
+- Lumber Tracker (Discord feedback): counts update live while you farm
+  (the bag scanner only refreshed with the main window open, so totals
+  froze until End Session), and each row now reads held vs what your
+  UNCOLLECTED decor still needs -- the same number as the Warehouse Need
+  column (one shared algorithm), shrinking as you collect. Hover a row
+  for the full breakdown: held, uncollected-decor need, craft-queue need.
+
+ADDED:
+- Projects has been rebuilt around Furnishings -- a cleaner model for planning
+  what goes in your rooms:
+  - DESIGNS are permanent: a design is your customised room -- its name and
+    its furnishings -- independent of where it physically lives. Create one
+    once and it persists across every layout and every renovation. Deleting a
+    layout never costs you a design; deleting a design saves its pieces to
+    your library. The old crate/orphan system is gone -- nothing can be
+    "orphaned" anymore.
+  - FURNISHING SETS are reusable plans of decor (a bedroom kit, a lighting
+    pass) kept in your library. Equip a set into any number of designs --
+    editing the set updates every design using it. Build a set in the new
+    decor picker and "Save as Set", or import one from a friend (codes are
+    compatible with old crate exports).
+  - The Projects landing is now your Designs list + Set library: every design
+    with its shape, equipped sets, decor total and "in N layouts"; every saved
+    set with its reach. Create, rename, duplicate, delete, export -- all in
+    one place.
+  - The Architect's right panel curates: click an unassigned room (marked *)
+    and answer "what is this room?" -- pick a design or create one in place.
+    Click an assigned room for its design's furnishings (grouped by set, with
+    provenance), equip/unequip sets, fork it into its own design, or
+    unassign it.
+  - One design can fill any number of rooms in a layout: assign "Basement" to
+    all three closets and they share its furnishings. The assign panel shows
+    designs already used here ("already 2 here"), reassigning a room to a
+    different design is a single click, and a new "Unassign design" button
+    clears a room back to an empty shape without touching the design. Design
+    assignments now also survive recapturing your house.
+  - The decor picker is now a card grid: pick a source (All Decor, one of
+    your Styles, or a shopping list), click cards to plan quantities
+    (right-click removes), hover for the 3D preview. Sources combine with the
+    category rail.
+  - The picker shows ALL decor, owned or not -- plan with pieces you don't
+    have yet (they show dimmed). Hover an unowned piece and one click sends
+    it to your craft queue (if it's craftable -- reagents feed the material
+    plan and Lumber Tracker) or your active shopping list. A dedicated
+    "Unowned decor" source is your gap list, and every source shows its
+    item count.
+  - Shared designs say so before you edit: the detail panel and the picker
+    both show "Shared -- fills 2 rooms; edits affect both", with Fork /
+    "Make a copy just here" right there when you want this one room to
+    diverge.
+  - Capturing your house now reports what happened: how many rooms matched,
+    how many are waiting to be assigned, and any that lost their placement
+    (their furnishings stay safe).
+  - AUTO-ASSIGN (Architect, next to Capture): one click and every
+    unassigned room takes your best matching design -- same shape, most
+    decor first. One design can fill several rooms, so three closets all
+    take your one "Basement". Rooms with no matching design are left for
+    you, and the status bar lists exactly what was assigned.
+  - FORK (Architect, shared designs only): when a design fills several
+    rooms, "Fork into its own design" splits the selected room off as a
+    copy you can change freely -- the other rooms keep the original.
+    The decor picker's "Make a copy just here" now does the same (and
+    now appears for designs shared WITHIN one layout, not just across
+    layouts -- it predated multi-assign). Copies number cleanly:
+    "Revile (copy)", then "(copy 2)" -- never "(copy) (copy)".
+  - A "Help!" button (Projects landing and the Architect) opens a workflow
+    diagram of the whole loop -- capture, arrange, assign, furnish, plan,
+    build. Click a stage for the details; the one-line creed up top: designs
+    are permanent, sets are reusable, layouts are sketches.
+  - In the house editor, the companion window's Designs tab shows each
+    design's pieces so you can place decor room by room, straight from
+    the plan.
+  - The what-if footer "Shopping list" is now "House changes" -- it lists
+    the rooms to build or remove to make your real house match the
+    what-if, each with its room-budget weight.
+  - Layouts tab tidy-up: "Load in Architect" is the title-bar action,
+    "Share code" became Export (pairing the list header's Import), imported
+    houses show their real name, and the detail title is just the layout
+    name (plus [LIVE] on the live one).
+- Existing crates and rooms migrate automatically -- each room becomes a
+  design carrying its crate as its own pieces, orphaned crates become
+  library sets named after their last room, and your layouts keep their
+  geometry.
+- The status bar at the bottom of the window now acknowledges many more
+  actions that previously happened silently: all Projects operations
+  (capture house, new layouts, assigning/forking designs, set
+  equip/import/export, bulk-adds), Mogul "Queue All" and
+  "Send to Auctionator", price-scan start, creating a shopping list, export
+  dialogs, ending a lumber session, and removing a character from the Alts
+  list.
+- Waypoint confirmations ("Waypoint set for...", "N vendor pins added") now
+  show in the status bar instead of chat; they only fall back to chat when the
+  HDG window is closed, so your chat log stays clean. Waypoint problems
+  (combat, unsupported zone) still reach chat.
+- Mogul's "Refresh from AH" button now tells you it needs the Auction House
+  window open (it previously did nothing, silently, away from the AH).
+- Decor Browser: the vendor name in the detail pane's source line is now a
+  clickable link -- click it to jump straight to that vendor in Acquire (vendor
+  view, with the vendor selected and ready to waypoint).
+- Mogul Goblin: a hint now appears above the list when there's no price data
+  yet, explaining to visit an Auction House and click "Refresh from AH"
+  (previously the profit columns just showed "-" with no guidance).
+- House tab: the dashboard now shows a friendly getting-started message when
+  no house data has been captured yet, instead of empty widget shells.
+- Smart Sets: the severity chips (Signature / Accent / Versatile / Clashing)
+  now have tooltips explaining what each band means.
+- Styles: the "Save Placed Decor" button now has a tooltip explaining when it
+  enables (catalog scanned + at least one item placed -- it previously sat
+  greyed out with no explanation).
+- Tooltips on disabled buttons now show (they often explain WHY the button is
+  disabled).
+- 21 new control tooltips across the addon for buttons whose effect wasn't
+  obvious from the label: the Acquire source-preset chips (Achieve / Rep /
+  Endeavor / Quest / Recipes) and "Missing" toggle, the map "X" clear-pins
+  button, the Decor Wishlist / Destroy buttons and the red Stored filter (it's
+  a filter -- it doesn't destroy anything!), Goblin's Auto / Direct price
+  sources and TSM% column, Mogul's Queue All / Send to Auctionator, the
+  Recipes materials Totals-vs-By-Recipe and Direct-vs-Raw controls and its
+  Auctionator button, the Curator Move / Undo buttons, the Config collection
+  cache reset (clarifies it's a rescan, not a wipe), Hard Reset (now mentions
+  the click-twice confirm), and the Discord / Coffee link rows (how to copy).
+
+FIXED:
+- Decor catalog no longer errors when Blizzard's category data hasn't streamed in
+  yet (cold client / fresh login): category and subcategory name lookups now treat
+  a not-yet-available answer as "try again next sweep" instead of crashing the
+  catalog build, which could leave the decor list empty for the session.
+- The Acquire tab's grid/list view choice and the Recipes tab's profession and
+  expansion filters now reliably survive /reload and logout (they were only saved
+  if something else happened to trigger a save in the same session).
+
+INTERNAL:
+- Event debounce timers are now cancellable on engine reset (prevents a stale
+  timer double-firing across a reset).
+- De-nested four deeply-nested functions (StaticData quality variants, Projects
+  crate ledger, Acquire item filter, Styles landing rows) into named helpers;
+  unified the quest-completion check shared by the Acquire list and detail
+  source line, and the floor/label sort shared by two Projects selectors.
+  No behavior change.
+- Removed the dead row-badge UI pipeline and two unused row helpers (~95 lines).
+- Documented why the vendor map-pin frame pool is taint-safe as written, and
+  marked HDGR_DecorNotes.lua as intentionally-retained future functionality.
+
 ## [3.1.2] - 2026-06-10 (June 2026)
 
 ADDED:
