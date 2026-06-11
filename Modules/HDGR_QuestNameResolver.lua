@@ -8,7 +8,7 @@
 -- Selectors that read quest titles route through ResolveTitle so the impure
 -- API call is localized here. Cache misses queue an async load + return the
 -- "quest N" fallback. When the QUEST_DATA_LOAD_RESULT batch drains, we
--- dispatch QUEST_INFO_RESOLVED which bumps session.questNames.tick;
+-- dispatch QUEST_INFO_RESOLVED which bumps session.resolvers.questNames.tick;
 -- consumers listing that path in `reads` invalidate + repaint with the
 -- now-cached title.
 
@@ -84,8 +84,8 @@ end
 -- IsComplete: is this quest flagged completed for the player? questID is a
 -- single number OR { ids } variant set (A/H / version / campaign-per-zone);
 -- any variant completing = true. C_QuestLog.IsQuestFlaggedCompleted is sync
--- + cheap; QUEST_TURNED_IN bumps session.questStatus.tick for repaint.
--- Selectors MUST declare reads = { "session.questStatus.tick" }.
+-- + cheap; QUEST_TURNED_IN bumps session.resolvers.questStatus.tick for repaint.
+-- Selectors MUST declare reads = { "session.resolvers.questStatus.tick" }.
 function R:IsComplete(questID)
     if not questID then return nil end
     if type(questID) == "table" then

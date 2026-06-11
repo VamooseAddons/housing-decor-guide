@@ -121,7 +121,7 @@ local function _lumberChild(lumber)
 end
 
 Selectors:Register("data.achievementsData", {
-    reads = { "session.achievementStatus.tick", "session.ui.data" },
+    reads = { "session.resolvers.achievementStatus.tick", "session.ui.data" },
     fn = function(state)
         local rows = {}
         rows[#rows + 1] = { kind = "sectionHeader", label = "Achievements" }
@@ -141,7 +141,7 @@ Selectors:Register("data.achievementsData", {
 -- ============================================================================
 
 local function _achievementTotals(state)
-    local _ = state.session.achievementStatus.tick
+    local _ = state.session.resolvers.achievementStatus.tick
     local obs = HDG.AchievementObserver
     local earned, total = 0, 0
     for _, a in ipairs(HDG.Constants.DECOR_ACHIEVEMENTS) do
@@ -159,7 +159,7 @@ local function _achievementTotals(state)
 end
 
 Selectors:Register("data.kpiAchievements", {
-    reads = { "session.achievementStatus.tick" },
+    reads = { "session.resolvers.achievementStatus.tick" },
     fn = function(state)
         local earned, total = _achievementTotals(state)
         return string.format("%d / %d", earned, total)
@@ -290,7 +290,7 @@ Selectors:Register("data.farmingHistoryRows", {
 
 Selectors:Register("data.allRows", {
     reads = {
-        "session.achievementStatus.tick",
+        "session.resolvers.achievementStatus.tick",
         "session.ui.data",
         "account.craft.history.entries",
     },

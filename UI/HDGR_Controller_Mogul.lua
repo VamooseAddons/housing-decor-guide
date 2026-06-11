@@ -121,7 +121,9 @@ function MogulController:_wireGoblinSource(rootFrame)
                 end
             end
         end
-        if HDG.PriceSource:StartDirectScan(ids) then
+        -- force: the explicit button is a REFRESH -- re-scan everything even
+        -- when the cache is fully populated (it always is after one scan).
+        if HDG.PriceSource:StartDirectScan(ids, true) then
             HDG.Log:Info("mogul_action", "Price scan started...")
         else
             -- Previously a SILENT no-op away from the AH -- worst kind of dead button.

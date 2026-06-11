@@ -241,7 +241,7 @@ Selectors:Register("config.scale", {
 
 -- Theme menu items from HDGR_SchemeMeta.order.
 Selectors:Register("config.themeMenuItems", {
-    reads = {"session.staticData.tick"},
+    reads = {"session.resolvers.staticData.tick"},
     fn = function(state, ctx)
         local meta = HDG.StaticData.Schemes:GetMeta()
         local out = {}

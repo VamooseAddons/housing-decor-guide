@@ -155,7 +155,10 @@ function M:Phase1()
     self._initDone = true
 end
 
--- Start. Synchronous onEnable in dependency order; pcall isolates failures so one module doesn't block siblings.
+-- Start. Synchronous onEnable in dependency order. Same fail-loud shape as
+-- Phase1: log with module-name context, then re-raise -- a half-enabled addon
+-- that quietly logs is worse than a loud halt (ADR-042; the old
+-- continue-for-siblings isolation was the removed pcall class, 2026-06-12).
 function M:Phase2()
     if self._started then return end
     if not self._initDone then self:Phase1() end
@@ -164,9 +167,9 @@ function M:Phase2()
         if def.onEnable then
             local ok, err = pcall(def.onEnable, def)
             if not ok then
-                -- Log to Debug tab; pcall isolation means boot continues for siblings.
                 local msg = ("Module %q onEnable failed: %s"):format(name, tostring(err))
                 HDG.Log:Error("modules", msg)
+                error(msg, 2)
             end
         end
     end
@@ -199,7 +202,7 @@ function M:Shutdown()
         local name = self._order[i]
         local def  = self._registry[name]
         if def and def.onShutdown then
-            local ok, err = pcall(def.onShutdown, def)
+            local ok, err = pcall(def.onShutdown, def)  -- exception(fire-forget): logout path -- sibling shutdown (SV finalization) must complete even if one module throws
             if not ok then
                 HDG.Log:Error("modules",
                     ("Module %q onShutdown failed: %s"):format(name, tostring(err)))

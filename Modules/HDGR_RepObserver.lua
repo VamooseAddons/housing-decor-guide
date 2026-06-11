@@ -2,7 +2,7 @@
 -- ============================================================================
 -- Owns C_Reputation / C_MajorFactions / C_GossipInfo. Rep standing is
 -- dynamic (advances on quest turn-in / token open) so live reads are gated
--- behind a tick: UPDATE_FACTION -> REP_PROGRESS_TICK -> session.rep.tick++
+-- behind a tick: UPDATE_FACTION -> REP_PROGRESS_TICK -> session.resolvers.rep.tick++
 -- -> rep selectors re-run -> call GetProgress() (live read).
 --
 -- GetProgress(factionID, requiredCode)
@@ -10,7 +10,7 @@
 --   type: "friendship" / "renown" / "standard"
 --   met : true if standing >= requiredCode
 --   isMax: renown-only -- true at max renown (gate always met)
--- Selectors declare reads = {"session.rep.tick"}.
+-- Selectors declare reads = {"session.resolvers.rep.tick"}.
 
 HDG = HDG or {}
 HDG.RepObserver = HDG.RepObserver or {}

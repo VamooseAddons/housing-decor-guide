@@ -113,12 +113,10 @@ local function resolveDef(widget, def)
     end
 
     if type(def) == "function" then
-        local ok, result = pcall(def, widget)
-        if not ok then
-            HDG.Log:Warn("tooltip", "TE:resolveDef function recipe errored: " .. tostring(result))
-            return nil
-        end
-        return resolveDef(widget, result)
+        -- Strict call (ADR-042): defs are internal registered code; a throwing
+        -- def is a bug that must surface through the script-handler error path,
+        -- not rot behind a per-def pcall (isolation class removed 2026-06-12).
+        return resolveDef(widget, def(widget))
     end
 
     if type(def) == "table" then return def end
@@ -178,11 +176,8 @@ local function renderTooltip(widget, t)
     -- dynamic, not just text). Kept for backward-compat; deprecate when
     -- no remaining call sites use it.
     if t.textFn then
-        local ok, dyn = pcall(t.textFn, widget)
-        if not ok then
-            HDG.Log:Warn("tooltip", "textFn errored: " .. tostring(dyn))
-        end
-        if ok and dyn then
+        local dyn = t.textFn(widget)   -- strict (ADR-042): internal registered code, fail loud
+        if dyn then
             if type(dyn) == "string" then
                 tooltip:AddLine(dyn, 1, 1, 1, true)
             elseif type(dyn) == "table" then

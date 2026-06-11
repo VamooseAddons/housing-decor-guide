@@ -233,87 +233,30 @@ local function NewDataSessionUI()
     return {}
 end
 
--- Bag inventory cache. BagObserver dispatches
--- BAG_INVENTORY_UPDATED { tick } whenever the debounced bag scan
--- completes; the reducer bumps session.bag.tick so inputs-memo selectors
--- (recipes.bagCounts) invalidate cleanly. The real count map lives in
--- HDG.BagObserver._counts -- selectors read it via the ADR-003a
--- inside-closure deterministic-module-read carve-out (the read is
--- post-init and pure).
-local function NewBagSession()
-    return {
-        tick = 0,
-    }
-end
-
 -- Item name cache. Resolved names are written into `names` by the
 -- ITEM_INFO_RESOLVED reducer (which receives entries from
 -- ItemNameResolver:Drain). Consumers (selectors / row factories) read via
 -- ItemNameResolver:ResolveName which Peeks this cache before re-querying
 -- Blizzard -- avoids redundant GetItemInfo calls on the hot path and
--- survives Blizzard cache eviction across long sessions. `tick` is the
--- invalidation signal for selectors that subscribe via reads. Mirror of
--- VDS's session.items.{names, tick} (VDS_Store.lua:472-499). Earlier shape
--- had tick only (no names cache) -- selectors had to call Blizzard inline
--- on every paint, which lost resolutions if Blizzard's cache cycled.
+-- survives Blizzard cache eviction across long sessions. Species B
+-- (state-resident, reducer-written): consumers declare the DATA PATH
+-- (session.itemNames.names) in reads -- the batched dispatch invalidates it
+-- directly, which is identical in power to the tick this cache used to
+-- carry (dissolved 2026-06-11; see TICK_REVALIDATION). The facade contract
+-- lives in Resolver:RegisterFacadeReads("ItemNameResolver") below.
 local function NewItemNamesSession()
     return {
-        tick  = 0,
         names = {},  -- [itemID] = "resolved name"; written by reducer, Peeked by ResolveName
     }
 end
 
--- Quest title cache tick. Mirror of itemNames.tick for quest-data async
--- loads. Bumped by QUEST_INFO_RESOLVED when HDG.QuestNameResolver drains
--- a QUEST_DATA_LOAD_RESULT batch. Selectors that show quest gate names
--- (acq.selectedItem.ribbonText) subscribe via `session.questNames.tick`.
-local function NewQuestNamesSession()
-    return {
-        tick = 0,
-    }
-end
-
--- Quest-completion invalidation tick. Bumped by QUEST_STATUS_RESOLVED when
--- QuestNameResolver sees QUEST_TURNED_IN, so selectors showing quest-completion
--- (acq.selectedItem.sourceLine [QUST] checkmark) repaint live.
-local function NewQuestStatusSession()
-    return {
-        tick = 0,
-    }
-end
-
--- Achievement-earned invalidation tick. Bumped by ACHIEVEMENT_STATUS_RESOLVED
--- when AchievementObserver sees ACHIEVEMENT_EARNED, so the [ACH] earned
--- checkmark (acq.selectedItem.sourceLine) repaints live -- same shape as
--- questStatus. Earned state is dynamic per-character; NOT baked at sweep.
-local function NewAchievementStatusSession()
-    return {
-        tick = 0,
-    }
-end
-
--- Static data invalidation tick. Always 0 today -- shipped data tables
--- (HDGR_VendorDB / HDGR_AllDecorDB / etc.) wrapped by HDG.StaticData are
--- IMMUTABLE within a session. Reserved for hot-reload / dev-tool override
--- features. Selectors that call HDG.StaticData.<X>:<accessor>(...) declare
--- reads = {"session.staticData.tick"} so the framework's read-tracking can
--- treat shipped-data dependencies the same as any other state path.
--- Supersedes ADR-003a's "module-singleton read carve-out" for these reads.
--- See docs/HDGR_ARCHITECTURE.md ADR-003c.
-local function NewStaticDataSession()
-    return {
-        tick = 0,
-    }
-end
-
--- Price-source invalidation tick. PriceSource is a stateful
--- module (caches, scan progress); selectors that resolve item prices via
--- the module subscribe to `session.prices.tick` for invalidation. Bumped
--- by every PRICES_* action that mutates the cache so Mogul plan repaints
--- when direct scan finishes, TSM mode flips, etc.
+-- Price-source session state. PriceSource is a stateful module (external
+-- TSM/Auctionator facades + scan progress); its A-side re-pull signal is
+-- session.resolvers.prices.tick (Resolver:Register("prices") at this file's
+-- EOF) and its B-side data is account.prices.* -- price-consuming selectors
+-- declare BOTH. This bucket keeps only the plain session-transient fields.
 local function NewPricesSession()
     return {
-        tick      = 0,
         -- Live scan progress (transient -- not persisted). Drives the
         -- Config sub-tab's progress strip.
         scanning  = false,
@@ -496,9 +439,9 @@ local function NewHouseTabAccountUI()
 end
 
 -- HouseTab live snapshot session slot. Aggregator dispatches HOUSE_SNAPSHOT_
--- UPDATED with the precomputed snapshot table. snapshotTick bumps on every
+-- UPDATED with the precomputed snapshot table. snapshotChangeSeq bumps on every
 -- dispatch; selectors derived from the snapshot declare reads = {
--- "session.house.snapshotTick" } to invalidate together.
+-- "session.house.snapshotChangeSeq" } to invalidate together.
 --
 -- ownedHouses: { [houseGUID] = { name, faction, level, favor, maxLevel,
 -- thresholds } }. Populated by HousingObserver via HOUSE_LIST_UPDATED
@@ -507,7 +450,7 @@ end
 local function NewHouseSession()
     return {
         snapshot               = {},   -- empty until first aggregator run
-        snapshotTick           = 0,
+        snapshotChangeSeq           = 0,
         ownedHouses            = {},   -- keyed by houseGUID
         activeNeighborhoodGUID = nil,  -- WOWGUID from C_NeighborhoodInitiative.GetActiveNeighborhood
         -- rewardsByLevel[level] = { rewards = {...} } -- per-level reward
@@ -525,7 +468,7 @@ local function NewHouseSession()
         -- entry = { recordID, shapeID, name, iconAtlas, iconTexture, placementCost,
         --           numStored, numPlaced, quantity, owned, isAllowedIndoors,
         --           isAllowedOutdoors, isPrefab, quality }.
-        roomCatalog            = { tick = 0, byShapeID = {}, entries = {} },
+        roomCatalog            = { changeSeq = 0, byShapeID = {}, entries = {} },
         -- Blizzard category/subcategory nav tree (CATALOG_CATEGORY_TREE_UPDATED),
         -- snapshotted from C_HousingCatalog by HousingCatalogObserver. Shared by the
         -- Style Curator + Projects decor picker. iconBase = atlas with Blizzard's baked
@@ -533,7 +476,7 @@ local function NewHouseSession()
         -- byID[catID]       = { id, name, iconBase, orderIndex, subcategoryIDs, anyStoredEntries }
         -- subcatByID[subID] = { id, name, iconBase, orderIndex, parentCategoryID, anyStoredEntries }
         -- rootIDs = top-level catIDs ordered by orderIndex; selectors filter storedOnly.
-        categoryTree           = { tick = 0, byID = {}, subcatByID = {}, rootIDs = {} },
+        categoryTree           = { changeSeq = 0, byID = {}, subcatByID = {}, rootIDs = {} },
     }
 end
 
@@ -629,7 +572,11 @@ end
 --   lastHarvestAt, finalizedAt? } } } -- finalizedAt set on LUMBER_SESSION_END.
 -- session.lumber.activeFarmingID: current lumberID; nil = idle.
 -- session.lumber.blips: recent gather events; GC-swept by LUMBER_BLIP_GC.
--- session.lumber.tick: monotonic; selector invalidation signal.
+-- session.lumber.tick: species-E CLOCK (TICK_REVALIDATION) -- bumped by the
+-- 1s LUMBER_TICK heartbeat while farming and on blip appends so elapsed/rate
+-- displays re-render. A render heartbeat, NOT a change signal: it stays a
+-- plain tick, outside the resolver registry, and is the sanctioned narrow
+-- exception to the no-UI-timers rule (data-display clock, not a state transition).
 local function NewLumberConfig()
     return {
         windowVisible    = false,            -- LUMBER_WINDOW_TOGGLE writes
@@ -646,21 +593,14 @@ local function NewLumberSession()
     return {
         activeFarmingID = nil,   -- lumberID currently being farmed
         blips           = {},    -- recent gather events (ring buffer)
-        tick            = 0,     -- monotonic bag-observer-driven counter
+        tick            = 0,     -- species-E clock; see comment above
     }
-end
-
--- session.rep.tick -- monotonic counter bumped by HDG.RepObserver on
--- UPDATE_FACTION / renown change. Rep-gate display selectors read it to re-run
--- live HDG.RepObserver:GetProgress (rep is dynamic; not baked at catalog sweep).
-local function NewRepSession()
-    return { tick = 0 }
 end
 
 -- StyleEngine cache invalidation tick (bumped on STYLES_INVALIDATE_CACHE).
 -- placedDecor: live map keyed by decorGUID (only stable handle Blizzard exposes).
 local function NewStylesSession()
-    return { cacheTick = 0, placedDecor = {} }
+    return { changeSeq = 0, placedDecor = {} }
 end
 
 -- Session log: ring buffer (per ADR-013). dispatchCap sub-caps the "dispatch"
@@ -682,7 +622,6 @@ local function NewSessionCatalog()
         loadedAt        = 0,        -- epoch of last completed load
         itemCount       = 0,
         vendorCount     = 0,
-        sweepGeneration = 0,        -- bumps on each completed sweep
         refreshPending  = false,    -- true after a catalog/storage event; clears on next tab open
         variantsLoaded  = false,    -- true once GetAllVariantInfosForEntry has been batched
     }
@@ -707,25 +646,23 @@ local function NewDefaultSession()
         ui             = NewSessionUI(),
         combat         = { inLockdown = false, queued = {} },
         log            = NewSessionLog(),
-        bag            = NewBagSession(),
+        -- Facade-poll re-pull signals, one slot per registered resolver
+        -- (species A + D; see Core/HDGR_Resolvers.lua + the Resolvers
+        -- section at the end of this file).
+        resolvers      = HDG.Resolver:MintSlots(),
         itemNames      = NewItemNamesSession(),
-        questNames     = NewQuestNamesSession(),
-        questStatus    = NewQuestStatusSession(),
-        achievementStatus = NewAchievementStatusSession(),
-        staticData     = NewStaticDataSession(),
         prices         = NewPricesSession(),
         styles         = NewStylesSession(),
         zone           = NewZoneState(),
         catalog        = NewSessionCatalog(),
         lumber         = NewLumberSession(),
-        rep            = NewRepSession(),    -- live rep-progress tick (RepObserver)
         identity       = NewIdentitySession(),
         daily          = { bestowed = nil, orcQuote = nil },  -- seeded here; EnsureSession no longer needs or-guard
         house          = NewHouseSession(),  -- seeded here; EnsureSession no longer needs or-guard
         -- Furnishings (v7): reducer-minted ID echoes (controllers read the id
         -- of what they just created) + derived reverse indexes (rebuilt on
         -- hydrate, maintained by the FURN_*/LAYOUT_* reducer cases).
-        furn           = { lastSetID = nil, lastRoomID = nil, tick = 0 },
+        furn           = { lastSetID = nil, lastRoomID = nil, changeSeq = 0 },
         furnIndex      = { setRooms = {}, roomLayouts = {} },  -- [setID]={[roomID]=true} / [roomID]={[layoutID]=true}
     }
 end
@@ -1093,12 +1030,11 @@ local function EnsureSession(state)
     state.session.ui.warehouse = state.session.ui.warehouse or NewWarehouseSessionUI()
     state.session.combat  = state.session.combat  or { inLockdown = false, queued = {} }
     state.session.log     = state.session.log     or NewSessionLog()
-    state.session.bag     = state.session.bag     or NewBagSession()
+    -- Top-up, not or-guard: the file-load placeholder state mints BEFORE the
+    -- Resolver:Register blocks at this file's EOF run, so hydrate re-mints any
+    -- slots registered since (see Resolver:EnsureSlots).
+    state.session.resolvers = HDG.Resolver:EnsureSlots(state.session.resolvers or {})
     state.session.itemNames  = state.session.itemNames  or NewItemNamesSession()
-    state.session.questNames = state.session.questNames or NewQuestNamesSession()
-    state.session.questStatus = state.session.questStatus or NewQuestStatusSession()
-    state.session.achievementStatus = state.session.achievementStatus or NewAchievementStatusSession()
-    state.session.staticData = state.session.staticData or NewStaticDataSession()
     state.session.identity = state.session.identity or NewIdentitySession()
     state.session.prices     = state.session.prices     or NewPricesSession()
     state.session.styles    = state.session.styles    or NewStylesSession()
@@ -1111,7 +1047,6 @@ local function EnsureSession(state)
     state.session.zone      = state.session.zone      or NewZoneState()
     state.session.catalog   = state.session.catalog   or NewSessionCatalog()
     state.session.lumber    = state.session.lumber    or NewLumberSession()
-    state.session.rep       = state.session.rep       or NewRepSession()      -- live rep tick (RepObserver)
     -- session.house + session.daily are seeded by NewDefaultSession; EnsureSession
     -- does not need or-guards for them (strict reads from here forward).
 end
@@ -1362,7 +1297,6 @@ function HDG.Store:_RawDispatch(action)
     if type(action) ~= "table" or not action.type then
         error("HDG.Store:_RawDispatch requires {type=..., payload=?}", 2)
     end
-    local A = HDG.Constants.ACTIONS
     local payload = action.payload or {}
     EnsureStateShape(self.state)
 
@@ -1375,2324 +1309,25 @@ function HDG.Store:_RawDispatch(action)
     if meta then
         local inv = meta.invalidates
         if type(inv) == "function" then
-            local ok, result = pcall(inv, action)
-            if not ok then
-                HDG.Log:Warn("store",
-                    ("invalidates fn for %s errored: %s"):format(tostring(action.type), tostring(result)))
-            end
-            invalidation = (ok and result) or "*"
+            -- Strict call (ADR-042): invalidates fns are registered internal
+            -- code -- a throw aborts the dispatch and surfaces via the outer
+            -- ErrorBoundary instead of degrading to refresh-all behind a Warn.
+            -- nil return stays the documented refresh-all default.
+            invalidation = inv(action) or "*"
         elseif inv ~= nil then
             invalidation = inv
         end
     end
 
-    if action.type == A.CONFIG_SET then
-        if payload.key ~= nil then
-            -- Dual-write: SV slot (profile / character / account, routed
-            -- by HDG.Config) AND the in-memory mirror at
-            -- state.account.config. Mirror keeps existing selectors with
-            -- `reads = { "account.config.X" }` working unchanged.
-            -- Scope resolution: explicit payload.scope wins; otherwise
-            -- look it up from the schema. Keys absent from both are a
-            -- schema-drift bug -- we crash loudly rather than silently
-            -- mis-route the write.
-            local scope = payload.scope or HDG.ConfigSchema.ScopeBy[payload.key]
-            local src = HDG.Config:_GetSourceForScope(scope)
-            src[payload.key] = payload.value
-            -- Account-scoped settings (one-time migration flags) live at
-            -- the top of HDG_DB and don't belong in the per-profile mirror.
-            if scope ~= HDG.Constants.ConfigScope.Account then
-                self.state.account.config[payload.key] = payload.value
-            end
-        end
-
-    elseif action.type == A.CONFIG_SCALE_STEP then
-        -- Step the UI scale by +/-0.1 within [0.5, 1.5] (bounds mirror the Config controller's
-        -- SCALE_MIN/MAX/STEP). Reducer owns the clamp; the view dispatches only a direction.
-        -- Same dual-write as CONFIG_SET (SV source + in-memory mirror); scale is profile-scoped.
-        local cur = self.state.account.config.scale
-        local nxt = cur + (payload.direction == "inc" and 0.1 or -0.1)
-        nxt = (payload.direction == "inc") and math.min(1.5, nxt) or math.max(0.5, nxt)
-        nxt = math.floor(nxt * 10 + 0.5) / 10
-        local scope = HDG.ConfigSchema.ScopeBy["scale"]
-        HDG.Config:_GetSourceForScope(scope)["scale"] = nxt
-        if scope ~= HDG.Constants.ConfigScope.Account then
-            self.state.account.config.scale = nxt
-        end
-
-    elseif action.type == A.PROFILE_CREATE then
-        local name = payload.name
-        if type(name) == "string" and name ~= "" and not HDG_DB.profiles[name] then
-            HDG_DB.profiles[name] = {}
-            if payload.cloneFrom and HDG_DB.profiles[payload.cloneFrom] then
-                for k, v in pairs(HDG_DB.profiles[payload.cloneFrom]) do
-                    HDG_DB.profiles[name][k] = v
-                end
-            end
-        end
-
-    elseif action.type == A.PROFILE_SWITCH then
-        local name = payload.name
-        if type(name) == "string" and HDG_DB.profiles[name] then
-            HDG_DB_CURRENT_PROFILE = name
-            HDG.Config._activeProfile = name
-            HDG.Config:_ImportDefaultsToActiveProfile()
-            HDG.Config:_HydrateMirror()
-        end
-
-    elseif action.type == A.PROFILE_DELETE then
-        local name = payload.name
-        if type(name) == "string" and name ~= "DEFAULT" and name ~= HDG.Config._activeProfile then
-            HDG_DB.profiles[name] = nil
-        end
-
-    elseif action.type == A.UI_SET_PERSISTENT then
-        if payload.key ~= nil then self.state.account.ui[payload.key] = payload.value end
-
-    elseif action.type == A.UI_SET_TRANSIENT then
-        if payload.view then
-            self.state.session.ui[payload.view] = self.state.session.ui[payload.view] or {}
-            if payload.key ~= nil then
-                self.state.session.ui[payload.view][payload.key] = payload.value
-            end
-        else
-            if payload.key ~= nil then
-                self.state.session.ui[payload.key] = payload.value
-            end
-        end
-
-    elseif action.type == A.REMOVALIST_PICK_PLOT then
-        -- Two-click cycle: 1st pick -> source, 2nd (distinct) -> target, else restart.
-        local r    = self.state.session.ui.removalist
-        local plot = payload.plot
-        if not r.sourcePlot then
-            r.sourcePlot = plot
-        elseif not r.targetPlot and plot ~= r.sourcePlot then
-            r.targetPlot = plot
-        else
-            r.sourcePlot, r.targetPlot = plot, nil
-        end
-
-    elseif action.type == A.REMOVALIST_SWAP then
-        local r = self.state.session.ui.removalist
-        r.sourcePlot, r.targetPlot = r.targetPlot, r.sourcePlot
-
-    elseif action.type == A.REMOVALIST_CLEAR then
-        local r = self.state.session.ui.removalist
-        r.sourcePlot, r.targetPlot = nil, nil
-
-    elseif action.type == A.REMOVALIST_SET_LETTER_FILTER then
-        -- nil payload (refresh) or re-clicking the active letter clears; else set.
-        local r = self.state.session.ui.removalist
-        local l = payload.letter
-        if l == nil or r.letterFilter == l then r.letterFilter = nil else r.letterFilter = l end
-
-    elseif action.type == A.REMOVALIST_SET_PLOT then
-        -- Map-click selection: the Source map sets source, the Target map sets target.
-        local r = self.state.session.ui.removalist
-        if payload.role == "source" then r.sourcePlot = payload.plot
-        elseif payload.role == "target" then r.targetPlot = payload.plot end
-
-    elseif action.type == A.MAIN_WINDOW_TOGGLE then
-        self.state.account.ui.mainWindowShown = not (self.state.account.ui.mainWindowShown == true)
-
-    elseif action.type == A.NAV_TOGGLE_GROUP then
-        -- Flip a sidebar parent group's collapsed state (keyed by hub view).
-        -- nil-clear when expanding so the set stays sparse (only collapsed groups present).
-        local groups = self.state.account.ui.nav.collapsedGroups
-        local v = payload.view
-        groups[v] = (not groups[v]) and true or nil
-
-    elseif action.type == A.SESSION_END then
-        -- Force all addon windows closed at logout (don't auto-reopen on /reload).
-        -- Zone auto-popup fires on ZONE_CHANGED independently (not from these flags).
-        self.state.account.ui.mainWindowShown        = false
-        self.state.account.ui.shoppingWidgetShown    = false
-        self.state.account.ui.zonePopupShown         = false
-        self.state.account.lumber.config.windowVisible = false
-
-    elseif action.type == A.HARD_RESET then
-        _G.HDG_DB = {}
-        self.state = NewDefaultState()
-
-    elseif action.type == A.COLLECTION_RESET then
-        -- Wipe the ownership cache so the next reconciler sweep rebuilds from
-        -- scratch. The catalog mirror (decorCatalog/catalogByItem/liveDecorIDs)
-        -- HousingCatalogObserver owns the row store and clears it on COLLECTION_RESET.
-        self.state.account.collection.ownedDecorIDs = {}
-
-    elseif action.type == A.COMBAT_ENTER then
-        self.state.session.combat.inLockdown = true
-
-    elseif action.type == A.COMBAT_EXIT then
-        self.state.session.combat.inLockdown = false
-        -- Reducer empties the queue here so middleware never mutates state
-        -- directly. CombatMiddleware snapshots the queue BEFORE dispatching
-        -- COMBAT_EXIT and re-dispatches the snapshot through the chain.
-        self.state.session.combat.queued = {}
-
-    elseif action.type == A.COMBAT_QUEUE_ACTION then
-        -- Append a deferred action to the lockdown queue. Middleware dispatches
-        -- this when an inbound combat-unsafe action arrives during lockdown;
-        -- the inbound action's payload is wrapped inside payload.action.
-        self.state.session.combat.queued = self.state.session.combat.queued or {}
-        if payload.action then
-            table.insert(self.state.session.combat.queued, payload.action)
-        end
-
-    elseif action.type == A.ACQ_SET_ITEMS_VIEW_MODE then
-        local mode = payload.mode
-        if mode == "grid" or mode == "list" then
-            -- account.ui.acquisition seeded by EnsureUI on every dispatch (ADR-005)
-            self.state.account.ui.acquisition.itemsViewMode = mode
-        end
-
-    elseif action.type == A.ACQ_TOGGLE_ADVANCED_FILTERS then
-        local a = self.state.session.ui.acquisition
-        a.advancedFiltersOpen = not (a.advancedFiltersOpen == true)
-
-    elseif action.type == A.ACQ_SET_PRESET then
-        -- Single-select preset chip; toggling the active value clears it.
-        -- Note: Lua 5.1 `(cond) and nil or v` trap -- must use a real branch when value is nil.
-        local v = payload.value
-        if self.state.session.ui.acquisition.preset == v then
-            self.state.session.ui.acquisition.preset = nil
-        else
-            self.state.session.ui.acquisition.preset = v
-        end
-
-    elseif action.type == A.ACQ_TOGGLE_MISSING then
-        -- Collection-state toggle, orthogonal to the source preset. Flips so
-        -- the Missing checkbox ANDs with whatever source chip is lit.
-        self.state.session.ui.acquisition.missingOnly =
-            not self.state.session.ui.acquisition.missingOnly
-
-    -- Advanced-filter multi-select set toggles. payload.<axis> == "all" clears the
-    -- set (master "All X" -> show every value); else flip membership. Empty = all.
-    -- Clone of RECIPES_TOGGLE_EXPANSION; session-scoped (no persistence).
-    elseif action.type == A.ACQ_TOGGLE_EXPANSION then
-        _acqToggleFilter(self.state.session.ui.acquisition.expansionFilter, payload.expansion)
-    elseif action.type == A.ACQ_TOGGLE_ZONE then
-        _acqToggleFilter(self.state.session.ui.acquisition.zoneFilter, payload.zone)
-    elseif action.type == A.ACQ_TOGGLE_REP then
-        _acqToggleFilter(self.state.session.ui.acquisition.repFilter, payload.rep)
-    elseif action.type == A.ACQ_TOGGLE_SOURCE then
-        _acqToggleFilter(self.state.session.ui.acquisition.sourceFilter, payload.source)
-    elseif action.type == A.ACQ_TOGGLE_FACTION then
-        _acqToggleFilter(self.state.session.ui.acquisition.factionFilter, payload.faction)
-
-    elseif action.type == A.UI_FILTER_RESET then
-        -- Atomic per-tab filter reset (ADR-018). Tab-specific logic lives in
-        -- the dispatch table below; no new action enum needed for additional tabs.
-        local tab = payload.tab
-        if tab == "decor" then
-            self.state.session.ui.decor.searchQuery = ""
-            self.state.session.ui.decor.filters     = NewDecorFilters()
-        elseif tab == "acquisition" then
-            local acq = self.state.session.ui.acquisition
-            acq.searchQuery     = ""
-            acq.preset          = nil
-            acq.missingOnly     = false
-            acq.factionFilter   = {}
-            acq.expansionFilter = {}
-            acq.zoneFilter      = {}
-            acq.repFilter       = {}
-            acq.sourceFilter    = {}
-        elseif tab == "recipes" then
-            local r = self.state.session.ui.recipes
-            r.searchQuery         = ""
-            r.listFilter          = "all"
-            r.filters             = NewRecipesFilters()
-            -- expansionFilter is account-wide: clear in-place -> all expansions.
-            local exp = self.state.account.ui.recipes.expansionFilter
-            for k in pairs(exp) do exp[k] = nil end
-            -- professions are per-character: drop this char's entry so it reverts to
-            -- the pristine default (= this character's professions).
-            self.state.account.ui.recipes.professionFilterByChar[self.state.session.identity.charKey] = nil
-        end
-
-    elseif action.type == A.DECOR_CATALOG_READY then
-        -- Notification-only (retained for closed-taxonomy check).
-
-    elseif action.type == A.MAIN_WINDOW_OPENING then
-        -- Lifecycle signal; no mutation. Subscribers handle catch-up.
-
-    elseif action.type == A.LOG_PUSH then
-        -- Pure append + cap. entry.id is a raw integer (no "log_" prefix needed).
-        local log = self.state.session.log
-        log.nextID = (log.nextID or 0) + 1
-        local entry = {
-            id        = log.nextID,
-            tag       = payload.tag,
-            level     = payload.level,
-            text      = payload.text,
-            timestamp = payload.timestamp,
-            duration  = payload.duration,
-            metadata  = payload.metadata,
-        }
-        log.entries[#log.entries + 1] = entry
-        -- Per-tag sub-cap for the "dispatch" tag; removes oldest first.
-        if entry.tag == "dispatch" then
-            local dispatchCap = log.dispatchCap
-            local dispatchCount = 0
-            for _, e in ipairs(log.entries) do
-                if e.tag == "dispatch" then dispatchCount = dispatchCount + 1 end
-            end
-            while dispatchCount > dispatchCap do
-                for i, e in ipairs(log.entries) do
-                    if e.tag == "dispatch" then
-                        table.remove(log.entries, i)
-                        dispatchCount = dispatchCount - 1
-                        break
-                    end
-                end
-            end
-        end
-        -- Overall ring buffer cap.
-        local cap = log.cap
-        while #log.entries > cap do
-            table.remove(log.entries, 1)
-        end
-
-    elseif action.type == A.LOG_CLEAR then
-        if payload.tag and payload.tag ~= "all" and payload.tag ~= "*" then
-            local entries = self.state.session.log.entries
-            for i = #entries, 1, -1 do
-                if entries[i].tag == payload.tag then
-                    table.remove(entries, i)
-                end
-            end
-        else
-            self.state.session.log.entries = {}
-        end
-
-    elseif action.type == A.LOG_SET_FILTER then
-        local f = self.state.session.log.tabFilter
-        if payload.tag        ~= nil then f.tag        = payload.tag        end
-        if payload.level      ~= nil then f.level      = payload.level      end
-        if payload.autoScroll ~= nil then f.autoScroll = payload.autoScroll end
-
-    elseif action.type == A.LOG_TOGGLE_AUTOSCROLL then
-        local f = self.state.session.log.tabFilter
-        f.autoScroll = not (f.autoScroll == true)
-
-    elseif action.type == A.COLLECTION_BULK_LOAD then
-        -- Wholesale ownership replace. Catalog mirrors are observer-local;
-        -- only ownedDecorIDs persists (warm-start fallback seam; not currently read at runtime).
-        self.state.account.collection.ownedDecorIDs = payload.owned
-
-    elseif action.type == A.COLLECTION_ITEM_LEARNED then
-        if payload.decorID then
-            self.state.account.collection.ownedDecorIDs[payload.decorID] = true
-        end
-
-    elseif action.type == A.COLLECTION_ITEM_REMOVED then
-        if payload.decorID then
-            self.state.account.collection.ownedDecorIDs[payload.decorID] = nil
-        end
-
-    elseif action.type == A.COLLECTION_CATALOG_ROW_ADDED then
-        -- Observer-owned; reducer is a no-op (retained for closed-taxonomy check).
-
-    elseif action.type == A.COLLECTION_CATALOG_ROW_REMOVED then
-        -- Observer calls R:RemoveRow; reducer only scrubs ownedDecorIDs for consistency.
-        if payload.decorID then
-            self.state.account.collection.ownedDecorIDs[payload.decorID] = nil
-        end
-
-    elseif action.type == A.COLLECTION_CATALOG_ROW_COUNTS_UPDATED then
-        -- Observer calls R:PatchCounts; reducer is a no-op (retained for closed-taxonomy check).
-
-    elseif action.type == A.LOG_TRACE_TOGGLE then
-        if payload.tag == "*" or payload.tag == "all" then
-            -- Wipe all traces (used by /hdgr trace off)
-            self.state.session.log.activeTraces = {}
-        elseif payload.tag then
-            local on = payload.on
-            if on == nil then
-                -- Toggle if `on` not provided
-                on = not self.state.session.log.activeTraces[payload.tag]
-            end
-            self.state.session.log.activeTraces[payload.tag] = on or nil
-        end
-
-    -- ===== Filter actions ============================================
-    -- ensureDecorFilters keeps defaults in NewDecorFilters (SSoT); helpers run only inside _RawDispatch.
-    elseif action.type == A.DECOR_SET_TOP_FILTER then
-        local f = ensureDecorFilters(self.state)
-        local v = payload.value
-        -- Validate against HDG.Constants.TOP_FILTERS so the reducer rejects
-        -- typo'd values from any caller. Single SSoT for the bucket set.
-        local valid = false
-        for _, entry in ipairs(HDG.Constants.TOP_FILTERS or {}) do
-            if entry.value == v then valid = true; break end
-        end
-        if valid then
-            f.topFilter = v
-            -- Switching top filter always clears the active tag (ADR-018).
-            f.activeTag = nil
-        end
-
-    elseif action.type == A.DECOR_SET_TAG then
-        local f = ensureDecorFilters(self.state)
-        if payload.tag == nil or type(payload.tag) == "string" then
-            f.activeTag = payload.tag
-        end
-
-    elseif action.type == A.DECOR_TOGGLE_ONLY_UNCOLLECTED then
-        local f = ensureDecorFilters(self.state)
-        f.onlyUncollected = not f.onlyUncollected
-
-    elseif action.type == A.DECOR_TOGGLE_ONLY_STORED then
-        local f = ensureDecorFilters(self.state)
-        f.onlyStored = not f.onlyStored
-
-    elseif action.type == A.DECOR_SET_SEARCH then
-        self.state.session.ui.decor.searchQuery = tostring(payload.query)
-
-    -- ===== Favorites (G2) ====================================================
-    elseif action.type == A.FAVORITE_TOGGLE then
-        if payload.itemID then
-            local fav = self.state.account.favorites
-            if fav[payload.itemID] then
-                fav[payload.itemID] = nil
-            else
-                fav[payload.itemID] = true
-            end
-        end
-
-    -- ===== User notes (G3) ===================================================
-    elseif action.type == A.NOTE_SET then
-        if payload.itemID and payload.text ~= nil then
-            self.state.account.userNotes[payload.itemID] = {
-                text = payload.text,
-                ts   = payload.ts or (_G.GetTime and _G.GetTime() or 0),  -- exception(boundary): GetTime/time absent in headless harness
-            }
-            -- LRU cap at 500. Iterate to find oldest; cheap at this size.
-            local MAX_NOTES = 500
-            local notes = self.state.account.userNotes
-            local count = 0
-            for _ in pairs(notes) do count = count + 1 end
-            if count > MAX_NOTES then
-                -- `n.ts or 0`: tolerates pre-1.0 savedvar entries that
-                -- shipped without timestamps. Treats them as oldest so
-                -- they evict first when over cap. Mark boundary so the
-                -- sweep recognises the migration intent.
-                local oldest_id, oldest_ts = nil, math.huge
-                for id, n in pairs(notes) do
-                    local ts = n.ts or 0  -- migration
-                    if ts < oldest_ts then oldest_ts = ts; oldest_id = id end
-                end
-                if oldest_id then notes[oldest_id] = nil end
-            end
-        end
-
-    elseif action.type == A.NOTE_CLEAR then
-        if payload.itemID then
-            self.state.account.userNotes[payload.itemID] = nil
-        end
-
-    -- ===== Vendor notes ======================================================
-    elseif action.type == A.VENDOR_NOTE_SET then
-        if payload.npcID and payload.text ~= nil then
-            self.state.account.vendorNotes[payload.npcID] = {
-                text = payload.text,
-                ts   = payload.ts or (_G.GetTime and _G.GetTime() or 0),  -- exception(boundary): GetTime/time absent in headless harness
-            }
-            -- LRU cap at 100 (vendor count is much smaller than item count).
-            local MAX_VENDOR_NOTES = 100
-            local notes = self.state.account.vendorNotes
-            local count = 0
-            for _ in pairs(notes) do count = count + 1 end
-            if count > MAX_VENDOR_NOTES then
-                -- See item-note LRU comment above: `n.ts or 0` covers
-                -- pre-1.0 savedvar entries without timestamps. Migration.
-                local oldest_id, oldest_ts = nil, math.huge
-                for id, n in pairs(notes) do
-                    local ts = n.ts or 0  -- migration
-                    if ts < oldest_ts then oldest_ts = ts; oldest_id = id end
-                end
-                if oldest_id then notes[oldest_id] = nil end
-            end
-        end
-
-    elseif action.type == A.VENDOR_NOTE_CLEAR then
-        if payload.npcID then
-            self.state.account.vendorNotes[payload.npcID] = nil
-        end
-
-    -- ===== Recipe knowledge ==================================================
-    elseif action.type == A.RECIPE_KNOWLEDGE_UPDATED then
-        -- Bulk replace: RecipeKnowledgeScanner emits the full per-itemID map.
-        self.state.account.recipes = payload.entries
-
-    -- ===== Crafting queue + history ==============================
-    elseif action.type == A.CRAFT_QUEUE_ADD then
-        local q   = self.state.account.craft.queue
-        local qty = payload.qty or 1   -- exception(boundary): slash-command dispatcher may omit qty for default-1 add
-        -- Coalesce into an existing row with the same recipeID so repeated
-        -- Add clicks accumulate qty instead of producing duplicate rows.
-        -- Matches HDG's queue semantics + keeps the byRecipe materials view
-        -- from showing the same recipe twice. Same recipeID = same craft;
-        -- sessionKey is a tiebreaker for cross-reload disambiguation only.
-        local merged = false
-        for _, row in ipairs(q) do
-            if row.recipeID == payload.recipeID then
-                row.requested = (row.requested or 0) + qty  -- exception(false-positive): requested accumulator lazy-init
-                row.remaining = (row.remaining or 0) + qty  -- exception(boundary): queue row from SVars may lack remaining
-                merged = true
-                break
-            end
-        end
-        if not merged then
-            q[#q + 1] = {
-                recipeID   = payload.recipeID,
-                itemID     = payload.itemID,
-                requested  = qty,
-                remaining  = qty,
-                source     = payload.source,
-                ts         = (_G.time and _G.time()) or 0,
-                sessionKey = payload.sessionKey,   -- reviewer C8: cross-reload disambiguator
-            }
-        end
-
-    elseif action.type == A.CRAFT_QUEUE_REMOVE then
-        local q = self.state.account.craft.queue
-        if payload.position and q[payload.position] then
-            table.remove(q, payload.position)
-        end
-
-    elseif action.type == A.CRAFT_QUEUE_CLEAR then
-        self.state.account.craft.queue = {}
-
-    elseif action.type == A.CRAFT_QUEUE_DECREMENT then
-        -- Match by (position, recipeID) -- reviewer C2/C4: position alone
-        -- isn't unique across a queue mutation, recipeID alone isn't unique
-        -- because the same item can come from multiple recipes.
-        -- List-side steppers dispatch WITHOUT a position -- fall back to the first matching row.
-        local q = self.state.account.craft.queue
-        local pos = payload.position
-        if not pos then
-            for i, r in ipairs(q) do
-                if r.recipeID == payload.recipeID then pos = i; break end
-            end
-        end
-        local row = pos and q[pos]
-        if row and row.recipeID == payload.recipeID then
-            row.remaining = (row.remaining or 0) - (payload.qty or 1)  -- exception(boundary): queue row from SVars may lack remaining
-            if row.remaining <= 0 then
-                table.remove(q, pos)
-            end
-        end
-
-    elseif action.type == A.CRAFT_HISTORY_PUSH then
-        -- Reviewer C2: `completed` flag defends against phantom history
-        -- entries when the matching DECREMENT was a no-op (post-removal
-        -- events 5..N of a multi-craft batch).
-        -- Field names: eventType + timestamp (HouseAggregator contract).
-        if payload.completed or payload.eventType == "learned" then
-            local hist = self.state.account.craft.history
-            hist.nextID = hist.nextID + 1
-            hist.entries[#hist.entries + 1] = {
-                id        = hist.nextID,
-                eventType = payload.eventType,
-                recipeID  = payload.recipeID,
-                itemID    = payload.itemID,
-                qty       = payload.qty,
-                timestamp = payload.timestamp or (_G.time and _G.time()) or 0,
-            }
-            local cap = HDG.Constants.CRAFT_HISTORY_CAP
-            while #hist.entries > cap do
-                table.remove(hist.entries, 1)
-            end
-            -- A learned decor changes the "Recently Learned" collection -> bump the
-            -- styles cacheTick so its resolver + every cacheTick-bound selector (Styles
-            -- tab + companion grid) refresh. Completed crafts don't affect it.
-            if payload.eventType == "learned" then
-                self.state.session.styles.cacheTick =
-                    (self.state.session.styles.cacheTick or 0) + 1
-            end
-        end
-
-    -- ===== Per-character roster (alts) ============================
-    elseif action.type == A.CHARACTER_PROFESSION_UPDATED then
-        -- Upsert the character entry, then replace this profession's data
-        -- in full (skill ladder + known recipes). Other professions on the
-        -- same char survive untouched -- each profession scan only carries
-        -- its own data.
-        local chars = self.state.account.characters
-        local key   = payload.charKey
-        if key then
-            chars[key] = chars[key] or {
-                name        = payload.name,
-                realm       = payload.realm,
-                class       = payload.class,
-                classFile   = payload.classFile,
-                hidden      = false,
-                lastSeen    = 0,
-                professions = {},
-            }
-            local c = chars[key]
-            -- Refresh identity fields on each scan (rename, class change
-            -- via faction change service, etc.).
-            c.name      = payload.name      or c.name
-            c.realm     = payload.realm     or c.realm
-            c.class     = payload.class     or c.class
-            c.classFile = payload.classFile or c.classFile
-            c.lastSeen  = (_G.time and _G.time()) or c.lastSeen or 0
-            -- Char-level knowsFindLumber: scanner captures via C_SpellBook
-            -- on every prof scan. Tracks per-char awareness of Find Lumber
-            -- (the achievement-gated find-spell), surfaced as a cyan
-            -- indicator in the Alts char header.
-            if payload.knowsFindLumber ~= nil then
-                c.knowsFindLumber = payload.knowsFindLumber and true or false
-            end
-            if payload.profName then
-                c.professions[payload.profName] = {
-                    skillLines   = payload.skillLines,
-                    knownRecipes = payload.knownRecipes,
-                }
-            end
-        end
-
-    elseif action.type == A.CHARACTER_DELETED then
-        if payload.charKey then
-            self.state.account.characters[payload.charKey] = nil
-        end
-
-    elseif action.type == A.CHARACTER_HIDDEN then
-        local c = self.state.account.characters[payload.charKey]
-        if c then c.hidden = payload.hidden and true or false end
-
-    elseif action.type == A.CHARACTER_HIDDEN_TOGGLE then
-        local c = self.state.account.characters[payload.charKey]
-        if c then c.hidden = not (c.hidden == true) end
-
-    elseif action.type == A.COMPANION_TOGGLE then
-        self.state.session.ui.companion.windowShown =
-            not self.state.session.ui.companion.windowShown
-
-    elseif action.type == A.COMPANION_SET_MODE then
-        local m = payload.mode
-        if m then
-            self.state.session.ui.companion.mode = m
-            -- Clear selection when switching modes (different collection sets).
-            self.state.session.ui.companion.selectedItemID = nil
-        end
-
-    elseif action.type == A.COMPANION_SELECT_ITEM then
-        self.state.session.ui.companion.selectedItemID = payload.itemID
-
-    elseif action.type == A.COMPANION_TOGGLE_COST then
-        self.state.session.ui.companion.showCost =
-            not self.state.session.ui.companion.showCost
-
-    elseif action.type == A.COMPANION_CYCLE_IO then
-        -- 3-state cycle: all -> indoor -> outdoor -> all.
-        local cur = self.state.session.ui.companion.ioFilter
-        self.state.session.ui.companion.ioFilter =
-            (cur == "all" and "indoor") or (cur == "indoor" and "outdoor") or "all"
-
-    elseif action.type == A.COMPANION_SET_POSITION then
-        self.state.account.ui.companion.window.x = payload.x
-        self.state.account.ui.companion.window.y = payload.y
-
-    elseif action.type == A.COMPANION_SET_LAUNCHER_POSITION then
-        self.state.account.ui.companion.launcher.x = payload.x
-        self.state.account.ui.companion.launcher.y = payload.y
-
-    -- ===== HouseTab dashboard =====
-    elseif action.type == A.HOUSE_SNAPSHOT_UPDATED then
-        self.state.session.house.snapshot     = payload.snapshot
-        self.state.session.house.snapshotTick = self.state.session.house.snapshotTick + 1
-
-    elseif action.type == A.HOUSE_LIST_UPDATED then
-        -- Identity-only update: ensure an entry exists per houseGUID with
-        -- identity fields populated; preserve any previously-captured
-        -- level/favor/thresholds across re-fires of the list event
-        -- (Blizzard re-fires 3-5 times on login). Faction is derived by
-        -- the observer (HouseInfo struct doesn't carry it directly).
-        local owned = self.state.session.house.ownedHouses
-        for _, h in ipairs(payload.houses or {}) do
-            local guid = h.houseGUID
-            if guid then
-                owned[guid] = owned[guid] or {}
-                owned[guid].name             = h.neighborhoodName or owned[guid].name
-                owned[guid].faction          = h.faction          or owned[guid].faction
-                owned[guid].neighborhoodGUID = h.neighborhoodGUID or owned[guid].neighborhoodGUID
-                -- exception(boundary): HouseInfo.houseName is 0 (number, truthy) for
-                -- unnamed houses -- a bare `or` would overwrite a previously-captured
-                -- real name with 0 on re-fires (_SIGNATURES.md HouseInfo gotcha).
-                local hn = (type(h.houseName) == "string" and h.houseName ~= "") and h.houseName or nil
-                owned[guid].houseName        = hn                 or owned[guid].houseName
-                owned[guid].plotID           = h.plotID           or owned[guid].plotID
-            end
-        end
-
-    elseif action.type == A.ACTIVE_NEIGHBORHOOD_UPDATED then
-        -- nil-able: GetActiveNeighborhood returns nil when not in a
-        -- neighborhood context. Selector falls back to first owned house.
-        self.state.session.house.activeNeighborhoodGUID = payload.neighborhoodGUID
-
-    elseif action.type == A.DAILY_BESTOWED_UPDATED then
-        self.state.session.daily.bestowed = {
-            name    = payload.name,
-            quote   = payload.quote,
-            dateKey = payload.dateKey,
-        }
-
-    elseif action.type == A.DAILY_ORC_QUOTE_SET then
-        self.state.session.daily.orcQuote = payload.quote
-
-    elseif action.type == A.STYLES_EDIT_STYLE then
-        -- Deep-link into the Style Curator with this style as the source
-        -- (HDG ShowEditor + SetSource parity). collectionID is already the
-        -- "style:<uuid>" key the curator's sourceMode consumes; selection
-        -- clears (selected itemIDs are meaningless across sources).
-        self.state.session.ui.styles.view = "curator"
-        self.state.session.ui.styles.curator.sourceMode = payload.collectionID
-        self.state.session.ui.styles.curator.selectedItems = {}
-        self.state.session.ui.styles.curator.selectedCount = 0
-        -- Clear any stale move-target from a prior curator session, else the
-        -- Move button would target the wrong style after a landing deep-link.
-        self.state.session.ui.styles.curator.selectedTargetID = nil
-
-    elseif action.type == A.HOUSE_LEVEL_UPDATED then
-        -- Per-house favor update. Event fires for ALL owned houses on
-        -- each request; we target by houseGUID. Ensure an entry exists
-        -- (level event may arrive before list event in some replay paths).
-        local owned = self.state.session.house.ownedHouses
-        local guid  = payload.houseGUID
-        if guid then
-            owned[guid] = owned[guid] or {}
-            owned[guid].level      = payload.level
-            owned[guid].favor      = payload.favor
-            owned[guid].maxLevel   = payload.maxLevel
-            owned[guid].thresholds = payload.thresholds
-        end
-
-    elseif action.type == A.HOUSE_REWARDS_RECEIVED then
-        -- Cache the per-level rewards array. RECEIVED_HOUSE_LEVEL_REWARDS
-        -- fires once per GetHouseLevelRewardsForLevel(level) call; cache
-        -- avoids re-requesting the same level repeatedly.
-        local level   = payload.level
-        local rewards = payload.rewards
-        if type(level) == "number" and type(rewards) == "table" then
-            self.state.session.house.rewardsByLevel[level] = { rewards = rewards }
-        end
-
-    elseif action.type == A.HOUSETAB_TOGGLE_WIDGET then
-        local id = payload.widgetID
-        local ht = self.state.account.ui.houseTab
-        ht.enabled[id] = not (ht.enabled[id] == true) and true or nil
-
-    elseif action.type == A.HOUSETAB_SET_ORDER then
-        self.state.account.ui.houseTab.order[payload.widgetID] = payload.order
-
-    elseif action.type == A.HOUSETAB_SET_ORDERS then
-        self.state.account.ui.houseTab.order = payload.orders
-
-    elseif action.type == A.HOUSETAB_REORDER_WIDGET then
-        -- Remove srcID from the supplied ordered list, reinsert at insertIdx, renumber to
-        -- contiguous order ints. This transition used to live in the controller's
-        -- _computePickerOrders; it belongs here. The controller passes the current ordered ids
-        -- (a legit one-shot selector read on drag-stop, not a render path).
-        local ids, srcID, insertIdx = payload.orderedIDs, payload.srcID, payload.insertIdx
-        if ids and srcID and insertIdx then
-            local out = {}
-            for _, id in ipairs(ids) do if id ~= srcID then out[#out + 1] = id end end
-            if insertIdx < 1 then insertIdx = 1 end
-            if insertIdx > #out + 1 then insertIdx = #out + 1 end
-            table.insert(out, insertIdx, srcID)
-            local order = {}
-            for i, id in ipairs(out) do order[id] = i end
-            self.state.account.ui.houseTab.order = order
-        end
-
-    elseif action.type == A.HOUSETAB_SET_WIDTH then
-        self.state.account.ui.houseTab.width[payload.widgetID] = payload.width
-
-    elseif action.type == A.HOUSETAB_RESIZE_WIDGET then
-        local ht = self.state.account.ui.houseTab
-        ht.layoutOverrides[payload.widgetID] = ht.layoutOverrides[payload.widgetID] or {}
-        ht.layoutOverrides[payload.widgetID].height = payload.height
-
-    elseif action.type == A.HOUSETAB_RESET_LAYOUT then
-        local ht = self.state.account.ui.houseTab
-        ht.enabled         = {}
-        ht.order           = {}
-        ht.width           = {}
-        ht.layoutOverrides = {}
-
-    elseif action.type == A.HOUSETAB_TOGGLE_PICKER then
-        self.state.session.ui.houseTab.pickerOpen =
-            not self.state.session.ui.houseTab.pickerOpen
-
-    elseif action.type == A.HOUSETAB_TOGGLE_DESIGN_MODE then
-        self.state.session.ui.houseTab.designMode =
-            not self.state.session.ui.houseTab.designMode
-
-    elseif action.type == A.SESSION_IDENTITY_SET then
-        -- Strict payload reads: SessionIdentity:onEnable already coerces
-        -- nil class/classFile to "" before dispatch (single producer; no
-        -- defensive `or` defaults at this internal boundary).
-        local id = self.state.session.identity
-        id.name         = payload.name
-        id.realm        = payload.realm
-        id.class        = payload.class
-        id.classFile    = payload.classFile
-        id.factionGroup = payload.factionGroup or ""  -- exception(boundary): SESSION_IDENTITY_SET payload may omit factionGroup
-        id.charKey      = id.name .. "-" .. id.realm
-
-    elseif action.type == A.TRAINERS_TOGGLE_PROFESSION then
-        local p = payload.profession
-        if p then
-            local expanded = self.state.session.ui.trainers.expandedProfessions
-            expanded[p] = not (expanded[p] == true) and true or nil
-        end
-
-    elseif action.type == A.TRAINERS_TOGGLE_MIDNIGHT_SECTION then
-        self.state.session.ui.trainers.midnightExpanded =
-            not self.state.session.ui.trainers.midnightExpanded
-
-    elseif action.type == A.TRAINERS_SELECT_TRAINER then
-        self.state.session.ui.trainers.selectedNpcID = payload.npcID
-
-    elseif action.type == A.ALTS_SET_CHARS_POPULATION then
-        -- Validate -- silently coerce unknown values to "active".
-        local p = payload.population
-        if p ~= "active" and p ~= "hidden" then p = "active" end
-        self.state.session.ui.alts.charsPopulation = p
-
-    elseif action.type == A.MOGUL_SET_MODE then
-        self.state.session.ui.mogul.mode = payload.mode
-    elseif action.type == A.MOGUL_SET_VIEW then
-        self.state.session.ui.mogul.viewMode = payload.viewMode
-    elseif action.type == A.MOGUL_SET_OPTIMIZE_BY then
-        self.state.session.ui.mogul.optimizeBy = payload.optimizeBy
-    elseif action.type == A.MOGUL_SET_SUBVIEW then
-        self.state.session.ui.mogul.subView = payload.subView
-    elseif action.type == A.MOGUL_SET_SUPPLY_MODE then
-        local si = self.state.session.ui.mogul.supplyImpact
-        si.mode = payload.mode
-    elseif action.type == A.MOGUL_SET_SUPPLY_SMOOTH then
-        local si = self.state.session.ui.mogul.supplyImpact
-        si.smoothPct = payload.pct
-    elseif action.type == A.MOGUL_SET_SUPPLY_CAP then
-        local si = self.state.session.ui.mogul.supplyImpact
-        si.capN = payload.n
-    elseif action.type == A.MOGUL_SET_FRUGAL then
-        self.state.session.ui.mogul.frugal = payload.on == true
-    elseif action.type == A.MOGUL_TOGGLE_FRUGAL then
-        self.state.session.ui.mogul.frugal = not (self.state.session.ui.mogul.frugal == true)
-    elseif action.type == A.GOBLIN_SET_PROFESSION then
-        self.state.session.ui.mogul.goblin.profession = payload.profession
-    elseif action.type == A.GOBLIN_SET_SEARCH then
-        self.state.session.ui.mogul.goblin.search    = payload.query
-    elseif action.type == A.GOBLIN_SET_KNOWLEDGE then
-        self.state.session.ui.mogul.goblin.knowledge = payload.mode
-    elseif action.type == A.GOBLIN_SET_QUEUE then
-        self.state.session.ui.mogul.goblin.queue     = payload.mode
-    elseif action.type == A.GOBLIN_TOGGLE_AUCTIONS then
-        local g = self.state.session.ui.mogul.goblin
-        g.auctionsOnly = not (g.auctionsOnly == true)
-    elseif action.type == A.PRICES_SET_PREFERRED_SOURCE then
-        -- Config write + price tick in one pass (two dispatches would cost two reducer runs).
-        self.state.account.config.preferredPriceAddon = payload.source
-        self.state.session.prices.tick =
-            self.state.session.prices.tick + 1
-
-    elseif action.type == A.PRICES_SET_TSM_MODE then
-        self.state.account.config.tsmPriceMode = payload.mode
-        self.state.session.prices.tick =
-            self.state.session.prices.tick + 1
-
-    elseif action.type == A.GOBLIN_TOGGLE_ROW_EXPAND then
-        -- Click row: toggle expansion. Same itemID as currently expanded
-        -- collapses; different/new itemID switches the detail panel to it.
-        local g = self.state.session.ui.mogul.goblin
-        if g.expandedItemID == payload.itemID then
-            g.expandedItemID = nil
-        else
-            g.expandedItemID = payload.itemID
-        end
-
-    elseif action.type == A.GOBLIN_SET_SORT then
-        -- Click on header: same column flips direction, new column resets
-        -- to the column's natural-desc default (most useful first sort).
-        -- Name column defaults to ascending (alphabetical reads better).
-        local g = self.state.session.ui.mogul.goblin
-        local col = payload.col
-        if g.sortCol == col then
-            g.sortDir = (g.sortDir == "desc") and "asc" or "desc"
-        else
-            g.sortCol = col
-            g.sortDir = (col == "name" or col == "lumber") and "asc" or "desc"
-        end
-
-    -- ===== Recipes tab session UI ================================
-    elseif action.type == A.RECIPES_SET_SEARCH then
-        self.state.session.ui.recipes.searchQuery = payload.query
-
-    elseif action.type == A.RECIPES_SET_SECTION_EXPAND then
-        local sections = self.state.session.ui.recipes.expandedSections
-        if payload.expanded then
-            sections[payload.key] = true
-        else
-            sections[payload.key] = nil
-        end
-
-    elseif action.type == A.RECIPES_SET_MATERIALS_DEPTH then
-        self.state.session.ui.recipes.materialsDepth = payload.value
-
-    elseif action.type == A.RECIPES_TOGGLE_MATERIALS_GROUPING then
-        local r = self.state.session.ui.recipes
-        r.materialsGrouping = (r.materialsGrouping == "byRecipe") and "totals" or "byRecipe"
-
-    elseif action.type == A.RECIPES_TOGGLE_FILTER then
-        local filters = self.state.session.ui.recipes.filters
-        local key = payload.filter
-        filters[key] = not filters[key]
-
-    elseif action.type == A.RECIPES_SELECT_RECIPE then
-        self.state.session.ui.recipes.selectedRecipeID = payload.recipeID
-        -- Picking a recipe from the list resets queue scoping: the queue row
-        -- deselects + Materials returns to the full-queue aggregate. (Last
-        -- selection wins; recipe-list and queue selections are mutually exclusive.)
-        self.state.session.ui.recipes.queueSelectedRecipeID = nil
-
-    elseif action.type == A.RECIPES_TOGGLE_QUEUE_SELECTION then
-        -- Toggle: click-on-selected clears (so mats list returns to the
-        -- full-queue aggregate); click-on-other sets to that recipeID.
-        local cur = self.state.session.ui.recipes.queueSelectedRecipeID
-        if cur == payload.recipeID then
-            self.state.session.ui.recipes.queueSelectedRecipeID = nil
-        else
-            self.state.session.ui.recipes.queueSelectedRecipeID = payload.recipeID
-        end
-
-    elseif action.type == A.RECIPES_TOGGLE_PROFESSION then
-        -- Per-character multi-select set toggle (persisted in account.ui, keyed by
-        -- charKey). payload.profession == "all" stores an empty set (-> show every
-        -- profession); == "mine" presets to THIS character's scanned professions;
-        -- otherwise flip that profession's membership.
-        local charKey = self.state.session.identity.charKey
-        local byChar  = self.state.account.ui.recipes.professionFilterByChar
-        local char    = self.state.account.characters[charKey]  -- exception(nullable): char record may not exist yet
-        local set     = byChar[charKey]
-        if not set then
-            -- First explicit choice for this char. Materialize the pristine default
-            -- (this char's professions) so a single-profession toggle builds on what
-            -- was actually shown -- UNLESS the click is "all" (which wants empty).
-            set = {}
-            if payload.profession ~= "all" and char and type(char.professions) == "table" then
-                for profName in pairs(char.professions) do set[profName] = true end
-            end
-            byChar[charKey] = set
-        end
-        if payload.profession == "all" then
-            for k in pairs(set) do set[k] = nil end
-        elseif payload.profession == "mine" then
-            for k in pairs(set) do set[k] = nil end
-            if char and type(char.professions) == "table" then
-                for profName in pairs(char.professions) do set[profName] = true end
-            end
-        else
-            set[payload.profession] = not (set[payload.profession] == true) and true or nil
-        end
-
-    elseif action.type == A.RECIPES_TOGGLE_EXPANSION then
-        -- Multi-select set toggle (persisted in account.ui). payload.expansion
-        -- == "all" clears the set (master "All Expansions" toggle -> show every
-        -- expansion); otherwise flip that expansion's membership. Empty = all.
-        local set = self.state.account.ui.recipes.expansionFilter
-        if payload.expansion == "all" then
-            for k in pairs(set) do set[k] = nil end
-        else
-            set[payload.expansion] = not (set[payload.expansion] == true) and true or nil
-        end
-
-    elseif action.type == A.RECIPES_SET_LIST_FILTER then
-        self.state.session.ui.recipes.listFilter = payload.filter
-
-    elseif action.type == A.RECIPES_SELECT_MATERIAL then
-        self.state.session.ui.warehouse.selectedMaterialID = payload.itemID
-
-    elseif action.type == A.RECIPES_SET_WH_MAT_SEARCH then
-        self.state.session.ui.warehouse.matSearch = payload.query
-
-    -- ===== Cross-feature observer dispatches =====================
-    elseif action.type == A.ITEM_INFO_RESOLVED then
-        -- Write resolved names to cache + bump tick once (per batch, not per entry).
-        local names = self.state.session.itemNames.names
-        if payload.entries then
-            for _, e in ipairs(payload.entries) do
-                if e.itemID and e.name then names[e.itemID] = e.name end
-            end
-        end
-        self.state.session.itemNames.tick = self.state.session.itemNames.tick + 1
-
-    elseif action.type == A.QUEST_INFO_RESOLVED then
-        -- Tick bump; selectors showing quest gate names read session.questNames.tick.
-        self.state.session.questNames.tick =
-            self.state.session.questNames.tick + 1
-
-    elseif action.type == A.QUEST_STATUS_RESOLVED then
-        -- Tick bump; [QUST] completion checkmark repaints on the open detail panel.
-        self.state.session.questStatus.tick =
-            self.state.session.questStatus.tick + 1
-
-    elseif action.type == A.QUEST_COMPLETION_RECORDED then
-        -- Merge the scanned completions into the account-wide set. First char to
-        -- record a quest wins (stable attribution) -- don't overwrite. payload
-        -- entries are { [questID] = { name, class } }.
-        local store = self.state.account.questCompletions
-        for questID, rec in pairs(payload.completions or {}) do
-            if not store[questID] then store[questID] = rec end
-        end
-
-    elseif action.type == A.ACHIEVEMENT_STATUS_RESOLVED then
-        -- Tick bump; [ACH] earned checkmark repaints on the open detail panel.
-        self.state.session.achievementStatus.tick =
-            self.state.session.achievementStatus.tick + 1
-
-    elseif action.type == A.BAG_INVENTORY_UPDATED then
-        -- Tick for memo invalidation; actual counts in BagObserver._counts (ADR-003a carve-out).
-        self.state.session.bag.tick = payload.tick or (self.state.session.bag.tick + 1)
-
-    -- ===== PriceSource ===========================================
-    elseif action.type == A.PRICES_CONFIG_CHANGED then
-        -- Pure tick bump; actual config write happens via CONFIG_SET.
-        self.state.session.prices.tick =
-            self.state.session.prices.tick + 1
-
-    elseif action.type == A.PRICES_DIRECT_SCAN_STARTED then
-        -- Replace-on-scan: wipe the previous cache so each scan is a fresh snapshot.
-        self.state.account.prices.directCache = {}
-        self.state.account.prices.directQtyCache = {}
-        self.state.account.prices.directCacheTime = nil
-        local s = self.state.session.prices
-        s.scanning  = true
-        s.scanFound = 0
-        s.scanTotal = payload.total
-        s.tick = s.tick + 1
-
-    elseif action.type == A.PRICES_DIRECT_SCAN_PROGRESS then
-        local s = self.state.session.prices
-        s.scanFound = payload.found or s.scanFound
-        s.scanTotal = payload.total or s.scanTotal
-
-    elseif action.type == A.PRICES_DIRECT_SCAN_BATCH then
-        local cache = self.state.account.prices.directCache
-        for itemID, copper in pairs(payload.prices) do
-            cache[itemID] = copper
-        end
-        local qty = self.state.account.prices.directQtyCache
-        for itemID, n in pairs(payload.quantities or {}) do
-            qty[itemID] = n
-        end
-        self.state.session.prices.tick =
-            self.state.session.prices.tick + 1
-
-    elseif action.type == A.PRICES_DIRECT_SCAN_COMPLETED then
-        local cache = self.state.account.prices.directCache
-        local qty   = self.state.account.prices.directQtyCache
-        -- Zero out items we wanted but never saw -- prevents re-scan
-        -- attempts every session for items that simply aren't on the AH.
-        for itemID in pairs(payload.neededItems) do
-            if cache[itemID] == nil then cache[itemID] = 0 end
-            if qty[itemID]   == nil then qty[itemID]   = 0 end
-        end
-        self.state.account.prices.directCacheTime = payload.now
-        local s = self.state.session.prices
-        s.scanning = false
-        s.scanFound = 0
-        s.scanTotal = 0
-        s.tick = s.tick + 1
-
-    elseif action.type == A.PRICES_DIRECT_CACHE_CLEARED then
-        self.state.account.prices.directCache     = {}
-        self.state.account.prices.directQtyCache  = {}
-        self.state.account.prices.directCacheTime = nil
-        self.state.session.prices.tick =
-            self.state.session.prices.tick + 1
-
-    elseif action.type == A.PRICES_OWNED_AUCTIONS_UPDATED then
-        self.state.account.prices.ownedAuctions = payload.auctions
-        self.state.session.prices.tick =
-            self.state.session.prices.tick + 1
-
-    elseif action.type == A.PRICES_ADDONS_AVAILABILITY_CHANGED then
-        local s = self.state.session.prices
-        s.tsmLoaded         = payload.tsm         == true
-        s.auctionatorLoaded = payload.auctionator == true
-        s.tick = s.tick + 1
-
-    -- ===== Styles ==================================================
-    elseif action.type == A.STYLES_SET_VIEW then
-        self.state.session.ui.styles.view = payload.view
-        -- The "Smart Sets" nav leaf opens this view without running BEGIN, so
-        -- seed a fresh draft's default name here. Only when truly fresh (no
-        -- draftKey, blank name, no rules) so navigating away + back preserves an
-        -- in-progress draft; the button path (BEGIN) owns the explicit reset.
-        if payload.view == "smartset" then
-            local s = self.state.session.ui.styles.smartset
-            local blankName = (s.draft.displayName == nil or s.draft.displayName == "")
-            if not s.draftKey and blankName and not next(s.rules) then
-                s.draft.displayName = _seededSmartsetName(self.state.account)
-                s.draft.descAuto    = true
-            end
-        end
-
-    elseif action.type == A.STYLES_LANDING_SET_FILTER then
-        self.state.session.ui.styles.landing.filter = payload.filter
-
-    elseif action.type == A.STYLES_LANDING_SET_SEARCH then
-        self.state.session.ui.styles.landing.search = payload.text
-
-    elseif action.type == A.STYLES_LANDING_TOGGLE_SECTION then
-        local t = payload.type
-        if t then
-            local expanded = self.state.session.ui.styles.landing.expandedSections
-            expanded[t] = not (expanded[t] == true) and true or nil
-        end
-
-    elseif action.type == A.STYLES_SELECT_COLLECTION then
-        self.state.session.ui.styles.selectedID = payload.collectionID
-
-    elseif action.type == A.STYLES_DETAIL_SELECT_ITEM then
-        self.state.session.ui.styles.detail.selectedItemID = payload.itemID
-
-    elseif action.type == A.STYLES_DETAIL_SET_VIEWMODE then
-        self.state.session.ui.styles.detail.viewMode = payload.mode
-
-    elseif action.type == A.STYLES_DETAIL_SET_FILTER then
-        self.state.session.ui.styles.detail.sourceFilter = payload.source
-
-    elseif action.type == A.STYLES_DETAIL_SET_SUBCAT then
-        self.state.session.ui.styles.detail.subcatFilter = payload.subcat
-
-    elseif action.type == A.STYLES_INVALIDATE_STYLE then
-        -- Bump global cacheTick; per-collection invalidation can layer later
-        -- when the engine port surfaces per-collection cache slots.
-        self.state.session.styles.cacheTick = self.state.session.styles.cacheTick + 1
-
-    elseif action.type == A.STYLES_CACHE_BUILDING_STARTED then
-        -- Notification-only (retained for closed-taxonomy check).
-
-    elseif action.type == A.STYLES_CACHE_BUILDING_FINISHED then
-        -- Notification-only (retained for closed-taxonomy check).
-
-    elseif action.type == A.STYLES_DETAIL_SET_SEARCH then
-        self.state.session.ui.styles.detail.search = payload.text
-
-    -- ===== 14.3 Curator =====================================================
-    elseif action.type == A.STYLES_CURATOR_SET_SOURCE then
-        self.state.session.ui.styles.curator.sourceMode = payload.mode
-        -- Selection clears when the source changes (selected itemIDs are
-        -- meaningless in a different source view).
-        self.state.session.ui.styles.curator.selectedItems = {}
-        self.state.session.ui.styles.curator.selectedCount = 0
-
-    elseif action.type == A.STYLES_CURATOR_SET_CATEGORY then
-        -- nil categoryID = the "All" icon (clears the filter). Subcategory always
-        -- resets when the major category changes -- its list is derived from the
-        -- focused category, so a carried-over value would point at a gone subcat.
-        self.state.session.ui.styles.curator.focusedCategoryID    = payload.categoryID
-        self.state.session.ui.styles.curator.focusedSubcategoryID = nil
-
-    elseif action.type == A.STYLES_CURATOR_SET_SUBCATEGORY then
-        self.state.session.ui.styles.curator.focusedSubcategoryID = payload.subcategoryID
-
-    elseif action.type == A.STYLES_CURATOR_TOGGLE_SELECT then
-        local id = payload.itemID
-        if id then
-            local cur = self.state.session.ui.styles.curator
-            if cur.selectedItems[id] then
-                cur.selectedItems[id] = nil
-                cur.selectedCount = (cur.selectedCount or 1) - 1
-            else
-                cur.selectedItems[id] = true
-                cur.selectedCount = (cur.selectedCount or 0) + 1
-            end
-        end
-
-    elseif action.type == A.STYLES_CURATOR_CLEAR_SELECT then
-        self.state.session.ui.styles.curator.selectedItems = {}
-        self.state.session.ui.styles.curator.selectedCount = 0
-
-    elseif action.type == A.STYLES_CURATOR_HOVER then
-        self.state.session.ui.styles.curator.hoverItemID = payload.itemID
-
-    elseif action.type == A.STYLES_CURATOR_SELECT_TARGET then
-        self.state.session.ui.styles.curator.selectedTargetID = payload.targetID
-
-    elseif action.type == A.STYLES_CREATE_STYLE then
-        -- Create a fresh "style:<slug>" collection in account.collections
-        -- and auto-select it as the Curator's active target so the user's
-        -- next Move lands there without an extra click.
-        local name = payload.displayName
-        if not (name and name ~= "" and name:gsub("%s", "") ~= "") then return end
-        local slug = name:lower():gsub("[^%w]+", "-")
-        if slug == "" or slug == "-" then slug = tostring(_G.time and _G.time() or 0) end
-        local id = "style:" .. slug
-        -- Disambiguate if a style with this slug already exists.
-        local cols = self.state.account.collections or {}
-        if cols[id] then
-            local suffix = 2
-            while cols[id .. "-" .. suffix] do suffix = suffix + 1 end
-            id = id .. "-" .. suffix
-        end
-        self.state.account.collections = cols
-        cols[id] = {
-            id          = id,
-            type        = "style",
-            displayName = name,
-            description = "",
-            items       = {},
-            createdAt   = (_G.time and _G.time()) or 0,
-        }
-        self.state.session.ui.styles.curator.selectedTargetID = id
-
-    elseif action.type == A.STYLES_RENAME_STYLE then
-        -- Rename the displayName of a "style:<slug>" collection. ID stays
-        -- the same so undo history + memberships keep their links.
-        local id   = payload.collectionID
-        local name = payload.displayName
-        if not (id and name and name ~= "" and name:gsub("%s", "") ~= "") then return end
-        local coll = self.state.account.collections and self.state.account.collections[id]
-        if coll and coll.type == "style" then
-            coll.displayName = name
-        end
-
-    elseif action.type == A.STYLES_DUPLICATE_STYLE then
-        -- Clone a "style:<slug>" collection. New id is "<src>-copy" with a
-        -- numeric suffix if "-copy" is already taken. items[] copied by value.
-        local srcID = payload.collectionID
-        local cols  = self.state.account.collections or {}
-        local src   = cols[srcID]
-        if not (src and src.type == "style") then return end
-        local baseID = srcID .. "-copy"
-        local newID  = baseID
-        local suffix = 2
-        while cols[newID] do
-            newID = baseID .. "-" .. suffix
-            suffix = suffix + 1
-        end
-        local items = {}
-        for i, v in ipairs(src.items or {}) do items[i] = v end
-        cols[newID] = {
-            id          = newID,
-            type        = "style",
-            displayName = (src.displayName or srcID) .. " (copy)",
-            description = src.description or "",
-            items       = items,
-            createdAt   = (_G.time and _G.time()) or 0,
-        }
-        self.state.account.collections = cols
-        self.state.session.ui.styles.curator.selectedTargetID = newID
-
-    elseif action.type == A.STYLES_DELETE_STYLE then
-        -- Delete any user-authored collection -- style / smartset / snapshot
-        -- live in account.collections; SHOPPING LISTS live in the separate
-        -- account.vendorShoppingLists slot, keyed WITHOUT the "vsl:" prefix the
-        -- landing card carries. Route by prefix so shopping-list deletes hit the
-        -- right slot (the old account.collections-only path silently no-op'd them
-        -- -- cols["vsl:L1"] is always nil). Pre-authored concept/collection sets
-        -- aren't deletable (canDelete=false), so they never reach here. Clears
-        -- selectedTargetID if this was the active target so the controls row hides.
-        local id  = payload.collectionID
-        local cur = self.state.session.ui.styles.curator
-        local vslID = type(id) == "string" and id:match("^vsl:(.+)$")
-        if vslID then
-            local lists = self.state.account.vendorShoppingLists
-            if not (lists and lists[vslID]) then return end   -- exception(boundary): missing list
-            lists[vslID] = nil
-        else
-            local cols = self.state.account.collections
-            if not (id and cols and cols[id]) then return end   -- exception(boundary): missing id / pre-first-save
-            cols[id] = nil
-        end
-        if cur and cur.selectedTargetID == id then
-            cur.selectedTargetID = nil
-        end
-
-    elseif action.type == A.STYLES_CURATOR_MOVE then
-        -- Move every currently-selected item from the active source to
-        -- the named target collection. payload.targetID overrides the
-        -- session-selected target so legacy callers (click-target-to-move)
-        -- still work; spec-aligned callers (explicit Move button) just
-        -- read selectedTargetID. Source-tracking + undo recording happens
-        -- here so the undo case can fully reverse without requiring the
-        -- controller to thread payload data through.
-        local cur = self.state.session.ui.styles.curator
-        local targetID = payload.targetID or cur.selectedTargetID
-        local sourceMode = cur.sourceMode
-        local target = targetID and self.state.account.collections[targetID]
-        if not target then return end
-        target.items = target.items or {}
-
-        -- Source collection (when sourceMode is "style:<id>"); nil for
-        -- "unassigned" or "all" -- those modes only ADD to the target.
-        local sourceID, sourceColl
-        if type(sourceMode) == "string" and sourceMode:sub(1, 6) == "style:" then
-            sourceID = sourceMode
-            sourceColl = self.state.account.collections[sourceID]
-        end
-
-        local movedIDs = {}
-        for itemID in pairs(cur.selectedItems) do
-            -- Add to target (dedupe).
-            local exists = false
-            for _, id in ipairs(target.items) do
-                if id == itemID then exists = true; break end
-            end
-            if not exists then
-                target.items[#target.items + 1] = itemID
-            end
-            -- Remove from source if any.
-            if sourceColl and sourceColl.items then
-                for i, id in ipairs(sourceColl.items) do
-                    if id == itemID then
-                        table.remove(sourceColl.items, i)
-                        break
-                    end
-                end
-            end
-            movedIDs[#movedIDs + 1] = itemID
-        end
-        -- Record an undo entry (capped to 20; older entries silently drop).
-        local undo = cur.recentUndo
-        undo[#undo + 1] = {
-            action   = "move",
-            from     = sourceID,    -- may be nil (Unassigned / All source)
-            to       = targetID,
-            items    = movedIDs,
-            ts       = (_G.time and _G.time()) or 0,
-        }
-        while #undo > 20 do table.remove(undo, 1) end
-        -- Clear selection after a successful move.
-        cur.selectedItems = {}
-        cur.selectedCount = 0
-
-    elseif action.type == A.STYLES_CURATOR_UNDO
-        or action.type == A.STYLES_CURATOR_UNDO_AT then
-        -- Reverse a single move from the stack.
-        -- UNDO     -> pops the topmost entry ("Undo last move" button).
-        -- UNDO_AT  -> pops the entry at payload.ord (per-row click in the
-        --             RECENT (UNDO) panel).
-        -- "from" may be nil (Unassigned source) -- in which case removal
-        -- from target is sufficient to put items back in the unassigned set.
-        -- Note: undoing an old entry while newer entries above it remain
-        -- can leave the moved items in multiple style memberships if the
-        -- items were re-moved by those newer entries. That's intentionally
-        -- self-recoverable -- the user can resolve via another targeted
-        -- undo. The alternative (cascade-undo to clicked row) was felt
-        -- to lose user intent ("I clicked ONE row, why did 4 actions undo?").
-        local cur = self.state.session.ui.styles.curator
-        local collections = self.state.account.collections
-        local ord
-        if action.type == A.STYLES_CURATOR_UNDO_AT then
-            ord = payload and payload.ord
-            if type(ord) ~= "number" then return end
-        else
-            ord = #cur.recentUndo
-        end
-        if ord < 1 or ord > #cur.recentUndo then return end
-
-        local entry = cur.recentUndo[ord]
-        table.remove(cur.recentUndo, ord)
-        local target = entry.to and collections[entry.to]
-        local source = entry.from and collections[entry.from]
-        if target and target.items then
-            for _, itemID in ipairs(entry.items or {}) do
-                for i, id in ipairs(target.items) do
-                    if id == itemID then
-                        table.remove(target.items, i)
-                        break
-                    end
-                end
-            end
-        end
-        if source then
-            source.items = source.items or {}
-            for _, itemID in ipairs(entry.items or {}) do
-                local exists = false
-                for _, id in ipairs(source.items) do
-                    if id == itemID then exists = true; break end
-                end
-                if not exists then source.items[#source.items + 1] = itemID end
-            end
-        end
-
-    -- ===== 14.4 Smart Set Builder ===========================================
-    elseif action.type == A.STYLES_SMARTSET_BEGIN then
-        -- Seed draft from existing collection (when editing) or from scratch.
-        -- The view-switch to "smartset" is dispatched separately by the
-        -- entry-point CTA / Detail "Edit" button.
-        local s = self.state.session.ui.styles.smartset
-        local existingID = payload.id
-        local existing = existingID and self.state.account.collections
-                         and self.state.account.collections[existingID]
-        if existing then
-            s.draftKey = existingID
-            s.draft = {
-                id          = existing.id or existingID,
-                displayName = existing.displayName or "",
-                description = existing.description or "",
-                type        = existing.type or "smartset",
-                descAuto    = false,   -- editing: preserve the saved description
-            }
-            -- Deep-copy rules so edits don't mutate the persisted record
-            -- until SAVE commits them.
-            s.rules = {}
-            for axis, tags in pairs(existing.rules or {}) do
-                s.rules[axis] = {}
-                for tag, sev in pairs(tags) do s.rules[axis][tag] = sev end
-            end
-        else
-            -- New draft: seed "<Char> Style <N>" + descAuto (the description
-            -- tracks the signature tags until the player types their own).
-            s.draftKey       = nil
-            s.draft          = { id = nil, displayName = _seededSmartsetName(self.state.account),
-                                 description = "", type = "smartset", descAuto = true }
-            s.rules          = {}
-        end
-        s.activeAxis     = "room"
-        s.activeSeverity = "all"
-        s.dirty          = false
-
-    elseif action.type == A.STYLES_SMARTSET_SET_FIELD then
-        local s = self.state.session.ui.styles.smartset
-        if payload.field then
-            s.draft[payload.field] = payload.value
-            -- User typed in the description -> stop auto-tracking the signature tags.
-            if payload.field == "description" then s.draft.descAuto = false end
-            s.dirty = true
-        end
-
-    elseif action.type == A.STYLES_SMARTSET_SET_AXIS then
-        self.state.session.ui.styles.smartset.activeAxis = payload.axis
-
-    elseif action.type == A.STYLES_SMARTSET_SET_SEVERITY_TAB then
-        self.state.session.ui.styles.smartset.activeSeverity = payload.sev
-
-    elseif action.type == A.STYLES_SMARTSET_TOGGLE_TAG then
-        -- Toggle a tag's severity within an axis. payload.severity nil =
-        -- remove the tag (untoggle); else set to that severity (overwrite
-        -- if already present at a different severity).
-        local s = self.state.session.ui.styles.smartset
-        local axis, tag, sev = payload.axis, payload.tag, payload.severity
-        if axis and tag then
-            s.rules[axis] = s.rules[axis] or {}
-            if sev == nil or s.rules[axis][tag] == sev then
-                s.rules[axis][tag] = nil
-                -- Drop empty axis tables for tidiness (saves serialization size).
-                local hasAny = false
-                for _ in pairs(s.rules[axis]) do hasAny = true; break end
-                if not hasAny then s.rules[axis] = nil end
-            else
-                s.rules[axis][tag] = sev
-            end
-            if s.draft.descAuto then s.draft.description = _buildSmartsetAutoDesc(s.rules) end
-            s.dirty = true
-        end
-
-    elseif action.type == A.STYLES_SMARTSET_CLEAR_ALL then
-        local s = self.state.session.ui.styles.smartset
-        s.rules = {}
-        s.draft.description = ""   -- auto-desc now tracks the (empty) signature set
-        s.draft.descAuto    = true
-        s.dirty = true
-
-    elseif action.type == A.STYLES_SMARTSET_SAVE then
-        -- Commit the draft to account.collections. New drafts get a fresh
-        -- "smartset:<sluggedName>" id; edits write through the existing
-        -- draftKey. Caller is responsible for view-switching back to
-        -- landing post-save (typically via the footer's onClick chain).
-        local s = self.state.session.ui.styles.smartset
-        if s.dirty or not s.draftKey then
-            local id = s.draftKey
-            if not id then
-                -- Monotonic, collision-free id (feedback_no_random_ids_use_counters);
-                -- shares the counter with the "<Char> Style <N>" name seed.
-                self.state.account.collectionSeq = (self.state.account.collectionSeq or 0) + 1  -- exception(boundary): pre-counter saved accounts lack collectionSeq
-                id = "smartset:" .. self.state.account.collectionSeq
-            end
-            self.state.account.collections = self.state.account.collections or {}
-            self.state.account.collections[id] = {
-                id          = id,
-                type        = "smartset",
-                displayName = s.draft.displayName or "Untitled",
-                description = s.draft.description or "",
-                rules       = {},
-            }
-            for axis, tags in pairs(s.rules or {}) do
-                self.state.account.collections[id].rules[axis] = {}
-                for tag, sev in pairs(tags) do
-                    self.state.account.collections[id].rules[axis][tag] = sev
-                end
-            end
-            s.draftKey = id
-            s.dirty    = false
-        end
-
-    elseif action.type == A.STYLES_SMARTSET_CANCEL then
-        -- Discard the draft. The view switch back to landing fires
-        -- separately so callers can also choose to return to a different
-        -- view (e.g. Detail when editing an existing smartset).
-        local s = self.state.session.ui.styles.smartset
-        s.draftKey       = nil
-        s.draft          = { id = nil, displayName = "", description = "", type = "smartset", descAuto = true }
-        s.rules          = {}
-        s.activeAxis     = "room"
-        s.activeSeverity = "all"
-        s.dirty          = false
-
-    -- ===== 14.5 Snapshot + Import =========================================
-    elseif action.type == A.STYLES_PLACED_DECOR_OBSERVED then
-        local guid = payload.decorGUID
-        if guid then
-            local now = time()
-            local map = self.state.session.styles.placedDecor
-            local existing = map[guid]
-            map[guid] = {
-                decorGUID = guid,
-                decorID   = payload.decorID,
-                itemID    = payload.itemID,
-                name      = payload.name,
-                -- placedAt: preserve original on edit re-observe; stamp on first sighting
-                placedAt  = (existing and existing.placedAt) or now,
-            }
-        end
-
-    elseif action.type == A.STYLES_PLACED_DECOR_OBSERVED_BATCH then
-        -- Bulk variant used by HousingObserver to coalesce the
-        -- HOUSING_DECOR_CUSTOMIZATION_CHANGED burst on edit-mode entry
-        -- (~N events in one frame). One reducer pass writes all entries,
-        -- one invalidation, one subscriber fan-out -- vs N dispatches in
-        -- the unbatched path.
-        --
-        -- Bulk fills (edit-mode entry) re-enumerate already-placed decor;
-        -- they shouldn't reset placedAt (these aren't "new" placements).
-        -- The dispatcher sets payload.bulkFill=true so we preserve existing
-        -- placedAt timestamps; only assign a fresh placedAt for GUIDs we
-        -- haven't seen before this session.
-        local now = time()
-        local map = self.state.session.styles.placedDecor
-        for _, e in ipairs(payload.entries) do
-            local guid = e.decorGUID
-            if guid then
-                local existing = map[guid]
-                map[guid] = {
-                    decorGUID = guid,
-                    decorID   = e.decorID,
-                    itemID    = e.itemID,
-                    name      = e.name,
-                    placedAt  = (existing and existing.placedAt) or now,
-                }
-            end
-        end
-
-    elseif action.type == A.STYLES_PLACED_DECOR_REMOVED then
-        local guid = payload.decorGUID
-        if guid then
-            -- Record the removal in RecentActivity. itemID comes from the live
-            -- placedDecor entry when present (decor placed/edited this session), else
-            -- from payload.itemID (parsed from the GUID in the observer) so removing
-            -- PRE-EXISTING decor still counts. Attributed to the active house.
-            local entry  = self.state.session.styles.placedDecor[guid]
-            local itemID = (entry and entry.itemID) or payload.itemID
-            if itemID then
-                _recentAppend(self.state, self.state.account.recentActivity.lastHouseKey,
-                              itemID, "removed")
-            end
-            self.state.session.styles.placedDecor[guid] = nil
-        end
-
-    elseif action.type == A.STYLES_PLACED_DECOR_CLEAR then
-        self.state.session.styles.placedDecor = {}
-
-    elseif action.type == A.RECENT_SESSION_START then
-        -- Seal the active (newest, unsealed) session, open a fresh one. Keyed
-        -- by the stable faction house id. Caps history at RECENT_SESSION_CAP.
-        -- An active session that recorded NO events is reused (so opening/
-        -- closing the editor without placing anything doesn't spam empty
-        -- "Now (0)" sessions).
-        local key = payload.houseKey
-        if key then
-            local ra = self.state.account.recentActivity
-            ra.lastHouseKey = key
-            local house = ra.houses[key]
-            if not house then house = { sessionOrder = {}, sessions = {} }; ra.houses[key] = house end
-            local newestID = house.sessionOrder[1]
-            local newest   = newestID and house.sessions[newestID]
-            local reuseEmpty = newest and not newest.endedAt and (newest.eventCount or 0) == 0
-            if not reuseEmpty then
-                if newest and not newest.endedAt then newest.endedAt = time() end
-                local sid = time()
-                if house.sessions[sid] then sid = sid + 1 end
-                house.sessions[sid] = { sessionID = sid, startedAt = sid, endedAt = nil,
-                                        eventCount = 0, events = {}, actions = {} }
-                table.insert(house.sessionOrder, 1, sid)
-                while #house.sessionOrder > RECENT_SESSION_CAP do
-                    local dropID = table.remove(house.sessionOrder)
-                    house.sessions[dropID] = nil
-                end
-            end
-        end
-
-    elseif action.type == A.RECENT_DECOR_PLACED then
-        _recentAppend(self.state, payload.houseKey, payload.itemID, "placed")
-
-    elseif action.type == A.STYLES_SNAPSHOT_PLACED then
-        -- Account-wide snapshot of everything the player has placed. The controller
-        -- scans the catalog (numPlaced>0) and passes distinct itemIDs in payload.items
-        -- (reducer stays pure -- no observer call here). This is the only taint-safe
-        -- full placed-decor list; a per-house split is impossible (GetAllPlacedDecor
-        -- taints, editor-frame hooks taint) -- see docs/HDGR_HOUSE_SNAPSHOTS.md.
-        -- takenAt + displayName stamped at the dispatch site (date()/time() boundary).
-        local items = payload.items or {}  -- exception(boundary): placed-decor list stamped at dispatch site
-        if #items == 0 then return end
-        local ts = payload.takenAt or 0  -- exception(boundary): takenAt stamped at dispatch site (time() boundary)
-        -- Monotonic id (NOT the timestamp) so two snapshots in the same second can't
-        -- collide-overwrite; same counter as smartset ids. takenAt stays for display.
-        self.state.account.collectionSeq = (self.state.account.collectionSeq or 0) + 1  -- exception(boundary): pre-counter saved accounts lack collectionSeq
-        local id = "snapshot:" .. self.state.account.collectionSeq
-        self.state.account.collections = self.state.account.collections or {}
-        self.state.account.collections[id] = {
-            id          = id,
-            type        = "snapshot",
-            displayName = payload.displayName or ("Snapshot " .. tostring(ts)),
-            description = "",
-            items       = items,
-            takenAt     = ts,
-            iconAtlas   = HDG.Constants.SNAPSHOT_ICON_ATLAS,  -- decorate-mode house glyph
-        }
-
-    elseif action.type == A.STYLES_IMPORT_SET_URL then
-        self.state.session.ui.styles.import.urlText = payload.text
-        -- Clear stale preview / error / parser hints on text change so the
-        -- user sees a fresh state when they re-Parse.
-        self.state.session.ui.styles.import.previewItems      = nil
-        self.state.session.ui.styles.import.parseError        = nil
-        self.state.session.ui.styles.import.parseSource       = nil
-        self.state.session.ui.styles.import.parseDisplayName  = nil
-
-    elseif action.type == A.STYLES_IMPORT_PARSE then
-        -- Delegate to HDG.Parsers (Modules/HDGR_Parsers.lua). Walks the
-        -- parser registry; first parser to recognize the pasted text wins.
-        -- Supports: style blobs (HDG:1:), shopping list blobs (HDGVL:1:),
-        -- Blizzard |Hitem chat links, URL ?items=NNN query params (wowhead
-        -- / housing.wowdb.com / generic), and a fallback digit-run parser
-        -- for raw CSVs.
-        local text   = self.state.session.ui.styles.import.urlText or ""
-        local result = HDG.Parsers and HDG.Parsers:Parse(text)  -- exception(boundary): optional module / not yet built
-                       or { ok = false, error = "Parsers unavailable" }
-        if result.ok then
-            self.state.session.ui.styles.import.previewItems = result.items
-            self.state.session.ui.styles.import.parseError   = nil
-            -- Stash hints so the commit step can pick up a parser-suggested
-            -- name + source URL.
-            self.state.session.ui.styles.import.parseSource     = result.source
-            self.state.session.ui.styles.import.parseDisplayName = result.displayName
-        else
-            self.state.session.ui.styles.import.previewItems = nil
-            self.state.session.ui.styles.import.parseError   = result.error or "Parse failed"
-        end
-
-    elseif action.type == A.STYLES_IMPORT_COMMIT then
-        local preview = self.state.session.ui.styles.import.previewItems
-        if not (preview and #preview > 0) then return end
-        local ts = (_G.time and _G.time()) or 0
-        local id = "shopping:" .. tostring(ts)
-        local sessionImport = self.state.session.ui.styles.import
-        -- Precedence: explicit payload override > parser-suggested name >
-        -- timestamp default.
-        local name = payload.displayName
-                     or sessionImport.parseDisplayName
-                     or ("Shopping List " .. tostring(ts))
-        self.state.account.collections = self.state.account.collections or {}
-        self.state.account.collections[id] = {
-            id          = id,
-            type        = "shopping",
-            displayName = name,
-            description = "",
-            items       = preview,
-            importedAt  = ts,
-            source      = sessionImport.parseSource or sessionImport.urlText,
-        }
-        -- Reset import session UI after a successful commit so re-entering
-        -- the Import view starts clean.
-        self.state.session.ui.styles.import.urlText           = ""
-        self.state.session.ui.styles.import.previewItems      = nil
-        self.state.session.ui.styles.import.parseError        = nil
-        self.state.session.ui.styles.import.parseSource       = nil
-        self.state.session.ui.styles.import.parseDisplayName  = nil
-
-    elseif action.type == A.STYLES_IMPORT_RESET then
-        self.state.session.ui.styles.import.urlText           = ""
-        self.state.session.ui.styles.import.previewItems      = nil
-        self.state.session.ui.styles.import.parseError        = nil
-        self.state.session.ui.styles.import.parseSource       = nil
-        self.state.session.ui.styles.import.parseDisplayName  = nil
-
-    elseif action.type == A.STYLES_INVALIDATE_CACHE then
-        -- Tick bump; actual cache clear runs via Store subscriber -> StyleEngine:InvalidateCache.
-        self.state.session.styles.cacheTick =
-            (self.state.session.styles.cacheTick or 0) + 1
-
-    elseif action.type == A.COLLECTION_STYLE_ITEM_ADDED then
-        -- Membership write -- adds itemID to collection.items if not present.
-        -- 14.0 scaffold: writes through to account.collections directly;
-        -- 14.3 (Curator) consumes this when the Move action lands.
-        local coll = payload.collectionID and self.state.account.collections
-                     and self.state.account.collections[payload.collectionID]
-        if coll and payload.itemID then
-            coll.items = coll.items or {}
-            local already = false
-            for _, id in ipairs(coll.items) do
-                if id == payload.itemID then already = true; break end
-            end
-            if not already then coll.items[#coll.items + 1] = payload.itemID end
-        end
-
-    elseif action.type == A.COLLECTION_STYLE_ITEM_REMOVED then
-        local coll = payload.collectionID and self.state.account.collections
-                     and self.state.account.collections[payload.collectionID]
-        if coll and coll.items and payload.itemID then
-            for i, id in ipairs(coll.items) do
-                if id == payload.itemID then
-                    table.remove(coll.items, i)
-                    break
-                end
-            end
-        end
-
-    -- =====================================================================
-    -- Zone Scanner
-    -- =====================================================================
-    -- ZONE_CHANGED: stamp new mapID, clear expanded set (scrollbox starts collapsed).
-    -- Search query intentionally persists across zone changes for multi-zone workflows.
-    elseif action.type == A.ZONE_CHANGED then
-        -- ZoneObserver:Probe coerces mapID to a number (0 sentinel on
-        -- API miss) and mapName to a string ("" sentinel) before dispatch,
-        -- so this reducer reads both strictly. Defensive `or 0` / `or ""`
-        -- here would mask producer regressions instead of surfacing them.
-        self.state.session.zone.currentMapID    = payload.mapID
-        self.state.session.zone.currentZoneName = payload.mapName
-        self.state.session.ui.zoneScanner.expanded = {}
-
-    elseif action.type == A.ZONE_POPUP_TOGGLE then
-        self.state.account.ui.zonePopupShown =
-            not (self.state.account.ui.zonePopupShown == true)
-
-    elseif action.type == A.ZONE_TOGGLE_VENDOR then
-        local npcID = payload.npcID
-        if type(npcID) == "number" then
-            local exp = self.state.session.ui.zoneScanner.expanded
-            exp[npcID] = not (exp[npcID] == true) and true or nil
-        end
-
-    elseif action.type == A.ZONE_SET_SEARCH then
-        self.state.session.ui.zoneScanner.searchQuery =
-            type(payload.text) == "string" and payload.text or ""
-
-    elseif action.type == A.ZONE_TOGGLE_COLLECTED then
-        self.state.session.ui.zoneScanner.showCollected =
-            not (self.state.session.ui.zoneScanner.showCollected == true)
-
-
-    -- =====================================================================
-    -- Lumber Tracker
-    -- =====================================================================
-    elseif action.type == A.LUMBER_HARVESTED then
-        -- Append blip + bump tick. Coords nil when observer can't resolve position
-        -- (loading screen, sub-map without world origin) -- skip blip, still bump tick.
-        local s = self.state.session.lumber
-        if payload.x and payload.y and payload.mapID then
-            s.blips[#s.blips + 1] = {
-                lumberID = payload.lumberID,
-                qty      = payload.qty,
-                x        = payload.x,
-                y        = payload.y,
-                mapID    = payload.mapID,
-                ts       = payload.timestamp,
-            }
-        end
-        s.tick = s.tick + 1
-        -- Append to the per-char session lastHarvestAt + accumulate count
-        -- IF a session is active for this lumberID (otherwise this is a
-        -- "between sessions" harvest the observer will start a session on).
-        local activeID = s.activeFarmingID
-        if activeID == payload.lumberID then
-            local charKey = self.state.session.identity.charKey
-            local charSessions = self.state.account.lumber.sessions[charKey]
-            local session = charSessions and charSessions[activeID]
-            if session then
-                session.lastHarvestAt = payload.timestamp
-            end
-        end
-
-    elseif action.type == A.LUMBER_SESSION_START then
-        -- First harvest after idle window; seeds per-char session record (startCount = bag total at start).
-        local s = self.state.session.lumber
-        s.activeFarmingID = payload.lumberID
-        local charKey = self.state.session.identity.charKey
-        self.state.account.lumber.sessions[charKey] =
-            self.state.account.lumber.sessions[charKey] or {}
-        self.state.account.lumber.sessions[charKey][payload.lumberID] = {
-            startedAt     = payload.timestamp,
-            startCount    = payload.startCount,
-            lastHarvestAt = payload.timestamp,
-            finalizedAt   = nil,
-        }
-
-    elseif action.type == A.LUMBER_SESSION_END then
-        -- Stamps finalizedAt so counter row keeps displaying totals after activeFarmingID clears.
-        local s = self.state.session.lumber
-        local activeID = s.activeFarmingID
-        if activeID then
-            local charKey = self.state.session.identity.charKey
-            local charSessions = self.state.account.lumber.sessions[charKey]
-            local session = charSessions and charSessions[activeID]
-            if session then
-                session.finalizedAt = payload.timestamp
-            end
-        end
-        s.activeFarmingID = nil
-
-    elseif action.type == A.LUMBER_HISTORY_PUSH then
-        -- Per-session summary for the Your Data farming log; ring buffer capped at LUMBER_HISTORY_CAP.
-        local hist = self.state.account.lumber.history
-        hist.nextID = hist.nextID + 1
-        hist.entries[#hist.entries + 1] = {
-            id           = hist.nextID,
-            lumberID     = payload.lumberID,
-            charKey      = payload.charKey,
-            startedAt    = payload.startedAt,
-            finalizedAt  = payload.finalizedAt,
-            sessionTotal = payload.sessionTotal,
-            zone         = payload.zone,
-            character    = payload.character,
-            realm        = payload.realm,
-        }
-        local cap = HDG.Constants.LUMBER_HISTORY_CAP
-        while #hist.entries > cap do
-            table.remove(hist.entries, 1)
-        end
-
-    elseif action.type == A.LUMBER_BLIP_GC then
-        -- Drop blips older than 1 hr (RESPAWN_SECONDS; distinct from the 600s radar color-cycle constant).
-        local s   = self.state.session.lumber
-        local now = payload.now
-        local ttl = 3600  -- mirror of HDG.LumberObserver.RESPAWN_SECONDS
-        local kept = {}
-        for _, b in ipairs(s.blips) do
-            if now - b.ts < ttl then kept[#kept + 1] = b end
-        end
-        s.blips = kept
-
-    elseif action.type == A.LUMBER_TICK then
-        -- 1s heartbeat while farming; invalidates duration+rate selectors without a bag-delta.
-        self.state.session.lumber.tick = self.state.session.lumber.tick + 1
-
-    elseif action.type == A.REP_PROGRESS_TICK then
-        -- Rep advanced (UPDATE_FACTION / renown change, debounced by RepObserver).
-        -- Bump so rep-gate displays re-read live HDG.RepObserver:GetProgress.
-        self.state.session.rep.tick = self.state.session.rep.tick + 1
-
-    elseif action.type == A.LUMBER_WINDOW_TOGGLE then
-        local c = self.state.account.lumber.config
-        if payload and payload.visible ~= nil then
-            c.windowVisible = payload.visible and true or false
-        else
-            c.windowVisible = not (c.windowVisible == true)
-        end
-
-    elseif action.type == A.LUMBER_WINDOW_POSITION_SET then
-        self.state.account.lumber.config.position = {
-            x = payload.x,
-            y = payload.y,
-        }
-
-    elseif action.type == A.LUMBER_RADAR_COLLAPSE_TOGGLE then
-        local c = self.state.account.lumber.config
-        c.radarCollapsed = not (c.radarCollapsed == true)
-
-    elseif action.type == A.LUMBER_AUTOSHOW_TOGGLE then
-        local c = self.state.account.lumber.config
-        c.autoShowOnHarvest = not (c.autoShowOnHarvest == true)
-
-    elseif action.type == A.LUMBER_LIST_COLLAPSE_TOGGLE then
-        local c = self.state.account.lumber.config
-        c.listCollapsed = not (c.listCollapsed == true)
-
-    elseif action.type == A.LUMBER_RADAR_SCALE_SET then
-        local scale = payload.scale
-        if type(scale) == "number" and scale > 0 then
-            self.state.account.lumber.config.radarScale = scale
-        end
-
-    -- =====================================================================
-    -- Shopping list
-    -- =====================================================================
-    elseif action.type == A.SHOPPING_WIDGET_TOGGLE then
-        self.state.account.ui.shoppingWidgetShown =
-            not (self.state.account.ui.shoppingWidgetShown == true)
-
-    elseif action.type == A.SHOPPING_LIST_CREATE then
-        self.state.account.shoppingListSeq = self.state.account.shoppingListSeq + 1
-        local id = "L" .. tostring(self.state.account.shoppingListSeq)
-        self.state.account.vendorShoppingLists[id] = {
-            name      = type(payload.name) == "string" and payload.name or ("List " .. id),
-            items     = {},
-            meta      = {},
-            createdAt = time(),
-        }
-        -- Auto-activate the first list created (HDG parity).
-        if self.state.account.activeShoppingListId == "" then
-            self.state.account.activeShoppingListId = id
-        end
-
-    elseif action.type == A.SHOPPING_LIST_DELETE then
-        local id = payload.id
-        self.state.account.vendorShoppingLists[id] = nil
-        if self.state.account.activeShoppingListId == id then
-            -- Pick any remaining list as new active, or "" if none.
-            local nextId = ""
-            for other in pairs(self.state.account.vendorShoppingLists) do
-                nextId = other; break
-            end
-            self.state.account.activeShoppingListId = nextId
-        end
-
-    elseif action.type == A.SHOPPING_LIST_RENAME then
-        local list = self.state.account.vendorShoppingLists[payload.id]
-        if list then list.name = tostring(payload.name or list.name) end
-
-    elseif action.type == A.SHOPPING_LIST_DUPLICATE then
-        local src = self.state.account.vendorShoppingLists[payload.id]
-        if src then
-            self.state.account.shoppingListSeq = self.state.account.shoppingListSeq + 1
-            local id = "L" .. tostring(self.state.account.shoppingListSeq)
-            -- Shallow copy each entry (entries are flat tables; per-entry
-            -- copy stops the duplicate from sharing entry references with
-            -- the source).
-            local copyItems = {}
-            for i, entry in ipairs(src.items) do
-                copyItems[i] = {
-                    itemID  = entry.itemID,
-                    npcID   = entry.npcID,
-                    qty     = entry.qty,
-                    addedAt = entry.addedAt,
-                }
-            end
-            self.state.account.vendorShoppingLists[id] = {
-                name      = tostring(payload.name or (src.name .. " (copy)")),
-                items     = copyItems,
-                meta      = {},   -- duplicates start with fresh meta (no inherited attribution)
-                createdAt = time(),
-            }
-        end
-
-    elseif action.type == A.SHOPPING_LIST_ACTIVATE then
-        if self.state.account.vendorShoppingLists[payload.id] then
-            self.state.account.activeShoppingListId = payload.id
-        end
-
-    elseif action.type == A.SHOPPING_LIST_CLEAR then
-        local list = self.state.account.vendorShoppingLists[payload.id]
-        if list then list.items = {} end
-
-    elseif action.type == A.SHOPPING_LIST_SET_META then
-        local list = self.state.account.vendorShoppingLists[payload.id]
-        if list and type(payload.key) == "string" then
-            list.meta = list.meta or {}
-            list.meta[payload.key] = payload.value
-        end
-
-    elseif action.type == A.SHOPPING_LIST_IMPORT then
-        -- HDG.ShoppingCodec.Decode returns a sanitized list record or nil
-        -- on garbage / format-mismatch / wrong magic header. Strict call --
-        -- ShoppingCodec is TOC-load-order guaranteed (Modules/ loads before
-        -- any user-driven action fires).
-        local decoded = HDG.ShoppingCodec.Decode(payload.encoded)
-        if decoded then
-            self.state.account.shoppingListSeq = self.state.account.shoppingListSeq + 1
-            local id = "L" .. tostring(self.state.account.shoppingListSeq)
-            self.state.account.vendorShoppingLists[id] = decoded
-            self.state.account.activeShoppingListId = id
-        end
-
-    elseif action.type == A.SHOPPING_TOGGLE_EXPANDED then
-        -- Flip a collapse flag (true = COLLAPSED). wishList is a scalar; zones/vendors are maps
-        -- keyed by zoneName / npcID. Reducer owns the flip; the view dispatches only which bucket
-        -- + key. (Replaces the controller's read-clone-flip-write _patchExpanded.)
-        local e = self.state.session.ui.shoppingList.expanded
-        if payload.bucket == "wishList" or payload.bucket == "ahList" then
-            e[payload.bucket] = not (e[payload.bucket] == true)
-        elseif payload.bucket and payload.key ~= nil then
-            local b = e[payload.bucket]
-            b[payload.key] = not (b[payload.key] == true) and true or nil
-        end
-
-    elseif action.type == A.SHOPPING_ITEM_ADD then
-        local listID = payload.listID or self.state.account.activeShoppingListId
-        local list = self.state.account.vendorShoppingLists[listID]
-        if list then
-            -- Coalesce: same (itemID, npcID) tuple bumps qty instead of
-            -- producing a duplicate row.
-            local merged
-            for _, entry in ipairs(list.items) do
-                if entry.itemID == payload.itemID and entry.npcID == payload.npcID then
-                    entry.qty = (entry.qty or 1) + (payload.qty or 1)
-                    merged = true
-                    break
-                end
-            end
-            if not merged then
-                list.items[#list.items + 1] = {
-                    itemID  = payload.itemID,
-                    npcID   = payload.npcID,   -- nil = wishlist
-                    qty     = payload.qty or 1,  -- exception(boundary): Shopping ADD may omit qty default-1
-                    addedAt = time(),
-                }
-            end
-        end
-
-    elseif action.type == A.SHOPPING_ITEM_REMOVE then
-        local listID = payload.listID or self.state.account.activeShoppingListId
-        local list = self.state.account.vendorShoppingLists[listID]
-        if list then
-            for i, entry in ipairs(list.items) do
-                if entry.itemID == payload.itemID and entry.npcID == payload.npcID then
-                    table.remove(list.items, i)
-                    break
-                end
-            end
-        end
-
-    elseif action.type == A.SHOPPING_ITEM_SET_QTY then
-        local listID = payload.listID or self.state.account.activeShoppingListId
-        local list = self.state.account.vendorShoppingLists[listID]
-        if list then
-            for _, entry in ipairs(list.items) do
-                if entry.itemID == payload.itemID and entry.npcID == payload.npcID then
-                    entry.qty = math.max(1, math.floor(tonumber(payload.qty) or 1))  -- exception(boundary): string-input qty from EditBox
-                    break
-                end
-            end
-        end
-
-    elseif action.type == A.SHOPPING_ITEM_ADJUST_QTY then
-        -- Relative delta applied to CURRENT state, so rapid +/- clicks accumulate:
-        -- the row buttons can't snapshot qty (re-render is deferred a frame, so a
-        -- captured absolute qty collides). Remove-at-zero lives here, not the
-        -- controller, so the whole transition is atomic.
-        local listID = payload.listID or self.state.account.activeShoppingListId
-        local list = self.state.account.vendorShoppingLists[listID]
-        if list then
-            for i, entry in ipairs(list.items) do
-                if entry.itemID == payload.itemID and entry.npcID == payload.npcID then
-                    local nextQty = (entry.qty or 1) + payload.delta  -- exception(boundary): legacy shopping entry pre-qty
-                    if nextQty <= 0 then
-                        table.remove(list.items, i)
-                    else
-                        entry.qty = nextQty
-                    end
-                    break
-                end
-            end
-        end
-
-    elseif action.type == A.SHOPPING_RESOLVE_VENDORS then
-        -- Persist resolved vendor npcIDs onto wishlist (npcID-less) entries so they
-        -- bucket under their vendor + travel with Export. resolutions = {[itemID]=npcID}.
-        -- Walk high->low: a resolved row that collides with an existing (itemID, npcID)
-        -- vendor row merges its qty in and is removed (coalesce, mirroring ITEM_ADD).
-        local list = self.state.account.vendorShoppingLists[payload.listID]
-        if list then
-            local res = payload.resolutions
-            for i = #list.items, 1, -1 do
-                local entry = list.items[i]
-                local npc = res[entry.itemID]   -- resolved vendor for this itemID, or nil
-                if (not entry.npcID) and npc then
-                    local mergeInto
-                    for _, other in ipairs(list.items) do
-                        if other ~= entry and other.itemID == entry.itemID and other.npcID == npc then
-                            mergeInto = other; break
-                        end
-                    end
-                    if mergeInto then
-                        mergeInto.qty = (mergeInto.qty or 1) + (entry.qty or 1)
-                        table.remove(list.items, i)
-                    else
-                        entry.npcID = npc
-                    end
-                end
-            end
-        end
-
-    -- =========================================================================
-    -- Catalog lifecycle
-    -- =========================================================================
-    elseif action.type == A.CATALOG_LOAD_REQUESTED then
-        self.state.session.catalog.status = "loading"
-
-    elseif action.type == A.CATALOG_LOAD_FAILED then
-        -- Without this, status stays "loading" -> infinite spinner.
-        self.state.session.catalog.status = "error"
-
-    elseif action.type == A.CATALOG_LOAD_COMPLETED then
-        local c = self.state.session.catalog
-        c.status          = "ready"
-        c.loadedAt        = action.payload.loadedAt        -- dispatcher stamps GetTime() before dispatch
-        c.itemCount       = action.payload.itemCount
-        c.vendorCount     = action.payload.vendorCount
-        c.sweepGeneration = action.payload.generation
-        -- Clear pending on any successful sweep; without this, refreshPending stays true and
-        -- every tab switch triggers a full re-sweep.
-        c.refreshPending  = false
-
-    elseif action.type == A.CATALOG_REFRESH_QUEUED then
-        self.state.session.catalog.refreshPending = true
-        self.state.session.catalog.variantsLoaded = false   -- ownership may have changed; force Dyed filter re-batch
-
-    elseif action.type == A.CATALOG_REFRESH_COMPLETED then
-        local c = self.state.session.catalog
-        c.refreshPending  = false
-        c.sweepGeneration = action.payload.generation or (c.sweepGeneration + 1)  -- exception(boundary): generation is optional
-
-    elseif action.type == A.CATALOG_VARIANTS_LOADED then
-        self.state.session.catalog.variantsLoaded = true
-
-    elseif action.type == A.UI_SET_VIEW then
-        self.state.session.ui.view = action.payload.view   -- dispatcher bug if nil; fail loud
-
-    -- ===== Projects: house topology ==========================================
-    -- Payload-key guards: missing key no-ops rather than indexing nil (payload is the input boundary).
-    elseif action.type == A.PROJECTS_UPSERT_HOUSE then
-        if payload.houseID then
-            local p = self.state.account.projects
-            local house = p.houses[payload.houseID] or {}
-            for k, v in pairs(payload.fields or {}) do house[k] = v end
-            p.houses[payload.houseID] = house
-        end
-
-    elseif action.type == A.PROJECTS_CAPTURE_COMMIT then
-        -- Atomic apply of a finalized capture; observer pre-computes matched/new/orphan + connections.
-        local p = self.state.account.projects
-        if payload.houseID then
-            local house = p.houses[payload.houseID] or {}
-            house.lastCapturedAt = payload.lastCapturedAt or house.lastCapturedAt
-            if payload.houseName        then house.name             = payload.houseName end
-            if payload.plotID           then house.plotID           = payload.plotID end
-            if payload.neighborhoodName then house.neighborhoodName  = payload.neighborhoodName end
-            p.houses[payload.houseID] = house
-        end
-        -- CAPTURE path mirrors REALITY -> the house's CURRENT layout (never the
-        -- active one). v7 truth lives in StoreFurnishings.ApplyCapture: placements
-        -- ONLY -- capture can never touch rooms' furnishing fields.
-        if payload.houseID then
-            HDG.StoreFurnishings.ApplyCapture(self.state, payload)
-        end
-
-    elseif action.type == A.PROJECTS_HOUSE_TICK then
-        -- Partial patch from HousingObserver; each event updates the subset it knows.
-        local h = self.state.session.house
-        if payload.budget       then h.budget = payload.budget end
-        if payload.numFloors    ~= nil then h.numFloors = payload.numFloors end
-        if payload.editorActive ~= nil then h.editorActive = payload.editorActive end
-
-    elseif action.type == A.PROJECTS_ROOM_CATALOG_UPDATED then
-        -- Atomic replace + tick bump; room-source/stock selectors invalidate together.
-        local rc = self.state.session.house.roomCatalog
-        rc.byShapeID = payload.byShapeID or {}  -- exception(boundary): atomic-replace; empty keeps table shape if payload omits
-        rc.entries   = payload.entries   or {}  -- exception(boundary): atomic-replace; empty keeps table shape if payload omits
-        rc.tick      = rc.tick + 1
-
-    elseif action.type == A.CATALOG_CATEGORY_TREE_UPDATED then
-        -- Blizzard category/subcategory nav snapshot from the observer. Atomic replace
-        -- + tick bump so the curator + projects nav selectors invalidate together.
-        local ct = self.state.session.house.categoryTree
-        ct.byID       = payload.byID       or {}  -- exception(boundary): atomic-replace; empty keeps table shape if payload omits
-        ct.subcatByID = payload.subcatByID or {}  -- exception(boundary): atomic-replace; empty keeps table shape if payload omits
-        ct.rootIDs    = payload.rootIDs    or {}  -- exception(boundary): atomic-replace; empty keeps table shape if payload omits
-        ct.tick       = ct.tick + 1
-
-    elseif action.type == A.PROJECTS_CLEAR_HOUSE then
-        -- Recapture prep. v8: placements persist (ApplyCapture matches by
-        -- capturedID in place, so roomID tags survive); only capture-owned
-        -- placements above payload.maxFloor are pruned (deleted floors never
-        -- get swept). Resets the capture summary echo.
-        if payload.houseID then
-            HDG.StoreFurnishings.ClearLayout(self.state, payload)
-        end
-
-    elseif action.type == A.PROJECTS_SET_ACTIVE_VERSION then
-        -- Switch active version for a house. Invalidates "*" (canvas reads two-level keys).
-        if payload.houseID and payload.versionID then
-            local house = self.state.account.projects.houses[payload.houseID]
-            if house then house.activeVersionID = payload.versionID end
-        end
-
-    elseif action.type == A.PROJECTS_CREATE_VERSION then
-        -- v7: branch a what-if LAYOUT. Placements copy; ROOMS ARE SHARED BY
-        -- REFERENCE (10-FINAL-MODEL: vary a room in a what-if by placing a
-        -- room VARIANT, never per-layout copies). layoutID minted from the
-        -- shared versionSeq counter.
-        if payload.houseID then
-            local p     = self.state.account.projects
-            local house = p.houses[payload.houseID]
-            if house then
-                local lid = _nextVersionID(p)
-                local srcLayout  = payload.basedOn and p.layouts[payload.basedOn]   -- exception(nullable): from-scratch designs have no basis
-                local placements, slotSeq = {}, 0
-                if srcLayout then
-                    for key, pl in pairs(srcLayout.placements) do
-                        placements[key] = { floor = pl.floor, x = pl.x, y = pl.y,
-                                            rotation = pl.rotation, shape = pl.shape, floors = pl.floors,
-                                            roomID = pl.roomID,   -- v8: tags copy; rooms shared by reference
-                                            capturedID = pl.capturedID, capturedName = pl.capturedName }
-                    end
-                    slotSeq = srcLayout.slotSeq or 0
-                else
-                    -- From-scratch design: every layout needs exactly one Entry
-                    -- (the anchor; the palette never offers it) -- seed it
-                    -- centre-canvas so building starts from the door.
-                    slotSeq = 1
-                    placements["slot:1"] = { floor = 1, x = 10, y = 10, rotation = 0, shape = "entry" }
-                end
-                p.layouts[lid] = {
-                    houseID   = payload.houseID, name = payload.name or "What-if",  -- exception(boundary): CREATE_VERSION payload may omit name
-                    createdAt = payload.createdAt, basedOn = payload.basedOn,
-                    placements = placements, slotSeq = slotSeq,
-                }
-                house.activeVersionID = lid
-                -- Reverse index: v8 placements are slot-keyed -- the design
-                -- rides as the roomID TAG. Count every copied tag into the
-                -- new layout (review 17 #1: keying by placement KEY matched
-                -- account.rooms never, so branching silently skipped this).
-                local idx = self.state.session.furnIndex
-                for _, pl in pairs(placements) do
-                    if pl.roomID then
-                        idx.roomLayouts[pl.roomID] = idx.roomLayouts[pl.roomID] or {}
-                        idx.roomLayouts[pl.roomID][lid] = (idx.roomLayouts[pl.roomID][lid] or 0) + 1
-                    end
-                end
-            end
-        end
-
-    elseif action.type == A.PROJECTS_DELETE_VERSION then
-        -- v7: remove a what-if LAYOUT (NEVER the live/current one). Rooms and
-        -- their furnishings persist by construction -- only references die.
-        -- Reverse-index GC prevents phantom "in N layouts" counts (12 #4).
-        if payload.houseID and payload.versionID then
-            local p     = self.state.account.projects
-            local house = p.houses[payload.houseID]
-            local lid   = payload.versionID
-            if house and lid ~= house.currentVersionID and p.layouts[lid] then
-                local idx = self.state.session.furnIndex
-                -- v8: tags, not keys (review 17 #2 -- the key form was a no-op GC).
-                for _, pl in pairs(p.layouts[lid].placements) do
-                    if pl.roomID and idx.roomLayouts[pl.roomID] then idx.roomLayouts[pl.roomID][lid] = nil end
-                end
-                p.layouts[lid] = nil
-                if house.activeVersionID == lid then
-                    house.activeVersionID = house.currentVersionID
-                end
-                self.state.session.furn.tick = self.state.session.furn.tick + 1
-            end
-        end
-
-    elseif action.type == A.PROJECTS_SET_VERSION_FLOORS then
-        -- Set the floor count on a what-if version (1..3 cap; enforced here too, not just
-        -- the controller, so the store never holds an out-of-range value). nil clears the
-        -- override -> floorTabs falls back to scanning room IDs + session.house.numFloors.
-        if payload.versionID and payload.numFloors ~= nil then
-            local layout = self.state.account.projects.layouts[payload.versionID]   -- exception(nullable): stale UI layout id
-            if layout then
-                local n = math.max(1, math.min(3, math.floor(payload.numFloors)))
-                layout.numFloors = n
-            end
-        end
-
-    elseif action.type == A.PROJECTS_RENAME_VERSION then
-        -- Rename a version (name only; structural fields stay locked).
-        if payload.versionID and payload.name then
-            local layout = self.state.account.projects.layouts[payload.versionID]   -- exception(nullable): stale UI layout id
-            if layout then layout.name = payload.name end
-        end
-
-    elseif action.type == A.PROJECTS_IMPORT_LAYOUT then
-        -- Thin (matches PROJECTS_PLACE_STACKED): the CONTROLLER builds the version
-        -- record from the decoded layout, re-keying roomIDs to the target house. The
-        -- reducer only mints the id (the counter is state-resident, so minting must be
-        -- reducer-side) + activates it, so the controller can read the id back.
-        if payload.houseID and payload.version then
-            local p     = self.state.account.projects
-            local house = p.houses[payload.houseID]
-            -- Importing into an owned-but-uncaptured house creates its record.
-            if not house then house = {}; p.houses[payload.houseID] = house end
-            -- Stamp the display name the chooser carried; a captured name
-            -- (richer: plot-prefixed) is never overwritten.
-            if payload.houseName and (not house.name or house.name == "") then
-                house.name = payload.houseName
-            end
-            local lid = _nextVersionID(p)
-            payload.version.placements = payload.version.placements or {}   -- exception(boundary): controller-built record
-            p.layouts[lid] = payload.version
-            house.activeVersionID = lid
-        end
-
-    elseif action.type == A.PROJECTS_FOCUS_HOUSE then
-        -- Switch which house the Architect/Projects views show. A monotonic focusSeq
-        -- bump makes this house win the house pick (no separate "active" pointer + no
-        -- new selector reads -- focusSeq lives under the house record). Focusing an
-        -- as-yet-uncaptured house (picked from the owned-houses dropdown) creates a
-        -- focus STUB so the pick sticks; capturing it later UPSERTs the same token.
-        if payload.houseID then
-            local p     = self.state.account.projects
-            local house = p.houses[payload.houseID]
-            if not house then house = {}; p.houses[payload.houseID] = house end
-            p.houseFocusSeq = (p.houseFocusSeq or 0) + 1
-            house.focusSeq  = p.houseFocusSeq
-        end
-
-    elseif action.type == A.PROJECTS_PICKER_SET_SOURCE then
-        -- Picker source axis (dropdown intent; scalar session write).
-        self.state.session.ui.projects.pickerSource = payload.source or "all"
-
-    elseif action.type == A.PROJECTS_FURN_TOGGLE_COLLAPSE then
-        -- Fold/unfold one set group in the room detail (reducer-owned flip;
-        -- session-only -- the panel is a workspace, not a dashboard).
-        if payload.setID then
-            local c = self.state.session.ui.projects.furnCollapsed
-            c[payload.setID] = not c[payload.setID] or nil
-        end
-
-    -- ===== Projects: crates ===================================================
-    elseif HDG.StoreFurnishings.HANDLED[action.type] then
-        -- Furnishings domain cases live in Core/HDGR_StoreFurnishings.lua --
-        -- same single dispatch path, housed with their domain.
-        HDG.StoreFurnishings.Reduce(self.state, action)
-
-    elseif action.type == A.SHIPPING_CRATE_PACK then
-        -- DeepCopy: topology.rooms / connections / contents[].decor are live refs; raw storage
-        -- would make the "backup" silently track future mutations.
-        if payload.shipID and payload.record then
-            self.state.account.collections[payload.shipID] = DeepCopy(payload.record)
-        end
-
-    elseif action.type == A.SHIPPING_CRATE_DELETE then
-        if payload.shipID then self.state.account.collections[payload.shipID] = nil end
-
-    else
-        -- Closed action taxonomy (spec section 12): unknown types are typos; fail loud at dispatch.
+    -- Every action is a self-registered block (HDG.Actions): reduce +
+    -- invalidates + flags declared in one place, dispatched by lookup.
+    -- Closed taxonomy: an unregistered type is a typo; fail loud.
+    local entry = HDG.Actions._entries[action.type]
+    if not entry then
         error(("HDG.Store:_RawDispatch: unknown action type %q"):format(
             tostring(action.type)), 2)
     end
+    entry.reduce(self.state, payload)
 
     -- Invalidate memos BEFORE _Notify so subscribers re-resolve selectors with fresh values.
     HDG.Selectors:InvalidateMemos(invalidation)
@@ -3750,3 +1385,3404 @@ function HDG.Store:Flush()
     _G.HDG_DB.account = self.state.account
 end
 
+-- ===== Self-registered actions (SELFREG conversion; bodies verbatim from
+-- the former _RawDispatch chain, self.state -> state) ======================
+local P = HDG.Paths   -- payload-keyed invalidates fns (moved from BuildActionMeta scope)
+
+HDG.Actions:Register{ name = "CONFIG_SET",
+    persists = true,  combatUnsafe = false,
+            invalidates = function(action) return { HDG.Paths.Join("account.config", action.payload and action.payload.key) } end,
+    reduce = function(state, payload)
+        if payload.key ~= nil then
+            -- Dual-write: SV slot (profile / character / account, routed
+            -- by HDG.Config) AND the in-memory mirror at
+            -- state.account.config. Mirror keeps existing selectors with
+            -- `reads = { "account.config.X" }` working unchanged.
+            -- Scope resolution: explicit payload.scope wins; otherwise
+            -- look it up from the schema. Keys absent from both are a
+            -- schema-drift bug -- we crash loudly rather than silently
+            -- mis-route the write.
+            local scope = payload.scope or HDG.ConfigSchema.ScopeBy[payload.key]
+            local src = HDG.Config:_GetSourceForScope(scope)
+            src[payload.key] = payload.value
+            -- Account-scoped settings (one-time migration flags) live at
+            -- the top of HDG_DB and don't belong in the per-profile mirror.
+            if scope ~= HDG.Constants.ConfigScope.Account then
+                state.account.config[payload.key] = payload.value
+            end
+        end
+    end }
+
+HDG.Actions:Register{ name = "CONFIG_SCALE_STEP",
+    persists = true,  combatUnsafe = false,
+            invalidates = { "account.config.scale" },
+    reduce = function(state, payload)
+        -- Step the UI scale by +/-0.1 within [0.5, 1.5] (bounds mirror the Config controller's
+        -- SCALE_MIN/MAX/STEP). Reducer owns the clamp; the view dispatches only a direction.
+        -- Same dual-write as CONFIG_SET (SV source + in-memory mirror); scale is profile-scoped.
+        local cur = state.account.config.scale
+        local nxt = cur + (payload.direction == "inc" and 0.1 or -0.1)
+        nxt = (payload.direction == "inc") and math.min(1.5, nxt) or math.max(0.5, nxt)
+        nxt = math.floor(nxt * 10 + 0.5) / 10
+        local scope = HDG.ConfigSchema.ScopeBy["scale"]
+        HDG.Config:_GetSourceForScope(scope)["scale"] = nxt
+        if scope ~= HDG.Constants.ConfigScope.Account then
+            state.account.config.scale = nxt
+        end
+    end }
+
+HDG.Actions:Register{ name = "PROFILE_CREATE",
+    persists = true,  combatUnsafe = false,
+            invalidates = { "account.profileList" },
+    reduce = function(state, payload)
+        local name = payload.name
+        if type(name) == "string" and name ~= "" and not HDG_DB.profiles[name] then
+            HDG_DB.profiles[name] = {}
+            if payload.cloneFrom and HDG_DB.profiles[payload.cloneFrom] then
+                for k, v in pairs(HDG_DB.profiles[payload.cloneFrom]) do
+                    HDG_DB.profiles[name][k] = v
+                end
+            end
+        end
+    end }
+
+HDG.Actions:Register{ name = "PROFILE_SWITCH",
+    persists = true,  combatUnsafe = false,
+            invalidates = "*",
+    reduce = function(state, payload)
+        local name = payload.name
+        if type(name) == "string" and HDG_DB.profiles[name] then
+            HDG_DB_CURRENT_PROFILE = name
+            HDG.Config._activeProfile = name
+            HDG.Config:_ImportDefaultsToActiveProfile()
+            HDG.Config:_HydrateMirror()
+        end
+    end }
+
+HDG.Actions:Register{ name = "PROFILE_DELETE",
+    persists = true,  combatUnsafe = false,
+            invalidates = { "account.profileList" },
+    reduce = function(state, payload)
+        local name = payload.name
+        if type(name) == "string" and name ~= "DEFAULT" and name ~= HDG.Config._activeProfile then
+            HDG_DB.profiles[name] = nil
+        end
+    end }
+
+HDG.Actions:Register{ name = "UI_SET_PERSISTENT",
+    persists = true,  combatUnsafe = false,
+            invalidates = function(action) return { HDG.Paths.Join("account.ui", action.payload and action.payload.key) } end,
+    reduce = function(state, payload)
+        if payload.key ~= nil then state.account.ui[payload.key] = payload.value end
+    end }
+
+HDG.Actions:Register{ name = "UI_SET_TRANSIENT",
+    persists = false, combatUnsafe = false,
+            invalidates = function(action)
+                local p = action.payload or {}
+                if p.view then
+                    return { P.Join("session.ui", p.view, p.key) }
+                end
+                return { P.Join("session.ui", p.key) }
+            end,
+    reduce = function(state, payload)
+        if payload.view then
+            state.session.ui[payload.view] = state.session.ui[payload.view] or {}
+            if payload.key ~= nil then
+                state.session.ui[payload.view][payload.key] = payload.value
+            end
+        else
+            if payload.key ~= nil then
+                state.session.ui[payload.key] = payload.value
+            end
+        end
+    end }
+
+HDG.Actions:Register{ name = "REMOVALIST_PICK_PLOT",
+    persists = false, combatUnsafe = false,
+            invalidates = { "session.ui.removalist.sourcePlot", "session.ui.removalist.targetPlot" },
+    reduce = function(state, payload)
+        -- Two-click cycle: 1st pick -> source, 2nd (distinct) -> target, else restart.
+        local r    = state.session.ui.removalist
+        local plot = payload.plot
+        if not r.sourcePlot then
+            r.sourcePlot = plot
+        elseif not r.targetPlot and plot ~= r.sourcePlot then
+            r.targetPlot = plot
+        else
+            r.sourcePlot, r.targetPlot = plot, nil
+        end
+    end }
+
+HDG.Actions:Register{ name = "REMOVALIST_SWAP",
+    persists = false, combatUnsafe = false,
+            invalidates = { "session.ui.removalist.sourcePlot", "session.ui.removalist.targetPlot" },
+    reduce = function(state, payload)
+        local r = state.session.ui.removalist
+        r.sourcePlot, r.targetPlot = r.targetPlot, r.sourcePlot
+    end }
+
+HDG.Actions:Register{ name = "REMOVALIST_CLEAR",
+    persists = false, combatUnsafe = false,
+            invalidates = { "session.ui.removalist.sourcePlot", "session.ui.removalist.targetPlot" },
+    reduce = function(state, payload)
+        local r = state.session.ui.removalist
+        r.sourcePlot, r.targetPlot = nil, nil
+    end }
+
+HDG.Actions:Register{ name = "REMOVALIST_SET_LETTER_FILTER",
+    persists = false, combatUnsafe = false,
+            invalidates = { "session.ui.removalist.letterFilter" },
+    reduce = function(state, payload)
+        -- nil payload (refresh) or re-clicking the active letter clears; else set.
+        local r = state.session.ui.removalist
+        local l = payload.letter
+        if l == nil or r.letterFilter == l then r.letterFilter = nil else r.letterFilter = l end
+    end }
+
+HDG.Actions:Register{ name = "REMOVALIST_SET_PLOT",
+    persists = false, combatUnsafe = false,
+            invalidates = { "session.ui.removalist.sourcePlot", "session.ui.removalist.targetPlot" },
+    reduce = function(state, payload)
+        -- Map-click selection: the Source map sets source, the Target map sets target.
+        local r = state.session.ui.removalist
+        if payload.role == "source" then r.sourcePlot = payload.plot
+        elseif payload.role == "target" then r.targetPlot = payload.plot end
+    end }
+
+HDG.Actions:Register{ name = "MAIN_WINDOW_TOGGLE",
+    persists = true,  combatUnsafe = false,
+            invalidates = { "account.ui.mainWindowShown" },
+    reduce = function(state, payload)
+        state.account.ui.mainWindowShown = not (state.account.ui.mainWindowShown == true)
+    end }
+
+HDG.Actions:Register{ name = "NAV_TOGGLE_GROUP",
+    persists = true,  combatUnsafe = false,
+            invalidates = { "account.ui.nav.collapsedGroups" },
+    reduce = function(state, payload)
+        -- Flip a sidebar parent group's collapsed state (keyed by hub view).
+        -- nil-clear when expanding so the set stays sparse (only collapsed groups present).
+        local groups = state.account.ui.nav.collapsedGroups
+        local v = payload.view
+        groups[v] = (not groups[v]) and true or nil
+    end }
+
+HDG.Actions:Register{ name = "SESSION_END",
+    persists = true,  combatUnsafe = false,
+            invalidates = { "account.ui.mainWindowShown",
+                            "account.ui.shoppingWidgetShown",
+                            "account.ui.zonePopupShown",
+                            "account.lumber.config.windowVisible" },
+    reduce = function(state, payload)
+        -- Force all addon windows closed at logout (don't auto-reopen on /reload).
+        -- Zone auto-popup fires on ZONE_CHANGED independently (not from these flags).
+        state.account.ui.mainWindowShown        = false
+        state.account.ui.shoppingWidgetShown    = false
+        state.account.ui.zonePopupShown         = false
+        state.account.lumber.config.windowVisible = false
+    end }
+
+HDG.Actions:Register{ name = "HARD_RESET",
+    persists = true,  combatUnsafe = false,
+            invalidates = "*",
+    reduce = function(state, payload)
+        _G.HDG_DB = {}
+        state = NewDefaultState()
+    end }
+
+HDG.Actions:Register{ name = "COLLECTION_RESET",
+    persists = true,  combatUnsafe = false,
+            invalidates = { "account.collection" },
+    reduce = function(state, payload)
+        -- Wipe the ownership cache so the next reconciler sweep rebuilds from
+        -- scratch. The catalog mirror (decorCatalog/catalogByItem/liveDecorIDs)
+        -- HousingCatalogObserver owns the row store and clears it on COLLECTION_RESET.
+        state.account.collection.ownedDecorIDs = {}
+    end }
+
+HDG.Actions:Register{ name = "COMBAT_ENTER",
+    persists = false, combatUnsafe = false, 
+    invalidates = { "session.combat.inLockdown" },
+    reduce = function(state, payload)
+        state.session.combat.inLockdown = true
+    end }
+
+HDG.Actions:Register{ name = "COMBAT_EXIT",
+    persists = false, combatUnsafe = false, 
+    invalidates = { "session.combat.inLockdown", "session.combat.queued" },
+    reduce = function(state, payload)
+        state.session.combat.inLockdown = false
+        -- Reducer empties the queue here so middleware never mutates state
+        -- directly. CombatMiddleware snapshots the queue BEFORE dispatching
+        -- COMBAT_EXIT and re-dispatches the snapshot through the chain.
+        state.session.combat.queued = {}
+    end }
+
+HDG.Actions:Register{ name = "ACQ_SET_ITEMS_VIEW_MODE",
+    persists = true,  combatUnsafe = false,
+            invalidates = { "account.ui.acquisition.itemsViewMode" },
+    reduce = function(state, payload)
+        local mode = payload.mode
+        if mode == "grid" or mode == "list" then
+            -- account.ui.acquisition seeded by EnsureUI on every dispatch (ADR-005)
+            state.account.ui.acquisition.itemsViewMode = mode
+        end
+    end }
+
+HDG.Actions:Register{ name = "ACQ_TOGGLE_ADVANCED_FILTERS",
+    persists = false, combatUnsafe = false, 
+    invalidates = { "session.ui.acquisition.advancedFiltersOpen" },
+    reduce = function(state, payload)
+        local a = state.session.ui.acquisition
+        a.advancedFiltersOpen = not (a.advancedFiltersOpen == true)
+    end }
+
+HDG.Actions:Register{ name = "ACQ_SET_PRESET",
+    persists = false, combatUnsafe = false, 
+    invalidates = { "session.ui.acquisition.preset" },
+    reduce = function(state, payload)
+        -- Single-select preset chip; toggling the active value clears it.
+        -- Note: Lua 5.1 `(cond) and nil or v` trap -- must use a real branch when value is nil.
+        local v = payload.value
+        if state.session.ui.acquisition.preset == v then
+            state.session.ui.acquisition.preset = nil
+        else
+            state.session.ui.acquisition.preset = v
+        end
+    end }
+
+HDG.Actions:Register{ name = "ACQ_TOGGLE_MISSING",
+    persists = false, combatUnsafe = false, 
+    invalidates = { "session.ui.acquisition.missingOnly" },
+    reduce = function(state, payload)
+        -- Collection-state toggle, orthogonal to the source preset. Flips so
+        -- the Missing checkbox ANDs with whatever source chip is lit.
+        state.session.ui.acquisition.missingOnly =
+            not state.session.ui.acquisition.missingOnly
+
+    -- Advanced-filter multi-select set toggles. payload.<axis> == "all" clears the
+    -- set (master "All X" -> show every value); else flip membership. Empty = all.
+    -- Clone of RECIPES_TOGGLE_EXPANSION; session-scoped (no persistence).
+    end }
+
+HDG.Actions:Register{ name = "ACQ_TOGGLE_EXPANSION",
+    persists = false, combatUnsafe = false, 
+    invalidates = { "session.ui.acquisition.expansionFilter" },
+    reduce = function(state, payload)
+        _acqToggleFilter(state.session.ui.acquisition.expansionFilter, payload.expansion)
+    end }
+
+HDG.Actions:Register{ name = "ACQ_TOGGLE_ZONE",
+    persists = false, combatUnsafe = false, 
+    invalidates = { "session.ui.acquisition.zoneFilter" },
+    reduce = function(state, payload)
+        _acqToggleFilter(state.session.ui.acquisition.zoneFilter, payload.zone)
+    end }
+
+HDG.Actions:Register{ name = "ACQ_TOGGLE_REP",
+    persists = false, combatUnsafe = false, 
+    invalidates = { "session.ui.acquisition.repFilter" },
+    reduce = function(state, payload)
+        _acqToggleFilter(state.session.ui.acquisition.repFilter, payload.rep)
+    end }
+
+HDG.Actions:Register{ name = "ACQ_TOGGLE_SOURCE",
+    persists = false, combatUnsafe = false, 
+    invalidates = { "session.ui.acquisition.sourceFilter" },
+    reduce = function(state, payload)
+        _acqToggleFilter(state.session.ui.acquisition.sourceFilter, payload.source)
+    end }
+
+HDG.Actions:Register{ name = "ACQ_TOGGLE_FACTION",
+    persists = false, combatUnsafe = false, 
+    invalidates = { "session.ui.acquisition.factionFilter" },
+    reduce = function(state, payload)
+        _acqToggleFilter(state.session.ui.acquisition.factionFilter, payload.faction)
+    end }
+
+HDG.Actions:Register{ name = "MAIN_WINDOW_OPENING",
+    persists = false, combatUnsafe = false,
+            invalidates = "*",
+    reduce = function(state, payload)
+        -- Lifecycle signal; no mutation. Subscribers handle catch-up.
+    end }
+
+HDG.Actions:Register{ name = "LOG_PUSH",
+    persists = false, combatUnsafe = false, 
+    invalidates = { "session.log.entries" },
+    reduce = function(state, payload)
+        -- Pure append + cap. entry.id is a raw integer (no "log_" prefix needed).
+        local log = state.session.log
+        log.nextID = (log.nextID or 0) + 1
+        local entry = {
+            id        = log.nextID,
+            tag       = payload.tag,
+            level     = payload.level,
+            text      = payload.text,
+            timestamp = payload.timestamp,
+            duration  = payload.duration,
+            metadata  = payload.metadata,
+        }
+        log.entries[#log.entries + 1] = entry
+        -- Per-tag sub-cap for the "dispatch" tag; removes oldest first.
+        if entry.tag == "dispatch" then
+            local dispatchCap = log.dispatchCap
+            local dispatchCount = 0
+            for _, e in ipairs(log.entries) do
+                if e.tag == "dispatch" then dispatchCount = dispatchCount + 1 end
+            end
+            while dispatchCount > dispatchCap do
+                for i, e in ipairs(log.entries) do
+                    if e.tag == "dispatch" then
+                        table.remove(log.entries, i)
+                        dispatchCount = dispatchCount - 1
+                        break
+                    end
+                end
+            end
+        end
+        -- Overall ring buffer cap.
+        local cap = log.cap
+        while #log.entries > cap do
+            table.remove(log.entries, 1)
+        end
+    end }
+
+HDG.Actions:Register{ name = "LOG_CLEAR",
+    persists = false, combatUnsafe = false, 
+    invalidates = { "session.log.entries" },
+    reduce = function(state, payload)
+        if payload.tag and payload.tag ~= "all" and payload.tag ~= "*" then
+            local entries = state.session.log.entries
+            for i = #entries, 1, -1 do
+                if entries[i].tag == payload.tag then
+                    table.remove(entries, i)
+                end
+            end
+        else
+            state.session.log.entries = {}
+        end
+    end }
+
+HDG.Actions:Register{ name = "LOG_SET_FILTER",
+    persists = false, combatUnsafe = false, 
+    invalidates = { "session.log.tabFilter" },
+    reduce = function(state, payload)
+        local f = state.session.log.tabFilter
+        if payload.tag        ~= nil then f.tag        = payload.tag        end
+        if payload.level      ~= nil then f.level      = payload.level      end
+        if payload.autoScroll ~= nil then f.autoScroll = payload.autoScroll end
+    end }
+
+HDG.Actions:Register{ name = "LOG_TOGGLE_AUTOSCROLL",
+    persists = false, combatUnsafe = false, 
+    invalidates = { "session.log.tabFilter" },
+    reduce = function(state, payload)
+        local f = state.session.log.tabFilter
+        f.autoScroll = not (f.autoScroll == true)
+    end }
+
+HDG.Actions:Register{ name = "COLLECTION_BULK_LOAD",
+    persists = true,  combatUnsafe = false,
+            invalidates = { "account.collection" },
+    reduce = function(state, payload)
+        -- Wholesale ownership replace. Catalog mirrors are observer-local;
+        -- only ownedDecorIDs persists (warm-start fallback seam; not currently read at runtime).
+        state.account.collection.ownedDecorIDs = payload.owned
+    end }
+
+HDG.Actions:Register{ name = "COLLECTION_ITEM_LEARNED",
+    persists = true,  combatUnsafe = false,
+            invalidates = { "account.collection.ownedDecorIDs" },
+    reduce = function(state, payload)
+        if payload.decorID then
+            state.account.collection.ownedDecorIDs[payload.decorID] = true
+        end
+    end }
+
+HDG.Actions:Register{ name = "COLLECTION_ITEM_REMOVED",
+    persists = true,  combatUnsafe = false,
+            invalidates = { "account.collection.ownedDecorIDs" },
+    reduce = function(state, payload)
+        if payload.decorID then
+            state.account.collection.ownedDecorIDs[payload.decorID] = nil
+        end
+    end }
+
+HDG.Actions:Register{ name = "LOG_TRACE_TOGGLE",
+    persists = false, combatUnsafe = false, 
+    invalidates = { "session.log.activeTraces" },
+    reduce = function(state, payload)
+        if payload.tag == "*" or payload.tag == "all" then
+            -- Wipe all traces (used by /hdgr trace off)
+            state.session.log.activeTraces = {}
+        elseif payload.tag then
+            local on = payload.on
+            if on == nil then
+                -- Toggle if `on` not provided
+                on = not state.session.log.activeTraces[payload.tag]
+            end
+            state.session.log.activeTraces[payload.tag] = on or nil
+        end
+
+    -- ===== Filter actions ============================================
+    -- ensureDecorFilters keeps defaults in NewDecorFilters (SSoT); helpers run only inside _RawDispatch.
+    end }
+
+HDG.Actions:Register{ name = "DECOR_SET_TOP_FILTER",
+    persists = false, combatUnsafe = false, 
+    invalidates = {
+                "session.ui.decor.filters.topFilter",
+                "session.ui.decor.filters.activeTag",
+            },
+    reduce = function(state, payload)
+        local f = ensureDecorFilters(state)
+        local v = payload.value
+        -- Validate against HDG.Constants.TOP_FILTERS so the reducer rejects
+        -- typo'd values from any caller. Single SSoT for the bucket set.
+        local valid = false
+        for _, entry in ipairs(HDG.Constants.TOP_FILTERS or {}) do
+            if entry.value == v then valid = true; break end
+        end
+        if valid then
+            f.topFilter = v
+            -- Switching top filter always clears the active tag (ADR-018).
+            f.activeTag = nil
+        end
+    end }
+
+HDG.Actions:Register{ name = "DECOR_SET_TAG",
+    persists = false, combatUnsafe = false, 
+    invalidates = { "session.ui.decor.filters.activeTag" },
+    reduce = function(state, payload)
+        local f = ensureDecorFilters(state)
+        if payload.tag == nil or type(payload.tag) == "string" then
+            f.activeTag = payload.tag
+        end
+    end }
+
+HDG.Actions:Register{ name = "DECOR_TOGGLE_ONLY_UNCOLLECTED",
+    persists = false, combatUnsafe = false, 
+    invalidates = { "session.ui.decor.filters.onlyUncollected" },
+    reduce = function(state, payload)
+        local f = ensureDecorFilters(state)
+        f.onlyUncollected = not f.onlyUncollected
+    end }
+
+HDG.Actions:Register{ name = "DECOR_TOGGLE_ONLY_STORED",
+    persists = false, combatUnsafe = false, 
+    invalidates = { "session.ui.decor.filters.onlyStored" },
+    reduce = function(state, payload)
+        local f = ensureDecorFilters(state)
+        f.onlyStored = not f.onlyStored
+    end }
+
+HDG.Actions:Register{ name = "DECOR_SET_SEARCH",
+    persists = false, combatUnsafe = false, noisy = true,
+    invalidates = { "session.ui.decor.searchQuery" },
+    reduce = function(state, payload)
+        state.session.ui.decor.searchQuery = tostring(payload.query)
+
+    -- ===== Favorites (G2) ====================================================
+    end }
+
+HDG.Actions:Register{ name = "FAVORITE_TOGGLE",
+    persists = true, combatUnsafe = false,
+            invalidates = { "account.favorites" },
+    reduce = function(state, payload)
+        if payload.itemID then
+            local fav = state.account.favorites
+            if fav[payload.itemID] then
+                fav[payload.itemID] = nil
+            else
+                fav[payload.itemID] = true
+            end
+        end
+
+    -- ===== User notes (G3) ===================================================
+    end }
+
+HDG.Actions:Register{ name = "NOTE_SET",
+    persists = true, combatUnsafe = false,
+            invalidates = function(action) return { HDG.Paths.Join("account.userNotes", action.payload and action.payload.itemID) } end,
+    reduce = function(state, payload)
+        if payload.itemID and payload.text ~= nil then
+            state.account.userNotes[payload.itemID] = {
+                text = payload.text,
+                ts   = payload.ts or (_G.GetTime and _G.GetTime() or 0),  -- exception(boundary): GetTime/time absent in headless harness
+            }
+            -- LRU cap at 500. Iterate to find oldest; cheap at this size.
+            local MAX_NOTES = 500
+            local notes = state.account.userNotes
+            local count = 0
+            for _ in pairs(notes) do count = count + 1 end
+            if count > MAX_NOTES then
+                -- `n.ts or 0`: tolerates pre-1.0 savedvar entries that
+                -- shipped without timestamps. Treats them as oldest so
+                -- they evict first when over cap. Mark boundary so the
+                -- sweep recognises the migration intent.
+                local oldest_id, oldest_ts = nil, math.huge
+                for id, n in pairs(notes) do
+                    local ts = n.ts or 0  -- migration
+                    if ts < oldest_ts then oldest_ts = ts; oldest_id = id end
+                end
+                if oldest_id then notes[oldest_id] = nil end
+            end
+        end
+    end }
+
+HDG.Actions:Register{ name = "NOTE_CLEAR",
+    persists = true, combatUnsafe = false,
+            invalidates = function(action) return { HDG.Paths.Join("account.userNotes", action.payload and action.payload.itemID) } end,
+    reduce = function(state, payload)
+        if payload.itemID then
+            state.account.userNotes[payload.itemID] = nil
+        end
+
+    -- ===== Vendor notes ======================================================
+    end }
+
+HDG.Actions:Register{ name = "VENDOR_NOTE_SET",
+    persists = true, combatUnsafe = false,
+            invalidates = function(action) return { HDG.Paths.Join("account.vendorNotes", action.payload and action.payload.npcID) } end,
+    reduce = function(state, payload)
+        if payload.npcID and payload.text ~= nil then
+            state.account.vendorNotes[payload.npcID] = {
+                text = payload.text,
+                ts   = payload.ts or (_G.GetTime and _G.GetTime() or 0),  -- exception(boundary): GetTime/time absent in headless harness
+            }
+            -- LRU cap at 100 (vendor count is much smaller than item count).
+            local MAX_VENDOR_NOTES = 100
+            local notes = state.account.vendorNotes
+            local count = 0
+            for _ in pairs(notes) do count = count + 1 end
+            if count > MAX_VENDOR_NOTES then
+                -- See item-note LRU comment above: `n.ts or 0` covers
+                -- pre-1.0 savedvar entries without timestamps. Migration.
+                local oldest_id, oldest_ts = nil, math.huge
+                for id, n in pairs(notes) do
+                    local ts = n.ts or 0  -- migration
+                    if ts < oldest_ts then oldest_ts = ts; oldest_id = id end
+                end
+                if oldest_id then notes[oldest_id] = nil end
+            end
+        end
+    end }
+
+HDG.Actions:Register{ name = "VENDOR_NOTE_CLEAR",
+    persists = true, combatUnsafe = false,
+            invalidates = function(action) return { HDG.Paths.Join("account.vendorNotes", action.payload and action.payload.npcID) } end,
+    reduce = function(state, payload)
+        if payload.npcID then
+            state.account.vendorNotes[payload.npcID] = nil
+        end
+
+    -- ===== Recipe knowledge ==================================================
+    end }
+
+HDG.Actions:Register{ name = "RECIPE_KNOWLEDGE_UPDATED",
+    persists = true, combatUnsafe = false,
+            invalidates = { "account.recipes" },
+    reduce = function(state, payload)
+        -- Bulk replace: RecipeKnowledgeScanner emits the full per-itemID map.
+        state.account.recipes = payload.entries
+
+    -- ===== Crafting queue + history ==============================
+    end }
+
+HDG.Actions:Register{ name = "CRAFT_QUEUE_ADD",
+    persists = true, combatUnsafe = false,
+            invalidates = { "account.craft.queue" },
+    reduce = function(state, payload)
+        local q   = state.account.craft.queue
+        local qty = payload.qty or 1   -- exception(boundary): slash-command dispatcher may omit qty for default-1 add
+        -- Coalesce into an existing row with the same recipeID so repeated
+        -- Add clicks accumulate qty instead of producing duplicate rows.
+        -- Matches HDG's queue semantics + keeps the byRecipe materials view
+        -- from showing the same recipe twice. Same recipeID = same craft;
+        -- sessionKey is a tiebreaker for cross-reload disambiguation only.
+        local merged = false
+        for _, row in ipairs(q) do
+            if row.recipeID == payload.recipeID then
+                row.requested = (row.requested or 0) + qty  -- exception(false-positive): requested accumulator lazy-init
+                row.remaining = (row.remaining or 0) + qty  -- exception(boundary): queue row from SVars may lack remaining
+                merged = true
+                break
+            end
+        end
+        if not merged then
+            q[#q + 1] = {
+                recipeID   = payload.recipeID,
+                itemID     = payload.itemID,
+                requested  = qty,
+                remaining  = qty,
+                source     = payload.source,
+                ts         = (_G.time and _G.time()) or 0,
+                sessionKey = payload.sessionKey,   -- reviewer C8: cross-reload disambiguator
+            }
+        end
+    end }
+
+HDG.Actions:Register{ name = "CRAFT_QUEUE_REMOVE",
+    persists = true, combatUnsafe = false,
+            invalidates = { "account.craft.queue" },
+    reduce = function(state, payload)
+        local q = state.account.craft.queue
+        if payload.position and q[payload.position] then
+            table.remove(q, payload.position)
+        end
+    end }
+
+HDG.Actions:Register{ name = "CRAFT_QUEUE_CLEAR",
+    persists = true, combatUnsafe = false,
+            invalidates = { "account.craft.queue" },
+    reduce = function(state, payload)
+        state.account.craft.queue = {}
+    end }
+
+HDG.Actions:Register{ name = "CRAFT_QUEUE_DECREMENT",
+    persists = true, combatUnsafe = false,
+            invalidates = { "account.craft.queue" },
+    reduce = function(state, payload)
+        -- Match by (position, recipeID) -- reviewer C2/C4: position alone
+        -- isn't unique across a queue mutation, recipeID alone isn't unique
+        -- because the same item can come from multiple recipes.
+        -- List-side steppers dispatch WITHOUT a position -- fall back to the first matching row.
+        local q = state.account.craft.queue
+        local pos = payload.position
+        if not pos then
+            for i, r in ipairs(q) do
+                if r.recipeID == payload.recipeID then pos = i; break end
+            end
+        end
+        local row = pos and q[pos]
+        if row and row.recipeID == payload.recipeID then
+            row.remaining = (row.remaining or 0) - (payload.qty or 1)  -- exception(boundary): queue row from SVars may lack remaining
+            if row.remaining <= 0 then
+                table.remove(q, pos)
+            end
+        end
+    end }
+
+HDG.Actions:Register{ name = "CRAFT_HISTORY_PUSH",
+    persists = true, combatUnsafe = false,
+            invalidates = { "account.craft.history.entries", "session.styles.changeSeq" },
+    reduce = function(state, payload)
+        -- Reviewer C2: `completed` flag defends against phantom history
+        -- entries when the matching DECREMENT was a no-op (post-removal
+        -- events 5..N of a multi-craft batch).
+        -- Field names: eventType + timestamp (HouseAggregator contract).
+        if payload.completed or payload.eventType == "learned" then
+            local hist = state.account.craft.history
+            hist.nextID = hist.nextID + 1
+            hist.entries[#hist.entries + 1] = {
+                id        = hist.nextID,
+                eventType = payload.eventType,
+                recipeID  = payload.recipeID,
+                itemID    = payload.itemID,
+                qty       = payload.qty,
+                timestamp = payload.timestamp or (_G.time and _G.time()) or 0,
+            }
+            local cap = HDG.Constants.CRAFT_HISTORY_CAP
+            while #hist.entries > cap do
+                table.remove(hist.entries, 1)
+            end
+            -- A learned decor changes the "Recently Learned" collection -> bump the
+            -- styles changeSeq so its resolver + every changeSeq-bound selector (Styles
+            -- tab + companion grid) refresh. Completed crafts don't affect it.
+            if payload.eventType == "learned" then
+                state.session.styles.changeSeq =
+                    (state.session.styles.changeSeq or 0) + 1
+            end
+        end
+
+    -- ===== Per-character roster (alts) ============================
+    end }
+
+HDG.Actions:Register{ name = "CHARACTER_PROFESSION_UPDATED",
+    persists = true, combatUnsafe = false,
+            invalidates = function(action) return { HDG.Paths.Join("account.characters", action.payload and action.payload.charKey) } end,
+    reduce = function(state, payload)
+        -- Upsert the character entry, then replace this profession's data
+        -- in full (skill ladder + known recipes). Other professions on the
+        -- same char survive untouched -- each profession scan only carries
+        -- its own data.
+        local chars = state.account.characters
+        local key   = payload.charKey
+        if key then
+            chars[key] = chars[key] or {
+                name        = payload.name,
+                realm       = payload.realm,
+                class       = payload.class,
+                classFile   = payload.classFile,
+                hidden      = false,
+                lastSeen    = 0,
+                professions = {},
+            }
+            local c = chars[key]
+            -- Refresh identity fields on each scan (rename, class change
+            -- via faction change service, etc.).
+            c.name      = payload.name      or c.name
+            c.realm     = payload.realm     or c.realm
+            c.class     = payload.class     or c.class
+            c.classFile = payload.classFile or c.classFile
+            c.lastSeen  = (_G.time and _G.time()) or c.lastSeen or 0
+            -- Char-level knowsFindLumber: scanner captures via C_SpellBook
+            -- on every prof scan. Tracks per-char awareness of Find Lumber
+            -- (the achievement-gated find-spell), surfaced as a cyan
+            -- indicator in the Alts char header.
+            if payload.knowsFindLumber ~= nil then
+                c.knowsFindLumber = payload.knowsFindLumber and true or false
+            end
+            if payload.profName then
+                c.professions[payload.profName] = {
+                    skillLines   = payload.skillLines,
+                    knownRecipes = payload.knownRecipes,
+                }
+            end
+        end
+    end }
+
+HDG.Actions:Register{ name = "CHARACTER_DELETED",
+    persists = true, combatUnsafe = false,
+            invalidates = function(action) return { HDG.Paths.Join("account.characters", action.payload and action.payload.charKey) } end,
+    reduce = function(state, payload)
+        if payload.charKey then
+            state.account.characters[payload.charKey] = nil
+        end
+    end }
+
+HDG.Actions:Register{ name = "CHARACTER_HIDDEN",
+    persists = true, combatUnsafe = false,
+            invalidates = function(action)
+                local key = action.payload and action.payload.charKey
+                if key then
+                    return { P.Join("account.characters", tostring(key), "hidden") }
+                end
+                return { "account.characters" }
+            end,
+    reduce = function(state, payload)
+        local c = state.account.characters[payload.charKey]
+        if c then c.hidden = payload.hidden and true or false end
+    end }
+
+HDG.Actions:Register{ name = "CHARACTER_HIDDEN_TOGGLE",
+    persists = true, combatUnsafe = false,
+            invalidates = function(action)
+                local key = action.payload and action.payload.charKey
+                if key then
+                    return { P.Join("account.characters", tostring(key), "hidden") }
+                end
+                return { "account.characters" }
+            end,
+    reduce = function(state, payload)
+        local c = state.account.characters[payload.charKey]
+        if c then c.hidden = not (c.hidden == true) end
+    end }
+
+HDG.Actions:Register{ name = "COMPANION_TOGGLE",
+    persists = false, combatUnsafe = false, 
+    invalidates = { "session.ui.companion.windowShown" },
+    reduce = function(state, payload)
+        state.session.ui.companion.windowShown =
+            not state.session.ui.companion.windowShown
+    end }
+
+HDG.Actions:Register{ name = "COMPANION_SET_MODE",
+    persists = false, combatUnsafe = false, 
+    invalidates = { "session.ui.companion.mode", "session.ui.companion.selectedItemID" },
+    reduce = function(state, payload)
+        local m = payload.mode
+        if m then
+            state.session.ui.companion.mode = m
+            -- Clear selection when switching modes (different collection sets).
+            state.session.ui.companion.selectedItemID = nil
+        end
+    end }
+
+HDG.Actions:Register{ name = "COMPANION_SELECT_ITEM",
+    persists = false, combatUnsafe = false, 
+    invalidates = { "session.ui.companion.selectedItemID" },
+    reduce = function(state, payload)
+        state.session.ui.companion.selectedItemID = payload.itemID
+    end }
+
+HDG.Actions:Register{ name = "COMPANION_TOGGLE_COST",
+    persists = false, combatUnsafe = false, 
+    invalidates = { "session.ui.companion.showCost" },
+    reduce = function(state, payload)
+        state.session.ui.companion.showCost =
+            not state.session.ui.companion.showCost
+    end }
+
+HDG.Actions:Register{ name = "COMPANION_CYCLE_IO",
+    persists = false, combatUnsafe = false, 
+    invalidates = { "session.ui.companion.ioFilter" },
+    reduce = function(state, payload)
+        -- 3-state cycle: all -> indoor -> outdoor -> all.
+        local cur = state.session.ui.companion.ioFilter
+        state.session.ui.companion.ioFilter =
+            (cur == "all" and "indoor") or (cur == "indoor" and "outdoor") or "all"
+    end }
+
+HDG.Actions:Register{ name = "COMPANION_SET_POSITION",
+    persists = true, combatUnsafe = false,
+            invalidates = { "account.ui.companion.window" },
+    reduce = function(state, payload)
+        state.account.ui.companion.window.x = payload.x
+        state.account.ui.companion.window.y = payload.y
+    end }
+
+HDG.Actions:Register{ name = "COMPANION_SET_LAUNCHER_POSITION",
+    persists = true, combatUnsafe = false,
+            invalidates = { "account.ui.companion.launcher" },
+    reduce = function(state, payload)
+        state.account.ui.companion.launcher.x = payload.x
+        state.account.ui.companion.launcher.y = payload.y
+
+    -- ===== HouseTab dashboard =====
+    end }
+
+HDG.Actions:Register{ name = "HOUSE_SNAPSHOT_UPDATED",
+    persists = false, combatUnsafe = false, 
+    invalidates = { "session.house.snapshot", "session.house.snapshotChangeSeq" },
+    reduce = function(state, payload)
+        state.session.house.snapshot     = payload.snapshot
+        state.session.house.snapshotChangeSeq = state.session.house.snapshotChangeSeq + 1
+    end }
+
+HDG.Actions:Register{ name = "HOUSE_LIST_UPDATED",
+    persists = false, combatUnsafe = false, 
+    invalidates = { "session.house.ownedHouses" },
+    reduce = function(state, payload)
+        -- Identity-only update: ensure an entry exists per houseGUID with
+        -- identity fields populated; preserve any previously-captured
+        -- level/favor/thresholds across re-fires of the list event
+        -- (Blizzard re-fires 3-5 times on login). Faction is derived by
+        -- the observer (HouseInfo struct doesn't carry it directly).
+        local owned = state.session.house.ownedHouses
+        for _, h in ipairs(payload.houses or {}) do
+            local guid = h.houseGUID
+            if guid then
+                owned[guid] = owned[guid] or {}
+                owned[guid].name             = h.neighborhoodName or owned[guid].name
+                owned[guid].faction          = h.faction          or owned[guid].faction
+                owned[guid].neighborhoodGUID = h.neighborhoodGUID or owned[guid].neighborhoodGUID
+                -- exception(boundary): HouseInfo.houseName is 0 (number, truthy) for
+                -- unnamed houses -- a bare `or` would overwrite a previously-captured
+                -- real name with 0 on re-fires (_SIGNATURES.md HouseInfo gotcha).
+                local hn = (type(h.houseName) == "string" and h.houseName ~= "") and h.houseName or nil
+                owned[guid].houseName        = hn                 or owned[guid].houseName
+                owned[guid].plotID           = h.plotID           or owned[guid].plotID
+            end
+        end
+    end }
+
+HDG.Actions:Register{ name = "ACTIVE_NEIGHBORHOOD_UPDATED",
+    persists = false, combatUnsafe = false, 
+    invalidates = { "session.house.activeNeighborhoodGUID" },
+    reduce = function(state, payload)
+        -- nil-able: GetActiveNeighborhood returns nil when not in a
+        -- neighborhood context. Selector falls back to first owned house.
+        state.session.house.activeNeighborhoodGUID = payload.neighborhoodGUID
+    end }
+
+HDG.Actions:Register{ name = "DAILY_BESTOWED_UPDATED",
+    persists = false, combatUnsafe = false, 
+    invalidates = { "session.daily.bestowed" },
+    reduce = function(state, payload)
+        state.session.daily.bestowed = {
+            name    = payload.name,
+            quote   = payload.quote,
+            dateKey = payload.dateKey,
+        }
+    end }
+
+HDG.Actions:Register{ name = "DAILY_ORC_QUOTE_SET",
+    persists = false, combatUnsafe = false, 
+    invalidates = { "session.daily.orcQuote" },
+    reduce = function(state, payload)
+        state.session.daily.orcQuote = payload.quote
+    end }
+
+HDG.Actions:Register{ name = "STYLES_EDIT_STYLE",
+    persists = false, combatUnsafe = false, 
+    invalidates = { "session.ui.styles.view",
+                                               "session.ui.styles.curator.sourceMode",
+                                               "session.ui.styles.curator.selectedItems",
+                                               "session.ui.styles.curator.selectedCount",
+                                               "session.ui.styles.curator.selectedTargetID" },
+    reduce = function(state, payload)
+        -- Deep-link into the Style Curator with this style as the source
+        -- (HDG ShowEditor + SetSource parity). collectionID is already the
+        -- "style:<uuid>" key the curator's sourceMode consumes; selection
+        -- clears (selected itemIDs are meaningless across sources).
+        state.session.ui.styles.view = "curator"
+        state.session.ui.styles.curator.sourceMode = payload.collectionID
+        state.session.ui.styles.curator.selectedItems = {}
+        state.session.ui.styles.curator.selectedCount = 0
+        -- Clear any stale move-target from a prior curator session, else the
+        -- Move button would target the wrong style after a landing deep-link.
+        state.session.ui.styles.curator.selectedTargetID = nil
+    end }
+
+HDG.Actions:Register{ name = "HOUSE_LEVEL_UPDATED",
+    persists = false, combatUnsafe = false, 
+    invalidates = { "session.house.ownedHouses" },
+    reduce = function(state, payload)
+        -- Per-house favor update. Event fires for ALL owned houses on
+        -- each request; we target by houseGUID. Ensure an entry exists
+        -- (level event may arrive before list event in some replay paths).
+        local owned = state.session.house.ownedHouses
+        local guid  = payload.houseGUID
+        if guid then
+            owned[guid] = owned[guid] or {}
+            owned[guid].level      = payload.level
+            owned[guid].favor      = payload.favor
+            owned[guid].maxLevel   = payload.maxLevel
+            owned[guid].thresholds = payload.thresholds
+        end
+    end }
+
+HDG.Actions:Register{ name = "HOUSE_REWARDS_RECEIVED",
+    persists = false, combatUnsafe = false, 
+    invalidates = { "session.house.rewardsByLevel" },
+    reduce = function(state, payload)
+        -- Cache the per-level rewards array. RECEIVED_HOUSE_LEVEL_REWARDS
+        -- fires once per GetHouseLevelRewardsForLevel(level) call; cache
+        -- avoids re-requesting the same level repeatedly.
+        local level   = payload.level
+        local rewards = payload.rewards
+        if type(level) == "number" and type(rewards) == "table" then
+            state.session.house.rewardsByLevel[level] = { rewards = rewards }
+        end
+    end }
+
+HDG.Actions:Register{ name = "HOUSETAB_TOGGLE_WIDGET",
+    persists = true, combatUnsafe = false,
+            invalidates = function(action) return { HDG.Paths.Join("account.ui.houseTab.enabled", action.payload and action.payload.widgetID) } end,
+    reduce = function(state, payload)
+        local id = payload.widgetID
+        local ht = state.account.ui.houseTab
+        ht.enabled[id] = not (ht.enabled[id] == true) and true or nil
+    end }
+
+HDG.Actions:Register{ name = "HOUSETAB_SET_ORDER",
+    persists = true, combatUnsafe = false,
+            invalidates = function(action) return { HDG.Paths.Join("account.ui.houseTab.order", action.payload and action.payload.widgetID) } end,
+    reduce = function(state, payload)
+        state.account.ui.houseTab.order[payload.widgetID] = payload.order
+    end }
+
+HDG.Actions:Register{ name = "HOUSETAB_SET_ORDERS",
+    persists = true, combatUnsafe = false,
+            invalidates = { "account.ui.houseTab.order" },
+    reduce = function(state, payload)
+        state.account.ui.houseTab.order = payload.orders
+    end }
+
+HDG.Actions:Register{ name = "HOUSETAB_REORDER_WIDGET",
+    persists = true, combatUnsafe = false,
+            invalidates = { "account.ui.houseTab.order" },
+    reduce = function(state, payload)
+        -- Remove srcID from the supplied ordered list, reinsert at insertIdx, renumber to
+        -- contiguous order ints. This transition used to live in the controller's
+        -- _computePickerOrders; it belongs here. The controller passes the current ordered ids
+        -- (a legit one-shot selector read on drag-stop, not a render path).
+        local ids, srcID, insertIdx = payload.orderedIDs, payload.srcID, payload.insertIdx
+        if ids and srcID and insertIdx then
+            local out = {}
+            for _, id in ipairs(ids) do if id ~= srcID then out[#out + 1] = id end end
+            if insertIdx < 1 then insertIdx = 1 end
+            if insertIdx > #out + 1 then insertIdx = #out + 1 end
+            table.insert(out, insertIdx, srcID)
+            local order = {}
+            for i, id in ipairs(out) do order[id] = i end
+            state.account.ui.houseTab.order = order
+        end
+    end }
+
+HDG.Actions:Register{ name = "HOUSETAB_SET_WIDTH",
+    persists = true, combatUnsafe = false,
+            invalidates = function(action) return { HDG.Paths.Join("account.ui.houseTab.width", action.payload and action.payload.widgetID) } end,
+    reduce = function(state, payload)
+        state.account.ui.houseTab.width[payload.widgetID] = payload.width
+    end }
+
+HDG.Actions:Register{ name = "HOUSETAB_RESIZE_WIDGET",
+    persists = true, combatUnsafe = false,
+            invalidates = function(action) return { HDG.Paths.Join("account.ui.houseTab.layoutOverrides", action.payload and action.payload.widgetID) } end,
+    reduce = function(state, payload)
+        local ht = state.account.ui.houseTab
+        ht.layoutOverrides[payload.widgetID] = ht.layoutOverrides[payload.widgetID] or {}
+        ht.layoutOverrides[payload.widgetID].height = payload.height
+    end }
+
+HDG.Actions:Register{ name = "HOUSETAB_RESET_LAYOUT",
+    persists = true, combatUnsafe = false,
+            invalidates = { "account.ui.houseTab.enabled", "account.ui.houseTab.order",
+                            "account.ui.houseTab.width", "account.ui.houseTab.layoutOverrides" },
+    reduce = function(state, payload)
+        local ht = state.account.ui.houseTab
+        ht.enabled         = {}
+        ht.order           = {}
+        ht.width           = {}
+        ht.layoutOverrides = {}
+    end }
+
+HDG.Actions:Register{ name = "HOUSETAB_TOGGLE_PICKER",
+    persists = false, combatUnsafe = false, 
+    invalidates = { "session.ui.houseTab.pickerOpen" },
+    reduce = function(state, payload)
+        state.session.ui.houseTab.pickerOpen =
+            not state.session.ui.houseTab.pickerOpen
+    end }
+
+HDG.Actions:Register{ name = "HOUSETAB_TOGGLE_DESIGN_MODE",
+    persists = false, combatUnsafe = false, 
+    invalidates = { "session.ui.houseTab.designMode" },
+    reduce = function(state, payload)
+        state.session.ui.houseTab.designMode =
+            not state.session.ui.houseTab.designMode
+    end }
+
+HDG.Actions:Register{ name = "SESSION_IDENTITY_SET",
+    persists = false, combatUnsafe = false, 
+    invalidates = { "session.identity" },
+    reduce = function(state, payload)
+        -- Strict payload reads: SessionIdentity:onEnable already coerces
+        -- nil class/classFile to "" before dispatch (single producer; no
+        -- defensive `or` defaults at this internal boundary).
+        local id = state.session.identity
+        id.name         = payload.name
+        id.realm        = payload.realm
+        id.class        = payload.class
+        id.classFile    = payload.classFile
+        id.factionGroup = payload.factionGroup or ""  -- exception(boundary): SESSION_IDENTITY_SET payload may omit factionGroup
+        id.charKey      = id.name .. "-" .. id.realm
+    end }
+
+HDG.Actions:Register{ name = "TRAINERS_TOGGLE_PROFESSION",
+    persists = false, combatUnsafe = false, retainsScroll = true,
+    invalidates = function(action) return { HDG.Paths.Join("session.ui.trainers.expandedProfessions", action.payload and action.payload.profession) } end,
+    reduce = function(state, payload)
+        local p = payload.profession
+        if p then
+            local expanded = state.session.ui.trainers.expandedProfessions
+            expanded[p] = not (expanded[p] == true) and true or nil
+        end
+    end }
+
+HDG.Actions:Register{ name = "TRAINERS_TOGGLE_MIDNIGHT_SECTION",
+    persists = false, combatUnsafe = false, retainsScroll = true,
+    invalidates = { "session.ui.trainers.midnightExpanded" },
+    reduce = function(state, payload)
+        state.session.ui.trainers.midnightExpanded =
+            not state.session.ui.trainers.midnightExpanded
+    end }
+
+HDG.Actions:Register{ name = "TRAINERS_SELECT_TRAINER",
+    persists = false, combatUnsafe = false, 
+    invalidates = { "session.ui.trainers.selectedNpcID" },
+    reduce = function(state, payload)
+        state.session.ui.trainers.selectedNpcID = payload.npcID
+    end }
+
+HDG.Actions:Register{ name = "ALTS_SET_CHARS_POPULATION",
+    persists = false, combatUnsafe = false, 
+    invalidates = { "session.ui.alts.charsPopulation" },
+    reduce = function(state, payload)
+        -- Validate -- silently coerce unknown values to "active".
+        local p = payload.population
+        if p ~= "active" and p ~= "hidden" then p = "active" end
+        state.session.ui.alts.charsPopulation = p
+    end }
+
+HDG.Actions:Register{ name = "MOGUL_SET_MODE",
+    persists = false, combatUnsafe = false, 
+    invalidates = { "session.ui.mogul.mode" },
+    reduce = function(state, payload)
+        state.session.ui.mogul.mode = payload.mode
+    end }
+
+HDG.Actions:Register{ name = "MOGUL_SET_VIEW",
+    persists = false, combatUnsafe = false, 
+    invalidates = { "session.ui.mogul.viewMode" },
+    reduce = function(state, payload)
+        state.session.ui.mogul.viewMode = payload.viewMode
+    end }
+
+HDG.Actions:Register{ name = "MOGUL_SET_OPTIMIZE_BY",
+    persists = false, combatUnsafe = false, 
+    invalidates = { "session.ui.mogul.optimizeBy" },
+    reduce = function(state, payload)
+        state.session.ui.mogul.optimizeBy = payload.optimizeBy
+    end }
+
+HDG.Actions:Register{ name = "MOGUL_SET_SUBVIEW",
+    persists = false, combatUnsafe = false, 
+    invalidates = { "session.ui.mogul.subView" },
+    reduce = function(state, payload)
+        state.session.ui.mogul.subView = payload.subView
+    end }
+
+HDG.Actions:Register{ name = "MOGUL_SET_SUPPLY_MODE",
+    persists = false, combatUnsafe = false, 
+    invalidates = { "session.ui.mogul.supplyImpact.mode",
+                                          "session.ui.mogul.supplyImpact.smoothPct",
+                                          "session.ui.mogul.supplyImpact.capN" },
+    reduce = function(state, payload)
+        local si = state.session.ui.mogul.supplyImpact
+        si.mode = payload.mode
+    end }
+
+HDG.Actions:Register{ name = "MOGUL_SET_SUPPLY_SMOOTH",
+    persists = false, combatUnsafe = false, 
+    invalidates = { "session.ui.mogul.supplyImpact.smoothPct" },
+    reduce = function(state, payload)
+        local si = state.session.ui.mogul.supplyImpact
+        si.smoothPct = payload.pct
+    end }
+
+HDG.Actions:Register{ name = "MOGUL_SET_SUPPLY_CAP",
+    persists = false, combatUnsafe = false, 
+    invalidates = { "session.ui.mogul.supplyImpact.capN" },
+    reduce = function(state, payload)
+        local si = state.session.ui.mogul.supplyImpact
+        si.capN = payload.n
+    end }
+
+HDG.Actions:Register{ name = "MOGUL_SET_FRUGAL",
+    persists = false, combatUnsafe = false, 
+    invalidates = { "session.ui.mogul.frugal" },
+    reduce = function(state, payload)
+        state.session.ui.mogul.frugal = payload.on == true
+    end }
+
+HDG.Actions:Register{ name = "MOGUL_TOGGLE_FRUGAL",
+    persists = false, combatUnsafe = false, 
+    invalidates = { "session.ui.mogul.frugal" },
+    reduce = function(state, payload)
+        state.session.ui.mogul.frugal = not (state.session.ui.mogul.frugal == true)
+    end }
+
+HDG.Actions:Register{ name = "GOBLIN_SET_PROFESSION",
+    persists = false, combatUnsafe = false, 
+    invalidates = { "session.ui.mogul.goblin.profession" },
+    reduce = function(state, payload)
+        state.session.ui.mogul.goblin.profession = payload.profession
+    end }
+
+HDG.Actions:Register{ name = "GOBLIN_SET_SEARCH",
+    persists = false, combatUnsafe = false, noisy = true,
+    invalidates = { "session.ui.mogul.goblin.search" },
+    reduce = function(state, payload)
+        state.session.ui.mogul.goblin.search    = payload.query
+    end }
+
+HDG.Actions:Register{ name = "GOBLIN_SET_KNOWLEDGE",
+    persists = false, combatUnsafe = false, 
+    invalidates = { "session.ui.mogul.goblin.knowledge" },
+    reduce = function(state, payload)
+        state.session.ui.mogul.goblin.knowledge = payload.mode
+    end }
+
+HDG.Actions:Register{ name = "GOBLIN_SET_QUEUE",
+    persists = false, combatUnsafe = false, 
+    invalidates = { "session.ui.mogul.goblin.queue" },
+    reduce = function(state, payload)
+        state.session.ui.mogul.goblin.queue     = payload.mode
+    end }
+
+HDG.Actions:Register{ name = "GOBLIN_TOGGLE_AUCTIONS",
+    persists = false, combatUnsafe = false, 
+    invalidates = { "session.ui.mogul.goblin.auctionsOnly" },
+    reduce = function(state, payload)
+        local g = state.session.ui.mogul.goblin
+        g.auctionsOnly = not (g.auctionsOnly == true)
+    end }
+
+HDG.Actions:Register{ name = "GOBLIN_TOGGLE_ROW_EXPAND",
+    persists = false, combatUnsafe = false, 
+    invalidates = { "session.ui.mogul.goblin.expandedItemID" },
+    reduce = function(state, payload)
+        -- Click row: toggle expansion. Same itemID as currently expanded
+        -- collapses; different/new itemID switches the detail panel to it.
+        local g = state.session.ui.mogul.goblin
+        if g.expandedItemID == payload.itemID then
+            g.expandedItemID = nil
+        else
+            g.expandedItemID = payload.itemID
+        end
+    end }
+
+HDG.Actions:Register{ name = "GOBLIN_SET_SORT",
+    persists = false, combatUnsafe = false, 
+    invalidates = { "session.ui.mogul.goblin.sortCol",
+                            "session.ui.mogul.goblin.sortDir" },
+    reduce = function(state, payload)
+        -- Click on header: same column flips direction, new column resets
+        -- to the column's natural-desc default (most useful first sort).
+        -- Name column defaults to ascending (alphabetical reads better).
+        local g = state.session.ui.mogul.goblin
+        local col = payload.col
+        if g.sortCol == col then
+            g.sortDir = (g.sortDir == "desc") and "asc" or "desc"
+        else
+            g.sortCol = col
+            g.sortDir = (col == "name" or col == "lumber") and "asc" or "desc"
+        end
+
+    -- ===== Recipes tab session UI ================================
+    end }
+
+HDG.Actions:Register{ name = "RECIPES_SET_SEARCH",
+    persists = false, combatUnsafe = false, noisy = true,
+    invalidates = { "session.ui.recipes.searchQuery" },
+    reduce = function(state, payload)
+        state.session.ui.recipes.searchQuery = payload.query
+    end }
+
+HDG.Actions:Register{ name = "RECIPES_SET_SECTION_EXPAND",
+    persists = false, combatUnsafe = false,
+            invalidates = function(action) return { HDG.Paths.Join("session.ui.recipes.expandedSections", action.payload and action.payload.key) } end,
+    reduce = function(state, payload)
+        local sections = state.session.ui.recipes.expandedSections
+        if payload.expanded then
+            sections[payload.key] = true
+        else
+            sections[payload.key] = nil
+        end
+    end }
+
+HDG.Actions:Register{ name = "RECIPES_SET_MATERIALS_DEPTH",
+    persists = false, combatUnsafe = false, 
+    invalidates = { "session.ui.recipes.materialsDepth" },
+    reduce = function(state, payload)
+        state.session.ui.recipes.materialsDepth = payload.value
+    end }
+
+HDG.Actions:Register{ name = "RECIPES_TOGGLE_MATERIALS_GROUPING",
+    persists = false, combatUnsafe = false, 
+    invalidates = { "session.ui.recipes.materialsGrouping" },
+    reduce = function(state, payload)
+        local r = state.session.ui.recipes
+        r.materialsGrouping = (r.materialsGrouping == "byRecipe") and "totals" or "byRecipe"
+    end }
+
+HDG.Actions:Register{ name = "RECIPES_TOGGLE_FILTER",
+    persists = false, combatUnsafe = false,
+            invalidates = function(action) return { HDG.Paths.Join("session.ui.recipes.filters", action.payload and action.payload.filter) } end,
+    reduce = function(state, payload)
+        local filters = state.session.ui.recipes.filters
+        local key = payload.filter
+        filters[key] = not filters[key]
+    end }
+
+HDG.Actions:Register{ name = "RECIPES_SELECT_RECIPE",
+    persists = false, combatUnsafe = false, 
+    invalidates = { "session.ui.recipes.selectedRecipeID", "session.ui.recipes.queueSelectedRecipeID" },
+    reduce = function(state, payload)
+        state.session.ui.recipes.selectedRecipeID = payload.recipeID
+        -- Picking a recipe from the list resets queue scoping: the queue row
+        -- deselects + Materials returns to the full-queue aggregate. (Last
+        -- selection wins; recipe-list and queue selections are mutually exclusive.)
+        state.session.ui.recipes.queueSelectedRecipeID = nil
+    end }
+
+HDG.Actions:Register{ name = "RECIPES_TOGGLE_QUEUE_SELECTION",
+    persists = false, combatUnsafe = false, 
+    invalidates = { "session.ui.recipes.queueSelectedRecipeID" },
+    reduce = function(state, payload)
+        -- Toggle: click-on-selected clears (so mats list returns to the
+        -- full-queue aggregate); click-on-other sets to that recipeID.
+        local cur = state.session.ui.recipes.queueSelectedRecipeID
+        if cur == payload.recipeID then
+            state.session.ui.recipes.queueSelectedRecipeID = nil
+        else
+            state.session.ui.recipes.queueSelectedRecipeID = payload.recipeID
+        end
+    end }
+
+HDG.Actions:Register{ name = "RECIPES_TOGGLE_PROFESSION",
+    persists = true,  combatUnsafe = false,
+            invalidates = { "account.ui.recipes.professionFilterByChar" },
+    reduce = function(state, payload)
+        -- Per-character multi-select set toggle (persisted in account.ui, keyed by
+        -- charKey). payload.profession == "all" stores an empty set (-> show every
+        -- profession); == "mine" presets to THIS character's scanned professions;
+        -- otherwise flip that profession's membership.
+        local charKey = state.session.identity.charKey
+        local byChar  = state.account.ui.recipes.professionFilterByChar
+        local char    = state.account.characters[charKey]  -- exception(nullable): char record may not exist yet
+        local set     = byChar[charKey]
+        if not set then
+            -- First explicit choice for this char. Materialize the pristine default
+            -- (this char's professions) so a single-profession toggle builds on what
+            -- was actually shown -- UNLESS the click is "all" (which wants empty).
+            set = {}
+            if payload.profession ~= "all" and char and type(char.professions) == "table" then
+                for profName in pairs(char.professions) do set[profName] = true end
+            end
+            byChar[charKey] = set
+        end
+        if payload.profession == "all" then
+            for k in pairs(set) do set[k] = nil end
+        elseif payload.profession == "mine" then
+            for k in pairs(set) do set[k] = nil end
+            if char and type(char.professions) == "table" then
+                for profName in pairs(char.professions) do set[profName] = true end
+            end
+        else
+            set[payload.profession] = not (set[payload.profession] == true) and true or nil
+        end
+    end }
+
+HDG.Actions:Register{ name = "RECIPES_TOGGLE_EXPANSION",
+    persists = true,  combatUnsafe = false,
+            invalidates = { "account.ui.recipes.expansionFilter" },
+    reduce = function(state, payload)
+        -- Multi-select set toggle (persisted in account.ui). payload.expansion
+        -- == "all" clears the set (master "All Expansions" toggle -> show every
+        -- expansion); otherwise flip that expansion's membership. Empty = all.
+        local set = state.account.ui.recipes.expansionFilter
+        if payload.expansion == "all" then
+            for k in pairs(set) do set[k] = nil end
+        else
+            set[payload.expansion] = not (set[payload.expansion] == true) and true or nil
+        end
+    end }
+
+HDG.Actions:Register{ name = "RECIPES_SET_LIST_FILTER",
+    persists = false, combatUnsafe = false, 
+    invalidates = { "session.ui.recipes.listFilter" },
+    reduce = function(state, payload)
+        state.session.ui.recipes.listFilter = payload.filter
+    end }
+
+HDG.Actions:Register{ name = "RECIPES_SELECT_MATERIAL",
+    persists = false, combatUnsafe = false, 
+    invalidates = { "session.ui.warehouse.selectedMaterialID" },
+    reduce = function(state, payload)
+        state.session.ui.warehouse.selectedMaterialID = payload.itemID
+    end }
+
+HDG.Actions:Register{ name = "RECIPES_SET_WH_MAT_SEARCH",
+    persists = false, combatUnsafe = false, noisy = true,
+    invalidates = { "session.ui.warehouse.matSearch" },
+    reduce = function(state, payload)
+        state.session.ui.warehouse.matSearch = payload.query
+
+    -- ===== Cross-feature observer dispatches =====================
+    end }
+
+HDG.Actions:Register{ name = "ITEM_INFO_RESOLVED",
+    persists = false, combatUnsafe = false,
+    invalidates = { "session.itemNames.names",
+                                     "account.craft.queue" },
+    reduce = function(state, payload)
+        -- Write resolved names to cache; one batched dispatch (not per entry).
+        -- Path invalidation on .names IS the re-pull signal (species B --
+        -- consumers read the data path; the redundant tick dissolved 2026-06-11).
+        local names = state.session.itemNames.names
+        if payload.entries then
+            for _, e in ipairs(payload.entries) do
+                if e.itemID and e.name then names[e.itemID] = e.name end
+            end
+        end
+    end }
+
+HDG.Actions:Register{ name = "QUEST_COMPLETION_RECORDED",
+    persists = true, combatUnsafe = false,
+            invalidates = { "account.questCompletions" },
+    reduce = function(state, payload)
+        -- Merge the scanned completions into the account-wide set. First char to
+        -- record a quest wins (stable attribution) -- don't overwrite. payload
+        -- entries are { [questID] = { name, class } }.
+        local store = state.account.questCompletions
+        for questID, rec in pairs(payload.completions or {}) do
+            if not store[questID] then store[questID] = rec end
+        end
+    end }
+
+HDG.Actions:Register{ name = "PRICES_DIRECT_SCAN_STARTED",
+    persists = true, combatUnsafe = false,
+            invalidates = { "session.prices.scanning", "session.prices.scanTotal",
+                            "account.prices.directCache", "account.prices.directQtyCache",
+                            "account.prices.directCacheTime" },
+    reduce = function(state, payload)
+        -- Replace-on-scan: wipe the previous cache so each scan is a fresh snapshot.
+        -- B-side: the account.prices path invalidation IS the consumer signal
+        -- (price selectors read account.prices; tick bump dissolved 2026-06-11).
+        state.account.prices.directCache = {}
+        state.account.prices.directQtyCache = {}
+        state.account.prices.directCacheTime = nil
+        local s = state.session.prices
+        s.scanning  = true
+        s.scanFound = 0
+        s.scanTotal = payload.total
+    end }
+
+HDG.Actions:Register{ name = "PRICES_DIRECT_SCAN_PROGRESS",
+    persists = false, combatUnsafe = false, 
+    invalidates = { "session.prices.scanFound" },
+    reduce = function(state, payload)
+        local s = state.session.prices
+        s.scanFound = payload.found or s.scanFound
+        s.scanTotal = payload.total or s.scanTotal
+    end }
+
+HDG.Actions:Register{ name = "PRICES_DIRECT_SCAN_BATCH",
+    persists = true,  combatUnsafe = false,
+            invalidates = { "account.prices.directCache", "account.prices.directQtyCache" },
+    reduce = function(state, payload)
+        local cache = state.account.prices.directCache
+        for itemID, copper in pairs(payload.prices) do
+            cache[itemID] = copper
+        end
+        local qty = state.account.prices.directQtyCache
+        for itemID, n in pairs(payload.quantities or {}) do
+            qty[itemID] = n
+        end
+    end }
+
+HDG.Actions:Register{ name = "PRICES_DIRECT_SCAN_COMPLETED",
+    persists = true,  combatUnsafe = false,
+            invalidates = { "account.prices.directCache", "account.prices.directQtyCache",
+                            "account.prices.directCacheTime",
+                            "session.prices.scanning" },
+    reduce = function(state, payload)
+        local cache = state.account.prices.directCache
+        local qty   = state.account.prices.directQtyCache
+        -- Zero out items we wanted but never saw -- prevents re-scan
+        -- attempts every session for items that simply aren't on the AH.
+        for itemID in pairs(payload.neededItems) do
+            if cache[itemID] == nil then cache[itemID] = 0 end
+            if qty[itemID]   == nil then qty[itemID]   = 0 end
+        end
+        state.account.prices.directCacheTime = payload.now
+        local s = state.session.prices
+        s.scanning = false
+        s.scanFound = 0
+        s.scanTotal = 0
+    end }
+
+HDG.Actions:Register{ name = "PRICES_DIRECT_CACHE_CLEARED",
+    persists = true,  combatUnsafe = false,
+            invalidates = { "account.prices.directCache", "account.prices.directQtyCache",
+                            "account.prices.directCacheTime" },
+    reduce = function(state, payload)
+        state.account.prices.directCache     = {}
+        state.account.prices.directQtyCache  = {}
+        state.account.prices.directCacheTime = nil
+    end }
+
+HDG.Actions:Register{ name = "PRICES_OWNED_AUCTIONS_UPDATED",
+    persists = true,  combatUnsafe = false,
+            invalidates = { "account.prices.ownedAuctions" },
+    reduce = function(state, payload)
+        state.account.prices.ownedAuctions = payload.auctions
+
+    -- ===== Styles ==================================================
+    end }
+
+HDG.Actions:Register{ name = "STYLES_SET_VIEW",
+    persists = false, combatUnsafe = false, 
+    invalidates = { "session.ui.styles.view",
+                                  "session.ui.styles.smartset.draft.displayName" },
+    reduce = function(state, payload)
+        state.session.ui.styles.view = payload.view
+        -- The "Smart Sets" nav leaf opens this view without running BEGIN, so
+        -- seed a fresh draft's default name here. Only when truly fresh (no
+        -- draftKey, blank name, no rules) so navigating away + back preserves an
+        -- in-progress draft; the button path (BEGIN) owns the explicit reset.
+        if payload.view == "smartset" then
+            local s = state.session.ui.styles.smartset
+            local blankName = (s.draft.displayName == nil or s.draft.displayName == "")
+            if not s.draftKey and blankName and not next(s.rules) then
+                s.draft.displayName = _seededSmartsetName(state.account)
+                s.draft.descAuto    = true
+            end
+        end
+    end }
+
+HDG.Actions:Register{ name = "STYLES_LANDING_SET_FILTER",
+    persists = false, combatUnsafe = false, 
+    invalidates = { "session.ui.styles.landing.filter" },
+    reduce = function(state, payload)
+        state.session.ui.styles.landing.filter = payload.filter
+    end }
+
+HDG.Actions:Register{ name = "STYLES_LANDING_SET_SEARCH",
+    persists = false, combatUnsafe = false, noisy = true,
+    invalidates = { "session.ui.styles.landing.search" },
+    reduce = function(state, payload)
+        state.session.ui.styles.landing.search = payload.text
+    end }
+
+HDG.Actions:Register{ name = "STYLES_LANDING_TOGGLE_SECTION",
+    persists = false, combatUnsafe = false, 
+    invalidates = function(action) return { HDG.Paths.Join("session.ui.styles.landing.expandedSections", action.payload and action.payload.type) } end,
+    reduce = function(state, payload)
+        local t = payload.type
+        if t then
+            local expanded = state.session.ui.styles.landing.expandedSections
+            expanded[t] = not (expanded[t] == true) and true or nil
+        end
+    end }
+
+HDG.Actions:Register{ name = "STYLES_SELECT_COLLECTION",
+    persists = false, combatUnsafe = false, 
+    invalidates = { "session.ui.styles.selectedID" },
+    reduce = function(state, payload)
+        state.session.ui.styles.selectedID = payload.collectionID
+    end }
+
+HDG.Actions:Register{ name = "STYLES_DETAIL_SELECT_ITEM",
+    persists = false, combatUnsafe = false, retainsScroll = true,
+    invalidates = { "session.ui.styles.detail.selectedItemID" },
+    reduce = function(state, payload)
+        state.session.ui.styles.detail.selectedItemID = payload.itemID
+    end }
+
+HDG.Actions:Register{ name = "STYLES_DETAIL_SET_VIEWMODE",
+    persists = false, combatUnsafe = false, 
+    invalidates = { "session.ui.styles.detail.viewMode" },
+    reduce = function(state, payload)
+        state.session.ui.styles.detail.viewMode = payload.mode
+    end }
+
+HDG.Actions:Register{ name = "STYLES_DETAIL_SET_FILTER",
+    persists = false, combatUnsafe = false, 
+    invalidates = { "session.ui.styles.detail.sourceFilter" },
+    reduce = function(state, payload)
+        state.session.ui.styles.detail.sourceFilter = payload.source
+    end }
+
+HDG.Actions:Register{ name = "STYLES_DETAIL_SET_SUBCAT",
+    persists = false, combatUnsafe = false, 
+    invalidates = { "session.ui.styles.detail.subcatFilter" },
+    reduce = function(state, payload)
+        state.session.ui.styles.detail.subcatFilter = payload.subcat
+    end }
+
+HDG.Actions:Register{ name = "STYLES_CACHE_BUILDING_STARTED",
+    persists = false, combatUnsafe = false, 
+    invalidates = { "session.styles.changeSeq" },
+    reduce = function(state, payload)
+        -- Notification-only (retained for closed-taxonomy check).
+    end }
+
+HDG.Actions:Register{ name = "STYLES_CACHE_BUILDING_FINISHED",
+    persists = false, combatUnsafe = false, 
+    invalidates = { "session.styles.changeSeq" },
+    reduce = function(state, payload)
+        -- Notification-only (retained for closed-taxonomy check).
+    end }
+
+HDG.Actions:Register{ name = "STYLES_DETAIL_SET_SEARCH",
+    persists = false, combatUnsafe = false, noisy = true,
+    invalidates = { "session.ui.styles.detail.search" },
+    reduce = function(state, payload)
+        state.session.ui.styles.detail.search = payload.text
+
+    -- ===== 14.3 Curator =====================================================
+    end }
+
+HDG.Actions:Register{ name = "STYLES_CURATOR_SET_SOURCE",
+    persists = false, combatUnsafe = false, 
+    invalidates = { "session.ui.styles.curator.sourceMode",
+                                               "session.ui.styles.curator.selectedItems",
+                                               "session.ui.styles.curator.selectedCount" },
+    reduce = function(state, payload)
+        state.session.ui.styles.curator.sourceMode = payload.mode
+        -- Selection clears when the source changes (selected itemIDs are
+        -- meaningless in a different source view).
+        state.session.ui.styles.curator.selectedItems = {}
+        state.session.ui.styles.curator.selectedCount = 0
+    end }
+
+HDG.Actions:Register{ name = "STYLES_CURATOR_SET_CATEGORY",
+    persists = false, combatUnsafe = false, 
+    invalidates = { "session.ui.styles.curator.focusedCategoryID",
+                                                "session.ui.styles.curator.focusedSubcategoryID" },
+    reduce = function(state, payload)
+        -- nil categoryID = the "All" icon (clears the filter). Subcategory always
+        -- resets when the major category changes -- its list is derived from the
+        -- focused category, so a carried-over value would point at a gone subcat.
+        state.session.ui.styles.curator.focusedCategoryID    = payload.categoryID
+        state.session.ui.styles.curator.focusedSubcategoryID = nil
+    end }
+
+HDG.Actions:Register{ name = "STYLES_CURATOR_SET_SUBCATEGORY",
+    persists = false, combatUnsafe = false, 
+    invalidates = { "session.ui.styles.curator.focusedSubcategoryID" },
+    reduce = function(state, payload)
+        state.session.ui.styles.curator.focusedSubcategoryID = payload.subcategoryID
+    end }
+
+HDG.Actions:Register{ name = "STYLES_CURATOR_TOGGLE_SELECT",
+    persists = false, combatUnsafe = false, retainsScroll = true,
+    invalidates = { "session.ui.styles.curator.selectedItems" },
+    reduce = function(state, payload)
+        local id = payload.itemID
+        if id then
+            local cur = state.session.ui.styles.curator
+            if cur.selectedItems[id] then
+                cur.selectedItems[id] = nil
+                cur.selectedCount = (cur.selectedCount or 1) - 1
+            else
+                cur.selectedItems[id] = true
+                cur.selectedCount = (cur.selectedCount or 0) + 1
+            end
+        end
+    end }
+
+HDG.Actions:Register{ name = "STYLES_CURATOR_CLEAR_SELECT",
+    persists = false, combatUnsafe = false, retainsScroll = true,
+    invalidates = { "session.ui.styles.curator.selectedItems",
+                                                "session.ui.styles.curator.selectedCount" },
+    reduce = function(state, payload)
+        state.session.ui.styles.curator.selectedItems = {}
+        state.session.ui.styles.curator.selectedCount = 0
+    end }
+
+HDG.Actions:Register{ name = "STYLES_CURATOR_HOVER",
+    persists = false, combatUnsafe = false,
+            noisy = true, retainsScroll = true,
+            invalidates = { "session.ui.styles.curator.hoverItemID" },
+    reduce = function(state, payload)
+        state.session.ui.styles.curator.hoverItemID = payload.itemID
+    end }
+
+HDG.Actions:Register{ name = "STYLES_CURATOR_SELECT_TARGET",
+    persists = false, combatUnsafe = false, retainsScroll = true,
+    invalidates = { "session.ui.styles.curator.selectedTargetID" },
+    reduce = function(state, payload)
+        state.session.ui.styles.curator.selectedTargetID = payload.targetID
+    end }
+
+HDG.Actions:Register{ name = "STYLES_CREATE_STYLE",
+    persists = false, combatUnsafe = false, 
+    invalidates = { "account.collections",
+                                               "session.ui.styles.curator.selectedTargetID" },
+    reduce = function(state, payload)
+        -- Create a fresh "style:<slug>" collection in account.collections
+        -- and auto-select it as the Curator's active target so the user's
+        -- next Move lands there without an extra click.
+        local name = payload.displayName
+        if not (name and name ~= "" and name:gsub("%s", "") ~= "") then return end
+        local slug = name:lower():gsub("[^%w]+", "-")
+        if slug == "" or slug == "-" then slug = tostring(_G.time and _G.time() or 0) end
+        local id = "style:" .. slug
+        -- Disambiguate if a style with this slug already exists.
+        local cols = state.account.collections or {}
+        if cols[id] then
+            local suffix = 2
+            while cols[id .. "-" .. suffix] do suffix = suffix + 1 end
+            id = id .. "-" .. suffix
+        end
+        state.account.collections = cols
+        cols[id] = {
+            id          = id,
+            type        = "style",
+            displayName = name,
+            description = "",
+            items       = {},
+            createdAt   = (_G.time and _G.time()) or 0,
+        }
+        state.session.ui.styles.curator.selectedTargetID = id
+    end }
+
+HDG.Actions:Register{ name = "STYLES_RENAME_STYLE",
+    persists = false, combatUnsafe = false, 
+    invalidates = { "account.collections" },
+    reduce = function(state, payload)
+        -- Rename the displayName of a "style:<slug>" collection. ID stays
+        -- the same so undo history + memberships keep their links.
+        local id   = payload.collectionID
+        local name = payload.displayName
+        if not (id and name and name ~= "" and name:gsub("%s", "") ~= "") then return end
+        local coll = state.account.collections and state.account.collections[id]
+        if coll and coll.type == "style" then
+            coll.displayName = name
+        end
+    end }
+
+HDG.Actions:Register{ name = "STYLES_DUPLICATE_STYLE",
+    persists = false, combatUnsafe = false, 
+    invalidates = { "account.collections",
+                                               "session.ui.styles.curator.selectedTargetID" },
+    reduce = function(state, payload)
+        -- Clone a "style:<slug>" collection. New id is "<src>-copy" with a
+        -- numeric suffix if "-copy" is already taken. items[] copied by value.
+        local srcID = payload.collectionID
+        local cols  = state.account.collections or {}
+        local src   = cols[srcID]
+        if not (src and src.type == "style") then return end
+        local baseID = srcID .. "-copy"
+        local newID  = baseID
+        local suffix = 2
+        while cols[newID] do
+            newID = baseID .. "-" .. suffix
+            suffix = suffix + 1
+        end
+        local items = {}
+        for i, v in ipairs(src.items or {}) do items[i] = v end
+        cols[newID] = {
+            id          = newID,
+            type        = "style",
+            displayName = (src.displayName or srcID) .. " (copy)",
+            description = src.description or "",
+            items       = items,
+            createdAt   = (_G.time and _G.time()) or 0,
+        }
+        state.account.collections = cols
+        state.session.ui.styles.curator.selectedTargetID = newID
+    end }
+
+HDG.Actions:Register{ name = "STYLES_DELETE_STYLE",
+    persists = false, combatUnsafe = false, 
+    invalidates = { "account.collections",
+                                               "account.vendorShoppingLists",   -- shopping lists live here; deleted via the "vsl:" id prefix
+                                               "session.ui.styles.curator.selectedTargetID" },
+    reduce = function(state, payload)
+        -- Delete any user-authored collection -- style / smartset / snapshot
+        -- live in account.collections; SHOPPING LISTS live in the separate
+        -- account.vendorShoppingLists slot, keyed WITHOUT the "vsl:" prefix the
+        -- landing card carries. Route by prefix so shopping-list deletes hit the
+        -- right slot (the old account.collections-only path silently no-op'd them
+        -- -- cols["vsl:L1"] is always nil). Pre-authored concept/collection sets
+        -- aren't deletable (canDelete=false), so they never reach here. Clears
+        -- selectedTargetID if this was the active target so the controls row hides.
+        local id  = payload.collectionID
+        local cur = state.session.ui.styles.curator
+        local vslID = type(id) == "string" and id:match("^vsl:(.+)$")
+        if vslID then
+            local lists = state.account.vendorShoppingLists
+            if not (lists and lists[vslID]) then return end   -- exception(boundary): missing list
+            lists[vslID] = nil
+        else
+            local cols = state.account.collections
+            if not (id and cols and cols[id]) then return end   -- exception(boundary): missing id / pre-first-save
+            cols[id] = nil
+        end
+        if cur and cur.selectedTargetID == id then
+            cur.selectedTargetID = nil
+        end
+    end }
+
+HDG.Actions:Register{ name = "STYLES_SMARTSET_BEGIN",
+    persists = false, combatUnsafe = false, 
+    invalidates = { "session.ui.styles.smartset" },
+    reduce = function(state, payload)
+        -- Seed draft from existing collection (when editing) or from scratch.
+        -- The view-switch to "smartset" is dispatched separately by the
+        -- entry-point CTA / Detail "Edit" button.
+        local s = state.session.ui.styles.smartset
+        local existingID = payload.id
+        local existing = existingID and state.account.collections
+                         and state.account.collections[existingID]
+        if existing then
+            s.draftKey = existingID
+            s.draft = {
+                id          = existing.id or existingID,
+                displayName = existing.displayName or "",
+                description = existing.description or "",
+                type        = existing.type or "smartset",
+                descAuto    = false,   -- editing: preserve the saved description
+            }
+            -- Deep-copy rules so edits don't mutate the persisted record
+            -- until SAVE commits them.
+            s.rules = {}
+            for axis, tags in pairs(existing.rules or {}) do
+                s.rules[axis] = {}
+                for tag, sev in pairs(tags) do s.rules[axis][tag] = sev end
+            end
+        else
+            -- New draft: seed "<Char> Style <N>" + descAuto (the description
+            -- tracks the signature tags until the player types their own).
+            s.draftKey       = nil
+            s.draft          = { id = nil, displayName = _seededSmartsetName(state.account),
+                                 description = "", type = "smartset", descAuto = true }
+            s.rules          = {}
+        end
+        s.activeAxis     = "room"
+        s.activeSeverity = "all"
+        s.dirty          = false
+    end }
+
+HDG.Actions:Register{ name = "STYLES_SMARTSET_SET_FIELD",
+    persists = false, combatUnsafe = false, 
+    invalidates = function(action) return { HDG.Paths.Join("session.ui.styles.smartset.draft", action.payload and action.payload.field) } end,
+    reduce = function(state, payload)
+        local s = state.session.ui.styles.smartset
+        if payload.field then
+            s.draft[payload.field] = payload.value
+            -- User typed in the description -> stop auto-tracking the signature tags.
+            if payload.field == "description" then s.draft.descAuto = false end
+            s.dirty = true
+        end
+    end }
+
+HDG.Actions:Register{ name = "STYLES_SMARTSET_SET_AXIS",
+    persists = false, combatUnsafe = false, 
+    invalidates = { "session.ui.styles.smartset.activeAxis" },
+    reduce = function(state, payload)
+        state.session.ui.styles.smartset.activeAxis = payload.axis
+    end }
+
+HDG.Actions:Register{ name = "STYLES_SMARTSET_SET_SEVERITY_TAB",
+    persists = false, combatUnsafe = false, 
+    invalidates = { "session.ui.styles.smartset.activeSeverity" },
+    reduce = function(state, payload)
+        state.session.ui.styles.smartset.activeSeverity = payload.sev
+    end }
+
+HDG.Actions:Register{ name = "STYLES_SMARTSET_TOGGLE_TAG",
+    persists = false, combatUnsafe = false, 
+    invalidates = { "session.ui.styles.smartset.rules",
+                                                   "session.ui.styles.smartset.dirty",
+                                                   "session.ui.styles.smartset.draft.description" },
+    reduce = function(state, payload)
+        -- Toggle a tag's severity within an axis. payload.severity nil =
+        -- remove the tag (untoggle); else set to that severity (overwrite
+        -- if already present at a different severity).
+        local s = state.session.ui.styles.smartset
+        local axis, tag, sev = payload.axis, payload.tag, payload.severity
+        if axis and tag then
+            s.rules[axis] = s.rules[axis] or {}
+            if sev == nil or s.rules[axis][tag] == sev then
+                s.rules[axis][tag] = nil
+                -- Drop empty axis tables for tidiness (saves serialization size).
+                local hasAny = false
+                for _ in pairs(s.rules[axis]) do hasAny = true; break end
+                if not hasAny then s.rules[axis] = nil end
+            else
+                s.rules[axis][tag] = sev
+            end
+            if s.draft.descAuto then s.draft.description = _buildSmartsetAutoDesc(s.rules) end
+            s.dirty = true
+        end
+    end }
+
+HDG.Actions:Register{ name = "STYLES_SMARTSET_CLEAR_ALL",
+    persists = false, combatUnsafe = false, 
+    invalidates = { "session.ui.styles.smartset.rules",
+                                                   "session.ui.styles.smartset.dirty",
+                                                   "session.ui.styles.smartset.draft.description" },
+    reduce = function(state, payload)
+        local s = state.session.ui.styles.smartset
+        s.rules = {}
+        s.draft.description = ""   -- auto-desc now tracks the (empty) signature set
+        s.draft.descAuto    = true
+        s.dirty = true
+    end }
+
+HDG.Actions:Register{ name = "STYLES_SMARTSET_SAVE",
+    persists = false, combatUnsafe = false, 
+    invalidates = { "account.collections",
+                                                   "session.ui.styles.smartset" },
+    reduce = function(state, payload)
+        -- Commit the draft to account.collections. New drafts get a fresh
+        -- "smartset:<sluggedName>" id; edits write through the existing
+        -- draftKey. Caller is responsible for view-switching back to
+        -- landing post-save (typically via the footer's onClick chain).
+        local s = state.session.ui.styles.smartset
+        if s.dirty or not s.draftKey then
+            local id = s.draftKey
+            if not id then
+                -- Monotonic, collision-free id (feedback_no_random_ids_use_counters);
+                -- shares the counter with the "<Char> Style <N>" name seed.
+                state.account.collectionSeq = (state.account.collectionSeq or 0) + 1  -- exception(boundary): pre-counter saved accounts lack collectionSeq
+                id = "smartset:" .. state.account.collectionSeq
+            end
+            state.account.collections = state.account.collections or {}
+            state.account.collections[id] = {
+                id          = id,
+                type        = "smartset",
+                displayName = s.draft.displayName or "Untitled",
+                description = s.draft.description or "",
+                rules       = {},
+            }
+            for axis, tags in pairs(s.rules or {}) do
+                state.account.collections[id].rules[axis] = {}
+                for tag, sev in pairs(tags) do
+                    state.account.collections[id].rules[axis][tag] = sev
+                end
+            end
+            s.draftKey = id
+            s.dirty    = false
+        end
+    end }
+
+HDG.Actions:Register{ name = "STYLES_SMARTSET_CANCEL",
+    persists = false, combatUnsafe = false, 
+    invalidates = { "session.ui.styles.smartset" },
+    reduce = function(state, payload)
+        -- Discard the draft. The view switch back to landing fires
+        -- separately so callers can also choose to return to a different
+        -- view (e.g. Detail when editing an existing smartset).
+        local s = state.session.ui.styles.smartset
+        s.draftKey       = nil
+        s.draft          = { id = nil, displayName = "", description = "", type = "smartset", descAuto = true }
+        s.rules          = {}
+        s.activeAxis     = "room"
+        s.activeSeverity = "all"
+        s.dirty          = false
+
+    -- ===== 14.5 Snapshot + Import =========================================
+    end }
+
+HDG.Actions:Register{ name = "STYLES_PLACED_DECOR_OBSERVED",
+    persists = false, combatUnsafe = false, 
+    invalidates = { "session.styles.placedDecor" },
+    reduce = function(state, payload)
+        local guid = payload.decorGUID
+        if guid then
+            local now = time()
+            local map = state.session.styles.placedDecor
+            local existing = map[guid]
+            map[guid] = {
+                decorGUID = guid,
+                decorID   = payload.decorID,
+                itemID    = payload.itemID,
+                name      = payload.name,
+                -- placedAt: preserve original on edit re-observe; stamp on first sighting
+                placedAt  = (existing and existing.placedAt) or now,
+            }
+        end
+    end }
+
+HDG.Actions:Register{ name = "STYLES_PLACED_DECOR_REMOVED",
+    persists = true, combatUnsafe = false,
+            invalidates = { "session.styles.placedDecor", "account.recentActivity" },
+    reduce = function(state, payload)
+        local guid = payload.decorGUID
+        if guid then
+            -- Record the removal in RecentActivity. itemID comes from the live
+            -- placedDecor entry when present (decor placed/edited this session), else
+            -- from payload.itemID (parsed from the GUID in the observer) so removing
+            -- PRE-EXISTING decor still counts. Attributed to the active house.
+            local entry  = state.session.styles.placedDecor[guid]
+            local itemID = (entry and entry.itemID) or payload.itemID
+            if itemID then
+                _recentAppend(state, state.account.recentActivity.lastHouseKey,
+                              itemID, "removed")
+            end
+            state.session.styles.placedDecor[guid] = nil
+        end
+    end }
+
+HDG.Actions:Register{ name = "STYLES_PLACED_DECOR_CLEAR",
+    persists = false, combatUnsafe = false, 
+    invalidates = { "session.styles.placedDecor" },
+    reduce = function(state, payload)
+        state.session.styles.placedDecor = {}
+    end }
+
+HDG.Actions:Register{ name = "RECENT_SESSION_START",
+    persists = true, combatUnsafe = false,
+            invalidates = { "account.recentActivity" },
+    reduce = function(state, payload)
+        -- Seal the active (newest, unsealed) session, open a fresh one. Keyed
+        -- by the stable faction house id. Caps history at RECENT_SESSION_CAP.
+        -- An active session that recorded NO events is reused (so opening/
+        -- closing the editor without placing anything doesn't spam empty
+        -- "Now (0)" sessions).
+        local key = payload.houseKey
+        if key then
+            local ra = state.account.recentActivity
+            ra.lastHouseKey = key
+            local house = ra.houses[key]
+            if not house then house = { sessionOrder = {}, sessions = {} }; ra.houses[key] = house end
+            local newestID = house.sessionOrder[1]
+            local newest   = newestID and house.sessions[newestID]
+            local reuseEmpty = newest and not newest.endedAt and (newest.eventCount or 0) == 0
+            if not reuseEmpty then
+                if newest and not newest.endedAt then newest.endedAt = time() end
+                local sid = time()
+                if house.sessions[sid] then sid = sid + 1 end
+                house.sessions[sid] = { sessionID = sid, startedAt = sid, endedAt = nil,
+                                        eventCount = 0, events = {}, actions = {} }
+                table.insert(house.sessionOrder, 1, sid)
+                while #house.sessionOrder > RECENT_SESSION_CAP do
+                    local dropID = table.remove(house.sessionOrder)
+                    house.sessions[dropID] = nil
+                end
+            end
+        end
+    end }
+
+HDG.Actions:Register{ name = "RECENT_DECOR_PLACED",
+    persists = true, combatUnsafe = false,
+            invalidates = { "account.recentActivity" },
+    reduce = function(state, payload)
+        _recentAppend(state, payload.houseKey, payload.itemID, "placed")
+    end }
+
+HDG.Actions:Register{ name = "STYLES_SNAPSHOT_PLACED",
+    persists = true, combatUnsafe = false, invalidates = { "account.collections" },
+    reduce = function(state, payload)
+        -- Account-wide snapshot of everything the player has placed. The controller
+        -- scans the catalog (numPlaced>0) and passes distinct itemIDs in payload.items
+        -- (reducer stays pure -- no observer call here). This is the only taint-safe
+        -- full placed-decor list; a per-house split is impossible (GetAllPlacedDecor
+        -- taints, editor-frame hooks taint) -- see docs/HDGR_HOUSE_SNAPSHOTS.md.
+        -- takenAt + displayName stamped at the dispatch site (date()/time() boundary).
+        local items = payload.items or {}  -- exception(boundary): placed-decor list stamped at dispatch site
+        if #items == 0 then return end
+        local ts = payload.takenAt or 0  -- exception(boundary): takenAt stamped at dispatch site (time() boundary)
+        -- Monotonic id (NOT the timestamp) so two snapshots in the same second can't
+        -- collide-overwrite; same counter as smartset ids. takenAt stays for display.
+        state.account.collectionSeq = (state.account.collectionSeq or 0) + 1  -- exception(boundary): pre-counter saved accounts lack collectionSeq
+        local id = "snapshot:" .. state.account.collectionSeq
+        state.account.collections = state.account.collections or {}
+        state.account.collections[id] = {
+            id          = id,
+            type        = "snapshot",
+            displayName = payload.displayName or ("Snapshot " .. tostring(ts)),
+            description = "",
+            items       = items,
+            takenAt     = ts,
+            iconAtlas   = HDG.Constants.SNAPSHOT_ICON_ATLAS,  -- decorate-mode house glyph
+        }
+    end }
+
+HDG.Actions:Register{ name = "STYLES_IMPORT_SET_URL",
+    persists = false, combatUnsafe = false, 
+    invalidates = { "session.ui.styles.import.urlText",
+                                                   "session.ui.styles.import.parseDisplayName",
+                                                   "session.ui.styles.import.parseSource",
+                                                   "session.ui.styles.import.previewItems",
+                                                   "session.ui.styles.import.parseError" },
+    reduce = function(state, payload)
+        state.session.ui.styles.import.urlText = payload.text
+        -- Clear stale preview / error / parser hints on text change so the
+        -- user sees a fresh state when they re-Parse.
+        state.session.ui.styles.import.previewItems      = nil
+        state.session.ui.styles.import.parseError        = nil
+        state.session.ui.styles.import.parseSource       = nil
+        state.session.ui.styles.import.parseDisplayName  = nil
+    end }
+
+HDG.Actions:Register{ name = "STYLES_IMPORT_PARSE",
+    persists = false, combatUnsafe = false, 
+    invalidates = { "session.ui.styles.import.previewItems",
+                                                   "session.ui.styles.import.parseError",
+                                                   "session.ui.styles.import.parseDisplayName",
+                                                   "session.ui.styles.import.parseSource" },
+    reduce = function(state, payload)
+        -- Delegate to HDG.Parsers (Modules/HDGR_Parsers.lua). Walks the
+        -- parser registry; first parser to recognize the pasted text wins.
+        -- Supports: style blobs (HDG:1:), shopping list blobs (HDGVL:1:),
+        -- Blizzard |Hitem chat links, URL ?items=NNN query params (wowhead
+        -- / housing.wowdb.com / generic), and a fallback digit-run parser
+        -- for raw CSVs.
+        local text   = state.session.ui.styles.import.urlText or ""
+        local result = HDG.Parsers and HDG.Parsers:Parse(text)  -- exception(boundary): optional module / not yet built
+                       or { ok = false, error = "Parsers unavailable" }
+        if result.ok then
+            state.session.ui.styles.import.previewItems = result.items
+            state.session.ui.styles.import.parseError   = nil
+            -- Stash hints so the commit step can pick up a parser-suggested
+            -- name + source URL.
+            state.session.ui.styles.import.parseSource     = result.source
+            state.session.ui.styles.import.parseDisplayName = result.displayName
+        else
+            state.session.ui.styles.import.previewItems = nil
+            state.session.ui.styles.import.parseError   = result.error or "Parse failed"
+        end
+    end }
+
+HDG.Actions:Register{ name = "STYLES_IMPORT_COMMIT",
+    persists = false, combatUnsafe = false, 
+    invalidates = { "account.collections",
+                                                   "session.ui.styles.import" },
+    reduce = function(state, payload)
+        local preview = state.session.ui.styles.import.previewItems
+        if not (preview and #preview > 0) then return end
+        local ts = (_G.time and _G.time()) or 0
+        local id = "shopping:" .. tostring(ts)
+        local sessionImport = state.session.ui.styles.import
+        -- Precedence: explicit payload override > parser-suggested name >
+        -- timestamp default.
+        local name = payload.displayName
+                     or sessionImport.parseDisplayName
+                     or ("Shopping List " .. tostring(ts))
+        state.account.collections = state.account.collections or {}
+        state.account.collections[id] = {
+            id          = id,
+            type        = "shopping",
+            displayName = name,
+            description = "",
+            items       = preview,
+            importedAt  = ts,
+            source      = sessionImport.parseSource or sessionImport.urlText,
+        }
+        -- Reset import session UI after a successful commit so re-entering
+        -- the Import view starts clean.
+        state.session.ui.styles.import.urlText           = ""
+        state.session.ui.styles.import.previewItems      = nil
+        state.session.ui.styles.import.parseError        = nil
+        state.session.ui.styles.import.parseSource       = nil
+        state.session.ui.styles.import.parseDisplayName  = nil
+    end }
+
+HDG.Actions:Register{ name = "STYLES_IMPORT_RESET",
+    persists = false, combatUnsafe = false, 
+    invalidates = { "session.ui.styles.import" },
+    reduce = function(state, payload)
+        state.session.ui.styles.import.urlText           = ""
+        state.session.ui.styles.import.previewItems      = nil
+        state.session.ui.styles.import.parseError        = nil
+        state.session.ui.styles.import.parseSource       = nil
+        state.session.ui.styles.import.parseDisplayName  = nil
+    end }
+
+HDG.Actions:Register{ name = "STYLES_INVALIDATE_CACHE",
+    persists = false, combatUnsafe = false, 
+    invalidates = { "session.styles.changeSeq" },
+    reduce = function(state, payload)
+        -- Tick bump; actual cache clear runs via Store subscriber -> StyleEngine:InvalidateCache.
+        state.session.styles.changeSeq =
+            (state.session.styles.changeSeq or 0) + 1
+    end }
+
+HDG.Actions:Register{ name = "COLLECTION_STYLE_ITEM_REMOVED",
+    persists = true,  combatUnsafe = false,
+            retainsScroll = true,
+            invalidates = function(action)
+                local id = action.payload and action.payload.collectionID
+                if id then
+                    return { P.Join("account.collections", id, "items") }
+                end
+                return { "account.collections" }
+            end,
+    reduce = function(state, payload)
+        local coll = payload.collectionID and state.account.collections
+                     and state.account.collections[payload.collectionID]
+        if coll and coll.items and payload.itemID then
+            for i, id in ipairs(coll.items) do
+                if id == payload.itemID then
+                    table.remove(coll.items, i)
+                    break
+                end
+            end
+        end
+
+    -- =====================================================================
+    -- Zone Scanner
+    -- =====================================================================
+    -- ZONE_CHANGED: stamp new mapID, clear expanded set (scrollbox starts collapsed).
+    -- Search query intentionally persists across zone changes for multi-zone workflows.
+    end }
+
+HDG.Actions:Register{ name = "ZONE_CHANGED",
+    persists = false, combatUnsafe = false,
+            invalidates = { "session.zone.currentMapID",
+                            "session.zone.currentZoneName",
+                            "session.ui.zoneScanner.expanded" },
+    reduce = function(state, payload)
+        -- ZoneObserver:Probe coerces mapID to a number (0 sentinel on
+        -- API miss) and mapName to a string ("" sentinel) before dispatch,
+        -- so this reducer reads both strictly. Defensive `or 0` / `or ""`
+        -- here would mask producer regressions instead of surfacing them.
+        state.session.zone.currentMapID    = payload.mapID
+        state.session.zone.currentZoneName = payload.mapName
+        state.session.ui.zoneScanner.expanded = {}
+    end }
+
+HDG.Actions:Register{ name = "ZONE_POPUP_TOGGLE",
+    persists = true, combatUnsafe = false,
+            invalidates = { "account.ui.zonePopupShown" },
+    reduce = function(state, payload)
+        state.account.ui.zonePopupShown =
+            not (state.account.ui.zonePopupShown == true)
+    end }
+
+HDG.Actions:Register{ name = "ZONE_TOGGLE_VENDOR",
+    persists = false, combatUnsafe = false,
+            invalidates = { "session.ui.zoneScanner.expanded" },
+    reduce = function(state, payload)
+        local npcID = payload.npcID
+        if type(npcID) == "number" then
+            local exp = state.session.ui.zoneScanner.expanded
+            exp[npcID] = not (exp[npcID] == true) and true or nil
+        end
+    end }
+
+HDG.Actions:Register{ name = "ZONE_SET_SEARCH",
+    persists = false, combatUnsafe = false,
+            invalidates = { "session.ui.zoneScanner.searchQuery" },
+    reduce = function(state, payload)
+        state.session.ui.zoneScanner.searchQuery =
+            type(payload.text) == "string" and payload.text or ""
+    end }
+
+HDG.Actions:Register{ name = "ZONE_TOGGLE_COLLECTED",
+    persists = false, combatUnsafe = false,
+            invalidates = { "session.ui.zoneScanner.showCollected" },
+    reduce = function(state, payload)
+        state.session.ui.zoneScanner.showCollected =
+            not (state.session.ui.zoneScanner.showCollected == true)
+
+
+    -- =====================================================================
+    -- Lumber Tracker
+    -- =====================================================================
+    end }
+
+HDG.Actions:Register{ name = "LUMBER_HARVESTED",
+    persists = false, combatUnsafe = false,
+            invalidates = { "session.lumber.blips", "session.lumber.tick",
+                            "account.lumber.sessions" },
+    reduce = function(state, payload)
+        -- Append blip + bump tick. Coords nil when observer can't resolve position
+        -- (loading screen, sub-map without world origin) -- skip blip, still bump tick.
+        local s = state.session.lumber
+        if payload.x and payload.y and payload.mapID then
+            s.blips[#s.blips + 1] = {
+                lumberID = payload.lumberID,
+                qty      = payload.qty,
+                x        = payload.x,
+                y        = payload.y,
+                mapID    = payload.mapID,
+                ts       = payload.timestamp,
+            }
+        end
+        s.tick = s.tick + 1
+        -- Append to the per-char session lastHarvestAt + accumulate count
+        -- IF a session is active for this lumberID (otherwise this is a
+        -- "between sessions" harvest the observer will start a session on).
+        local activeID = s.activeFarmingID
+        if activeID == payload.lumberID then
+            local charKey = state.session.identity.charKey
+            local charSessions = state.account.lumber.sessions[charKey]
+            local session = charSessions and charSessions[activeID]
+            if session then
+                session.lastHarvestAt = payload.timestamp
+            end
+        end
+    end }
+
+HDG.Actions:Register{ name = "LUMBER_SESSION_START",
+    persists = true, combatUnsafe = false,
+            invalidates = { "session.lumber.activeFarmingID",
+                            "account.lumber.sessions" },
+    reduce = function(state, payload)
+        -- First harvest after idle window; seeds per-char session record (startCount = bag total at start).
+        local s = state.session.lumber
+        s.activeFarmingID = payload.lumberID
+        local charKey = state.session.identity.charKey
+        state.account.lumber.sessions[charKey] =
+            state.account.lumber.sessions[charKey] or {}
+        state.account.lumber.sessions[charKey][payload.lumberID] = {
+            startedAt     = payload.timestamp,
+            startCount    = payload.startCount,
+            lastHarvestAt = payload.timestamp,
+            finalizedAt   = nil,
+        }
+    end }
+
+HDG.Actions:Register{ name = "LUMBER_SESSION_END",
+    persists = true, combatUnsafe = false,
+            invalidates = { "session.lumber.activeFarmingID",
+                            "account.lumber.sessions" },
+    reduce = function(state, payload)
+        -- Stamps finalizedAt so counter row keeps displaying totals after activeFarmingID clears.
+        local s = state.session.lumber
+        local activeID = s.activeFarmingID
+        if activeID then
+            local charKey = state.session.identity.charKey
+            local charSessions = state.account.lumber.sessions[charKey]
+            local session = charSessions and charSessions[activeID]
+            if session then
+                session.finalizedAt = payload.timestamp
+            end
+        end
+        s.activeFarmingID = nil
+    end }
+
+HDG.Actions:Register{ name = "LUMBER_HISTORY_PUSH",
+    persists = true, combatUnsafe = false,
+            invalidates = { "account.lumber.history" },
+    reduce = function(state, payload)
+        -- Per-session summary for the Your Data farming log; ring buffer capped at LUMBER_HISTORY_CAP.
+        local hist = state.account.lumber.history
+        hist.nextID = hist.nextID + 1
+        hist.entries[#hist.entries + 1] = {
+            id           = hist.nextID,
+            lumberID     = payload.lumberID,
+            charKey      = payload.charKey,
+            startedAt    = payload.startedAt,
+            finalizedAt  = payload.finalizedAt,
+            sessionTotal = payload.sessionTotal,
+            zone         = payload.zone,
+            character    = payload.character,
+            realm        = payload.realm,
+        }
+        local cap = HDG.Constants.LUMBER_HISTORY_CAP
+        while #hist.entries > cap do
+            table.remove(hist.entries, 1)
+        end
+    end }
+
+HDG.Actions:Register{ name = "LUMBER_BLIP_GC",
+    persists = false, combatUnsafe = false,
+            invalidates = { "session.lumber.blips" },
+    reduce = function(state, payload)
+        -- Drop blips older than 1 hr (RESPAWN_SECONDS; distinct from the 600s radar color-cycle constant).
+        local s   = state.session.lumber
+        local now = payload.now
+        local ttl = 3600  -- mirror of HDG.LumberObserver.RESPAWN_SECONDS
+        local kept = {}
+        for _, b in ipairs(s.blips) do
+            if now - b.ts < ttl then kept[#kept + 1] = b end
+        end
+        s.blips = kept
+    end }
+
+HDG.Actions:Register{ name = "LUMBER_TICK",
+    persists = false, combatUnsafe = false,
+            noisy = true,  -- 1s heartbeat while farming; would flood the dispatch log otherwise
+            invalidates = { "session.lumber.tick" },
+    reduce = function(state, payload)
+        -- 1s heartbeat while farming; invalidates duration+rate selectors without a bag-delta.
+        state.session.lumber.tick = state.session.lumber.tick + 1
+    end }
+
+HDG.Actions:Register{ name = "LUMBER_WINDOW_TOGGLE",
+    persists = true, combatUnsafe = false,
+            invalidates = { "account.lumber.config.windowVisible" },
+    reduce = function(state, payload)
+        local c = state.account.lumber.config
+        if payload and payload.visible ~= nil then
+            c.windowVisible = payload.visible and true or false
+        else
+            c.windowVisible = not (c.windowVisible == true)
+        end
+    end }
+
+HDG.Actions:Register{ name = "LUMBER_WINDOW_POSITION_SET",
+    persists = true, combatUnsafe = false,
+            invalidates = { "account.lumber.config.position" },
+    reduce = function(state, payload)
+        state.account.lumber.config.position = {
+            x = payload.x,
+            y = payload.y,
+        }
+    end }
+
+HDG.Actions:Register{ name = "LUMBER_RADAR_COLLAPSE_TOGGLE",
+    persists = true, combatUnsafe = false,
+            invalidates = { "account.lumber.config.radarCollapsed" },
+    reduce = function(state, payload)
+        local c = state.account.lumber.config
+        c.radarCollapsed = not (c.radarCollapsed == true)
+    end }
+
+HDG.Actions:Register{ name = "LUMBER_AUTOSHOW_TOGGLE",
+    persists = true, combatUnsafe = false,
+            invalidates = { "account.lumber.config.autoShowOnHarvest" },
+    reduce = function(state, payload)
+        local c = state.account.lumber.config
+        c.autoShowOnHarvest = not (c.autoShowOnHarvest == true)
+    end }
+
+HDG.Actions:Register{ name = "LUMBER_LIST_COLLAPSE_TOGGLE",
+    persists = true, combatUnsafe = false,
+            invalidates = { "account.lumber.config.listCollapsed" },
+    reduce = function(state, payload)
+        local c = state.account.lumber.config
+        c.listCollapsed = not (c.listCollapsed == true)
+    end }
+
+HDG.Actions:Register{ name = "LUMBER_RADAR_SCALE_SET",
+    persists = true, combatUnsafe = false,
+            invalidates = { "account.lumber.config.radarScale" },
+    reduce = function(state, payload)
+        local scale = payload.scale
+        if type(scale) == "number" and scale > 0 then
+            state.account.lumber.config.radarScale = scale
+        end
+
+    -- =====================================================================
+    -- Shopping list
+    -- =====================================================================
+    end }
+
+HDG.Actions:Register{ name = "SHOPPING_WIDGET_TOGGLE",
+    persists = true, combatUnsafe = false,
+            invalidates = { "account.ui.shoppingWidgetShown" },
+    reduce = function(state, payload)
+        state.account.ui.shoppingWidgetShown =
+            not (state.account.ui.shoppingWidgetShown == true)
+    end }
+
+HDG.Actions:Register{ name = "SHOPPING_LIST_CREATE",
+    persists = true, combatUnsafe = false,
+            invalidates = { "account.vendorShoppingLists", "account.activeShoppingListId",
+                            "account.shoppingListSeq" },
+    reduce = function(state, payload)
+        state.account.shoppingListSeq = state.account.shoppingListSeq + 1
+        local id = "L" .. tostring(state.account.shoppingListSeq)
+        state.account.vendorShoppingLists[id] = {
+            name      = type(payload.name) == "string" and payload.name or ("List " .. id),
+            items     = {},
+            meta      = {},
+            createdAt = time(),
+        }
+        -- Auto-activate the first list created (HDG parity).
+        if state.account.activeShoppingListId == "" then
+            state.account.activeShoppingListId = id
+        end
+    end }
+
+HDG.Actions:Register{ name = "SHOPPING_LIST_DELETE",
+    persists = true, combatUnsafe = false,
+            invalidates = { "account.vendorShoppingLists", "account.activeShoppingListId" },
+    reduce = function(state, payload)
+        local id = payload.id
+        state.account.vendorShoppingLists[id] = nil
+        if state.account.activeShoppingListId == id then
+            -- Pick any remaining list as new active, or "" if none.
+            local nextId = ""
+            for other in pairs(state.account.vendorShoppingLists) do
+                nextId = other; break
+            end
+            state.account.activeShoppingListId = nextId
+        end
+    end }
+
+HDG.Actions:Register{ name = "SHOPPING_LIST_RENAME",
+    persists = true, combatUnsafe = false,
+            invalidates = { "account.vendorShoppingLists" },
+    reduce = function(state, payload)
+        local list = state.account.vendorShoppingLists[payload.id]
+        if list then list.name = tostring(payload.name or list.name) end
+    end }
+
+HDG.Actions:Register{ name = "SHOPPING_LIST_DUPLICATE",
+    persists = true, combatUnsafe = false,
+            invalidates = { "account.vendorShoppingLists", "account.shoppingListSeq" },
+    reduce = function(state, payload)
+        local src = state.account.vendorShoppingLists[payload.id]
+        if src then
+            state.account.shoppingListSeq = state.account.shoppingListSeq + 1
+            local id = "L" .. tostring(state.account.shoppingListSeq)
+            -- Shallow copy each entry (entries are flat tables; per-entry
+            -- copy stops the duplicate from sharing entry references with
+            -- the source).
+            local copyItems = {}
+            for i, entry in ipairs(src.items) do
+                copyItems[i] = {
+                    itemID  = entry.itemID,
+                    npcID   = entry.npcID,
+                    qty     = entry.qty,
+                    addedAt = entry.addedAt,
+                }
+            end
+            state.account.vendorShoppingLists[id] = {
+                name      = tostring(payload.name or (src.name .. " (copy)")),
+                items     = copyItems,
+                meta      = {},   -- duplicates start with fresh meta (no inherited attribution)
+                createdAt = time(),
+            }
+        end
+    end }
+
+HDG.Actions:Register{ name = "SHOPPING_LIST_ACTIVATE",
+    persists = true, combatUnsafe = false,
+            invalidates = { "account.activeShoppingListId" },
+    reduce = function(state, payload)
+        if state.account.vendorShoppingLists[payload.id] then
+            state.account.activeShoppingListId = payload.id
+        end
+    end }
+
+HDG.Actions:Register{ name = "SHOPPING_LIST_CLEAR",
+    persists = true, combatUnsafe = false,
+            invalidates = { "account.vendorShoppingLists" },
+    reduce = function(state, payload)
+        local list = state.account.vendorShoppingLists[payload.id]
+        if list then list.items = {} end
+    end }
+
+HDG.Actions:Register{ name = "SHOPPING_LIST_SET_META",
+    persists = true, combatUnsafe = false,
+            invalidates = { "account.vendorShoppingLists" },
+    reduce = function(state, payload)
+        local list = state.account.vendorShoppingLists[payload.id]
+        if list and type(payload.key) == "string" then
+            list.meta = list.meta or {}
+            list.meta[payload.key] = payload.value
+        end
+    end }
+
+HDG.Actions:Register{ name = "SHOPPING_TOGGLE_EXPANDED",
+    persists = false, combatUnsafe = false, 
+    invalidates = { "session.ui.shoppingList.expanded" },
+    reduce = function(state, payload)
+        -- Flip a collapse flag (true = COLLAPSED). wishList is a scalar; zones/vendors are maps
+        -- keyed by zoneName / npcID. Reducer owns the flip; the view dispatches only which bucket
+        -- + key. (Replaces the controller's read-clone-flip-write _patchExpanded.)
+        local e = state.session.ui.shoppingList.expanded
+        if payload.bucket == "wishList" or payload.bucket == "ahList" then
+            e[payload.bucket] = not (e[payload.bucket] == true)
+        elseif payload.bucket and payload.key ~= nil then
+            local b = e[payload.bucket]
+            b[payload.key] = not (b[payload.key] == true) and true or nil
+        end
+    end }
+
+HDG.Actions:Register{ name = "SHOPPING_ITEM_ADD",
+    persists = true, combatUnsafe = false,
+            invalidates = { "account.vendorShoppingLists" },
+    reduce = function(state, payload)
+        local listID = payload.listID or state.account.activeShoppingListId
+        local list = state.account.vendorShoppingLists[listID]
+        if list then
+            -- Coalesce: same (itemID, npcID) tuple bumps qty instead of
+            -- producing a duplicate row.
+            local merged
+            for _, entry in ipairs(list.items) do
+                if entry.itemID == payload.itemID and entry.npcID == payload.npcID then
+                    entry.qty = (entry.qty or 1) + (payload.qty or 1)
+                    merged = true
+                    break
+                end
+            end
+            if not merged then
+                list.items[#list.items + 1] = {
+                    itemID  = payload.itemID,
+                    npcID   = payload.npcID,   -- nil = wishlist
+                    qty     = payload.qty or 1,  -- exception(boundary): Shopping ADD may omit qty default-1
+                    addedAt = time(),
+                }
+            end
+        end
+    end }
+
+HDG.Actions:Register{ name = "SHOPPING_ITEM_REMOVE",
+    persists = true, combatUnsafe = false,
+            invalidates = { "account.vendorShoppingLists" },
+    reduce = function(state, payload)
+        local listID = payload.listID or state.account.activeShoppingListId
+        local list = state.account.vendorShoppingLists[listID]
+        if list then
+            for i, entry in ipairs(list.items) do
+                if entry.itemID == payload.itemID and entry.npcID == payload.npcID then
+                    table.remove(list.items, i)
+                    break
+                end
+            end
+        end
+    end }
+
+HDG.Actions:Register{ name = "SHOPPING_ITEM_SET_QTY",
+    persists = true, combatUnsafe = false,
+            invalidates = { "account.vendorShoppingLists" },
+    reduce = function(state, payload)
+        local listID = payload.listID or state.account.activeShoppingListId
+        local list = state.account.vendorShoppingLists[listID]
+        if list then
+            for _, entry in ipairs(list.items) do
+                if entry.itemID == payload.itemID and entry.npcID == payload.npcID then
+                    entry.qty = math.max(1, math.floor(tonumber(payload.qty) or 1))  -- exception(boundary): string-input qty from EditBox
+                    break
+                end
+            end
+        end
+    end }
+
+HDG.Actions:Register{ name = "SHOPPING_ITEM_ADJUST_QTY",
+    persists = true, combatUnsafe = false,
+            invalidates = { "account.vendorShoppingLists" },
+    reduce = function(state, payload)
+        -- Relative delta applied to CURRENT state, so rapid +/- clicks accumulate:
+        -- the row buttons can't snapshot qty (re-render is deferred a frame, so a
+        -- captured absolute qty collides). Remove-at-zero lives here, not the
+        -- controller, so the whole transition is atomic.
+        local listID = payload.listID or state.account.activeShoppingListId
+        local list = state.account.vendorShoppingLists[listID]
+        if list then
+            for i, entry in ipairs(list.items) do
+                if entry.itemID == payload.itemID and entry.npcID == payload.npcID then
+                    local nextQty = (entry.qty or 1) + payload.delta  -- exception(boundary): legacy shopping entry pre-qty
+                    if nextQty <= 0 then
+                        table.remove(list.items, i)
+                    else
+                        entry.qty = nextQty
+                    end
+                    break
+                end
+            end
+        end
+    end }
+
+HDG.Actions:Register{ name = "SHOPPING_RESOLVE_VENDORS",
+    persists = true, combatUnsafe = false,
+            invalidates = { "account.vendorShoppingLists" },
+    reduce = function(state, payload)
+        -- Persist resolved vendor npcIDs onto wishlist (npcID-less) entries so they
+        -- bucket under their vendor + travel with Export. resolutions = {[itemID]=npcID}.
+        -- Walk high->low: a resolved row that collides with an existing (itemID, npcID)
+        -- vendor row merges its qty in and is removed (coalesce, mirroring ITEM_ADD).
+        local list = state.account.vendorShoppingLists[payload.listID]
+        if list then
+            local res = payload.resolutions
+            for i = #list.items, 1, -1 do
+                local entry = list.items[i]
+                local npc = res[entry.itemID]   -- resolved vendor for this itemID, or nil
+                if (not entry.npcID) and npc then
+                    local mergeInto
+                    for _, other in ipairs(list.items) do
+                        if other ~= entry and other.itemID == entry.itemID and other.npcID == npc then
+                            mergeInto = other; break
+                        end
+                    end
+                    if mergeInto then
+                        mergeInto.qty = (mergeInto.qty or 1) + (entry.qty or 1)
+                        table.remove(list.items, i)
+                    else
+                        entry.npcID = npc
+                    end
+                end
+            end
+        end
+
+    -- =========================================================================
+    -- Catalog lifecycle
+    -- =========================================================================
+    end }
+
+HDG.Actions:Register{ name = "CATALOG_LOAD_REQUESTED",
+    persists = false, combatUnsafe = false, 
+    invalidates = { "session.catalog" },
+    reduce = function(state, payload)
+        state.session.catalog.status = "loading"
+    end }
+
+HDG.Actions:Register{ name = "CATALOG_LOAD_FAILED",
+    persists = false, combatUnsafe = false, 
+    invalidates = { "session.catalog.status" },
+    reduce = function(state, payload)
+        -- Without this, status stays "loading" -> infinite spinner.
+        state.session.catalog.status = "error"
+    end }
+
+HDG.Actions:Register{ name = "CATALOG_REFRESH_QUEUED",
+    persists = false, combatUnsafe = false, 
+    invalidates = { "session.catalog.refreshPending",
+                                            "session.catalog.variantsLoaded" },
+    reduce = function(state, payload)
+        state.session.catalog.refreshPending = true
+        state.session.catalog.variantsLoaded = false   -- ownership may have changed; force Dyed filter re-batch
+    end }
+
+HDG.Actions:Register{ name = "CATALOG_VARIANTS_LOADED",
+    persists = false, combatUnsafe = false, 
+    invalidates = { "session.catalog.variantsLoaded" },
+    reduce = function(state, payload)
+        state.session.catalog.variantsLoaded = true
+    end }
+
+HDG.Actions:Register{ name = "PROJECTS_UPSERT_HOUSE",
+    persists = true, combatUnsafe = false,
+            invalidates = { "account.projects.houses" },
+    reduce = function(state, payload)
+        if payload.houseID then
+            local p = state.account.projects
+            local house = p.houses[payload.houseID] or {}
+            for k, v in pairs(payload.fields or {}) do house[k] = v end
+            p.houses[payload.houseID] = house
+        end
+    end }
+
+HDG.Actions:Register{ name = "PROJECTS_CAPTURE_COMMIT",
+    persists = true, combatUnsafe = false,
+            invalidates = { "account.projects.houses", "account.projects.layouts", "account.rooms",
+                            "session.furn", "session.furnIndex" },
+    reduce = function(state, payload)
+        -- Atomic apply of a finalized capture; observer pre-computes matched/new/orphan + connections.
+        local p = state.account.projects
+        if payload.houseID then
+            local house = p.houses[payload.houseID] or {}
+            house.lastCapturedAt = payload.lastCapturedAt or house.lastCapturedAt
+            if payload.houseName        then house.name             = payload.houseName end
+            if payload.plotID           then house.plotID           = payload.plotID end
+            if payload.neighborhoodName then house.neighborhoodName  = payload.neighborhoodName end
+            p.houses[payload.houseID] = house
+        end
+        -- CAPTURE path mirrors REALITY -> the house's CURRENT layout (never the
+        -- active one). v7 truth lives in StoreFurnishings.ApplyCapture: placements
+        -- ONLY -- capture can never touch rooms' furnishing fields.
+        if payload.houseID then
+            HDG.StoreFurnishings.ApplyCapture(state, payload)
+        end
+    end }
+
+HDG.Actions:Register{ name = "PROJECTS_HOUSE_TICK",
+    persists = false, combatUnsafe = false, 
+    invalidates = { "session.house.budget", "session.house.numFloors", "session.house.editorActive" },
+    reduce = function(state, payload)
+        -- Partial patch from HousingObserver; each event updates the subset it knows.
+        local h = state.session.house
+        if payload.budget       then h.budget = payload.budget end
+        if payload.numFloors    ~= nil then h.numFloors = payload.numFloors end
+        if payload.editorActive ~= nil then h.editorActive = payload.editorActive end
+    end }
+
+HDG.Actions:Register{ name = "PROJECTS_ROOM_CATALOG_UPDATED",
+    persists = false, combatUnsafe = false, 
+    invalidates = { "session.house.roomCatalog" },
+    reduce = function(state, payload)
+        -- Atomic replace + tick bump; room-source/stock selectors invalidate together.
+        local rc = state.session.house.roomCatalog
+        rc.byShapeID = payload.byShapeID or {}  -- exception(boundary): atomic-replace; empty keeps table shape if payload omits
+        rc.entries   = payload.entries   or {}  -- exception(boundary): atomic-replace; empty keeps table shape if payload omits
+        rc.changeSeq      = rc.changeSeq + 1
+    end }
+
+HDG.Actions:Register{ name = "CATALOG_CATEGORY_TREE_UPDATED",
+    persists = false, combatUnsafe = false, 
+    invalidates = { "session.house.categoryTree" },
+    reduce = function(state, payload)
+        -- Blizzard category/subcategory nav snapshot from the observer. Atomic replace
+        -- + tick bump so the curator + projects nav selectors invalidate together.
+        local ct = state.session.house.categoryTree
+        ct.byID       = payload.byID       or {}  -- exception(boundary): atomic-replace; empty keeps table shape if payload omits
+        ct.subcatByID = payload.subcatByID or {}  -- exception(boundary): atomic-replace; empty keeps table shape if payload omits
+        ct.rootIDs    = payload.rootIDs    or {}  -- exception(boundary): atomic-replace; empty keeps table shape if payload omits
+        ct.changeSeq       = ct.changeSeq + 1
+    end }
+
+HDG.Actions:Register{ name = "PROJECTS_CLEAR_HOUSE",
+    persists = true, combatUnsafe = false,
+            invalidates = { "account.projects.layouts", "session.furn", "session.furnIndex" },
+    reduce = function(state, payload)
+        -- Recapture prep. v8: placements persist (ApplyCapture matches by
+        -- capturedID in place, so roomID tags survive); only capture-owned
+        -- placements above payload.maxFloor are pruned (deleted floors never
+        -- get swept). Resets the capture summary echo.
+        if payload.houseID then
+            HDG.StoreFurnishings.ClearLayout(state, payload)
+        end
+    end }
+
+HDG.Actions:Register{ name = "PROJECTS_SET_ACTIVE_VERSION",
+    persists = true, combatUnsafe = false,
+            invalidates = "*",
+    reduce = function(state, payload)
+        -- Switch active version for a house. Invalidates "*" (canvas reads two-level keys).
+        if payload.houseID and payload.versionID then
+            local house = state.account.projects.houses[payload.houseID]
+            if house then house.activeVersionID = payload.versionID end
+        end
+    end }
+
+HDG.Actions:Register{ name = "PROJECTS_CREATE_VERSION",
+    persists = true, combatUnsafe = false,
+            invalidates = "*",
+    reduce = function(state, payload)
+        -- v7: branch a what-if LAYOUT. Placements copy; ROOMS ARE SHARED BY
+        -- REFERENCE (10-FINAL-MODEL: vary a room in a what-if by placing a
+        -- room VARIANT, never per-layout copies). layoutID minted from the
+        -- shared versionSeq counter.
+        if payload.houseID then
+            local p     = state.account.projects
+            local house = p.houses[payload.houseID]
+            if house then
+                local lid = _nextVersionID(p)
+                local srcLayout  = payload.basedOn and p.layouts[payload.basedOn]   -- exception(nullable): from-scratch designs have no basis
+                local placements, slotSeq = {}, 0
+                if srcLayout then
+                    for key, pl in pairs(srcLayout.placements) do
+                        placements[key] = { floor = pl.floor, x = pl.x, y = pl.y,
+                                            rotation = pl.rotation, shape = pl.shape, floors = pl.floors,
+                                            roomID = pl.roomID,   -- v8: tags copy; rooms shared by reference
+                                            capturedID = pl.capturedID, capturedName = pl.capturedName }
+                    end
+                    slotSeq = srcLayout.slotSeq or 0
+                else
+                    -- From-scratch design: every layout needs exactly one Entry
+                    -- (the anchor; the palette never offers it) -- seed it
+                    -- centre-canvas so building starts from the door.
+                    slotSeq = 1
+                    placements["slot:1"] = { floor = 1, x = 10, y = 10, rotation = 0, shape = "entry" }
+                end
+                p.layouts[lid] = {
+                    houseID   = payload.houseID, name = payload.name or "What-if",  -- exception(boundary): CREATE_VERSION payload may omit name
+                    createdAt = payload.createdAt, basedOn = payload.basedOn,
+                    placements = placements, slotSeq = slotSeq,
+                }
+                house.activeVersionID = lid
+                -- Reverse index: v8 placements are slot-keyed -- the design
+                -- rides as the roomID TAG. Count every copied tag into the
+                -- new layout (review 17 #1: keying by placement KEY matched
+                -- account.rooms never, so branching silently skipped this).
+                local idx = state.session.furnIndex
+                for _, pl in pairs(placements) do
+                    if pl.roomID then
+                        idx.roomLayouts[pl.roomID] = idx.roomLayouts[pl.roomID] or {}
+                        idx.roomLayouts[pl.roomID][lid] = (idx.roomLayouts[pl.roomID][lid] or 0) + 1
+                    end
+                end
+            end
+        end
+    end }
+
+HDG.Actions:Register{ name = "PROJECTS_DELETE_VERSION",
+    persists = true, combatUnsafe = false,
+            invalidates = "*",
+    reduce = function(state, payload)
+        -- v7: remove a what-if LAYOUT (NEVER the live/current one). Rooms and
+        -- their furnishings persist by construction -- only references die.
+        -- Reverse-index GC prevents phantom "in N layouts" counts (12 #4).
+        if payload.houseID and payload.versionID then
+            local p     = state.account.projects
+            local house = p.houses[payload.houseID]
+            local lid   = payload.versionID
+            if house and lid ~= house.currentVersionID and p.layouts[lid] then
+                local idx = state.session.furnIndex
+                -- v8: tags, not keys (review 17 #2 -- the key form was a no-op GC).
+                for _, pl in pairs(p.layouts[lid].placements) do
+                    if pl.roomID and idx.roomLayouts[pl.roomID] then idx.roomLayouts[pl.roomID][lid] = nil end
+                end
+                p.layouts[lid] = nil
+                if house.activeVersionID == lid then
+                    house.activeVersionID = house.currentVersionID
+                end
+                state.session.furn.changeSeq = state.session.furn.changeSeq + 1
+            end
+        end
+    end }
+
+HDG.Actions:Register{ name = "PROJECTS_SET_VERSION_FLOORS",
+    persists = true, combatUnsafe = false,
+            invalidates = { "account.projects.layouts" },
+    reduce = function(state, payload)
+        -- Set the floor count on a what-if version (1..3 cap; enforced here too, not just
+        -- the controller, so the store never holds an out-of-range value). nil clears the
+        -- override -> floorTabs falls back to scanning room IDs + session.house.numFloors.
+        if payload.versionID and payload.numFloors ~= nil then
+            local layout = state.account.projects.layouts[payload.versionID]   -- exception(nullable): stale UI layout id
+            if layout then
+                local n = math.max(1, math.min(3, math.floor(payload.numFloors)))
+                layout.numFloors = n
+            end
+        end
+    end }
+
+HDG.Actions:Register{ name = "PROJECTS_RENAME_VERSION",
+    persists = true, combatUnsafe = false,
+            invalidates = { "account.projects.layouts" },
+    reduce = function(state, payload)
+        -- Rename a version (name only; structural fields stay locked).
+        if payload.versionID and payload.name then
+            local layout = state.account.projects.layouts[payload.versionID]   -- exception(nullable): stale UI layout id
+            if layout then layout.name = payload.name end
+        end
+    end }
+
+HDG.Actions:Register{ name = "PROJECTS_IMPORT_LAYOUT",
+    persists = true, combatUnsafe = false,
+            invalidates = "*",
+    reduce = function(state, payload)
+        -- Thin (matches PROJECTS_PLACE_STACKED): the CONTROLLER builds the version
+        -- record from the decoded layout, re-keying roomIDs to the target house. The
+        -- reducer only mints the id (the counter is state-resident, so minting must be
+        -- reducer-side) + activates it, so the controller can read the id back.
+        if payload.houseID and payload.version then
+            local p     = state.account.projects
+            local house = p.houses[payload.houseID]
+            -- Importing into an owned-but-uncaptured house creates its record.
+            if not house then house = {}; p.houses[payload.houseID] = house end
+            -- Stamp the display name the chooser carried; a captured name
+            -- (richer: plot-prefixed) is never overwritten.
+            if payload.houseName and (not house.name or house.name == "") then
+                house.name = payload.houseName
+            end
+            local lid = _nextVersionID(p)
+            payload.version.placements = payload.version.placements or {}   -- exception(boundary): controller-built record
+            p.layouts[lid] = payload.version
+            house.activeVersionID = lid
+        end
+    end }
+
+HDG.Actions:Register{ name = "PROJECTS_FOCUS_HOUSE",
+    persists = true, combatUnsafe = false,
+            invalidates = "*",
+    reduce = function(state, payload)
+        -- Switch which house the Architect/Projects views show. A monotonic focusSeq
+        -- bump makes this house win the house pick (no separate "active" pointer + no
+        -- new selector reads -- focusSeq lives under the house record). Focusing an
+        -- as-yet-uncaptured house (picked from the owned-houses dropdown) creates a
+        -- focus STUB so the pick sticks; capturing it later UPSERTs the same token.
+        if payload.houseID then
+            local p     = state.account.projects
+            local house = p.houses[payload.houseID]
+            if not house then house = {}; p.houses[payload.houseID] = house end
+            p.houseFocusSeq = (p.houseFocusSeq or 0) + 1
+            house.focusSeq  = p.houseFocusSeq
+        end
+    end }
+
+HDG.Actions:Register{ name = "PROJECTS_PICKER_SET_SOURCE",
+    persists = false, combatUnsafe = false, 
+    invalidates = { "session.ui.projects.pickerSource" },
+    reduce = function(state, payload)
+        -- Picker source axis (dropdown intent; scalar session write).
+        state.session.ui.projects.pickerSource = payload.source or "all"
+    end }
+
+HDG.Actions:Register{ name = "PROJECTS_FURN_TOGGLE_COLLAPSE",
+    persists = false, combatUnsafe = false, 
+    invalidates = { "session.ui.projects.furnCollapsed" },
+    reduce = function(state, payload)
+        -- Fold/unfold one set group in the room detail (reducer-owned flip;
+        -- session-only -- the panel is a workspace, not a dashboard).
+        if payload.setID then
+            local c = state.session.ui.projects.furnCollapsed
+            c[payload.setID] = not c[payload.setID] or nil
+        end
+    end }
+
+HDG.Actions:Register{ name = "SHIPPING_CRATE_PACK",
+    persists = true, combatUnsafe = false, invalidates = { "account.collections" },
+    reduce = function(state, payload)
+        -- DeepCopy: topology.rooms / connections / contents[].decor are live refs; raw storage
+        -- would make the "backup" silently track future mutations.
+        if payload.shipID and payload.record then
+            state.account.collections[payload.shipID] = DeepCopy(payload.record)
+        end
+    end }
+
+HDG.Actions:Register{ name = "SHIPPING_CRATE_DELETE",
+    persists = true, combatUnsafe = false, invalidates = { "account.collections" },
+    reduce = function(state, payload)
+        if payload.shipID then state.account.collections[payload.shipID] = nil end
+    end }
+
+HDG.Actions:Register{ name = "COMBAT_QUEUE_ACTION",
+    persists = false, combatUnsafe = false, 
+    invalidates = { "session.combat.queued" },
+    reduce = function(state, payload)
+        -- Append a deferred action to the lockdown queue. Middleware dispatches
+        -- this when an inbound combat-unsafe action arrives during lockdown;
+        -- the inbound action's payload is wrapped inside payload.action.
+        state.session.combat.queued = state.session.combat.queued or {}
+        if payload.action then
+            table.insert(state.session.combat.queued, payload.action)
+        end
+    end }
+
+HDG.Actions:Register{ name = "UI_FILTER_RESET",
+    persists = false, combatUnsafe = false,
+            invalidates = function(action)
+                local tab = action.payload and action.payload.tab
+                if tab and tab ~= "" then
+                    if tab == "recipes" then
+                        -- recipes' expansion + profession filters are persisted in
+                        -- account.ui, outside the session.ui.recipes subtree --
+                        -- invalidate all three so the dropdowns + run repaint
+                        -- after a reset.
+                        return { "session.ui.recipes",
+                                 "account.ui.recipes.expansionFilter",
+                                 "account.ui.recipes.professionFilterByChar" }
+                    end
+                    return { "session.ui." .. tab }
+                end
+                return { "session.ui" }  -- fallback: no tab payload -> broad invalidate
+            end,
+    reduce = function(state, payload)
+        -- Atomic per-tab filter reset (ADR-018). Tab-specific logic lives in
+        -- the dispatch table below; no new action enum needed for additional tabs.
+        local tab = payload.tab
+        if tab == "decor" then
+            state.session.ui.decor.searchQuery = ""
+            state.session.ui.decor.filters     = NewDecorFilters()
+        elseif tab == "acquisition" then
+            local acq = state.session.ui.acquisition
+            acq.searchQuery     = ""
+            acq.preset          = nil
+            acq.missingOnly     = false
+            acq.factionFilter   = {}
+            acq.expansionFilter = {}
+            acq.zoneFilter      = {}
+            acq.repFilter       = {}
+            acq.sourceFilter    = {}
+        elseif tab == "recipes" then
+            local r = state.session.ui.recipes
+            r.searchQuery         = ""
+            r.listFilter          = "all"
+            r.filters             = NewRecipesFilters()
+            -- expansionFilter is account-wide: clear in-place -> all expansions.
+            local exp = state.account.ui.recipes.expansionFilter
+            for k in pairs(exp) do exp[k] = nil end
+            -- professions are per-character: drop this char's entry so it reverts to
+            -- the pristine default (= this character's professions).
+            state.account.ui.recipes.professionFilterByChar[state.session.identity.charKey] = nil
+        end
+    end }
+
+HDG.Actions:Register{ name = "STYLES_INVALIDATE_STYLE",
+    persists = false, combatUnsafe = false, 
+    invalidates = { "session.styles.changeSeq" },
+    reduce = function(state, payload)
+        -- Bump global changeSeq; per-collection invalidation can layer later
+        -- when the engine port surfaces per-collection cache slots.
+        state.session.styles.changeSeq = state.session.styles.changeSeq + 1
+    end }
+
+HDG.Actions:Register{ name = "STYLES_CURATOR_MOVE",
+    persists = false, combatUnsafe = false, 
+    invalidates = { "account.collections",
+                                               "session.ui.styles.curator.selectedItems",
+                                               "session.ui.styles.curator.recentUndo" },
+    reduce = function(state, payload)
+        -- Move every currently-selected item from the active source to
+        -- the named target collection. payload.targetID overrides the
+        -- session-selected target so legacy callers (click-target-to-move)
+        -- still work; spec-aligned callers (explicit Move button) just
+        -- read selectedTargetID. Source-tracking + undo recording happens
+        -- here so the undo case can fully reverse without requiring the
+        -- controller to thread payload data through.
+        local cur = state.session.ui.styles.curator
+        local targetID = payload.targetID or cur.selectedTargetID
+        local sourceMode = cur.sourceMode
+        local target = targetID and state.account.collections[targetID]
+        if not target then return end
+        target.items = target.items or {}
+
+        -- Source collection (when sourceMode is "style:<id>"); nil for
+        -- "unassigned" or "all" -- those modes only ADD to the target.
+        local sourceID, sourceColl
+        if type(sourceMode) == "string" and sourceMode:sub(1, 6) == "style:" then
+            sourceID = sourceMode
+            sourceColl = state.account.collections[sourceID]
+        end
+
+        local movedIDs = {}
+        for itemID in pairs(cur.selectedItems) do
+            -- Add to target (dedupe).
+            local exists = false
+            for _, id in ipairs(target.items) do
+                if id == itemID then exists = true; break end
+            end
+            if not exists then
+                target.items[#target.items + 1] = itemID
+            end
+            -- Remove from source if any.
+            if sourceColl and sourceColl.items then
+                for i, id in ipairs(sourceColl.items) do
+                    if id == itemID then
+                        table.remove(sourceColl.items, i)
+                        break
+                    end
+                end
+            end
+            movedIDs[#movedIDs + 1] = itemID
+        end
+        -- Record an undo entry (capped to 20; older entries silently drop).
+        local undo = cur.recentUndo
+        undo[#undo + 1] = {
+            action   = "move",
+            from     = sourceID,    -- may be nil (Unassigned / All source)
+            to       = targetID,
+            items    = movedIDs,
+            ts       = (_G.time and _G.time()) or 0,
+        }
+        while #undo > 20 do table.remove(undo, 1) end
+        -- Clear selection after a successful move.
+        cur.selectedItems = {}
+        cur.selectedCount = 0
+    end }
+
+HDG.Actions:Register{ name = "STYLES_PLACED_DECOR_OBSERVED_BATCH",
+    persists = false, combatUnsafe = false, 
+    invalidates = { "session.styles.placedDecor" },
+    reduce = function(state, payload)
+        -- Bulk variant used by HousingObserver to coalesce the
+        -- HOUSING_DECOR_CUSTOMIZATION_CHANGED burst on edit-mode entry
+        -- (~N events in one frame). One reducer pass writes all entries,
+        -- one invalidation, one subscriber fan-out -- vs N dispatches in
+        -- the unbatched path.
+        --
+        -- Bulk fills (edit-mode entry) re-enumerate already-placed decor;
+        -- they shouldn't reset placedAt (these aren't "new" placements).
+        -- The dispatcher sets payload.bulkFill=true so we preserve existing
+        -- placedAt timestamps; only assign a fresh placedAt for GUIDs we
+        -- haven't seen before this session.
+        local now = time()
+        local map = state.session.styles.placedDecor
+        for _, e in ipairs(payload.entries) do
+            local guid = e.decorGUID
+            if guid then
+                local existing = map[guid]
+                map[guid] = {
+                    decorGUID = guid,
+                    decorID   = e.decorID,
+                    itemID    = e.itemID,
+                    name      = e.name,
+                    placedAt  = (existing and existing.placedAt) or now,
+                }
+            end
+        end
+    end }
+
+HDG.Actions:Register{ name = "COLLECTION_STYLE_ITEM_ADDED",
+    persists = true,  combatUnsafe = false,
+            retainsScroll = true,  -- mid-curate item move; don't yank user to top
+            invalidates = function(action)
+                local id = action.payload and action.payload.collectionID
+                if id then
+                    return { P.Join("account.collections", id, "items") }
+                end
+                return { "account.collections" }
+            end,
+    reduce = function(state, payload)
+        -- Membership write -- adds itemID to collection.items if not present.
+        -- 14.0 scaffold: writes through to account.collections directly;
+        -- 14.3 (Curator) consumes this when the Move action lands.
+        local coll = payload.collectionID and state.account.collections
+                     and state.account.collections[payload.collectionID]
+        if coll and payload.itemID then
+            coll.items = coll.items or {}
+            local already = false
+            for _, id in ipairs(coll.items) do
+                if id == payload.itemID then already = true; break end
+            end
+            if not already then coll.items[#coll.items + 1] = payload.itemID end
+        end
+    end }
+
+HDG.Actions:Register{ name = "SHOPPING_LIST_IMPORT",
+    persists = true, combatUnsafe = false,
+            invalidates = { "account.vendorShoppingLists", "account.activeShoppingListId",
+                            "account.shoppingListSeq" },
+    reduce = function(state, payload)
+        -- HDG.ShoppingCodec.Decode returns a sanitized list record or nil
+        -- on garbage / format-mismatch / wrong magic header. Strict call --
+        -- ShoppingCodec is TOC-load-order guaranteed (Modules/ loads before
+        -- any user-driven action fires).
+        local decoded = HDG.ShoppingCodec.Decode(payload.encoded)
+        if decoded then
+            state.account.shoppingListSeq = state.account.shoppingListSeq + 1
+            local id = "L" .. tostring(state.account.shoppingListSeq)
+            state.account.vendorShoppingLists[id] = decoded
+            state.account.activeShoppingListId = id
+        end
+    end }
+
+HDG.Actions:Register{ name = "UI_SET_VIEW",
+    persists = false, combatUnsafe = false, 
+    invalidates = { "session.ui.view" },
+    reduce = function(state, payload)
+        state.session.ui.view = payload.view   -- dispatcher bug if nil; fail loud
+
+    -- ===== Projects: house topology ==========================================
+    -- Payload-key guards: missing key no-ops rather than indexing nil (payload is the input boundary).
+    end }
+
+-- Curator undo: ONE body, two entry points (the chain's only multi-type
+-- branch). UNDO pops the top entry; UNDO_AT pops payload.ord. The old
+-- chain's early `return`s skipped notify; block returns no-op-notify
+-- instead (benign: no state change, identical repaint).
+local function _curatorUndoAt(state, ord)
+        -- Reverse a single move from the stack.
+        -- UNDO     -> pops the topmost entry ("Undo last move" button).
+        -- UNDO_AT  -> pops the entry at payload.ord (per-row click in the
+        --             RECENT (UNDO) panel).
+        -- "from" may be nil (Unassigned source) -- in which case removal
+        -- from target is sufficient to put items back in the unassigned set.
+        -- Note: undoing an old entry while newer entries above it remain
+        -- can leave the moved items in multiple style memberships if the
+        -- items were re-moved by those newer entries. That's intentionally
+        -- self-recoverable -- the user can resolve via another targeted
+        -- undo. The alternative (cascade-undo to clicked row) was felt
+        -- to lose user intent ("I clicked ONE row, why did 4 actions undo?").
+        local cur = state.session.ui.styles.curator
+        local collections = state.account.collections
+        if ord < 1 or ord > #cur.recentUndo then return end
+
+        local entry = cur.recentUndo[ord]
+        table.remove(cur.recentUndo, ord)
+        local target = entry.to and collections[entry.to]
+        local source = entry.from and collections[entry.from]
+        if target and target.items then
+            for _, itemID in ipairs(entry.items or {}) do
+                for i, id in ipairs(target.items) do
+                    if id == itemID then
+                        table.remove(target.items, i)
+                        break
+                    end
+                end
+            end
+        end
+        if source then
+            source.items = source.items or {}
+            for _, itemID in ipairs(entry.items or {}) do
+                local exists = false
+                for _, id in ipairs(source.items) do
+                    if id == itemID then exists = true; break end
+                end
+                if not exists then source.items[#source.items + 1] = itemID end
+            end
+        end
+
+    -- ===== 14.4 Smart Set Builder ===========================================
+end
+
+HDG.Actions:Register{ name = "STYLES_CURATOR_UNDO",
+    persists = false, combatUnsafe = false, 
+    invalidates = { "account.collections",
+                                               "session.ui.styles.curator.recentUndo" },
+    reduce = function(state, payload)
+        _curatorUndoAt(state, #state.session.ui.styles.curator.recentUndo)
+    end }
+
+HDG.Actions:Register{ name = "STYLES_CURATOR_UNDO_AT",
+    persists = false, combatUnsafe = false, 
+    invalidates = { "account.collections",
+                                               "session.ui.styles.curator.recentUndo" },
+    reduce = function(state, payload)
+        local ord = payload and payload.ord
+        if type(ord) ~= "number" then return end
+        _curatorUndoAt(state, ord)
+    end }
+
+-- ===== Resolvers (species A facade-poll + species D markers) ==================
+-- Registry: Core/HDGR_Resolvers.lua; taxonomy: Lattice/docs/TICK_REVALIDATION_
+-- 2026-06-11.md. Each block mints session.resolvers.<name>.tick and registers
+-- the action(s) that signal "the facade's world changed -- re-pull". The
+-- facade field is the selector-visible module the sweep cross-checks reads
+-- against (scripts/semantic_sweep.lua rule 4c).
+
+-- Bag counts. Data lives in HDG.BagObserver._counts (ADR-003a inside-closure
+-- deterministic-module-read carve-out); BagObserver dispatches after each
+-- debounced bag scan, passing its own scan counter as the tick value.
+HDG.Resolver:Register{ name = "bag", facade = "BagObserver",
+    actions = {
+        { name = "BAG_INVENTORY_UPDATED",
+          bump = function(cur, payload) return payload.tick or (cur + 1) end },
+    } }
+
+-- Quest titles. HDG.QuestNameResolver drains QUEST_DATA_LOAD_RESULT batches
+-- into its module table; name-display selectors re-pull on the tick.
+HDG.Resolver:Register{ name = "questNames",
+    facade = { module = "QuestNameResolver" },
+    actions = { { name = "QUEST_INFO_RESOLVED" } } }
+
+-- Quest completion. QuestNameResolver:IsComplete reads live quest APIs;
+-- bumped on QUEST_TURNED_IN so [QUST] checkmarks repaint live. Method-scoped:
+-- IsComplete is the completion facade on the (shared) QuestNameResolver module.
+HDG.Resolver:Register{ name = "questStatus",
+    facade = { module = "QuestNameResolver", method = "IsComplete" },
+    actions = { { name = "QUEST_STATUS_RESOLVED" } } }
+
+-- Achievement earned. HDG.AchievementObserver:IsEarned reads the live API;
+-- bumped on ACHIEVEMENT_EARNED so [ACH] checkmarks repaint live. Earned state
+-- is dynamic per-character; NOT baked at catalog sweep.
+HDG.Resolver:Register{ name = "achievementStatus", facade = "AchievementObserver",
+    actions = { { name = "ACHIEVEMENT_STATUS_RESOLVED" } } }
+
+-- Reputation progress. HDG.RepObserver:GetProgress reads live faction APIs;
+-- bumped (debounced) on UPDATE_FACTION / renown change.
+HDG.Resolver:Register{ name = "rep", facade = "RepObserver",
+    actions = {
+        { name = "REP_PROGRESS_TICK",
+          noisy = true },  -- UPDATE_FACTION fires in bursts (debounced, but still chatty)
+    } }
+
+-- Housing catalog. Data lives in HDG.HousingCatalogObserver's module index
+-- (byItemID + counts, mutated in place by RemoveRow/PatchCounts). The tick
+-- VALUE is the observer's sweep generation, stamped by the load/refresh
+-- lifecycle actions; the row-patch signals invalidate the path WITHOUT
+-- writing it (bump = false -- path invalidation re-runs subscribed selectors;
+-- the generation only advances per completed sweep, preserving the
+-- pre-registry sweepGeneration semantics).
+HDG.Resolver:Register{ name = "catalog", facade = "HousingCatalogObserver",
+    actions = {
+        { name = "DECOR_CATALOG_READY",                   bump = false },
+        { name = "COLLECTION_CATALOG_ROW_ADDED",          bump = false },
+        { name = "COLLECTION_CATALOG_ROW_COUNTS_UPDATED", bump = false },
+        { name = "COLLECTION_CATALOG_ROW_REMOVED",        bump = false,
+          invalidates = { "account.collection.ownedDecorIDs" },
+          -- Observer calls RemoveRow on its index; reducer only scrubs
+          -- ownedDecorIDs for consistency.
+          reduce = function(state, payload)
+              if payload.decorID then
+                  state.account.collection.ownedDecorIDs[payload.decorID] = nil
+              end
+          end },
+        { name = "CATALOG_LOAD_COMPLETED",
+          invalidates = { "session.catalog", "session.catalog.refreshPending" },
+          bump = function(cur, payload) return payload.generation end,
+          reduce = function(state, payload)
+              local c = state.session.catalog
+              c.status      = "ready"
+              c.loadedAt    = payload.loadedAt   -- dispatcher stamps GetTime() before dispatch
+              c.itemCount   = payload.itemCount
+              c.vendorCount = payload.vendorCount
+              -- Clear pending on any successful sweep; without this, refreshPending
+              -- stays true and every tab switch triggers a full re-sweep.
+              c.refreshPending = false
+          end },
+        { name = "CATALOG_REFRESH_COMPLETED",
+          invalidates = { "session.catalog" },
+          bump = function(cur, payload) return payload.generation or (cur + 1) end,  -- exception(boundary): generation is optional
+          reduce = function(state, payload)
+              state.session.catalog.refreshPending = false
+          end },
+    } }
+
+-- Static shipped data (species D -- dependency MARKER, never bumped). The
+-- TOC-shipped tables behind HDG.StaticData are IMMUTABLE within a session;
+-- selectors declare the read so shipped-data deps flow through read-tracking
+-- like any state path (ADR-003c). Reserved for hot-reload / dev-tool override.
+HDG.Resolver:RegisterStatic{ name = "staticData", facade = "StaticData" }
+
+-- Prices (the species A+B hybrid, split per TICK_REVALIDATION). A-side: the
+-- external TSM/Auctionator facades + which source/mode is preferred -- these
+-- four actions change what the facade RETURNS without touching price data,
+-- so they bump the resolver tick. B-side: the direct-scan caches + owned
+-- auctions are account.prices.* STATE -- those actions invalidate their data
+-- paths only, and price-consuming selectors declare account.prices (prefix)
+-- alongside this tick. Goblin computes through PriceSource, so both modules
+-- carry the same contract.
+HDG.Resolver:Register{ name = "prices",
+    facade   = { "PriceSource", "Goblin" },
+    requires = { "account.prices" },
+    actions  = {
+        { name = "PRICES_CONFIG_CHANGED" },  -- pure signal; config write rides CONFIG_SET
+        { name = "PRICES_SET_PREFERRED_SOURCE", persists = true,
+          invalidates = { "account.config.preferredPriceAddon" },
+          -- Config write + resolver bump in one pass (two dispatches would
+          -- cost two reducer runs).
+          reduce = function(state, payload)
+              state.account.config.preferredPriceAddon = payload.source
+          end },
+        { name = "PRICES_SET_TSM_MODE", persists = true,
+          invalidates = { "account.config.tsmPriceMode" },
+          reduce = function(state, payload)
+              state.account.config.tsmPriceMode = payload.mode
+          end },
+        { name = "PRICES_ADDONS_AVAILABILITY_CHANGED",
+          invalidates = { "session.prices.tsmLoaded", "session.prices.auctionatorLoaded" },
+          reduce = function(state, payload)
+              local s = state.session.prices
+              s.tsmLoaded         = payload.tsm         == true
+              s.auctionatorLoaded = payload.auctionator == true
+          end },
+    } }
+
+-- Item names (dissolved species B): the data is STATE -- the reducer-written
+-- session.itemNames.names cache -- so there is no resolver tick; consumers
+-- read the data path and ITEM_INFO_RESOLVED invalidates it directly. This
+-- contract makes the sweep enforce that read on every ItemNameResolver
+-- caller (ResolveName Peeks the cache before re-querying Blizzard).
+HDG.Resolver:RegisterFacadeReads{ facade = "ItemNameResolver",
+    requires = { "session.itemNames.names" } }

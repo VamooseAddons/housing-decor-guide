@@ -118,9 +118,10 @@ end
 
 Selectors:Register("zone.vendorsInZone", {
     reads = {
+        "session.resolvers.staticData.tick",  -- ADR-003c StaticData marker (sweep rule 4c)
         "session.zone.currentMapID",
         "session.identity.factionGroup",
-        "session.catalog.sweepGeneration",
+        "session.resolvers.catalog.tick",
         "account.collection.ownedDecorIDs",
         "account.vendorShoppingLists",
         "account.activeShoppingListId",
@@ -193,7 +194,7 @@ Selectors:Register("zone.filteredVendors", {
 
 -- Tree-via-flat-projection: vendor header + item rows when expanded.
 Selectors:Register("zone.entriesByVendor", {
-    reads = { "session.ui.zoneScanner.expanded", "session.itemNames.tick" },
+    reads = { "session.ui.zoneScanner.expanded", "session.itemNames.names" },
     calls = { "zone.filteredVendors" },
     fn = function(state, ctx)
         local vendors  = Selectors:Call("zone.filteredVendors", state, ctx)

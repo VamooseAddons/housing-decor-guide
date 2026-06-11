@@ -437,12 +437,12 @@ local function runPipeline(frame, invalidation, actionType)
     for _, stage in ipairs(PIPELINE_STAGES) do
         if not stage.predicate or stage.predicate(ctx) then
             local t0 = timed and _G.debugprofilestop() or nil
-            local ok, err = pcall(stage.run, ctx)
+            -- Strict call (ADR-042): the per-stage pcall was the isolation
+            -- class -- a Bind-stage throw used to leave LATER stages running
+            -- on a half-bound frame (deterministic-but-wrong paint). A throw
+            -- now aborts the pipeline and surfaces via the outer ErrorBoundary.
+            stage.run(ctx)
             if timed then perf:RecordStage(stage.name, _G.debugprofilestop() - t0) end
-            if not ok then
-                HDG.Log:Error("pipeline",
-                    ("stage %s error: %s"):format(tostring(stage.name), tostring(err)))
-            end
         end
     end
 end

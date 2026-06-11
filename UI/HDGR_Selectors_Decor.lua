@@ -16,7 +16,7 @@ local Selectors = HDG.Selectors
 --
 -- iconTexture is the catalog's rendered preview icon (NOT GetItemIconByID).
 Selectors:Register("decor.allItems", {
-    reads    = {"account.collection.ownedDecorIDs", "session.catalog.sweepGeneration"},
+    reads    = {"account.collection.ownedDecorIDs", "session.resolvers.catalog.tick"},
     memoized = true,
     fn = function(state, ctx)
         if not HDG.HousingCatalogObserver:IsReady() then return {} end
@@ -212,7 +212,7 @@ Selectors:Register("decor.items", {
 -- Decor selection. Detail pane + model preview bind through this chain.
 Selectors:Register("decor.selectedItemID", {
     memoized = true,
-    reads = {"session.ui.decor.selectedItemID", "session.staticData.tick"},
+    reads = {"session.ui.decor.selectedItemID", "session.resolvers.staticData.tick"},
     fn = function(state, ctx)
         local d = state.session.ui.decor
         return d.selectedItemID or nil
@@ -232,7 +232,7 @@ Selectors:Register("decor.selectedVariantKey", {
 Selectors:Register("decor.selectedItem", {
     memoized = true,
     calls = {"decor.selectedItemID"},
-    reads = {"session.catalog.sweepGeneration"},
+    reads = {"session.resolvers.catalog.tick"},
     fn = function(state, ctx)
         local id = Selectors:Call("decor.selectedItemID", state, ctx)
         if not id then return nil end
@@ -368,7 +368,7 @@ Selectors:Register("decor.selectedItem.sourceLabel", {
 -- Collection segment: DecorFormat:Collection (ownership + stored + placed).
 -- Placement segment: row.placementLabel (baked at BuildRow). +XP chip when applicable.
 Selectors:Register("decor.selectedItem.statusLabel", {
-    reads = {"account.config.scheme", "session.catalog.sweepGeneration"},
+    reads = {"account.config.scheme", "session.resolvers.catalog.tick"},
     calls = {"decor.selectedItemID"},
     fn = function(state, ctx)
         local id = Selectors:Call("decor.selectedItemID", state, ctx)
@@ -400,7 +400,7 @@ Selectors:Register("decor.selectedItem.statusLabel", {
 -- Category breadcrumb + size tag + optional trophy marker.
 -- Reads row.categoryLabel + row.sizeLabel (baked at BuildRow).
 Selectors:Register("decor.selectedItem.categoryLabel", {
-    reads = {"account.config.scheme", "session.catalog.sweepGeneration"},
+    reads = {"account.config.scheme", "session.resolvers.catalog.tick"},
     calls = {"decor.selectedItemID"},
     fn = function(state, ctx)
         local id = Selectors:Call("decor.selectedItemID", state, ctx)
@@ -425,7 +425,7 @@ Selectors:Register("decor.selectedItem.categoryLabel", {
 
 -- Tags line (Styles + Factions, baked as row.tagsLabel at BuildRow).
 Selectors:Register("decor.selectedItem.tagsLabel", {
-    reads = {"account.config.scheme", "session.catalog.sweepGeneration"},
+    reads = {"account.config.scheme", "session.resolvers.catalog.tick"},
     calls = {"decor.selectedItemID"},
     fn = function(state, ctx)
         local id = Selectors:Call("decor.selectedItemID", state, ctx)
@@ -440,7 +440,7 @@ Selectors:Register("decor.selectedItem.tagsLabel", {
 
 -- Expansion label: baked at BuildRow as row.expansionLabel (Palette is scheme-invariant).
 Selectors:Register("decor.selectedItem.headerExpansion", {
-    reads = {"session.catalog.sweepGeneration"},
+    reads = {"session.resolvers.catalog.tick"},
     calls = {"decor.selectedItemID"},
     fn = function(state, ctx)
         local id = Selectors:Call("decor.selectedItemID", state, ctx)
@@ -500,7 +500,7 @@ Selectors:Register("decor.selectedItem.hasTags", {
 -- Category line: row.categoryName + row.subcategoryName, pre-resolved at sweep. per ADR-003.
 Selectors:Register("decor.selectedItem.category", {
     calls = {"decor.selectedItem"},
-    reads = {"session.catalog.sweepGeneration"},
+    reads = {"session.resolvers.catalog.tick"},
     fn = function(state, ctx)
         local v = Selectors:Call("decor.selectedItem", state, ctx)
         if not (v and v.decorID) then return "" end
@@ -580,10 +580,11 @@ Selectors:Register("decor.headerLabel", {
 -- O(1) per item. Hot filter toggles NEVER invalidate these (per ADR-012).
 
 -- isCollected: via Observer:IsOwned (same predicate as BuildRow/PatchCounts/HouseAggregator).
--- Re-fires on sweepGeneration bump (covers full sweep AND incremental PatchCounts).
+-- Re-fires on the catalog resolver signal (full sweep stamps the generation;
+-- incremental PatchCounts invalidates the path signal-only).
 Selectors:Register("decor.isCollected", {
     memoized = true,
-    reads = {"session.catalog.sweepGeneration"},
+    reads = {"session.resolvers.catalog.tick"},
     fn = function(state, ctx)
         return function(itemID)
             return HDG.HousingCatalogObserver:IsOwned(itemID)
@@ -593,7 +594,7 @@ Selectors:Register("decor.isCollected", {
 
 -- isStored: destroyableInstanceCount > 0 (stored AND destroyable; unique trophies excluded).
 Selectors:Register("decor.isStored", {
-    reads = {"session.catalog.sweepGeneration"},
+    reads = {"session.resolvers.catalog.tick"},
     fn = function(state, ctx)
         local byItemID = HDG.HousingCatalogObserver.byItemID
         return function(itemID)
@@ -605,7 +606,7 @@ Selectors:Register("decor.isStored", {
 
 -- destroyableCount: destroyable copies in storage. Used for row stamping + sort order.
 Selectors:Register("decor.destroyableCount", {
-    reads = {"session.catalog.sweepGeneration"},
+    reads = {"session.resolvers.catalog.tick"},
     fn = function(state, ctx)
         local byItemID = HDG.HousingCatalogObserver.byItemID
         return function(itemID)
@@ -743,7 +744,7 @@ Selectors:Register("decor.onlyStored", {
 -- Curried per-item flag for dyed-or-dyeable filtering. Reads catalog row
 -- data populated by ReconcileFull.
 Selectors:Register("decor.isDyeable", {
-    reads = {"session.catalog.sweepGeneration"},
+    reads = {"session.resolvers.catalog.tick"},
     fn = function(state, ctx)
         local byItemID = HDG.HousingCatalogObserver.byItemID
         return function(itemID)
@@ -753,7 +754,7 @@ Selectors:Register("decor.isDyeable", {
     end,
 })
 Selectors:Register("decor.isDyed", {
-    reads = {"session.catalog.sweepGeneration"},
+    reads = {"session.resolvers.catalog.tick"},
     fn = function(state, ctx)
         local byItemID = HDG.HousingCatalogObserver.byItemID
         return function(itemID)
@@ -789,8 +790,18 @@ Selectors:Register("decor.filterActive", {
 -- ===== Tags row content + bucket/tag matching =================================
 -- decor.tagsForFilter -> ordered chip list for the current topFilter.
 -- decor.matchesTag -> curried predicate composed into decor.items.
+
+-- Placement-cost chips under the Size top filter. The budget atlas IS the
+-- label ("cost" reads as gold; "weight" is room terminology) -- the same
+-- glyph as the card corner badges. ONE format string builds AND parses the
+-- chip, so the matcher cannot drift from the builder.
+local COST_TAG_FMT = "|A:house-decor-budget-icon:12:12|a %d"
+local function _costTagValue(tag)
+    if type(tag) ~= "string" then return nil end
+    return tonumber(tag:match("^|A:house%-decor%-budget%-icon:%d+:%d+|a (%d+)$"))
+end
 Selectors:Register("decor.tagsForFilter", {
-    reads    = {"session.catalog.sweepGeneration"},
+    reads    = {"session.resolvers.catalog.tick"},
     calls    = {"decor.topFilter"},
     memoized = true,
     fn = function(state, ctx)
@@ -866,6 +877,19 @@ Selectors:Register("decor.tagsForFilter", {
         else
             table.sort(out)
         end
+        if top == "sizes" then
+            -- Placement-cost chips after the size tags: distinct LIVE catalog
+            -- values (1/2/3/5 today; a future tier appears by itself).
+            local costs = {}
+            for _, row in pairs(byDecorID) do
+                local c = row.placementCost
+                if c and c > 0 then costs[c] = true end
+            end
+            local sorted = {}
+            for c in pairs(costs) do sorted[#sorted + 1] = c end
+            table.sort(sorted)
+            for _, c in ipairs(sorted) do out[#out + 1] = COST_TAG_FMT:format(c) end
+        end
         return out
     end,
 })
@@ -881,7 +905,7 @@ Selectors:Register("decor.matchesTopFilter", {
 -- Curried (itemID) -> bool for "matches the active tag at the current top filter".
 -- nil or "All Decor" activeTag matches everything.
 Selectors:Register("decor.matchesTag", {
-    reads = {"account.recipes", "account.favorites", "session.catalog.sweepGeneration"},
+    reads = {"account.recipes", "account.favorites", "session.resolvers.catalog.tick"},
     calls = {"decor.topFilter", "decor.activeTag",
              "decor.isFavorite", "decor.isCollected",
              "decor.isDyed", "decor.isDyeable"},
@@ -990,6 +1014,14 @@ Selectors:Register("decor.matchesTag", {
         if not bucket then return function() return true end end
         local byItemID = HDG.HousingCatalogObserver.byItemID
         local TagData = HDG.TagData
+        -- Placement-cost chip (Size bucket): exact-value match on the live row.
+        local cost = _costTagValue(tag)
+        if cost then
+            return function(itemID)
+                local row = byItemID[itemID]
+                return row ~= nil and row.placementCost == cost
+            end
+        end
         -- Compare via GetShortLabel: activeTag uses the short display form,
         -- so long-form comparison would miss shortened expansion tags.
         return function(itemID)
@@ -1022,7 +1054,7 @@ Selectors:Register("decor.ownedCount", {
 
 -- "N stored" sidebar counter. Memoized; re-runs only on catalog sweep.
 Selectors:Register("decor.storedCount", {
-    reads    = {"session.catalog.sweepGeneration"},
+    reads    = {"session.resolvers.catalog.tick"},
     memoized = true,
     fn = function(state, ctx)
         if not HDG.HousingCatalogObserver:IsReady() then return 0 end

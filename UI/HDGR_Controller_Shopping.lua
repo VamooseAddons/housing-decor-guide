@@ -119,7 +119,7 @@ end
 local function _showItemChrome(row, ed)
     _ensureItemChrome(row)
     -- Icon -- placeholder ? when unresolved (cache will warm + the
-    -- session.itemNames.tick read re-fires the selector).
+    -- session.itemNames.names read re-fires the selector).
     row._iconTex:SetTexture(ed.iconID or HDG.Constants.PLACEHOLDER_ICON)
     row._iconTex:Show()
     -- Chips -- reuse Acquire's exact same renderer (single derivation point).
@@ -503,7 +503,7 @@ end
 -- has swept (sweepGeneration 0 = no baked vendors yet).
 function ShoppingController:_EnrichListVendors(listID)
     local state = HDG.Store:GetState()  -- exception(false-positive): top-level controller method (not a row factory)
-    if state.session.catalog.sweepGeneration == 0 then return end  -- exception(nullable): catalog not swept yet
+    if state.session.resolvers.catalog.tick == 0 then return end  -- exception(nullable): catalog not swept yet
     local list = listID and state.account.vendorShoppingLists[listID] or nil
     if not list then return end  -- exception(nullable): list may be missing/empty
     local res, n = {}, 0
@@ -539,11 +539,15 @@ function ShoppingController:Wire(rootFrame)
 
     -- Resolve + persist vendor npcIDs for the active list once the catalog sweep
     -- completes -- fixes already-imported lists (npcID=0 from the blob) on the
-    -- first sweep after open. Subscribe once (Wire may run per window rebuild).
+    -- first sweep after open. ALSO on every SHOPPING_ITEM_ADD: items wishlisted
+    -- from any surface (decor browser, companion right-click, Find Decor) while
+    -- this window is OPEN used to sit in the Wishlist bucket until a close/
+    -- reopen re-ran the OnShow enrich -- resolve them the moment they land.
+    -- Subscribe once (Wire may run per window rebuild).
     if not ShoppingController._enrichSubscribed then
         ShoppingController._enrichSubscribed = true
         HDG.Store:Subscribe(function(actionType)
-            if actionType == A.DECOR_CATALOG_READY then
+            if actionType == A.DECOR_CATALOG_READY or actionType == A.SHOPPING_ITEM_ADD then
                 ShoppingController:_EnrichListVendors(HDG.Store:GetState().account.activeShoppingListId)
             end
         end)

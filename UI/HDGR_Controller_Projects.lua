@@ -617,7 +617,7 @@ local function _paintFurnItem(row, ed)
     HDG.UI.applyFontRole(row._nameFs, "body")
     row._nameFs:SetText(ed.name or ("item " .. tostring(ed.decorID)))
     -- ed.icon stamped by the selector (NOT resolved here) so the async-load ->
-    -- session.itemNames.tick -> selector re-run -> re-bind cycle works.
+    -- session.itemNames.names -> selector re-run -> re-bind cycle works.
     if ed.icon then row._iconTex:SetTexture(ed.icon); row._iconTex:Show() end
     row._setID, row._decorID = ed.setID, ed.decorID
     row._nameFs:ClearAllPoints()

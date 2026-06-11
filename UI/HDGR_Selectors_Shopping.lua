@@ -180,7 +180,7 @@ Selectors:Register("shopping.attributionText", {
 -- Per-item enrichment with vendor name/zone/mapID/coords.
 -- Wishlist entries (npcID nil) carry vendor = nil.
 -- Icon resolved via ItemNameResolver:ResolveIcon (boundary); nil on cache miss
--- queues warm-up; session.itemNames.tick bump re-fires this selector.
+-- queues warm-up; session.itemNames.names bump re-fires this selector.
 local function resolveIconID(itemID)
     return HDG.ItemNameResolver:ResolveIcon(itemID)
 end
@@ -219,12 +219,12 @@ local function _resolveWishlistVendor(itemID)
 end
 
 Selectors:Register("shopping.activeListEntries", {
-    reads = { "session.itemNames.tick", "session.catalog.sweepGeneration" },
+    reads = {"session.resolvers.staticData.tick",  "session.itemNames.names", "session.resolvers.catalog.tick" },
     calls = { "shopping.activeList" },
     fn = function(state, ctx)
         local list = Selectors:Call("shopping.activeList", state, ctx)
         if not list then return {} end
-        local sweep = state.session.catalog.sweepGeneration
+        local sweep = state.session.resolvers.catalog.tick
         local out = {}
         for _, entry in ipairs(list.items) do
             -- Drop non-housing items (reagents, crafting mats) that may have
@@ -373,8 +373,8 @@ end
 Selectors:Register("shopping.entriesByZone", {
     reads = {
         "session.ui.shoppingList.expanded",
-        "session.itemNames.tick",
-        "session.catalog.sweepGeneration",
+        "session.itemNames.names",
+        "session.resolvers.catalog.tick",
     },
     calls = { "shopping.activeListEntries" },
     fn = function(state, ctx)

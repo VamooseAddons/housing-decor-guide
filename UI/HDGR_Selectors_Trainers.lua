@@ -46,7 +46,7 @@ Selectors:Register("trainers.selectedNpcID", {
 
 -- All trainer DB profession names in canonical PROFESSION_DATA order.
 Selectors:Register("trainers.allProfessions", {
-    reads    = {"session.staticData.tick"},
+    reads    = {"session.resolvers.staticData.tick"},
     memoized = true,
     fn = function()
         local out, seen = {}, {}
@@ -89,7 +89,7 @@ Selectors:Register("trainers.currentCharKnownProfessions", {
 
 -- Sorted profession list: current-char-known first (alphabetical within each group).
 Selectors:Register("trainers.profSectionsOrdered", {
-    reads = {"session.staticData.tick", "account.characters"},
+    reads = {"session.resolvers.staticData.tick", "account.characters"},
     calls = {"trainers.allProfessions", "trainers.currentCharKnownProfessions"},
     fn = function(state, ctx)
         local all   = Selectors:Call("trainers.allProfessions", state, ctx)
@@ -114,7 +114,7 @@ Selectors:Register("trainers.profSectionsOrdered", {
 
 -- Trainer count per profession: [profName] = N.
 Selectors:Register("trainers.trainerCountsByProf", {
-    reads    = {"session.staticData.tick"},
+    reads    = {"session.resolvers.staticData.tick"},
     memoized = true,
     fn = function()
         local out = {}
@@ -174,7 +174,7 @@ local function _findTopCrafterForProf(chars, profName, profBucket)
 end
 
 Selectors:Register("trainers.topDecorCrafterByProf", {
-    reads = {"account.characters", "session.staticData.tick"},
+    reads = {"account.characters", "session.resolvers.staticData.tick"},
     calls = {"alts.decorRecipeIndex"},
     fn = function(state, ctx)
         local out = {}
@@ -230,7 +230,7 @@ end
 
 -- Chars needing training per (profession, expansion): [profName][expName] = [{charName, current, max}].
 Selectors:Register("trainers.charsNeedingByProfExp", {
-    reads = {"account.characters", "session.staticData.tick"},
+    reads = {"account.characters", "session.resolvers.staticData.tick"},
     fn = function(state)
         local out      = {}
         local trainers = HDG.StaticData.Trainers:GetAll() or {}
@@ -359,7 +359,7 @@ end
 
 Selectors:Register("trainers.sectionRows", {
     reads = {
-        "session.staticData.tick",
+        "session.resolvers.staticData.tick",
         "session.ui.trainers.searchQuery",
         "session.ui.trainers.expandedProfessions",
         "account.characters",
@@ -427,10 +427,10 @@ local function _buildMidnightRow(itemID, entry)
 end
 
 Selectors:Register("trainers.midnightRecipeRows", {
-    reads = {"session.staticData.tick", "session.ui.trainers.midnightExpanded"},
+    reads = {"session.resolvers.staticData.tick", "session.ui.trainers.midnightExpanded"},
     fn = function(state)
         -- Read staticData.tick unconditionally so the declaration exercises on the collapsed path.
-        local _ = state.session.staticData.tick
+        local _ = state.session.resolvers.staticData.tick
         local rows = {}
         rows[#rows + 1] = {
             kind     = "midnightHeader",
@@ -476,7 +476,7 @@ Selectors:Register("trainers.midnightRecipeRows", {
 -- Composite feed: sectionRows + midnightRecipeRows.
 Selectors:Register("trainers.allRows", {
     reads = {
-        "session.staticData.tick",
+        "session.resolvers.staticData.tick",
         "session.ui.trainers.searchQuery",
         "session.ui.trainers.expandedProfessions",
         "session.ui.trainers.midnightExpanded",

@@ -61,7 +61,24 @@ local function _placeDecor(entryID)
     _G.C_HousingBasicMode.StartPlacingNewDecor(entryID)
 end
 
-local function _companionCellClick(self)
+-- Right-click = straight to the shopping wishlist (no menu, owner call
+-- 2026-06-12; craft-queue dropped for now). Module-level so every tab's
+-- grid + the recent strip share one handler.
+local function _addToShopping(self)
+    local itemID = self._placeItemID
+    if not itemID then return end           -- room/collection cards carry no item
+    local name = self._placeName or "this decor"
+    if HDG.Store:GetState().account.activeShoppingListId == "" then
+        HDG.Log:Notify("warn", "No active shopping list -- open the Shopping tab to create one.")
+        return
+    end
+    HDG.Store:Dispatch({ type = HDG.Constants.ACTIONS.SHOPPING_ITEM_ADD,
+        payload = { itemID = itemID, qty = 1 } })
+    HDG.Log:Notify("success", ('"%s" added to your shopping list.'):format(name))
+end
+
+local function _companionCellClick(self, button)
+    if button == "RightButton" then return _addToShopping(self) end
     local entryID = self._placeEntryID
     if not entryID then return end          -- non-placeable cell (catalog miss)
     local name = self._placeName or "this decor"
@@ -200,7 +217,26 @@ local function _companionCellTooltipDef(self)
         if (self._placeCost or 0) > 0 then
             lines[#lines + 1] = { text = "Placement cost: " .. self._placeCost, r = 0.78, g = 0.78, b = 0.6 }
         end
-        lines[#lines + 1] = { text = "Click to place", r = 0.5, g = 0.5, b = 0.5 }
+    end
+    -- Vendor source (when the catalog baked one): first vendor + overflow count.
+    -- Hover-time observer read; byItemID is O(1) (ADR-031 facade).
+    if self._placeItemID then
+        local row = HDG.HousingCatalogObserver:GetRow(self._placeItemID)
+        local vendors = row and row.vendors  -- exception(nullable): unswept item / no vendor source
+        if vendors and #vendors > 0 then
+            local v = vendors[1]
+            local where = (v.zone and v.zone ~= "" and (" -- " .. v.zone)) or ""
+            local more  = #vendors > 1 and ("  (+" .. (#vendors - 1) .. " more)") or ""
+            lines[#lines + 1] = { text = "Vendor: " .. v.name .. where .. more, r = 0.55, g = 0.78, b = 1 }
+        end
+    end
+    -- Click hints with the housing-hotkey mouse glyphs (same source of truth
+    -- as the decor browser rows: TE.ClickHintLines).
+    if self._placeEntryID or self._placeItemID then
+        HDG.TooltipEngine.AppendClickHints(lines, {
+            leftText  = self._placeEntryID and "Place" or nil,
+            rightText = self._placeItemID and "Add to shopping list" or nil,
+        })
     end
     return { title = self._placeName, extraLines = lines }
 end
@@ -249,6 +285,7 @@ HDG.CardGrid:RegisterCellKind("companionGridCell", {
 
         -- Stamp the placement payload the click handler + tooltip read.
         cell._placeEntryID      = ed.entryID
+        cell._placeItemID       = ed.itemID   -- vendor-source tooltip + right-click acquisition menu
         cell._placeName         = ed.name
         cell._placeQty          = qty
         cell._placeAllowIndoors = ed.allowIndoors
@@ -273,7 +310,7 @@ HDG.CardGrid:RegisterCellKind("companionGridCell", {
             and ((H._isInside and not ed.allowIndoors)
               or (not H._isInside and not ed.allowOutdoors)))
 
-        cell:RegisterForClicks("LeftButtonUp")
+        cell:RegisterForClicks("LeftButtonUp", "RightButtonUp")
         cell:SetScript("OnClick", _companionCellClick)
         -- Show the tooltip from WITHIN OnEnter (re-wired every init), NOT via
         -- TooltipEngine:Attach. This cell re-SetScripts OnEnter each init (hover bg),

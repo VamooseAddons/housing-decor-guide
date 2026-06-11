@@ -403,7 +403,7 @@ local REWARD_VALUE   = (_E_RT and _E_RT.Value)         or 0
 local VTYPE_ROOMS    = (_E_VT and _E_VT.Rooms)         or 2
 local VTYPE_INTERIOR = (_E_VT and _E_VT.InteriorDecor) or 0
 Selectors:Register("projects.placementCaps", {
-    reads = { "session.house.snapshot", "session.house.snapshotTick" },
+    reads = { "session.house.snapshot", "session.house.snapshotChangeSeq" },
     fn = function(state)
         local nr = state.session.house.snapshot.nextRewards
         local roomMax, decorMax = 0, 0
@@ -761,13 +761,13 @@ Selectors:Register("projects.roomDetail", {
 })
 
 -- Selected room's crate detail. Name + icon stamped INTO the row envelope (not at paint)
--- per ADR-003b: cold-cache resolve bumps itemNames.tick -> selector re-runs -> scrollbox
+-- per ADR-003b: cold-cache resolve bumps itemNames.names -> selector re-runs -> scrollbox
 -- re-configures with real data. Resolving at paint breaks this cycle (the row data
 -- wouldn't change on the tick, so cold rows stay on the fallback).
 Selectors:Register("projects.crateDetail", {
     memoized = true,
     reads = { "account.rooms", "account.furnishingSets",
-              "session.ui.projects.selectedRoomID", "session.itemNames.tick" },
+              "session.ui.projects.selectedRoomID", "session.itemNames.names" },
     fn = function(state)
         local roomID, room = _selectedRoom(state)
         if not room then return { hasCrate = false } end
@@ -929,7 +929,7 @@ Selectors:Register("projects.slotOfferHasRows", {
 Selectors:Register("projects.roomFurnishingsRows", {
     memoized = true,
     reads = { "account.rooms", "account.furnishingSets", "session.ui.projects.furnCollapsed",
-              "session.ui.projects.selectedRoomID", "session.itemNames.tick", "session.furn" },
+              "session.ui.projects.selectedRoomID", "session.itemNames.names", "session.furn" },
     fn = function(state)
         local roomID, room = _selectedRoom(state)
         if not room then return {} end
@@ -976,8 +976,8 @@ Selectors:Register("projects.pickerResults", {
     reads = { "account.furnishingSets", "session.ui.projects.pickerCrateID",
               "session.ui.projects.pickerSearch", "session.ui.projects.pickerSource",
               "session.ui.projects.focusedCategoryID", "session.ui.projects.focusedSubcategoryID",
-              "account.collections", "account.vendorShoppingLists", "session.staticData.tick",
-              "account.collection.ownedDecorIDs", "session.catalog.sweepGeneration" },
+              "account.collections", "account.vendorShoppingLists", "session.resolvers.staticData.tick",
+              "account.collection.ownedDecorIDs", "session.resolvers.catalog.tick" },
     calls = { "decor.allItems" },
     fn = function(state, ctx)
         local crateID = state.session.ui.projects.pickerCrateID
@@ -1049,13 +1049,13 @@ local function _hoverUnowned(state)
 end
 Selectors:Register("projects.pickerHoverUnowned", {
     reads = { "session.ui.projects.pickerSelectedItemID",
-              "account.collection.ownedDecorIDs", "session.catalog.sweepGeneration" },
+              "account.collection.ownedDecorIDs", "session.resolvers.catalog.tick" },
     fn = function(state) return _hoverUnowned(state) ~= nil end,
 })
 Selectors:Register("projects.pickerHoverCraftable", {
     reads = { "session.ui.projects.pickerSelectedItemID",
-              "account.collection.ownedDecorIDs", "session.catalog.sweepGeneration",
-              "session.staticData.tick" },
+              "account.collection.ownedDecorIDs", "session.resolvers.catalog.tick",
+              "session.resolvers.staticData.tick" },
     fn = function(state)
         local itemID = _hoverUnowned(state)
         return itemID ~= nil and HDG.StaticData.Recipes:Get(itemID) ~= nil
@@ -1069,7 +1069,7 @@ Selectors:Register("projects.pickerSource", {
     fn = function(state) return state.session.ui.projects.pickerSource end,
 })
 Selectors:Register("projects.pickerSourceMenuItems", {
-    reads = { "account.collections", "account.vendorShoppingLists", "session.staticData.tick" },
+    reads = { "account.collections", "account.vendorShoppingLists", "session.resolvers.staticData.tick" },
     calls = { "decor.allItems" },
     fn = function(state, ctx)
         -- Counts on the catalog entries mirror the style entries' counts.
@@ -1137,7 +1137,7 @@ Selectors:Register("projects.pickerSourceMenuItems", {
 
 -- Hover-driven info line under the 3D preview: "Owned N -- Planned here M".
 Selectors:Register("projects.pickerHoverName", {
-    reads = { "session.ui.projects.pickerSelectedItemID", "session.itemNames.tick" },
+    reads = { "session.ui.projects.pickerSelectedItemID", "session.itemNames.names" },
     fn = function(state)
         local itemID = state.session.ui.projects.pickerSelectedItemID
         if not itemID then return "" end
@@ -1146,7 +1146,7 @@ Selectors:Register("projects.pickerHoverName", {
 })
 Selectors:Register("projects.pickerHoverLine", {
     reads = { "session.ui.projects.pickerSelectedItemID", "session.ui.projects.pickerCrateID",
-              "account.furnishingSets", "session.catalog.sweepGeneration" },
+              "account.furnishingSets", "session.resolvers.catalog.tick" },
     fn = function(state)
         local itemID = state.session.ui.projects.pickerSelectedItemID
         if not itemID then return "" end
@@ -1191,7 +1191,7 @@ Selectors:Register("projects.pickerTargetTitle", {
 })
 Selectors:Register("projects.pickerTargetRows", {
     memoized = true,
-    reads = { "session.ui.projects.pickerCrateID", "account.furnishingSets", "session.itemNames.tick" },
+    reads = { "session.ui.projects.pickerCrateID", "account.furnishingSets", "session.itemNames.names" },
     fn = function(state)
         local sid, set = _pickerTarget(state)
         if not set then return {} end

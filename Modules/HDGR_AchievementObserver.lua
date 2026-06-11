@@ -7,7 +7,7 @@
 -- it is read live in the selector, gated by a tick this module bumps.
 --
 --   ACHIEVEMENT_EARNED  -> OnAchievementEarned -> dispatch ACHIEVEMENT_STATUS_RESOLVED
---      -> session.achievementStatus.tick++  -> [ACH] earned-checkmark selectors re-run
+--      -> session.resolvers.achievementStatus.tick++  -> [ACH] earned-checkmark selectors re-run
 --      -> selector calls AchievementObserver:IsEarned(achievementID)  (live read)
 --
 -- This is the §1 boundary pattern: selectors stay pure (they read the tick +
@@ -17,7 +17,7 @@
 -- Public API:
 --   HDG.AchievementObserver:IsEarned(achievementID) -> bool
 --   Selectors that show the earned checkmark declare
---   reads = { "session.achievementStatus.tick" } and call IsEarned(...).
+--   reads = { "session.resolvers.achievementStatus.tick" } and call IsEarned(...).
 
 HDG = HDG or {}
 HDG.AchievementObserver = HDG.AchievementObserver or {}
@@ -27,7 +27,7 @@ local R = HDG.AchievementObserver
 -- (ItemAugment type=1 carries one inline). IsValidAchievement guards
 -- fabricated / wrong-faction IDs -> false (no checkmark) rather than a
 -- GetAchievementInfo error. Sync + cheap, so no cache; ACHIEVEMENT_EARNED
--- bumps session.achievementStatus.tick to repaint.
+-- bumps session.resolvers.achievementStatus.tick to repaint.
 function R:IsEarned(achievementID)
     if not achievementID then return false end
     -- exception(boundary): invalid / cross-faction IDs are "not earned" for our purposes.

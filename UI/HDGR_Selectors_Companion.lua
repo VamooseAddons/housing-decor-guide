@@ -194,9 +194,9 @@ Selectors:Register("companion.sidebarRows", {
         "account.furnishingSets",            -- rooms-mode counts
         "session.furn",                      -- rooms-mode change tick
         "session.house.roomCatalog",         -- rooms-mode blueprint tiles
-        "session.styles.cacheTick",
-        "session.staticData.tick",
-        "session.catalog.sweepGeneration",   -- cost-bucket owned counts
+        "session.styles.changeSeq",
+        "session.resolvers.staticData.tick",
+        "session.resolvers.catalog.tick",   -- cost-bucket owned counts
     },
     calls = { "companion.recentSessions" },  -- recent-mode sidebar (pulls account.recentActivity into the reads-closure)
     fn = function(state)
@@ -417,9 +417,9 @@ Selectors:Register("companion.gridItems", {
         "account.collections",
         "account.rooms",                    -- rooms-mode grid: the selected room
         "account.furnishingSets",           -- rooms-mode grid: its effective furnishings
-        "session.styles.cacheTick",
-        "session.staticData.tick",          -- StyleResolve reads pre-authored defs
-        "session.catalog.sweepGeneration",
+        "session.styles.changeSeq",
+        "session.resolvers.staticData.tick",          -- StyleResolve reads pre-authored defs
+        "session.resolvers.catalog.tick",
     },
     fn = function(state)
         local mode     = state.session.ui.companion.mode
@@ -536,8 +536,8 @@ Selectors:Register("companion.gridItems", {
 Selectors:Register("companion.recentStrip", {
     reads = {
         "session.styles.placedDecor",
-        "session.styles.cacheTick",
-        "session.catalog.sweepGeneration",
+        "session.styles.changeSeq",
+        "session.resolvers.catalog.tick",
         "session.ui.companion.showCost",   -- re-placeable cells -> cost badge respects the toggle
         "account.recentActivity",          -- this-session placed/removed -> +/- corner badges
     },

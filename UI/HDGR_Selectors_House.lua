@@ -4,7 +4,7 @@
 -- on every relevant dispatch (debounced 100ms); selectors derive per-widget
 -- shapes from that snapshot + account-side layout overrides.
 --
--- Snapshot-derived selectors read snapshotTick (atomic rebuild; one tick
+-- Snapshot-derived selectors read snapshotChangeSeq (atomic rebuild; one tick
 -- invalidates every consumer). Layout-override selectors use narrow path reads.
 
 HDG = HDG or {}
@@ -16,13 +16,13 @@ local Selectors = HDG.Selectors
 -- ============================================================================
 
 Selectors:Register("house.snapshot", {
-    reads = {"session.house.snapshot", "session.house.snapshotTick"},
+    reads = {"session.house.snapshot", "session.house.snapshotChangeSeq"},
     fn    = function(state) return state.session.house.snapshot end,
 })
 
-Selectors:Register("house.snapshotTick", {
-    reads = {"session.house.snapshotTick"},
-    fn    = function(state) return state.session.house.snapshotTick end,
+Selectors:Register("house.snapshotChangeSeq", {
+    reads = {"session.house.snapshotChangeSeq"},
+    fn    = function(state) return state.session.house.snapshotChangeSeq end,
 })
 
 Selectors:Register("houseTab.pickerOpen", {
@@ -68,7 +68,7 @@ Selectors:Register("house.designButtonLabel", {
 -- ============================================================================
 
 Selectors:Register("house.titleTier", {
-    reads = {"session.house.snapshotTick"},
+    reads = {"session.house.snapshotChangeSeq"},
     calls = {"house.snapshot"},
     fn = function(state, ctx)
         local snap = Selectors:Call("house.snapshot", state, ctx)
@@ -105,7 +105,7 @@ Selectors:Register("house.titleTier", {
 -- Falls back to first owned house pre-NEIGHBORHOOD_INITIATIVE_UPDATED.
 Selectors:Register("house.decoratorProfileData", {
     reads = {
-        "session.house.snapshotTick",
+        "session.house.snapshotChangeSeq",
         "session.house.ownedHouses",
         "session.house.activeNeighborhoodGUID",
         "session.daily.bestowed",
@@ -157,7 +157,7 @@ Selectors:Register("house.decoratorProfileData", {
 
 -- sourceDonut: bySource sorted by collected DESC.
 Selectors:Register("house.sourceDonutData", {
-    reads = { "session.house.snapshotTick", "session.catalog.sweepGeneration" },
+    reads = { "session.house.snapshotChangeSeq", "session.resolvers.catalog.tick" },
     calls = { "house.snapshot" },
     fn = function(state, ctx)
         local snap = Selectors:Call("house.snapshot", state, ctx)
@@ -183,7 +183,7 @@ Selectors:Register("house.sourceDonutData", {
 
 -- expansionDonut: byExp in EXPANSION_DATA canonical order (newest first).
 Selectors:Register("house.expansionDonutData", {
-    reads = { "session.house.snapshotTick", "session.catalog.sweepGeneration" },
+    reads = { "session.house.snapshotChangeSeq", "session.resolvers.catalog.tick" },
     calls = { "house.snapshot" },
     fn = function(state, ctx)
         local snap = Selectors:Call("house.snapshot", state, ctx)
@@ -225,7 +225,7 @@ Selectors:Register("house.expansionDonutData", {
 
 -- styleAffinity: top-5 style tags. Pass-through from snapshot.
 Selectors:Register("house.styleAffinityData", {
-    reads = { "session.house.snapshotTick" },
+    reads = { "session.house.snapshotChangeSeq" },
     calls = { "house.snapshot" },
     fn = function(state, ctx)
         return { tags = Selectors:Call("house.snapshot", state, ctx).topStyles or {} }
@@ -234,7 +234,7 @@ Selectors:Register("house.styleAffinityData", {
 
 -- closeCards: top-3 closest-to-complete subcategories.
 Selectors:Register("house.closeCardsData", {
-    reads = { "session.house.snapshotTick" },
+    reads = { "session.house.snapshotChangeSeq" },
     calls = { "house.snapshot" },
     fn = function(state, ctx)
         return { rows = Selectors:Call("house.snapshot", state, ctx).closestToComplete or {} }
@@ -243,7 +243,7 @@ Selectors:Register("house.closeCardsData", {
 
 -- hotPicks: top-5 uncollected by firstAcquisitionBonus.
 Selectors:Register("house.hotPicksData", {
-    reads = { "session.house.snapshotTick" },
+    reads = { "session.house.snapshotChangeSeq" },
     calls = { "house.snapshot" },
     fn = function(state, ctx)
         return { items = Selectors:Call("house.snapshot", state, ctx).hotPicks or {} }
@@ -252,7 +252,7 @@ Selectors:Register("house.hotPicksData", {
 
 -- velocity: structured data only; renderer assembles the display label (selectors return data).
 Selectors:Register("house.velocityData", {
-    reads = { "session.house.snapshotTick" },
+    reads = { "session.house.snapshotChangeSeq" },
     calls = { "house.snapshot" },
     fn = function(state, ctx)
         local v = Selectors:Call("house.snapshot", state, ctx).velocity
@@ -271,7 +271,7 @@ Selectors:Register("house.velocityData", {
 
 -- capacity: structured data only. Tier "healthy"/"warn"/"full" -> StatusBar Skinner variant.
 Selectors:Register("house.capacityData", {
-    reads = { "session.house.snapshotTick" },
+    reads = { "session.house.snapshotChangeSeq" },
     calls = { "house.snapshot" },
     fn = function(state, ctx)
         local c = Selectors:Call("house.snapshot", state, ctx).capacity
@@ -291,7 +291,7 @@ Selectors:Register("house.capacityData", {
 
 -- featured: 4 owned items (week-rotated).
 Selectors:Register("house.featuredData", {
-    reads = { "session.house.snapshotTick" },
+    reads = { "session.house.snapshotChangeSeq" },
     calls = { "house.snapshot" },
     fn = function(state, ctx)
         return { items = Selectors:Call("house.snapshot", state, ctx).featured or {} }
@@ -300,7 +300,7 @@ Selectors:Register("house.featuredData", {
 
 -- favorites: top 5 favorited items (mix of collected + uncollected).
 Selectors:Register("house.favoritesData", {
-    reads = { "session.house.snapshotTick" },
+    reads = { "session.house.snapshotChangeSeq" },
     calls = { "house.snapshot" },
     fn = function(state, ctx)
         return { items = Selectors:Call("house.snapshot", state, ctx).favorites or {} }
@@ -309,7 +309,7 @@ Selectors:Register("house.favoritesData", {
 
 -- themedSets: top 4 themed-set buckets (closest to complete first).
 Selectors:Register("house.themedSetsData", {
-    reads = { "session.house.snapshotTick" },
+    reads = { "session.house.snapshotChangeSeq" },
     calls = { "house.snapshot" },
     fn = function(state, ctx)
         return { sets = Selectors:Call("house.snapshot", state, ctx).themedSets or {} }
@@ -318,7 +318,7 @@ Selectors:Register("house.themedSetsData", {
 
 -- topVendors: top 3 vendors by uncollected item count.
 Selectors:Register("house.topVendorsData", {
-    reads = { "session.house.snapshotTick" },
+    reads = { "session.house.snapshotChangeSeq" },
     calls = { "house.snapshot" },
     fn = function(state, ctx)
         return { rows = Selectors:Call("house.snapshot", state, ctx).topVendors or {} }
@@ -328,7 +328,7 @@ Selectors:Register("house.topVendorsData", {
 -- recentActivity: last 5 learned-decor entries from craft history.
 -- Renderer joins itemID -> name+icon via catalog at paint time.
 Selectors:Register("house.recentActivityData", {
-    reads = { "session.house.snapshotTick" },
+    reads = { "session.house.snapshotChangeSeq" },
     calls = { "house.snapshot" },
     fn = function(state, ctx)
         return { entries = Selectors:Call("house.snapshot", state, ctx).recentActivity or {} }
@@ -337,7 +337,7 @@ Selectors:Register("house.recentActivityData", {
 
 -- lumberWallet: per-expansion lumber counts (current char bag, v1).
 Selectors:Register("house.lumberWalletData", {
-    reads = { "session.house.snapshotTick" },
+    reads = { "session.house.snapshotChangeSeq" },
     calls = { "house.snapshot" },
     fn = function(state, ctx)
         return { types = Selectors:Call("house.snapshot", state, ctx).walletLumber or {} }
@@ -346,7 +346,7 @@ Selectors:Register("house.lumberWalletData", {
 
 -- decorCurrency: housing-relevant currencies (count + need).
 Selectors:Register("house.decorCurrencyData", {
-    reads = { "session.house.snapshotTick" },
+    reads = { "session.house.snapshotChangeSeq" },
     calls = { "house.snapshot" },
     fn = function(state, ctx)
         return { currencies = Selectors:Call("house.snapshot", state, ctx).walletHousing or {} }
@@ -355,7 +355,7 @@ Selectors:Register("house.decorCurrencyData", {
 
 -- Initiative event cards: thin pass-throughs over snapshot fields.
 Selectors:Register("house.ritualSitesData", {
-    reads = { "session.house.snapshotTick" },
+    reads = { "session.house.snapshotChangeSeq" },
     calls = { "house.snapshot" },
     fn = function(state, ctx)
         return Selectors:Call("house.snapshot", state, ctx).ritualSites
@@ -364,7 +364,7 @@ Selectors:Register("house.ritualSitesData", {
 })
 
 Selectors:Register("house.abyssAnglersData", {
-    reads = { "session.house.snapshotTick" },
+    reads = { "session.house.snapshotChangeSeq" },
     calls = { "house.snapshot" },
     fn = function(state, ctx)
         return Selectors:Call("house.snapshot", state, ctx).abyssAnglers
@@ -373,7 +373,7 @@ Selectors:Register("house.abyssAnglersData", {
 })
 
 Selectors:Register("house.decorDuelsData", {
-    reads = { "session.house.snapshotTick" },
+    reads = { "session.house.snapshotChangeSeq" },
     calls = { "house.snapshot" },
     fn = function(state, ctx)
         return Selectors:Call("house.snapshot", state, ctx).decorDuels
@@ -385,7 +385,7 @@ Selectors:Register("house.decorDuelsData", {
 -- "Loading..."). Otherwise carries { level, maxLevel, targetLevel,
 -- atMax, rewards } -- rewards nil while async fetch is in flight.
 Selectors:Register("house.nextRewardsData", {
-    reads = { "session.house.snapshotTick" },
+    reads = { "session.house.snapshotChangeSeq" },
     calls = { "house.snapshot" },
     fn = function(state, ctx)
         return Selectors:Call("house.snapshot", state, ctx).nextRewards
@@ -395,7 +395,7 @@ Selectors:Register("house.nextRewardsData", {
 -- craftableNow: { canCraftNow, almostCraftable }. Headline numbers for
 -- the "how many decor recipes can I craft right now" widget.
 Selectors:Register("house.craftableNowData", {
-    reads = { "session.house.snapshotTick" },
+    reads = { "session.house.snapshotChangeSeq" },
     calls = { "house.snapshot" },
     fn = function(state, ctx)
         return Selectors:Call("house.snapshot", state, ctx).craftableNow
@@ -405,7 +405,7 @@ Selectors:Register("house.craftableNowData", {
 
 -- records: lifetime stats (totals, age, bestDay, streak).
 Selectors:Register("house.recordsData", {
-    reads = { "session.house.snapshotTick" },
+    reads = { "session.house.snapshotChangeSeq" },
     calls = { "house.snapshot" },
     fn = function(state, ctx)
         return Selectors:Call("house.snapshot", state, ctx).records or {}
@@ -414,7 +414,7 @@ Selectors:Register("house.recordsData", {
 
 -- goblinTopLumber: top-5 craftable decor by gold-per-lumber.
 Selectors:Register("house.goblinTopLumberData", {
-    reads = { "session.house.snapshotTick" },
+    reads = { "session.house.snapshotChangeSeq" },
     calls = { "house.snapshot" },
     fn = function(state, ctx)
         return { items = Selectors:Call("house.snapshot", state, ctx).goblinTopLumber or {} }
@@ -517,15 +517,15 @@ Selectors:Register("house.widgetRows", {
         "account.ui.houseTab.order",
         "account.ui.houseTab.width",
         "account.ui.houseTab.layoutOverrides",
-        -- snapshotTick + ownedHouses are read transitively via
+        -- snapshotChangeSeq + ownedHouses are read transitively via
         -- house.decoratorProfileData; declared here so BindingEngine
         -- knows widgetRows invalidates on those paths too. As more
         -- per-widget selectors plug in, their roots land in this list.
-        "session.house.snapshotTick",
+        "session.house.snapshotChangeSeq",
         "session.house.ownedHouses",
         -- sweepGeneration: donut selectors re-derive buckets from catalog
         -- observer on each sweep; widgetRows must invalidate transitively.
-        "session.catalog.sweepGeneration",
+        "session.resolvers.catalog.tick",
     },
     calls = {
         "house.snapshot",   -- readiness gate (see fn): no cards until the snapshot is built
@@ -557,7 +557,7 @@ Selectors:Register("house.widgetRows", {
         -- Readiness gate: snapshot {} until first build (deferred to window-open
         -- to dodge the cold-client housing-C CTD). Card renderers strict-read snapshot
         -- fields and erupt on nil; emit zero cards until snapshot exists. widgetRows
-        -- reads snapshotTick so it re-runs on HOUSE_SNAPSHOT_UPDATED.
+        -- reads snapshotChangeSeq so it re-runs on HOUSE_SNAPSHOT_UPDATED.
         if next(Selectors:Call("house.snapshot", state, ctx)) == nil then
             return {}
         end

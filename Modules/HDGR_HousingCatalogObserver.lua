@@ -288,7 +288,7 @@ function R:_CommitSweep(result)
 
     local vendorCount = 0
     for _ in pairs(result.byVendor) do vendorCount = vendorCount + 1 end
-    local generation = (HDG.Store:GetState().session.catalog.sweepGeneration or 0) + 1
+    local generation = (HDG.Store:GetState().session.resolvers.catalog.tick or 0) + 1
 
     -- COLLECTION_BULK_LOAD = canonical "catalog refreshed" action. Reducer reads
     -- payload.owned to update state.account.collection.ownedDecorIDs (persisted).
@@ -369,9 +369,9 @@ function R:ReconcileEntry(entryID)
         HDG.Store:Dispatch({ type = A.COLLECTION_ITEM_REMOVED, payload = { decorID = decorID } })
     end
 
-    -- Patch the mutable count fields + bump sweepGeneration -- on ownership
-    -- TRANSITIONS too, not just the counts-only case (this was an `elseif` that
-    -- skipped learn/remove -- the screen-update regression).
+    -- Patch the mutable count fields + signal the catalog resolver -- on
+    -- ownership TRANSITIONS too, not just the counts-only case (this was an
+    -- `elseif` that skipped learn/remove -- the screen-update regression).
     --
     -- CRITICAL ORDERING: PatchCounts the row SYNCHRONOUSLY here, THEN dispatch the
     -- re-render signal. The dispatch's own Subscribe handler ALSO calls PatchCounts,
@@ -381,9 +381,11 @@ function R:ReconcileEntry(entryID)
     -- "uncollected" for that frame (the tooltip reads the row live at hover, AFTER
     -- the patch lands -- which is why it showed owned while the list didn't). Mutate
     -- before signalling -> the row is fresh no matter which subscriber fires first.
-    -- COUNTS_UPDATED still bumps session.catalog.sweepGeneration, the path every
-    -- catalog-derived selector reads (LEARNED/REMOVED only touch ownedDecorIDs,
-    -- which those selectors do NOT read). `row` is always set (built above).
+    -- COUNTS_UPDATED still invalidates session.resolvers.catalog.tick
+    -- (signal-only, bump=false: subscribers re-run without the generation
+    -- advancing), the path every catalog-derived selector reads (LEARNED/
+    -- REMOVED only touch ownedDecorIDs, which those selectors do NOT read).
+    -- `row` is always set (built above).
     local counts = {
         quantity                 = info.quantity                 or 0,  -- exception(boundary): Blizzard struct field sparse
         numPlaced                = info.numPlaced                or 0,  -- exception(boundary): Blizzard struct field sparse

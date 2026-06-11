@@ -8,7 +8,7 @@
 HDG = HDG or {}
 HDG.LumberController = HDG.LumberController or {}
 
--- Icon in lumber.counterRows selector (stamps ed.icon + declares session.itemNames.tick read
+-- Icon in lumber.counterRows selector (stamps ed.icon + declares session.itemNames.names read
 -- so async ITEM_INFO_RESOLVED re-fires the selector). Row factory just reads ed.icon.
 
 -- First-paint chrome: icon | name (fill) | stock/queue-need (right).

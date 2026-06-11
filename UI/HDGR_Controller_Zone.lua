@@ -16,7 +16,7 @@ local CH = HDG.ControllerHelpers
 local A = HDG.Constants.ACTIONS
 
 -- ===== Item-name / icon resolvers ===========================================
--- Resolve* returns nil on cache miss + queues warm-up; session.itemNames.tick
+-- Resolve* returns nil on cache miss + queues warm-up; session.itemNames.names
 -- re-fires the selector once name/icon lands. -- engine-internal
 local function resolveItemIcon(itemID)
     return HDG.ItemNameResolver:ResolveIcon(itemID)

@@ -109,7 +109,7 @@ function L:Scan()
     -- Satellite-window live totals (Discord report 2026-06-11): BagObserver's
     -- own BAG_UPDATE scan is gated requiresMainWindow -- right for the
     -- warehouse, wrong for the lumber tracker farming with the main window
-    -- CLOSED. The tracker rows read Bag:GetTotal + session.bag.tick, so the
+    -- CLOSED. The tracker rows read Bag:GetTotal + session.resolvers.bag.tick, so the
     -- counts froze until End Session / opening the warehouse. Kick the
     -- owner's scan whenever the tracker is on screen (we already own this
     -- debounced BAG_UPDATE for harvest deltas).

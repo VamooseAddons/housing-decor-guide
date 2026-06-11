@@ -47,7 +47,7 @@ Selectors:Register("config.auctionatorAvailable", {
 -- ===== Cache freshness display =============================================
 Selectors:Register("config.cacheFreshnessLabel", {
     reads = {"account.prices.directCache", "account.prices.directCacheTime",
-             "session.prices.tick"},
+             "session.resolvers.prices.tick"},
     fn = function(state)
         local count = 0
         for _ in pairs(state.account.prices.directCache) do count = count + 1 end

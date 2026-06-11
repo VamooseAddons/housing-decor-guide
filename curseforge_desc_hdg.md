@@ -12,39 +12,31 @@
 
 ---
 
-## What's New in v3.2.0
+## What's New in v3.3.0
 
-Projects has been rebuilt around Designs, a clearer way to plan what goes in every room, plus Lumber Tracker fixes and a built-in workflow guide.
+A decor-shopping and House Editor quality-of-life release.
 
-**Projects: Designs**
+**Decor browser: filter by placement cost**
 
-- **Designs are permanent.** A design is your customised room: its name and its furnishings, independent of where it physically lives. Deleting a layout never costs you a design; deleting a design saves its pieces to your library. The crate and orphan system is gone.
-- **One design can fill several rooms.** Assign "Basement" to all three closets and they share its furnishings. Unassign clears a room back to an empty shape, and Fork splits one room off as a copy when it should look different.
-- **Auto-assign.** After a capture, one click fills every unassigned room with your best matching design (same shape, most decor first). The status bar lists exactly what was assigned.
-- **Furnishing Sets.** Reusable decor plans kept in your library. Equip a set into any number of designs; editing the set updates every design using it. Share codes are compatible with old crate exports.
-- **The decor picker shows everything.** Plan with pieces you don't own yet (they show dimmed). Hover an unowned piece and one click queues a craft or adds it to your shopping list. A dedicated "Unowned decor" source lists exactly what you are missing.
-- **Place from the plan.** The House Editor companion's Designs tab shows each design's pieces so you can place decor room by room.
-- **Help button.** A workflow diagram of the whole loop (capture, arrange, assign, furnish, plan, build) with a short explanation for each stage.
+- The Sizes filter is now "Size" with the room-budget glyph, and carries placement-cost chips alongside the size tags. Click a chip to see only decor that uses exactly that much room budget (1, 3, or 5). Useful when a room is close to its budget cap and you want pieces that still fit.
 
-**Lumber Tracker fixes**
+**House Editor companion**
 
-- Counts update live while you farm. They previously froze until you ended the session or opened the main window.
-- Each row shows held versus what your uncollected decor still needs, the same number as the Warehouse Need column, shrinking as you collect. Hover a row for the full breakdown.
+- Decor tooltips now show where to buy a piece: the first vendor and their zone, with a count when more vendors sell it.
+- Right-click any decor in any tab, or in the recent strip, to add it to your shopping list without leaving the editor.
+- Tooltip click hints use the same mouse-button glyphs as the rest of the addon.
 
-**Also in this release**
+**Fixes**
 
-- Capturing your house reports what happened: rooms matched, rooms waiting for a design, and any that lost their placement.
-- The what-if footer "House changes" lists the rooms to build or remove to make your real house match the plan.
-- Layouts tab: Load in Architect moved to the title bar, "Share code" is now Export (pairing the Import button), and imported houses show their real name.
-- Waypoint confirmations show in the status bar instead of chat, the status bar acknowledges many more actions, tooltips now show on disabled buttons to explain why, and 21 controls gained explanatory tooltips.
-- Existing crates and rooms migrate automatically into designs and sets; your layouts keep their geometry.
+- Items wishlisted while the Shopping List window is open now file under their vendor immediately. They previously sat in the Wishlist group until the window was closed and reopened.
+- Mogul's "Refresh from AH" runs a fresh scan even when every item is already cached. It previously did nothing once a full scan had completed, so prices could never update.
 
 ---
 
 ## The Decor Catalog
 
 - **Every piece from the in-game Housing Catalog** in one searchable list -- favorites, a collected check, a craftable-recipe star, and dye-variant color dots at a glance.
-- **Compose filters** across Crafted (by profession), Sizes, Styles, Expansions, Sources (vendor / quest / achievement / reputation / crafted / ...), and more -- with a live "collected / shown" status readout and one-click Reset.
+- **Compose filters** across Crafted (by profession), Size (footprint tags plus placement-cost chips), Styles, Expansions, Sources (vendor / quest / achievement / reputation / crafted / ...), and more -- with a live "collected / shown" status readout and one-click Reset.
 - **Uncollected** toggle to focus on what you're missing; **Destroy Decor** toggle to manage stored duplicates (with a safe, confirmed destroy dialog).
 - **3D model preview** of any piece -- rotate, zoom, swap the backdrop, and preview specific dye variants.
 - **Rich detail card**: category breadcrumb, size, source, owned/stored/placed counts, first-acquisition House XP bonus, and style/faction tags.
@@ -93,7 +85,7 @@ A personal dashboard: decorator profile with house level, favor, and Collector t
 
 ## Right inside the House Editor
 
-A companion window injects into Blizzard's House Editor so you can **place decor with one click** -- browse by your designs (each room's plan), your styles, shopping lists, snapshots, room concepts, or what you've placed recently. Indoor/outdoor filtering, placement-cost display, and dye variants are all handled for you.
+A companion window injects into Blizzard's House Editor so you can **place decor with one click** -- browse by your designs (each room's plan), your styles, shopping lists, snapshots, room concepts, or what you've placed recently. Tooltips show ownership, placement cost, and the vendor that sells each piece; right-click sends a piece to your shopping list without leaving the editor. Indoor/outdoor filtering and dye variants are all handled for you.
 
 ## Tools
 
@@ -122,7 +114,7 @@ A companion window injects into Blizzard's House Editor so you can **place decor
 ---
 
 **Author:** Vamoose
-**Version:** 3.2.0
+**Version:** 3.3.0
 **Game Version:** 12.0.5+ (Midnight)
 **Source / Issues:** https://github.com/VamooseAddons/housing-decor-guide
 **Discord:** https://discord.gg/RWZaxJaHFP

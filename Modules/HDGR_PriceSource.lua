@@ -318,13 +318,18 @@ local function onScanEvent(_, event, ...)
     end
 end
 
--- StartDirectScan(itemIDs) -- AH must be open.
+-- StartDirectScan(itemIDs, force) -- AH must be open.
 -- Prices stream in via PRICES_DIRECT_SCAN_BATCH; PRICES_DIRECT_SCAN_COMPLETED
 -- finalizes (zeroes unfound items, records cacheTime).
--- Returns: true if started, false if AH not open.
-function P:StartDirectScan(itemIDs)
+-- force = true scans EVERY id regardless of cache state. Without it, a
+-- completed scan makes every id non-nil (COMPLETED zeroes the unfound ones),
+-- so the needed-filter goes to 0 and "Refresh from AH" was a forever no-op
+-- against a full cache -- the explicit refresh button must force.
+-- Returns: true if started (or already scanning), false if AH not open.
+function P:StartDirectScan(itemIDs, force)
     if not self:IsAHOpen() then return false end
     if not _G.C_AuctionHouse or not _G.C_AuctionHouse.SendBrowseQuery then return false end
+    if scan.active then return true end   -- one browse query at a time; the label already shows progress
 
     if not scanFrame then
         scanFrame = _G.CreateFrame("Frame")
@@ -336,10 +341,12 @@ function P:StartDirectScan(itemIDs)
 
     local cache = HDG.Store:GetState().account.prices.directCache
 
-    -- Skip already-cached items (0 = "scanned but unlisted"; don't re-scan).
+    -- Skip already-cached items (0 = "scanned but unlisted"; don't re-scan)
+    -- unless forced -- PRICES_DIRECT_SCAN_STARTED wipes the cache anyway
+    -- (replace-on-scan), so a forced scan is a fresh snapshot end to end.
     local needed, n = {}, 0
     for _, id in ipairs(itemIDs or {}) do
-        if cache[id] == nil then needed[id] = true; n = n + 1 end
+        if force or cache[id] == nil then needed[id] = true; n = n + 1 end
     end
     if n == 0 then return true end
 

@@ -5,7 +5,7 @@
 --
 -- Rules:
 --   1. Selectors call HDG.StaticData.<Domain>:<accessor>() -- never _G.HDGR_*DB directly.
---   2. Selectors declare reads = {"session.staticData.tick"} (always 0 today;
+--   2. Selectors declare reads = {"session.resolvers.staticData.tick"} (always 0 today;
 --      reserves space for future hot-reload override).
 --   3. Tests stub HDG.StaticData.<Domain> to inject fixtures.
 --

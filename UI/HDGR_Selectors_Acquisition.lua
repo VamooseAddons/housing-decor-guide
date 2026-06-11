@@ -56,11 +56,11 @@ HDG.Log:RegisterTags({
 --
 -- canWaypoint = VendorAugment entry exists (has real coords for TomTom).
 -- Vendors known only by name (no augment match) still appear with canWaypoint=false.
--- Reads session.catalog.sweepGeneration so the list rebuilds on each sweep.
+-- Reads session.resolvers.catalog.tick so the list rebuilds on each sweep.
 local FACTION_LABEL = { A = "Alliance", H = "Horde", N = "Neutral" }
 Selectors:Register("acq.allVendors", {
     memoized = true,  -- perf: base vendor walk; called transitively ~1000x/session
-    reads = { "session.catalog.sweepGeneration" },
+    reads = {"session.resolvers.staticData.tick",  "session.resolvers.catalog.tick" },
     fn = function()
         if not HDG.HousingCatalogObserver:IsReady() then return {} end
         -- Iterate byVendor entries directly (one per (name, zone) composite
@@ -331,7 +331,7 @@ Selectors:Register("acq.detailExpansion", {
 -- Master item list (Find by Item view). All catalog rows are released items
 -- so no liveDecorIDs gate is needed.
 Selectors:Register("acq.allItems", {
-    reads    = {"session.catalog.sweepGeneration"},
+    reads    = {"session.resolvers.staticData.tick", "session.resolvers.catalog.tick"},
     memoized = true,
     fn = function()
         if not HDG.HousingCatalogObserver:IsReady() then return {} end
@@ -450,7 +450,7 @@ local _PRESET_TO_FLAG = {
 }
 Selectors:Register("acq.matchesPreset", {
     -- SOURCE axis only. "missing" moved to acq.matchesMissing (orthogonal).
-    reads = {"session.catalog.sweepGeneration"},
+    reads = {"session.resolvers.catalog.tick"},
     calls = {"acq.preset"},
     fn = function(state, ctx)
         local preset = Selectors:Call("acq.preset", state, ctx)
@@ -481,7 +481,7 @@ Selectors:Register("acq.missingOnly", {
 -- Curried Missing predicate: toggle off -> pass-all; on -> uncollected-only.
 -- Mirrors the old matchesPreset "missing" branch (reads owned set live).
 Selectors:Register("acq.matchesMissing", {
-    reads = {"account.collection.ownedDecorIDs", "session.catalog.sweepGeneration"},
+    reads = {"account.collection.ownedDecorIDs", "session.resolvers.catalog.tick"},
     calls = {"acq.missingOnly", "decor.isCollected"},
     fn = function(state, ctx)
         if not Selectors:Call("acq.missingOnly", state, ctx) then
@@ -539,7 +539,7 @@ end
 Selectors:Register("acq.matchesSource", {
     -- sweepGeneration: the gold/endeavor branches + _matchesFlag read the
     -- catalog row (costEntries / sourceTags) by itemID -- re-resolve on re-sweep.
-    reads = {"session.catalog.sweepGeneration"},
+    reads = {"session.resolvers.catalog.tick"},
     calls = {"acq.sourceFilter"},
     fn = function(state, ctx)
         local set = Selectors:Call("acq.sourceFilter", state, ctx)
@@ -575,7 +575,7 @@ Selectors:Register("acq.matchesSource", {
 -- carries decor.isCollected (the "missing" signal).
 Selectors:Register("acq.matchesItemFilters", {
     calls = {"acq.matchesSource", "acq.matchesPreset", "acq.matchesMissing", "acq.expansionFilter"},
-    reads = {"session.catalog.sweepGeneration"},
+    reads = {"session.resolvers.catalog.tick"},
     fn = function(state, ctx)
         local matchSource  = Selectors:Call("acq.matchesSource",   state, ctx)
         local matchPreset  = Selectors:Call("acq.matchesPreset",   state, ctx)
@@ -668,8 +668,8 @@ Selectors:Register("acq.items", {
     -- repMet (the row-list chip-dim signals) when completion or rep changes. Gate the
     -- impure IsComplete/IsEarned/GetProgress calls below -- same boundary as the detail line.
     -- sweepGeneration: the rep-axis GetRow(itemID).factionGate lookup below reads the bake.
-    reads = {"session.questStatus.tick", "session.achievementStatus.tick", "account.questCompletions",
-             "session.rep.tick", "session.catalog.sweepGeneration"},
+    reads = {"session.resolvers.questStatus.tick", "session.resolvers.achievementStatus.tick", "account.questCompletions",
+             "session.resolvers.rep.tick", "session.resolvers.catalog.tick"},
     fn = function(state, ctx)
         local all       = Selectors:Call("acq.allItems",           state, ctx)
         local q         = Selectors:Call("acq.filterQuery",        state, ctx)
@@ -718,7 +718,7 @@ Selectors:Register("acq.items", {
 -- non-vendor-sourced recipes (drops/quests) are skipped -- nothing to buy.
 Selectors:Register("acq.allRecipes", {
     memoized = true,
-    reads = {"account.recipes"},
+    reads = {"session.resolvers.staticData.tick", "account.recipes"},
     fn = function(state)
         local out = {}
         for _, entry in pairs(HDG.StaticData.Recipes:GetAll()) do
@@ -773,7 +773,7 @@ Selectors:Register("acq.recipeRows", {
 
 -- Current faction filter ("all" / "Alliance" / "Horde" / "Neutral").
 Selectors:Register("acq.factionFilter", {
-    reads = {"session.ui.acquisition.factionFilter", "session.staticData.tick"},
+    reads = {"session.ui.acquisition.factionFilter", "session.resolvers.staticData.tick"},
     fn = function(state)
         return state.session.ui.acquisition.factionFilter   -- multi-select SET ({} = all)
     end,
@@ -1137,7 +1137,7 @@ end
 
 Selectors:Register("acq.vendors", {
     memoized = true,  -- perf: filters the vendor walk; memo dedupes per flush
-    reads = {"session.staticData.tick", "account.recipes"},
+    reads = {"session.resolvers.staticData.tick", "account.recipes"},
     calls = {"acq.allVendors", "acq.filterQuery", "acq.factionFilter",
              "acq.zoneFilter", "acq.repFilter", "acq.sourceFilter",
              "acq.expansionFilter", "acq.preset", "acq.missingOnly",
@@ -1260,7 +1260,7 @@ Selectors:Register("acq.blankItem", {
 
 Selectors:Register("acq.vendorRows", {
     memoized = true,  -- perf: 1.4ms walk; called by the list binding + hasResults + blankVendor
-    reads = {"session.catalog.sweepGeneration"},
+    reads = {"session.resolvers.catalog.tick"},
     calls = {"acq.vendors", "decor.isCollected"},
     fn = function(state, ctx)
         local vendors = Selectors:Call("acq.vendors",       state, ctx)
@@ -1399,9 +1399,9 @@ Selectors:Register("acq.selectedItem.compactDetail", {
     calls = {"acq.selectedItemID", "decor.isCollected", "acq.selectedRecipe"},
     -- quest/ach/rep ticks (+ questCompletions): the gate line is met-aware (green check
     -- when satisfied, dim when not) -- it refreshes when completion or rep changes.
-    reads = {"account.config.scheme", "session.staticData.tick",
-             "session.catalog.sweepGeneration", "session.rep.tick",
-             "session.questStatus.tick", "session.achievementStatus.tick", "account.questCompletions"},
+    reads = {"account.config.scheme", "session.resolvers.staticData.tick",
+             "session.resolvers.catalog.tick", "session.resolvers.rep.tick",
+             "session.resolvers.questStatus.tick", "session.resolvers.achievementStatus.tick", "account.questCompletions"},
     fn = function(state, ctx)
         local dimCC  = HDG.Theme:ColorCode("text.dim")
         local textCC = HDG.Theme:ColorCode("text.primary")
@@ -1432,7 +1432,7 @@ Selectors:Register("acq.selectedItem.compactDetail", {
                     reqStr = name .. " Renown " .. (recipe.minRep - 8)
                 end
                 -- Live met-check via RepObserver (renown + friendship); reads
-                -- session.rep.tick so it refreshes when the player's rep changes.
+                -- session.resolvers.rep.tick so it refreshes when the player's rep changes.
                 local prog = HDG.RepObserver:GetProgress(recipe.factionID, recipe.minRep)
                 if prog and prog.met then
                     rlines[#rlines + 1] = HDG.Theme:GetTextStateColorToken("collected")
@@ -1565,7 +1565,7 @@ local function _recipeVendorRows(itemID)
 end
 
 Selectors:Register("acq.selectedItem.vendors", {
-    reads = {"session.catalog.sweepGeneration"},
+    reads = {"session.resolvers.staticData.tick", "session.resolvers.catalog.tick"},
     calls = {"acq.selectedItemID", "acq.selectedRecipe"},
     fn = function(state, ctx)
         -- Recipe scroll selected -> its vendors (reuses the same row shape).
@@ -1662,9 +1662,9 @@ end
 -- The strip line (if any chip-only tags exist) lands at the bottom so
 -- gated text-bearing entries stay legible at the top of the widget.
 Selectors:Register("acq.selectedItem.sourceLine", {
-    -- session.rep.tick: RepObserver bumps it on rep change so the REP gate's
+    -- session.resolvers.rep.tick: RepObserver bumps it on rep change so the REP gate's
     -- LIVE progress suffix (composed below) re-reads. Static gate text is baked.
-    reads = {"session.staticData.tick", "session.catalog.sweepGeneration", "session.rep.tick", "session.questStatus.tick", "session.achievementStatus.tick", "account.questCompletions"},
+    reads = {"session.resolvers.staticData.tick", "session.resolvers.catalog.tick", "session.resolvers.rep.tick", "session.resolvers.questStatus.tick", "session.resolvers.achievementStatus.tick", "account.questCompletions"},
     calls = {"acq.selectedItemID"},
     fn = function(state, ctx)
         local id = Selectors:Call("acq.selectedItemID", state, ctx)
@@ -1684,7 +1684,7 @@ Selectors:Register("acq.selectedItem.sourceLine", {
                         "%s%s  |cffffff00|Hhdgrach:%d|h[%s]|h|r",
                         prefix, chip, id, t.text)
                     -- Earned checkmark: live AchievementObserver:IsEarned, gated
-                    -- by session.achievementStatus.tick in this selector's reads
+                    -- by session.resolvers.achievementStatus.tick in this selector's reads
                     -- (earned state is dynamic per-character; same shape as QUEST).
                     if row.achievementID
                        and HDG.AchievementObserver:IsEarned(row.achievementID) then
@@ -1696,7 +1696,7 @@ Selectors:Register("acq.selectedItem.sourceLine", {
                     -- REP: append LIVE progress ("ready/not-ready <standing> (X/Y)")
                     -- onto the static "Honored with X" requirement. Read through
                     -- HDG.RepObserver (owns the rep namespaces); gated by
-                    -- session.rep.tick in this selector's reads.
+                    -- session.resolvers.rep.tick in this selector's reads.
                     if t.kind == "REP" and t.factionID then
                         local suffix = HDG.Format.ComposeRepProgressSuffix(
                             HDG.RepObserver:GetProgress(t.factionID, t.requiredCode))
@@ -1741,7 +1741,7 @@ Selectors:Register("acq.selectedItem.sourceLine", {
 -- (coin atlas, budget icon) is baked at BuildRow.
 Selectors:Register("acq.selectedItem.shortRibbonText", {
     calls = {"acq.selectedItemID"},
-    reads = {"session.catalog.sweepGeneration"},
+    reads = {"session.resolvers.catalog.tick"},
     fn = function(state, ctx)
         local id = Selectors:Call("acq.selectedItemID", state, ctx)
         if not id then return "" end
@@ -1794,12 +1794,13 @@ Selectors:Register("acq.selected.items", {
     memoized = true,
     calls = {"decor.isCollected"},
     reads = {
-        "session.catalog.sweepGeneration",
+        "session.resolvers.staticData.tick",  -- ADR-003c StaticData marker (sweep rule 4c)
+        "session.resolvers.catalog.tick",
         "session.ui.acquisition.selectedVendorName",  -- synthetic-vendor fallback
         "session.ui.acquisition.selectedVendorZone",
         -- gate-met chip-dim signals (questDone/achEarned/repMet stamped per item below)
-        "session.questStatus.tick", "session.achievementStatus.tick",
-        "account.questCompletions", "session.rep.tick",
+        "session.resolvers.questStatus.tick", "session.resolvers.achievementStatus.tick",
+        "account.questCompletions", "session.resolvers.rep.tick",
     },
     fn = function(state, ctx)
         -- Synthetic catalog vendors ("Draenor World Vendors" etc.) have no
@@ -1910,6 +1911,7 @@ Selectors:Register("acq.selected.items", {
 Selectors:Register("acq.selected.recipes", {
     memoized = true,
     reads = {
+        "session.resolvers.staticData.tick",  -- ADR-003c StaticData marker (sweep rule 4c)
         "session.ui.acquisition.selectedNpcID",
         "account.recipes",
     },
@@ -2097,7 +2099,7 @@ Selectors:Register("acq.selectedItemID", {
 
 Selectors:Register("acq.selectedItem", {
     memoized = true,
-    reads = {"session.catalog.sweepGeneration", "session.ui.acquisition.selectedItemID"},
+    reads = {"session.resolvers.catalog.tick", "session.ui.acquisition.selectedItemID"},
     fn = function(state)
         local id = state.session.ui.acquisition.selectedItemID
         if not id then return nil end

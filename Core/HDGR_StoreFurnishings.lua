@@ -3,7 +3,7 @@
 -- ============================================================================
 -- Domain-store file: owns the v6->7 migration, the furnishings shape ensures,
 -- the session reverse indexes, the FURN_*/LAYOUT_* reducer cases (delegated
--- from Store:_RawDispatch via the HANDLED set -- still the single dispatch
+-- via HDG.Actions:Register blocks -- still the single dispatch
 -- path; this is the same reducer, in its own file), and the v7 halves of the
 -- capture/clear cases. Loaded BEFORE HDGR_Store.lua in the TOC; the Store
 -- calls in strictly (load-order-guaranteed singleton).
@@ -357,7 +357,7 @@ function SF.ApplyCapture(state, payload)
     cap.removed = (cap.removed or 0) + removed
     cap.houseID, cap.layoutID = payload.houseID, lid
     state.session.furn.lastCapture = cap
-    state.session.furn.tick = state.session.furn.tick + 1
+    state.session.furn.changeSeq = state.session.furn.changeSeq + 1
 end
 
 -- Prep the current LAYOUT for a recapture sweep. v8: placements PERSIST --
@@ -413,17 +413,23 @@ function SF.LayoutView(state, layoutID)
     return out
 end
 
--- ===== Reducer cases (delegated from Store:_RawDispatch) ====================
+-- ===== Action blocks (self-registered; Store dispatches via HDG.Actions) ====
 -- IDs counter-minted (echoed via session.furn for the dispatching controller);
 -- reverse indexes maintained in place. Same single-dispatch-path reducer --
 -- just housed with its domain.
 
-SF.HANDLED = {}   -- filled below A-by-A once Constants is loaded (TOC: Constants precedes this file)
 
-function SF.Reduce(state, action)
-    local A, payload = HDG.Constants.ACTIONS, action.payload or {}
+-- ===== Self-registered actions (SELFREG_RESOLVER_DESIGN, first domain) =====
+-- One block per action: reduce + invalidates + flags in ONE place (meta
+-- moved here from Init.BuildActionMeta; merged back at boot with a
+-- duplicate-source error). Bodies are the former SF.Reduce branches,
+-- verbatim -- the golden dispatch-equivalence corpus pins that claim.
+-- All persist (account.* writes); session.furn carries minted-ID echoes
+-- + the changeSeq; session.furnIndex is the maintained reverse index.
 
-    if action.type == A.FURN_SET_CREATE then
+HDG.Actions:Register{ name = "FURN_SET_CREATE",
+    invalidates = { "account.furnishingSets", "session.furn" },
+    reduce = function(state, payload)
         local acct = state.account
         acct.furnishingSetSeq = acct.furnishingSetSeq + 1
         local id, items = "set:" .. acct.furnishingSetSeq, {}
@@ -434,13 +440,19 @@ function SF.Reduce(state, action)
             createdAt = payload.ts or 0,
         }
         state.session.furn.lastSetID = id
-        state.session.furn.tick = state.session.furn.tick + 1
+        state.session.furn.changeSeq = state.session.furn.changeSeq + 1
+    end }
 
-    elseif action.type == A.FURN_SET_RENAME then
+HDG.Actions:Register{ name = "FURN_SET_RENAME",
+    invalidates = { "account.furnishingSets" },
+    reduce = function(state, payload)
         local set = payload.setID and state.account.furnishingSets[payload.setID]   -- exception(nullable): lookup can miss on stale UI
         if set and payload.name and payload.name ~= "" then set.name = payload.name end
+    end }
 
-    elseif action.type == A.FURN_SET_DELETE then
+HDG.Actions:Register{ name = "FURN_SET_DELETE",
+    invalidates = { "account.furnishingSets", "account.rooms", "session.furnIndex", "session.furn" },
+    reduce = function(state, payload)
         local acct, idx = state.account, state.session.furnIndex
         local sid = payload.setID
         if sid and acct.furnishingSets[sid] then
@@ -452,10 +464,13 @@ function SF.Reduce(state, action)
             end
             idx.setRooms[sid] = nil
             acct.furnishingSets[sid] = nil
-            state.session.furn.tick = state.session.furn.tick + 1
+            state.session.furn.changeSeq = state.session.furn.changeSeq + 1
         end
+    end }
 
-    elseif action.type == A.FURN_SET_ITEM_ADD then
+HDG.Actions:Register{ name = "FURN_SET_ITEM_ADD",
+    invalidates = { "account.furnishingSets" },
+    reduce = function(state, payload)
         local set = payload.setID and state.account.furnishingSets[payload.setID]   -- exception(nullable): lookup can miss on stale UI
         if set and payload.itemID then
             local found
@@ -474,8 +489,11 @@ function SF.Reduce(state, action)
                 set.items[#set.items + 1] = { id = payload.itemID, count = payload.count or 1 }
             end
         end
+    end }
 
-    elseif action.type == A.FURN_SET_ITEM_REMOVE then
+HDG.Actions:Register{ name = "FURN_SET_ITEM_REMOVE",
+    invalidates = { "account.furnishingSets" },
+    reduce = function(state, payload)
         local set = payload.setID and state.account.furnishingSets[payload.setID]   -- exception(nullable): lookup can miss on stale UI
         if set and payload.itemID then
             for i, it in ipairs(set.items) do
@@ -487,16 +505,22 @@ function SF.Reduce(state, action)
                 end
             end
         end
+    end }
 
-    elseif action.type == A.FURN_SET_PROMOTE then
+HDG.Actions:Register{ name = "FURN_SET_PROMOTE",
+    invalidates = { "account.furnishingSets", "session.furn" },
+    reduce = function(state, payload)
         local set = payload.setID and state.account.furnishingSets[payload.setID]   -- exception(nullable): lookup can miss on stale UI
         if set then
             set.isLocal, set.ownerRoom = nil, nil
             if payload.name and payload.name ~= "" then set.name = payload.name end
-            state.session.furn.tick = state.session.furn.tick + 1
+            state.session.furn.changeSeq = state.session.furn.changeSeq + 1
         end
+    end }
 
-    elseif action.type == A.FURN_ROOM_CREATE then
+HDG.Actions:Register{ name = "FURN_ROOM_CREATE",
+    invalidates = { "account.rooms", "account.projects.layouts", "session.furn", "session.furnIndex" },
+    reduce = function(state, payload)
         local acct = state.account
         acct.roomSeq = acct.roomSeq + 1
         local id = "room:" .. acct.roomSeq
@@ -505,7 +529,7 @@ function SF.Reduce(state, action)
             furnishingSetIDs = {}, createdAt = payload.ts or 0,
         }
         state.session.furn.lastRoomID = id
-        state.session.furn.tick = state.session.furn.tick + 1
+        state.session.furn.changeSeq = state.session.furn.changeSeq + 1
         -- Create-in-place from an unassigned slot: TAG the slot (v8 -- the
         -- placement key is stable; lineage stays on the placement).
         local layout = payload.layoutID and acct.projects.layouts[payload.layoutID]   -- exception(nullable): create can be slot-less (Rooms list "+ New Room")
@@ -522,12 +546,18 @@ function SF.Reduce(state, action)
             end
             idx.roomLayouts[id] = { [payload.layoutID] = 1 }
         end
+    end }
 
-    elseif action.type == A.FURN_ROOM_RENAME then
+HDG.Actions:Register{ name = "FURN_ROOM_RENAME",
+    invalidates = { "account.rooms" },
+    reduce = function(state, payload)
         local room = payload.roomID and state.account.rooms[payload.roomID]   -- exception(nullable): lookup can miss on stale UI
         if room and payload.name and payload.name ~= "" then room.name = payload.name end
+    end }
 
-    elseif action.type == A.FURN_ROOM_DELETE then
+HDG.Actions:Register{ name = "FURN_ROOM_DELETE",
+    invalidates = { "account.rooms", "account.furnishingSets", "account.projects.layouts", "session.furn", "session.furnIndex" },
+    reduce = function(state, payload)
         local acct, idx = state.account, state.session.furnIndex
         local room = payload.roomID and acct.rooms[payload.roomID]   -- exception(nullable): lookup can miss on stale UI
         if room then
@@ -549,10 +579,13 @@ function SF.Reduce(state, action)
             end
             idx.roomLayouts[payload.roomID] = nil
             acct.rooms[payload.roomID] = nil
-            state.session.furn.tick = state.session.furn.tick + 1
+            state.session.furn.changeSeq = state.session.furn.changeSeq + 1
         end
+    end }
 
-    elseif action.type == A.FURN_ROOM_EQUIP then
+HDG.Actions:Register{ name = "FURN_ROOM_EQUIP",
+    invalidates = { "account.rooms", "session.furn", "session.furnIndex" },
+    reduce = function(state, payload)
         local acct = state.account
         local room = payload.roomID and acct.rooms[payload.roomID]   -- exception(nullable): lookup can miss on stale UI
         if room and payload.setID and acct.furnishingSets[payload.setID] then
@@ -565,11 +598,14 @@ function SF.Reduce(state, action)
                 local idx = state.session.furnIndex
                 idx.setRooms[payload.setID] = idx.setRooms[payload.setID] or {}
                 idx.setRooms[payload.setID][payload.roomID] = true
-                state.session.furn.tick = state.session.furn.tick + 1
+                state.session.furn.changeSeq = state.session.furn.changeSeq + 1
             end
         end
+    end }
 
-    elseif action.type == A.FURN_ROOM_UNEQUIP then
+HDG.Actions:Register{ name = "FURN_ROOM_UNEQUIP",
+    invalidates = { "account.rooms", "session.furn", "session.furnIndex" },
+    reduce = function(state, payload)
         local room = payload.roomID and state.account.rooms[payload.roomID]   -- exception(nullable): lookup can miss on stale UI
         if room and payload.setID then
             for i = #room.furnishingSetIDs, 1, -1 do
@@ -577,10 +613,13 @@ function SF.Reduce(state, action)
             end
             local idx = state.session.furnIndex
             if idx.setRooms[payload.setID] then idx.setRooms[payload.setID][payload.roomID] = nil end
-            state.session.furn.tick = state.session.furn.tick + 1
+            state.session.furn.changeSeq = state.session.furn.changeSeq + 1
         end
+    end }
 
-    elseif action.type == A.FURN_ROOM_DUPLICATE then
+HDG.Actions:Register{ name = "FURN_ROOM_DUPLICATE",
+    invalidates = { "account.rooms", "account.furnishingSets", "account.projects.layouts", "session.furn", "session.furnIndex" },
+    reduce = function(state, payload)
         -- Variant for what-if work: library sets are SHARED (edit propagates by
         -- design), the local set is CLONED (the variant owns its own pieces).
         -- Lineage (legacyID) is NOT copied -- recapture keeps matching the source.
@@ -641,10 +680,13 @@ function SF.Reduce(state, action)
                 end
             end
             state.session.furn.lastRoomID = id
-            state.session.furn.tick = state.session.furn.tick + 1
+            state.session.furn.changeSeq = state.session.furn.changeSeq + 1
         end
+    end }
 
-    elseif action.type == A.LAYOUT_SWAP_ROOM then
+HDG.Actions:Register{ name = "LAYOUT_SWAP_ROOM",
+    invalidates = { "account.projects.layouts", "account.rooms", "session.furn", "session.furnIndex" },
+    reduce = function(state, payload)
         -- The placement changes hands in ONE layout; both rooms persist.
         local acct = state.account
         -- v8: retag every spot the outgoing room holds in this layout.
@@ -663,11 +705,14 @@ function SF.Reduce(state, action)
                 -- A shapeless ("+ New Room") incomer adopts the spots' shape.
                 if not to.shape then to.shape = shape end
                 SF.RebuildIndexes(state)
-                state.session.furn.tick = state.session.furn.tick + 1
+                state.session.furn.changeSeq = state.session.furn.changeSeq + 1
             end
         end
+    end }
 
-    elseif action.type == A.LAYOUT_PLACE then
+HDG.Actions:Register{ name = "LAYOUT_PLACE",
+    invalidates = { "account.projects.layouts", "session.furn", "session.furnIndex" },
+    reduce = function(state, payload)
         local acct = state.account
         local layout = payload.layoutID and acct.projects.layouts[payload.layoutID]   -- exception(nullable): lookup can miss on stale UI
         if layout then
@@ -690,7 +735,7 @@ function SF.Reduce(state, action)
                 idx.roomLayouts[payload.roomID] = idx.roomLayouts[payload.roomID] or {}
                 idx.roomLayouts[payload.roomID][payload.layoutID] =
                     (idx.roomLayouts[payload.roomID][payload.layoutID] or 0) + 1
-                state.session.furn.tick = state.session.furn.tick + 1
+                state.session.furn.changeSeq = state.session.furn.changeSeq + 1
             elseif payload.shape then
                 -- Unassigned slot (doodle) -- persists, lazily curated via LAYOUT_ASSIGN.
                 layout.slotSeq = (layout.slotSeq or 0) + 1
@@ -698,8 +743,11 @@ function SF.Reduce(state, action)
                 layout.placements["slot:" .. layout.slotSeq] = rec
             end
         end
+    end }
 
-    elseif action.type == A.LAYOUT_MOVE then
+HDG.Actions:Register{ name = "LAYOUT_MOVE",
+    invalidates = { "account.projects.layouts" },
+    reduce = function(state, payload)
         local layout = payload.layoutID and state.account.projects.layouts[payload.layoutID]   -- exception(nullable): lookup can miss on stale UI
         local pl = layout and payload.key and layout.placements[payload.key]
         if pl then
@@ -709,8 +757,11 @@ function SF.Reduce(state, action)
             if payload.rotation ~= nil then pl.rotation = payload.rotation end
             if payload.floors   ~= nil then pl.floors   = payload.floors   end   -- span override
         end
+    end }
 
-    elseif action.type == A.LAYOUT_REMOVE_PLACEMENT then
+HDG.Actions:Register{ name = "LAYOUT_REMOVE_PLACEMENT",
+    invalidates = { "account.projects.layouts", "session.furn", "session.furnIndex" },
+    reduce = function(state, payload)
         local layout = payload.layoutID and state.account.projects.layouts[payload.layoutID]   -- exception(nullable): lookup can miss on stale UI
         if layout and payload.key and layout.placements[payload.key] then
             local rid = layout.placements[payload.key].roomID
@@ -720,10 +771,13 @@ function SF.Reduce(state, action)
                 local n = idx.roomLayouts[rid][payload.layoutID] - 1
                 idx.roomLayouts[rid][payload.layoutID] = n > 0 and n or nil
             end
-            state.session.furn.tick = state.session.furn.tick + 1
+            state.session.furn.changeSeq = state.session.furn.changeSeq + 1
         end
+    end }
 
-    elseif action.type == A.LAYOUT_ASSIGN then
+HDG.Actions:Register{ name = "LAYOUT_ASSIGN",
+    invalidates = { "account.projects.layouts", "account.rooms", "session.furn", "session.furnIndex" },
+    reduce = function(state, payload)
         -- v8: assignment is a TAG -- the slot keeps its key, the room may
         -- already hold other spots here (multi-assign is the point).
         local acct = state.account
@@ -745,10 +799,13 @@ function SF.Reduce(state, action)
             idx.roomLayouts[payload.roomID] = idx.roomLayouts[payload.roomID] or {}
             idx.roomLayouts[payload.roomID][payload.layoutID] =
                 (idx.roomLayouts[payload.roomID][payload.layoutID] or 0) + 1
-            state.session.furn.tick = state.session.furn.tick + 1
+            state.session.furn.changeSeq = state.session.furn.changeSeq + 1
         end
+    end }
 
-    elseif action.type == A.LAYOUT_UNASSIGN then
+HDG.Actions:Register{ name = "LAYOUT_UNASSIGN",
+    invalidates = { "account.projects.layouts", "session.furn", "session.furnIndex" },
+    reduce = function(state, payload)
         -- Clear the tag: the spot reverts to a bare unassigned shape; the
         -- room (and its furnishings) persists untouched.
         local layout = payload.layoutID and state.account.projects.layouts[payload.layoutID]   -- exception(nullable): lookup can miss on stale UI
@@ -761,22 +818,7 @@ function SF.Reduce(state, action)
                 local n = idx.roomLayouts[rid][payload.layoutID] - 1
                 idx.roomLayouts[rid][payload.layoutID] = n > 0 and n or nil
             end
-            state.session.furn.tick = state.session.furn.tick + 1
+            state.session.furn.changeSeq = state.session.furn.changeSeq + 1
         end
-    end
-end
+    end }
 
--- HANDLED set: the delegation key in Store:_RawDispatch.
-do
-    local A = HDG.Constants.ACTIONS
-    for _, name in ipairs({
-        "FURN_SET_CREATE", "FURN_SET_RENAME", "FURN_SET_DELETE",
-        "FURN_SET_ITEM_ADD", "FURN_SET_ITEM_REMOVE", "FURN_SET_PROMOTE",
-        "FURN_ROOM_CREATE", "FURN_ROOM_RENAME", "FURN_ROOM_DELETE",
-        "FURN_ROOM_EQUIP", "FURN_ROOM_UNEQUIP", "FURN_ROOM_DUPLICATE",
-        "LAYOUT_PLACE", "LAYOUT_MOVE", "LAYOUT_REMOVE_PLACEMENT", "LAYOUT_ASSIGN",
-        "LAYOUT_UNASSIGN", "LAYOUT_SWAP_ROOM",
-    }) do
-        SF.HANDLED[A[name]] = true
-    end
-end

@@ -945,10 +945,7 @@ local function ApplyOne(widget, region)
     -- Hook for animation / transition layer (no-op today). Surfaces or themes
     -- can attach :OnLayoutChanged(rect) to a widget to react to placement.
     if widget.OnLayoutChanged then  -- exception(optional): OnLayoutChanged is an optional extension protocol; absent = no-op
-        local ok, err = pcall(widget.OnLayoutChanged, widget, region)
-        if not ok then
-            HDG.Log:Error("layout", "OnLayoutChanged error: " .. tostring(err))
-        end
+        widget:OnLayoutChanged(region)   -- strict (ADR-042): attached hooks are internal code, fail loud
     end
 end
 

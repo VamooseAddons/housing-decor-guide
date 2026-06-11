@@ -61,7 +61,7 @@ end
 -- can be queried with the same display names the EXPANSION_DATA columns
 -- use ("The Burning Crusade" rather than "Outland").
 Selectors:Register("alts.decorRecipeIndex", {
-    reads    = {"session.staticData.tick"},
+    reads    = {"session.resolvers.staticData.tick"},
     memoized = true,
     fn = function()
         local out = {}

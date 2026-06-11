@@ -28,13 +28,13 @@ local function effectiveSourceIsTSM(state)
 end
 
 Selectors:Register("goblin.isTSMActive", {
-    reads = {"account.config.preferredPriceAddon", "session.prices.tick"},
+    reads = {"account.config.preferredPriceAddon", "session.resolvers.prices.tick"},
     fn = effectiveSourceIsTSM,
 })
 
 Selectors:Register("mogul.dynamicColumns", {
     reads = {"session.ui.mogul.subView",
-             "account.config.preferredPriceAddon", "session.prices.tick"},
+             "account.config.preferredPriceAddon", "session.resolvers.prices.tick"},
     fn = function(state)
         local subView = state.session.ui.mogul.subView
         if subView == "goblin" then
@@ -89,8 +89,8 @@ Selectors:Register("goblin.detailTitle", {
 
 -- Per-material breakdown for the expanded recipe. Sorted by total cost DESC (budget driver first).
 Selectors:Register("goblin.detailRows", {
-    reads = {"session.ui.mogul.goblin.expandedItemID",
-             "session.prices.tick", "session.bag.tick"},
+    reads = {"account.prices", "session.ui.mogul.goblin.expandedItemID",
+             "session.resolvers.prices.tick", "session.resolvers.bag.tick"},
     fn = function(state)
         local r = expandedRecipe(state)
         if not r or type(r.reagents) ~= "table" then return {} end
@@ -188,9 +188,9 @@ Selectors:Register("mogul.plan", {
         "account.recipes",                       -- decor-known authority
         "account.characters",                    -- alt-hint derivation
         "account.collection.ownedDecorIDs",
-        "session.bag.tick",
-        "session.prices.tick",
-        "session.itemNames.tick",
+        "session.resolvers.bag.tick",
+        "session.resolvers.prices.tick",
+        "session.itemNames.names",
     },
     fn = function(state)
         local m = state.session.ui.mogul
@@ -352,7 +352,7 @@ Selectors:Register("mogul.totalsLabel", {
 -- ===== Lumber tracker rows =================================================
 -- One row per lumber type; isActive marks tiers the plan consumed.
 Selectors:Register("mogul.lumberRows", {
-    reads = {"session.bag.tick"},   -- numbers paint via Theme:Register roles -> ApplyAll repaints on scheme swap
+    reads = {"session.resolvers.bag.tick"},   -- numbers paint via Theme:Register roles -> ApplyAll repaints on scheme swap
     calls = {"mogul.plan"},
     fn = function(state, ctx)
         local plan = Selectors:Call("mogul.plan", state, ctx)
@@ -421,10 +421,10 @@ Selectors:Register("mogul.lumberRowsPaired", {
 })
 
 -- ===== Reagents to buy =====================================================
--- Shopping list rows from plan.shoppingList. Reads itemNames.tick so
+-- Shopping list rows from plan.shoppingList. Reads itemNames.names so
 -- ITEM_INFO_RESOLVED repaints names after async cache fills.
 Selectors:Register("mogul.matsRows", {
-    reads = {"session.itemNames.tick", "session.prices.tick"},
+    reads = {"session.itemNames.names", "session.resolvers.prices.tick"},
     calls = {"mogul.plan"},
     fn = function(state, ctx)
         local plan = Selectors:Call("mogul.plan", state, ctx)
@@ -451,13 +451,14 @@ Selectors:Register("goblin.rows", {
     memoized = true,
     calls = { "goblin.isTSMActive" },
     reads = {
+        "account.prices",  -- resolver-facade contract (sweep rule 4c)
         "account.config.scheme",   -- lumber column bakes Theme color codes -> re-emit on scheme swap to repaint
         "account.recipes",
         "account.collection.ownedDecorIDs",
         "account.craft.queue",
         "account.prices.ownedAuctions",
-        "session.prices.tick",
-        "session.bag.tick",
+        "session.resolvers.prices.tick",
+        "session.resolvers.bag.tick",
         "session.ui.mogul.goblin.profession",
         "session.ui.mogul.goblin.search",
         "session.ui.mogul.goblin.knowledge",

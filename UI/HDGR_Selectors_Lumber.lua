@@ -50,7 +50,7 @@ Selectors:Register("lumber.activeFarmingID", {
 -- so consumers strict-read without `or 0`. Reads staticData.tick so a
 -- cold-cache recipe DB landing after first paint triggers re-bind.
 Selectors:Register("lumber.queueNeed", {
-    reads = { "account.craft.queue", "session.staticData.tick" },
+    reads = { "account.craft.queue", "session.resolvers.staticData.tick" },
     fn = function(state, _ctx)
         -- Dense map: every LUMBER_DATA id pre-seeded to 0 so consumers
         -- strict-read (no `or 0` fallback at the call site). Lumber types
@@ -86,13 +86,13 @@ local function _computeRate(sessionTotal, duration)
 end
 
 Selectors:Register("lumber.counterRows", {
-    -- session.itemNames.tick: boundary signal from ItemNameResolver.
+    -- session.itemNames.names: boundary signal from ItemNameResolver.
     -- ITEM_INFO_RESOLVED bumps it so cold-cache rows re-bind with the real icon.
-    reads = { "session.bag.tick",
-              "session.itemNames.tick",
+    reads = { "session.resolvers.bag.tick",
+              "session.itemNames.names",
               "session.lumber.activeFarmingID",
               "account.collection.ownedDecorIDs",      -- denominator drops as decor is collected
-              "session.catalog.sweepGeneration" },     -- recipe->decorID map warms async
+              "session.resolvers.catalog.tick" },     -- recipe->decorID map warms async
     calls = { "lumber.activeFarmingID", "lumber.queueNeed", "warehouse.lumberRequired" },
     fn = function(state, ctx)
         local Bag       = HDG.BagObserver
@@ -252,7 +252,7 @@ Selectors:Register("lumber.trackingPanelLine2", {
 Selectors:Register("lumber.sessionStats", {
     memoized = true,
     reads = { "session.lumber.activeFarmingID",
-              "session.bag.tick",
+              "session.resolvers.bag.tick",
               "session.lumber.tick",       -- 1s live ticker drives duration/rate refresh between bag-deltas
               "session.identity.charKey",
               "account.lumber.sessions" },

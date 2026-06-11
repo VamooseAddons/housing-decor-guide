@@ -18,10 +18,10 @@ Selectors:Register("catalog.refreshPending", {
     end,
 })
 
-Selectors:Register("catalog.sweepGeneration", {
-    reads = { "session.catalog.sweepGeneration" },
+Selectors:Register("catalog.resolverTick", {
+    reads = { "session.resolvers.catalog.tick" },
     fn = function(state)
-        return state.session.catalog.sweepGeneration
+        return state.session.resolvers.catalog.tick
     end,
 })
 

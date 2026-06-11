@@ -62,7 +62,7 @@ Selectors:Register("styles.headerCount", {
 Selectors:DefinePath("styles.selectedID", "session.ui.styles.selectedID")
 
 -- Cache invalidation tick. Selectors deriving from StyleEngine declare reads here.
-Selectors:DefinePath("styles.cacheTick", "session.styles.cacheTick")
+Selectors:DefinePath("styles.changeSeq", "session.styles.changeSeq")
 
 -- Landing filter chip.
 Selectors:DefinePath("styles.landing.filter", "session.ui.styles.landing.filter")
@@ -154,7 +154,7 @@ end
 
 -- Count collections per type for section-header badges and chip-strip counts.
 Selectors:Register("styles.collectionsByType", {
-    reads = { "account.collections", "account.vendorShoppingLists", "session.styles.cacheTick" },
+    reads = { "account.collections", "account.vendorShoppingLists", "session.styles.changeSeq" },
     fn = function(state)
         local counts = { style = 0, smartset = 0, shopping = 0, snapshot = 0, concept = 0, collection = 0 }
         for _, entry in ipairs(iterAllCollections(state)) do
@@ -308,8 +308,8 @@ Selectors:Register("styles.landing.rows", {
         "session.ui.styles.selectedID",
         "account.collections",
         "account.vendorShoppingLists",       -- vendor-tab shopping lists (separate slot)
-        "session.styles.cacheTick",
-        "session.catalog.sweepGeneration",   -- re-resolves when observer sweep completes
+        "session.styles.changeSeq",
+        "session.resolvers.catalog.tick",   -- re-resolves when observer sweep completes
     },
     -- calls: declared so BindingEngine's read-closure includes collectionsByType's reads.
     -- Without this, section-header counts would go stale on account.collections mutations.
@@ -396,11 +396,11 @@ local function _legacyToRules(def)
     return rules
 end
 
--- Name-pattern resolver for Useful Collections. Memoized against cacheTick
+-- Name-pattern resolver for Useful Collections. Memoized against changeSeq
 -- so consecutive reads don't re-walk ~1700 items per tick.
 local _collectionItemsCache = {}        -- [collID] = { items = {...}, tick = N }
 _resolveNamePatternItems = function(collID, def, state)
-    local tick = state.session.styles.cacheTick
+    local tick = state.session.styles.changeSeq
     local cached = _collectionItemsCache[collID]
     if cached and cached.tick == tick then return cached.items end
     if not HDG.HousingCatalogObserver:IsReady() then return {} end
@@ -424,11 +424,11 @@ end
 
 -- Special resolver: "dyeable" = canCustomize; "trophies" = isUniqueTrophy;
 -- "recently-learned" = decor from account.craft.history learned events, newest first.
--- Memoized against cacheTick (bumped on each learned CRAFT_HISTORY_PUSH, so this cache
+-- Memoized against changeSeq (bumped on each learned CRAFT_HISTORY_PUSH, so this cache
 -- refreshes the moment a decor is learned).
 local _resolverItemsCache = {}          -- [collID] = { items = {...}, tick = N }
 _resolveSpecialItems = function(collID, def, state)
-    local tick = state.session.styles.cacheTick
+    local tick = state.session.styles.changeSeq
     local cached = _resolverItemsCache[collID]
     if cached and cached.tick == tick then return cached.items end
     if not HDG.HousingCatalogObserver:IsReady() then return {} end
@@ -518,7 +518,7 @@ end
 
 -- id -> array of member itemIDs. Explicit items[] or scored rules{}
 -- (signature+accent kept, clashing dropped). {} for unknown ids.
--- Callers must declare cacheTick + sweepGeneration in their reads.
+-- Callers must declare changeSeq + sweepGeneration in their reads.
 function HDG.StyleResolve.ItemsFor(id, state)
     local coll = HDG.StyleResolve.RecordFor(id, state)
     if not coll then return {} end
@@ -541,8 +541,8 @@ Selectors:Register("styles.detail.collection", {
         "session.ui.styles.selectedID",
         "account.collections",
         "account.vendorShoppingLists",   -- shopping lists resolve via "vsl:" prefix in RecordFor
-        "session.styles.cacheTick",
-        "session.catalog.sweepGeneration",
+        "session.styles.changeSeq",
+        "session.resolvers.catalog.tick",
     },
     fn = function(state)
         return HDG.StyleResolve.RecordFor(state.session.ui.styles.selectedID, state)
@@ -640,8 +640,8 @@ Selectors:Register("styles.detail.items", {
     calls = { "styles.detail.collection" },
     reads = { "session.ui.styles.detail.selectedItemID",
               "session.ui.styles.detail.search",
-              "session.styles.cacheTick",
-              "session.catalog.sweepGeneration", },
+              "session.styles.changeSeq",
+              "session.resolvers.catalog.tick", },
     fn = function(state, ctx)
         local coll = Selectors:Call("styles.detail.collection", state, ctx)
         if not coll then return {} end
@@ -750,7 +750,7 @@ Selectors:Register("styles.detail.sourceFilters", {
     calls = { "styles.detail.items" },
     reads = {
         "session.ui.styles.detail.sourceFilter",
-        "session.catalog.sweepGeneration",
+        "session.resolvers.catalog.tick",
     },
     fn = function(state, ctx)
         local items = Selectors:Call("styles.detail.items", state, ctx)
@@ -786,7 +786,7 @@ Selectors:Register("styles.detail.subcategoryRows", {
     calls = { "styles.detail.items" },
     reads = {
         "session.ui.styles.detail.subcatFilter",
-        "session.catalog.sweepGeneration",
+        "session.resolvers.catalog.tick",
     },
     fn = function(state, ctx)
         local items   = Selectors:Call("styles.detail.items", state, ctx)
@@ -817,7 +817,7 @@ Selectors:Register("styles.detail.subcategoryRows", {
 Selectors:Register("styles.detail.selectedItemPanelData", {
     reads = {
         "session.ui.styles.detail.selectedItemID",
-        "session.catalog.sweepGeneration",
+        "session.resolvers.catalog.tick",
     },
     fn = function(state)
         local itemID  = state.session.ui.styles.detail.selectedItemID
@@ -845,7 +845,7 @@ Selectors:Register("styles.detail.selectedItemPanelData", {
 -- Drives "Unassigned" source mode and the Memberships hover panel.
 Selectors:Register("styles.curator.itemMemberships", {
     memoized = true,
-    reads = { "account.collections", "session.styles.cacheTick" },
+    reads = { "account.collections", "session.styles.changeSeq" },
     fn = function(state)
         local out = {}
         for id, coll in pairs(state.account.collections) do
@@ -864,7 +864,7 @@ Selectors:Register("styles.curator.itemMemberships", {
 -- Zero collections -> single placeholder row (ed.empty = true).
 Selectors:Register("styles.curator.targetRows", {
     reads = { "account.collections", "session.ui.styles.curator.selectedTargetID",
-              "session.styles.cacheTick" },
+              "session.styles.changeSeq" },
     fn = function(state)
         local activeID = state.session.ui.styles.curator.selectedTargetID
         local out = {}
@@ -965,8 +965,8 @@ Selectors:Register("styles.curator.sourceItems", {
         "session.ui.styles.curator.focusedSubcategoryID",
         "session.ui.styles.curator.selectedItems",
         "account.collections",
-        "session.styles.cacheTick",
-        "session.catalog.sweepGeneration",
+        "session.styles.changeSeq",
+        "session.resolvers.catalog.tick",
     },
     calls = { "styles.curator.itemMemberships" },
     fn = function(state, ctx)
@@ -1103,8 +1103,8 @@ Selectors:Register("styles.curator.coverage", {
     reads = {
         "account.collections",
         "account.collection.ownedDecorIDs",
-        "session.styles.cacheTick",
-        "session.catalog.sweepGeneration",
+        "session.styles.changeSeq",
+        "session.resolvers.catalog.tick",
     },
     calls = { "styles.curator.itemMemberships" },
     fn = function(state, ctx)
@@ -1152,8 +1152,8 @@ Selectors:Register("styles.curator.coverageLabel", {
 Selectors:Register("styles.curator.unassignedCount", {
     memoized = true,
     reads = { "account.collections",
-              "session.styles.cacheTick",
-              "session.catalog.sweepGeneration", },
+              "session.styles.changeSeq",
+              "session.resolvers.catalog.tick", },
     calls = { "styles.curator.itemMemberships" },
     fn = function(state, ctx)
         if not HDG.HousingCatalogObserver:IsReady() then return 0 end
@@ -1388,14 +1388,14 @@ local function _walkFacetDB(visitorFn)
 end
 
 -- Facet indexes (forward + reverse) built in ONE FacetDB walk.
--- Lazy, keyed on cacheTick (ADR-003a carve-out). Tag tallies from #_reverseIndex[axis][tag].
+-- Lazy, keyed on changeSeq (ADR-003a carve-out). Tag tallies from #_reverseIndex[axis][tag].
 local _reverseIndex   = {}     -- [axis] = { [tagStr] = { itemID, ... } }
 local _facetStore     = {}     -- [itemID] = { [axis] = { tagStr, ... } }
 local _facetIdxTick   = nil
 local _EMPTY          = {}
 
 local function _ensureFacetIndexes()
-    local tick = HDG.Store:GetState().session.styles.cacheTick  -- seeded by NewStylesSession
+    local tick = HDG.Store:GetState().session.styles.changeSeq  -- seeded by NewStylesSession
     if _facetIdxTick == tick and next(_reverseIndex) then return end
     _reverseIndex, _facetStore, _facetIdxTick = {}, {}, tick
     _walkFacetDB(function(axisName, tagStr, itemID)
@@ -1419,9 +1419,10 @@ end
 -- affinityPct = co-occurrence % vs current signature set.
 Selectors:Register("styles.smartset.activeAxisTags", {
     reads = {
+        "session.resolvers.staticData.tick",  -- ADR-003c StaticData marker (sweep rule 4c)
         "session.ui.styles.smartset.activeAxis",
         "session.ui.styles.smartset.rules",
-        "session.styles.cacheTick",
+        "session.styles.changeSeq",
     },
     calls = { "styles.smartset.affinity" },
     fn = function(state, ctx)
@@ -1626,8 +1627,8 @@ Selectors:Register("styles.smartset._resolved", {
     memoized = true,
     reads = {
         "session.ui.styles.smartset.rules",
-        "session.styles.cacheTick",
-        "session.catalog.sweepGeneration",   -- liveSet (observer byItemID) changes on sweep
+        "session.styles.changeSeq",
+        "session.resolvers.catalog.tick",   -- liveSet (observer byItemID) changes on sweep
     },
     fn = function(state, ctx)
         local rules = state.session.ui.styles.smartset.rules
@@ -1661,7 +1662,7 @@ end
 Selectors:Register("styles.smartset.previewItems", {
     reads = {
         "session.ui.styles.smartset.activeSeverity",
-        "session.catalog.sweepGeneration",
+        "session.resolvers.catalog.tick",
     },
     calls = { "styles.smartset._resolved" },
     fn = function(state, ctx)
@@ -1721,7 +1722,7 @@ Selectors:Register("styles.smartset.affinity", {
     reads = {
         "session.ui.styles.smartset.rules",
         "session.ui.styles.smartset.activeAxis",
-        "session.styles.cacheTick",
+        "session.styles.changeSeq",
     },
     fn = function(state)
         _ensureFacetIndexes()
@@ -1734,9 +1735,9 @@ Selectors:Register("styles.smartset.affinity", {
 -- placedCount: distinct catalog items with numPlaced > 0. Drives Save button enable.
 -- Re-runs on sweepGeneration (button enables once catalog loads).
 Selectors:Register("styles.snapshot.placedCount", {
-    reads = { "session.catalog.sweepGeneration" },
+    reads = { "session.resolvers.catalog.tick" },
     fn = function(state)
-        local _ = state.session.catalog.sweepGeneration   -- force re-run on catalog sweep
+        local _ = state.session.resolvers.catalog.tick   -- force re-run on catalog sweep
         if not HDG.HousingCatalogObserver:IsReady() then return 0 end
         local n = 0
         HDG.HousingCatalogObserver:IterateRows(function(_, row)
@@ -1762,7 +1763,7 @@ Selectors:DefinePath("styles.import.previewItems","session.ui.styles.import.prev
 Selectors:Register("styles.import.previewRows", {
     reads = {
         "session.ui.styles.import.previewItems",
-        "session.catalog.sweepGeneration",
+        "session.resolvers.catalog.tick",
     },
     fn = function(state)
         local items = state.session.ui.styles.import.previewItems
@@ -1885,7 +1886,7 @@ Selectors:Register("styles.curator.sourceCountLabel", {
 
 -- Hero header label: collection count placeholder (future: per-collection stats).
 Selectors:Register("styles.landing.heroLabel", {
-    reads = { "session.styles.cacheTick", "account.collections" },
+    reads = { "session.styles.changeSeq", "account.collections" },
     calls = { "styles.collectionsByType" },   -- transitively reads account.vendorShoppingLists
     fn = function(state)
         local counts = Selectors:Call("styles.collectionsByType", state, {})
@@ -1900,7 +1901,7 @@ Selectors:Register("styles.landing.totalStylesLabel", {
     reads = {
         "session.ui.styles.landing.filter",
         "account.collections",
-        "session.styles.cacheTick",
+        "session.styles.changeSeq",
     },
     calls = { "styles.collectionsByType" },   -- transitively reads account.vendorShoppingLists
     fn = function(state)

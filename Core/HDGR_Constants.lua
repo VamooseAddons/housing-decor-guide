@@ -172,7 +172,7 @@ HDG.Constants = {
     TOP_FILTERS = {
         { value = "all",        label = "All"        },
         { value = "crafted",    label = "Crafted"    },
-        { value = "sizes",      label = "Sizes"      },
+        { value = "sizes",      label = "Size |A:house-decor-budget-icon:12:12|a" },
         { value = "styles",     label = "Styles"     },
         { value = "expansions", label = "Expansions" },
         { value = "other",      label = "Other"      },
@@ -649,7 +649,7 @@ HDG.Constants = {
         LUMBER_RADAR_SCALE_SET      = "HDGR_LUMBER_RADAR_SCALE_SET",      -- payload: { scale } (0.5..2.0)
         LUMBER_LIST_COLLAPSE_TOGGLE = "HDGR_LUMBER_LIST_COLLAPSE_TOGGLE",
         LUMBER_TICK                 = "HDGR_LUMBER_TICK",                 -- 1s heartbeat while farming; bumps session.lumber.tick
-        REP_PROGRESS_TICK           = "HDGR_REP_PROGRESS_TICK",           -- UPDATE_FACTION/renown; bumps session.rep.tick
+        REP_PROGRESS_TICK           = "HDGR_REP_PROGRESS_TICK",           -- UPDATE_FACTION/renown; bumps session.resolvers.rep.tick
 
         -- ===== Catalog lifecycle =====
         CATALOG_LOAD_REQUESTED    = "HDGR_CATALOG_LOAD_REQUESTED",

@@ -46,7 +46,7 @@ end
 
 -- Resolve a vendor sell price for an item via the WoW client cache.
 -- Vendor sell-price via ItemNameResolver boundary (ADR-003b: no direct GetItemInfo in selectors).
--- mogul.plan declares session.itemNames.tick; resolver bumps tick on drain -> re-ranking.
+-- mogul.plan declares session.itemNames.names; resolver bumps tick on drain -> re-ranking.
 -- Returns 0 when uncached (mogul treats 0 as "ineligible").
 local function vendorSellPrice(itemID)
     return HDG.ItemNameResolver:GetSellPrice(itemID)

@@ -231,7 +231,7 @@ local function _snapshotMemory()
         heap          = collectgarbage("count"),
         svBytes       = _G.HDG_DB and _approxBytes(_G.HDG_DB, {}) or 0,
         catalogStatus = state.session.catalog.status,
-        catalogSweep  = state.session.catalog.sweepGeneration or 0,
+        catalogSweep  = state.session.resolvers.catalog.tick or 0,
         observer      = _collectObserverRows(),
         account       = _profileChildren(state.account),
         session       = _profileChildren(state.session),

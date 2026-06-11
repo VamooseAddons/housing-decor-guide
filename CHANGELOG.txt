@@ -1,3 +1,25 @@
+## [3.3.0] - 2026-06-12 (June 2026)
+
+ADDED:
+- Decor browser: the Sizes filter is now "Size" plus the budget glyph, and
+  carries placement-cost chips (the same glyph as on the cards) -- click
+  one to see only decor that uses exactly that much of your room budget.
+- House Editor companion: decor tooltips now show the vendor source (first
+  vendor + zone, with a "+N more" count) when a piece is vendor-sold, and
+  the click hints use the same mouse glyphs as the rest of the addon.
+- House Editor companion: right-click any decor (all tabs + the recent
+  strip) to add it straight to your shopping list.
+
+FIXED:
+- Shopping list: items wishlisted while the floating window is open now
+  resolve to their vendor group immediately, instead of sitting under
+  Wishlist until the window was closed and reopened.
+- Mogul: "Refresh from AH" now actually re-scans when you already have a
+  full price cache (it previously did nothing once every item had been
+  scanned once -- the cache timestamp stayed frozen). Clicking while a scan
+  is running no longer restarts it.
+
+
 ## [3.2.0] - 2026-06-11 (June 2026)
 
 FIXED:

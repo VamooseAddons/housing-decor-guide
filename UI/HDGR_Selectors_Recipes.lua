@@ -211,8 +211,8 @@ end
 Selectors:Register("warehouse.lumberRequired", {
     reads = {
         "account.collection.ownedDecorIDs",
-        "session.catalog.sweepGeneration",   -- recipe itemID -> decorID via HousingCatalogObserver.byItemID (warms async)
-        "session.staticData.tick",
+        "session.resolvers.catalog.tick",   -- recipe itemID -> decorID via HousingCatalogObserver.byItemID (warms async)
+        "session.resolvers.staticData.tick",
     },
     fn = function(state)
         return buildLumberRequiredMap(state)
@@ -221,11 +221,11 @@ Selectors:Register("warehouse.lumberRequired", {
 
 Selectors:Register("warehouse.lumberRows", {
     reads = {
-        "session.bag.tick",
+        "session.resolvers.bag.tick",
         "account.craft.queue",
         "account.collection.ownedDecorIDs",
-        "session.catalog.sweepGeneration",
-        "session.achievementStatus.tick",   -- exp-acronym gold = lumber milestone earned (live IsEarned)
+        "session.resolvers.catalog.tick",
+        "session.resolvers.achievementStatus.tick",   -- exp-acronym gold = lumber milestone earned (live IsEarned)
     },
     calls = { "warehouse.lumberRequired" },
     fn = function(state, ctx)
@@ -306,7 +306,7 @@ Selectors:Register("warehouse.allMaterialsRows", {
     -- Cross-file calls dependency on filteredRecipes is intentional (scoped to recipe filter).
     calls = {"recipes.filteredRecipes",
              "warehouse.matSearch"},
-    reads = {"session.bag.tick", "account.craft.queue"},
+    reads = {"session.resolvers.bag.tick", "account.craft.queue"},
     fn = function(state, ctx)
         local recipes  = Selectors:Call("recipes.filteredRecipes",       state, ctx)
         local query    = Selectors:Call("warehouse.matSearch",           state, ctx):lower()
@@ -340,7 +340,7 @@ Selectors:Register("warehouse.allMaterialsRows", {
 -- Follows the filter chain (expansion + profession + listFilter).
 Selectors:Register("warehouse.usedInRows", {
     calls = {"warehouse.selectedMaterialID", "recipes.filteredRecipes"},
-    reads = {"session.staticData.tick"},
+    reads = {"session.resolvers.staticData.tick"},
     fn = function(state, ctx)
         local materialID = Selectors:Call("warehouse.selectedMaterialID", state, ctx)
         if not materialID then
@@ -415,9 +415,11 @@ end
 Selectors:Register("recipes.allRecipes", {
     memoized = true,  -- perf: ~1050-row walk; called by professionRows/groupedRows/filteredRecipes
     reads = {
+        "session.itemNames.names",  -- resolver-facade contract (sweep rule 4c)
+        "session.resolvers.staticData.tick",  -- ADR-003c StaticData marker (sweep rule 4c)
         "account.recipes",
         "account.collection.ownedDecorIDs",
-        "session.catalog.sweepGeneration",
+        "session.resolvers.catalog.tick",
     },
     fn = function(state)
         -- DecorDB (curated, decor-only) is the source of truth; ProfessionsDB is
@@ -462,7 +464,7 @@ Selectors:Register("recipes.allRecipes", {
 -- Decor-itemID set from HousingCatalogObserver (released items only).
 -- Rebuilds on sweepGeneration.
 Selectors:Register("recipes.decorItemSet", {
-    reads    = {"session.catalog.sweepGeneration"},
+    reads    = {"session.resolvers.catalog.tick"},
     memoized = true,
     fn = function()
         local set = {}
@@ -750,7 +752,7 @@ Selectors:Register("recipes.gridRows", {
 -- queueRows: one per queue entry. canCraft/maxCraftable from bag counts.
 -- selfKnown gates the craft button (alt-known recipes can't be crafted here).
 Selectors:Register("recipes.queueRows", {
-    reads = {"account.craft.queue", "session.staticData.tick", "session.bag.tick",
+    reads = {"session.itemNames.names", "account.craft.queue", "session.resolvers.staticData.tick", "session.resolvers.bag.tick",
              "account.recipes"},
     fn = function(state)
         local q        = state.account.craft.queue
@@ -804,7 +806,7 @@ Selectors:Register("recipes.queueRows", {
 -- craftOrderRows: aggregate craft order across the queue, numbered + knowledge-stamped.
 -- Also drives craftTheseRows (materials panel footer).
 Selectors:Register("recipes.craftOrderRows", {
-    reads = {"account.craft.queue", "session.staticData.tick"},
+    reads = {"account.craft.queue", "session.resolvers.staticData.tick"},
     calls = {"decor.craftableState"},
     fn = function(state, ctx)
         local craftableState = Selectors:Call("decor.craftableState", state, ctx)
@@ -873,7 +875,7 @@ Selectors:Register("recipes.queueLumberHeaderLabel", {
 
 -- queueReadinessRows: per-entry readiness sorted DESC by pct. Drives the queue footer.
 Selectors:Register("recipes.queueReadinessRows", {
-    reads = {"account.craft.queue", "session.bag.tick", "session.itemNames.tick", "session.staticData.tick"},
+    reads = {"account.craft.queue", "session.resolvers.bag.tick", "session.itemNames.names", "session.resolvers.staticData.tick"},
     calls = {"decor.craftableState"},
     fn = function(state, ctx)
         local q = state.account.craft.queue
@@ -933,7 +935,7 @@ Selectors:Register("recipes.groupedRows", {
     -- clicks no longer rebuild the whole grouped list.
     calls = {"recipes.filteredRecipes",
              "decor.craftableState", "recipes.listFilter"},
-    reads = {"session.bag.tick"},
+    reads = {"session.resolvers.bag.tick"},
     fn = function(state, ctx)
         local recipes        = Selectors:Call("recipes.filteredRecipes", state, ctx)
         local craftableState = Selectors:Call("decor.craftableState", state, ctx)
@@ -1093,7 +1095,7 @@ Selectors:Register("recipes.countLabel", {
 -- ---------- Selected-recipe panel --------------------------------------------
 -- ADR-003a: DecorDB read inside closure (deterministic post-init).
 Selectors:Register("recipes.selectedRecipe", {
-    reads = {"session.staticData.tick"},
+    reads = {"session.resolvers.staticData.tick"},
     calls = {"recipes.selectedRecipeID"},
     fn = function(state, ctx)
         local rid = Selectors:Call("recipes.selectedRecipeID", state, ctx)
@@ -1288,7 +1290,7 @@ Selectors:Register("recipes.materials.direct", {
     -- queueSelectedRecipeID is read inside effectiveQueue -- the scope
     -- filter narrows the queue to a single recipe. Track here so toggling
     -- it invalidates the materials list.
-    reads = {"session.bag.tick", "session.ui.recipes.queueSelectedRecipeID", "session.staticData.tick"},
+    reads = {"session.resolvers.bag.tick", "session.ui.recipes.queueSelectedRecipeID", "session.resolvers.staticData.tick"},
     fn = function(state, ctx)
         local queue = effectiveQueue(state, ctx)
         if not queue then return {} end
@@ -1307,7 +1309,7 @@ Selectors:Register("recipes.materials.direct", {
 
 Selectors:Register("recipes.materials.raw", {
     calls = {"recipes.queue", "recipes.selectedRecipe"},
-    reads = {"session.bag.tick", "session.ui.recipes.queueSelectedRecipeID"},
+    reads = {"session.resolvers.bag.tick", "session.ui.recipes.queueSelectedRecipeID"},
     fn = function(state, ctx)
         local queue = effectiveQueue(state, ctx)
         if not queue then return {} end
@@ -1372,7 +1374,7 @@ end
 
 Selectors:Register("recipes.materials.byRecipe", {
     calls = {"recipes.queue", "recipes.selectedRecipe"},
-    reads = {"session.bag.tick", "session.ui.recipes.queueSelectedRecipeID", "session.staticData.tick"},
+    reads = {"session.resolvers.bag.tick", "session.ui.recipes.queueSelectedRecipeID", "session.resolvers.staticData.tick"},
     fn = function(state, ctx)
         local queue = effectiveQueue(state, ctx)
         if not queue then return {} end
@@ -1382,7 +1384,7 @@ Selectors:Register("recipes.materials.byRecipe", {
 
 Selectors:Register("recipes.materials.byRecipeRaw", {
     calls = {"recipes.queue", "recipes.selectedRecipe"},
-    reads = {"session.bag.tick", "session.ui.recipes.queueSelectedRecipeID", "session.staticData.tick"},
+    reads = {"session.resolvers.bag.tick", "session.ui.recipes.queueSelectedRecipeID", "session.resolvers.staticData.tick"},
     fn = function(state, ctx)
         local queue = effectiveQueue(state, ctx)
         if not queue then return {} end
@@ -1409,10 +1411,10 @@ Selectors:Register("recipes.materials.current", {
 -- materials.cost: missing-only cost estimate. sum(price * max(0, need-have)).
 -- Unpriced mats (lumber etc. -- not AH-buyable) are excluded, not flagged.
 -- Empty when nothing's missing.
--- PriceSource is the boundary (session.prices.tick triggers repaint on scan).
+-- PriceSource is the boundary (session.resolvers.prices.tick triggers repaint on scan).
 Selectors:Register("recipes.materials.cost", {
     calls = {"recipes.materials.current"},
-    reads = {"session.prices.tick"},
+    reads = {"account.prices", "session.resolvers.prices.tick"},
     fn = function(state, ctx)
         local rows = Selectors:Call("recipes.materials.current", state, ctx)
         local totalCopper, anyMissing = 0, false
