@@ -80,7 +80,10 @@ LC.sections["companion.toolbar"] = {
     gap     = "sm",
     order   = 10,
 }
--- Body split: fixed-width sidebar well + fill grid well.
+-- Body split: fill sidebar well + exact-fit grid well. The grid is fixed at
+-- its 5-column content width (5 x 60 cards, 0 spacing, +6 scrollbar gutter,
+-- +3 slack against UI-scale rounding so the 5th column can't wrap) and the
+-- sidebar absorbs the leftover -- a fill grid left ~23 dead px on its right.
 LC.sections["companion.split"] = {
     ["in"]  = "companion.body",
     layout  = "horizontal",
@@ -90,14 +93,14 @@ LC.sections["companion.split"] = {
 LC.sections["companion.sidebarWell"] = {
     ["in"]  = "companion.split",
     layout  = "fill",
-    width   = 160,
+    width   = "fill",
     order   = 10,
     chrome  = "inset",
 }
 LC.sections["companion.gridWell"] = {
     ["in"]  = "companion.split",
     layout  = "fill",
-    width   = "fill",
+    width   = 309,                -- 5*60 + SCROLLBOX_SCROLLBAR_RESERVE(6) + 3
     order   = 20,
     chrome  = "inset",
 }
@@ -217,8 +220,8 @@ LC.widgets["companionPanel.grid"] = {
     binding = "companion.gridItems",
     cellKind    = "companionGridCell",
     cellSize    = 60,
-    cellSpacing = 5,
-    rowSpacing  = 5,
+    cellSpacing = 0,              -- cards flush; cell chrome is the separator
+    rowSpacing  = 0,
     order = 10,
 }
 

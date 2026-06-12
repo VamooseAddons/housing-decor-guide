@@ -12,24 +12,21 @@
 
 ---
 
-## What's New in v3.3.0
+## What's New in v3.4.0
 
-A decor-shopping and House Editor quality-of-life release.
+**See what each patch adds: the "New in <patch>" filter**
 
-**Decor browser: filter by placement cost**
-
-- The Sizes filter is now "Size" with the room-budget glyph, and carries placement-cost chips alongside the size tags. Click a chip to see only decor that uses exactly that much room budget (1, 3, or 5). Useful when a room is close to its budget cap and you want pieces that still fit.
+- The decor browser now remembers which decor exist in the catalog. When a patch (or hotfix) adds more, a "New in 12.0.7"-style chip appears in the filter row -- click it to browse exactly what was added, or combine it with the Uncollected toggle to see what you're missing from the patch.
+- **Log in once with HDG enabled before 12.0.7 patch day.** That records the 12.0.5 catalog as your baseline, so when the patch arrives the filter shows its new decor. If your first login with this version happens after the patch, that decor folds into your baseline and the filter waits for the following patch instead.
 
 **House Editor companion**
 
-- Decor tooltips now show where to buy a piece: the first vendor and their zone, with a count when more vendors sell it.
-- Right-click any decor in any tab, or in the recent strip, to add it to your shopping list without leaving the editor.
-- Tooltip click hints use the same mouse-button glyphs as the rest of the addon.
+- Decor cards now sit flush with no gaps between them, the grid fits its five columns exactly, and the freed width goes to the category list on the left.
+- The owned-count number on each card is smaller and tucked into the corner, matching the placement-cost badge.
 
 **Fixes**
 
-- Items wishlisted while the Shopping List window is open now file under their vendor immediately. They previously sat in the Wishlist group until the window was closed and reopened.
-- Mogul's "Refresh from AH" runs a fresh scan even when every item is already cached. It previously did nothing once a full scan had completed, so prices could never update.
+- The decor browser's filtered count now counts each decor once. Owned dyed copies appear as a "+ N dyed" tail instead of inflating the count (the Dyeable tag previously read 157 when there are 143 dyeable decor).
 
 ---
 
@@ -37,6 +34,7 @@ A decor-shopping and House Editor quality-of-life release.
 
 - **Every piece from the in-game Housing Catalog** in one searchable list -- favorites, a collected check, a craftable-recipe star, and dye-variant color dots at a glance.
 - **Compose filters** across Crafted (by profession), Size (footprint tags plus placement-cost chips), Styles, Expansions, Sources (vendor / quest / achievement / reputation / crafted / ...), and more -- with a live "collected / shown" status readout and one-click Reset.
+- **"New in <patch>"** -- when a patch or hotfix adds decor to the catalog, a New chip appears in the filter row so you can browse exactly what was added (and what you're still missing, via the Uncollected toggle).
 - **Uncollected** toggle to focus on what you're missing; **Destroy Decor** toggle to manage stored duplicates (with a safe, confirmed destroy dialog).
 - **3D model preview** of any piece -- rotate, zoom, swap the backdrop, and preview specific dye variants.
 - **Rich detail card**: category breadcrumb, size, source, owned/stored/placed counts, first-acquisition House XP bonus, and style/faction tags.
@@ -114,7 +112,7 @@ A companion window injects into Blizzard's House Editor so you can **place decor
 ---
 
 **Author:** Vamoose
-**Version:** 3.3.0
+**Version:** 3.4.0
 **Game Version:** 12.0.5+ (Midnight)
 **Source / Issues:** https://github.com/VamooseAddons/housing-decor-guide
 **Discord:** https://discord.gg/RWZaxJaHFP

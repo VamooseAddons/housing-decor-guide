@@ -660,6 +660,7 @@ HDG.Constants = {
         -- Blizzard category/subcategory nav tree; shared by Style Curator + Projects decor picker.
         CATALOG_CATEGORY_TREE_UPDATED = "HDGR_CATALOG_CATEGORY_TREE_UPDATED", -- payload: { byID, subcatByID, rootIDs }
         CATALOG_VARIANTS_LOADED   = "HDGR_CATALOG_VARIANTS_LOADED",   -- payload: { count }
+        CATALOG_VINTAGE_UPDATE    = "HDGR_CATALOG_VINTAGE_UPDATE",    -- payload: { ids = {itemID,...}, build, label, isSeed } -- observer snapshot diff; drives "New in <patch>" chip
 
         UI_SET_VIEW               = "HDGR_UI_SET_VIEW",  -- payload: { view }
 

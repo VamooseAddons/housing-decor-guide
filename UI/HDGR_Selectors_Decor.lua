@@ -553,12 +553,20 @@ Selectors:Register("decor.headerLabel", {
             return string.format("%d/%d (%d%%)", owned, denom, math.floor(owned / denom * 100))
         end
         -- Filtered: collected / shown WITHIN the current filter, + the filter name
-        -- (e.g. "204/309 (66%)  Quest"). Counts rows so it matches the "shown" total.
+        -- (e.g. "204/309 (66%)  Quest"). Counts unique base decor -- owned
+        -- dyed-variant rows would inflate the ratio every time something is
+        -- dyed (VDS says 143 dyeable, the row count said 157). Variant rows
+        -- surface as a "+ N dyed" tail instead.
         local items  = Selectors:Call("decor.items", state, ctx)
         local isColl = Selectors:Call("decor.isCollected", state, ctx)
-        local shown, collected = #items, 0
+        local shown, collected, dyedRows, seen = 0, 0, 0, {}
         for _, row in ipairs(items) do
-            if isColl(row.itemID) then collected = collected + 1 end
+            if row.isVariantRow then dyedRows = dyedRows + 1 end
+            if not seen[row.itemID] then
+                seen[row.itemID] = true
+                shown = shown + 1
+                if isColl(row.itemID) then collected = collected + 1 end
+            end
         end
         local pct = shown > 0 and math.floor(collected / shown * 100) or 0
         local out = string.format("%d/%d (%d%%)", collected, shown, pct)
@@ -568,6 +576,9 @@ Selectors:Register("decor.headerLabel", {
             -- friendly label. Other tags (Favorites/sizes/styles) are already friendly.
             local kind = HDG.Constants.SOURCE_KIND_BY_KEY[tag]
             out = out .. "  " .. ((kind and kind.label) or tag)
+        end
+        if dyedRows > 0 then
+            out = out .. " + " .. dyedRows .. " dyed"
         end
         return out
     end,
@@ -767,6 +778,18 @@ Selectors:Register("decor.isDyed", {
     end,
 })
 
+-- Curried per-item flag for the "New in <patch>" chip. newIds = the batch of
+-- itemIDs that appeared in the live catalog under the current client build
+-- (observer snapshot diff at _CommitSweep; the first-ever sweep seeds the
+-- snapshot silently, so a fresh install has no batch).
+Selectors:Register("decor.isNew", {
+    reads = {"account.catalogVintage"},
+    fn = function(state, ctx)
+        local newIds = state.account.catalogVintage.newIds
+        return function(itemID) return newIds[itemID] == true end
+    end,
+})
+
 -- Any filter active? Drives the 'Clear filters' affordance.
 -- decor.activeProfessions (retired) not checked here: legacy state with no UI effect.
 Selectors:Register("decor.filterActive", {
@@ -800,8 +823,15 @@ local function _costTagValue(tag)
     if type(tag) ~= "string" then return nil end
     return tonumber(tag:match("^|A:house%-decor%-budget%-icon:%d+:%d+|a (%d+)$"))
 end
+-- "New in <patch>" chip under 'all'. ONE format string builds AND parses
+-- (same discipline as COST_TAG_FMT) -- the label half is the live build
+-- version stamped on the batch ("12.0.5"), so the matcher keys on the prefix.
+local NEW_TAG_FMT = "New in %s"
+local function _isNewTag(tag)
+    return type(tag) == "string" and tag:find("^New in ") ~= nil
+end
 Selectors:Register("decor.tagsForFilter", {
-    reads    = {"session.resolvers.catalog.tick"},
+    reads    = {"session.resolvers.catalog.tick", "account.catalogVintage"},
     calls    = {"decor.topFilter"},
     memoized = true,
     fn = function(state, ctx)
@@ -815,7 +845,13 @@ Selectors:Register("decor.tagsForFilter", {
         if top == "all" then
             -- Structural/status sub-tags. Rep/Quest/Ach dropped: they duplicated
             -- the Sources top-filter. "Placed" = decor currently placed in a house.
-            return { "Favorites", "Crafted", "House XP", "Dyed", "Dyeable", "Placed", "Redeemable" }
+            local tags = { "Favorites", "Crafted", "House XP", "Dyed", "Dyeable", "Placed", "Redeemable" }
+            -- "New in <patch>" leads when the vintage diff has a current batch.
+            local cv = state.account.catalogVintage
+            if next(cv.newIds) ~= nil then
+                table.insert(tags, 1, NEW_TAG_FMT:format(cv.newBuildLabel))
+            end
+            return tags
         end
         if top == "crafted" then
             local profs = HDG.Constants.DECOR_PROFESSIONS or {}
@@ -908,7 +944,7 @@ Selectors:Register("decor.matchesTag", {
     reads = {"account.recipes", "account.favorites", "session.resolvers.catalog.tick"},
     calls = {"decor.topFilter", "decor.activeTag",
              "decor.isFavorite", "decor.isCollected",
-             "decor.isDyed", "decor.isDyeable"},
+             "decor.isDyed", "decor.isDyeable", "decor.isNew"},
     fn = function(state, ctx)
         local top = Selectors:Call("decor.topFilter", state, ctx)
         local tag = Selectors:Call("decor.activeTag",  state, ctx)
@@ -945,6 +981,9 @@ Selectors:Register("decor.matchesTag", {
             if tag == "Dyeable" then
                 local isDyeable = Selectors:Call("decor.isDyeable", state, ctx)
                 return function(itemID) return isDyeable and isDyeable(itemID) or false end
+            end
+            if _isNewTag(tag) then
+                return Selectors:Call("decor.isNew", state, ctx)
             end
             if tag == "Placed" then
                 -- Decor currently placed in a house (catalog live numPlaced > 0).

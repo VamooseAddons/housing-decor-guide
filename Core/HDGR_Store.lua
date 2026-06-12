@@ -901,6 +901,15 @@ local function _recentAppend(state, houseKey, itemID, kind)
     for i = #session.actions, RECENT_ACTION_CAP + 1, -1 do session.actions[i] = nil end
 end
 
+-- Patch-vintage tracking: snapshot = every itemID ever seen in the live
+-- catalog (account-wide, persisted); newIds = the batch that appeared under
+-- the current client build -- drives the decor browser's "New in <patch>"
+-- chip. First-ever sweep seeds the snapshot silently (no batch), so existing
+-- collections don't read as 100% new on install.
+local function NewCatalogVintage()
+    return { snapshot = {}, snapshotBuild = 0, newIds = {}, newBuild = 0, newBuildLabel = "" }
+end
+
 local function NewDefaultState()
     return {
         account = {
@@ -908,6 +917,7 @@ local function NewDefaultState()
             config               = NewConfig(),
             ui                   = NewAccountUI(),
             collection           = NewCollection(),
+            catalogVintage       = NewCatalogVintage(),
             favorites            = NewFavorites(),   -- G2
             userNotes            = NewUserNotes(),    -- G3
             vendorNotes          = NewVendorNotes(),
@@ -1102,6 +1112,7 @@ local function EnsureStateShape(state)
     EnsureConfig(state.account)
     EnsureUI(state.account)
     EnsureCollection(state.account)
+    state.account.catalogVintage = state.account.catalogVintage or NewCatalogVintage()   -- exception(boundary): SV migration -- vintage tracking added post-3.3.0
     state.account.favorites   = state.account.favorites   or NewFavorites()
     state.account.userNotes   = state.account.userNotes   or NewUserNotes()
     state.account.vendorNotes = state.account.vendorNotes or NewVendorNotes()
@@ -1808,6 +1819,32 @@ HDG.Actions:Register{ name = "COLLECTION_ITEM_REMOVED",
         if payload.decorID then
             state.account.collection.ownedDecorIDs[payload.decorID] = nil
         end
+    end }
+
+HDG.Actions:Register{ name = "CATALOG_VINTAGE_UPDATE",
+    persists = true,  combatUnsafe = false,
+            invalidates = { "account.catalogVintage" },
+    reduce = function(state, payload)
+        -- Observer snapshot diff (see HousingCatalogObserver:_UpdateVintage).
+        -- Seed: first-ever sweep populates the snapshot only -- no batch.
+        -- Diff: ids join the snapshot AND the current-build "new" batch; a
+        -- build change retires the previous patch's batch first. Same-build
+        -- ids (mid-patch hotfix additions) merge into the running batch.
+        -- Label stamps on EVERY non-seed dispatch (build + label travel
+        -- together in the payload; refreshing only on build change let a
+        -- same-build merge keep a stale label).
+        local cv = state.account.catalogVintage
+        if not payload.isSeed then
+            if payload.build ~= cv.newBuild then
+                cv.newIds, cv.newBuild = {}, payload.build
+            end
+            cv.newBuildLabel = payload.label
+        end
+        for _, itemID in ipairs(payload.ids) do
+            cv.snapshot[itemID] = true
+            if not payload.isSeed then cv.newIds[itemID] = true end
+        end
+        cv.snapshotBuild = payload.build
     end }
 
 HDG.Actions:Register{ name = "LOG_TRACE_TOGGLE",

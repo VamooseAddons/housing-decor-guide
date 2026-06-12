@@ -256,6 +256,17 @@ HDG.CardGrid:RegisterCellKind("companionGridCell", {
         -- place count badge below carries ownership (matches HDG's cell).
         cell.label:Hide()
 
+        -- Downsize the shared anatomy's owned-count badge (16pt default reads
+        -- intrusive on a 60px placement cell); match the cost badge's font +
+        -- baseline so the two corners sit on one visual line.
+        if not cell._badgeDownsized then
+            cell._badgeDownsized = true
+            cell.badge:SetFontObject("NumberFontNormalSmall")
+            cell.badge:SetHeight(12)
+            cell.badge:ClearAllPoints()
+            cell.badge:SetPoint("BOTTOMRIGHT", -4, 3)
+        end
+
         -- Cost badge (bottom-left): gated by ed.showCost, stamped per-cell from
         -- session.ui.companion.showCost. Pure function of ed; COMPANION_TOGGLE_COST re-pushes.
         if not cell._costFs then

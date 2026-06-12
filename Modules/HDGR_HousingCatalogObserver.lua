@@ -316,8 +316,43 @@ function R:_CommitSweep(result)
     -- completes; this ensures subcategory info (e.g. Furnishings) is populated.
     R:QueueCategoryTreeRebuild()
 
+    R:_UpdateVintage()
+
     HDG.Log:Success("catalog_refreshed",
         string.format("Catalog ready -- %d items, %d vendors indexed", itemCount, vendorCount))
+end
+
+-- Patch-vintage diff: any live itemID absent from the persisted snapshot is
+-- NEW -- added by a client patch OR a mid-patch hotfix (so we diff on every
+-- full sweep, not on build-number change; the build is the STAMP on the
+-- batch, not the tripwire). First-ever sweep seeds the snapshot silently.
+-- Later sweeps in the SEED session also absorb silently: the catalog streams
+-- in (tag groups / storage re-kicks), so a post-seed sweep can surface
+-- late-streaming rows that are seed material, not patch additions. Hotfix
+-- batches count from the next session on.
+function R:_UpdateVintage()
+    local cv = HDG.Store:GetState().account.catalogVintage
+    local isSeed = next(cv.snapshot) == nil
+    if isSeed then R._vintageSeededSession = true
+    elseif R._vintageSeededSession then isSeed = true end
+    local fresh = {}
+    for itemID in pairs(R.byItemID) do
+        if not cv.snapshot[itemID] then fresh[#fresh + 1] = itemID end
+    end
+    if #fresh == 0 then return end
+    local label, build = "?", 0
+    if _G.GetBuildInfo then  -- exception(boundary): GetBuildInfo absent in headless harness
+        local v, _, _, iface = _G.GetBuildInfo()
+        label, build = tostring(v), iface or 0
+    end
+    HDG.Store:Dispatch({
+        type = HDG.Constants.ACTIONS.CATALOG_VINTAGE_UPDATE,
+        payload = { ids = fresh, build = build, label = label, isSeed = isSeed },
+    })
+    if not isSeed then
+        HDG.Log:Info("catalog_refreshed",
+            string.format("%d new decor detected (build %s)", #fresh, label))
+    end
 end
 
 -- ReconcileEntry(entryID): targeted update from HOUSING_STORAGE_ENTRY_UPDATED.

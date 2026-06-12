@@ -1,3 +1,29 @@
+## [3.4.0] - 2026-06-12 (June 2026)
+
+ADDED:
+- Decor browser: a "New in <patch>" filter chip appears when a patch (or
+  hotfix) adds decor to the catalog -- click it to see exactly what's new,
+  or combine it with Uncollected to see what you're missing from the patch.
+  HDG records the catalog as its baseline on your first login with this
+  version; decor added after that shows under the New filter.
+- Before 12.0.7 patch day: log in once with HDG enabled so the baseline
+  records the 12.0.5 catalog. The new patch's decor then appears under
+  "New in 12.0.7". If your first login with this version happens after
+  the patch, its decor folds into the baseline and the filter stays
+  hidden until the following patch.
+
+CHANGED:
+- House Editor companion: the decor cards now sit flush (no gaps between
+  cards) and the grid hugs its 5 columns exactly -- the leftover width
+  goes to the category list on the left.
+- House Editor companion: the owned-count number on each card is smaller
+  and tucked into the corner, matching the placement-cost badge.
+
+FIXED:
+- Decor browser: the filtered count now counts each decor once. Owned dyed
+  copies appear as a "+ N dyed" tail instead of inflating the ratio (the
+  Dyeable tag previously read 157/157 when there are 143 dyeable decor).
+
 ## [3.3.0] - 2026-06-12 (June 2026)
 
 ADDED:
