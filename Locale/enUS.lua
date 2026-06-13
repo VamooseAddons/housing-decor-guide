@@ -163,7 +163,7 @@ HDG.Locale:Register("enUS", {
     MOG_KNOWLEDGE_PREFIX        = "Knowledge: ",
     MOG_QUEUE_PLACEHOLDER       = "Queue: ...",
     MOG_QUEUE_PREFIX            = "Queue: ",
-    MOG_AUCTIONS                = "Auctions",
+    MOG_AUCTIONS                = "Your Auctions",
     MOG_DETAIL_COL_QTY          = "Qty",
     MOG_DETAIL_COL_OWNED        = "Owned",
     MOG_DETAIL_COL_COST         = "Cost",

@@ -1,3 +1,16 @@
+## [3.5.0] - 2026-06-13 (June 2026)
+
+ADDED:
+- Goblin: the #AH count turns green when any of those listings are yours --
+  see at a glance which items you already have on the Auction House before
+  crafting another one (thanks Deadi).
+- Goblin/Recipes row tooltips now show "Yours on AH: xN" and "In bags: N"
+  for the crafted item.
+
+CHANGED:
+- Goblin: the "Auctions" filter button is now labeled "Your Auctions" --
+  clearer that it filters to items you have listed, not the market at large.
+
 ## [3.4.0] - 2026-06-12 (June 2026)
 
 ADDED:

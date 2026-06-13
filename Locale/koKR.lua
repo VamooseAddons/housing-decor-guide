@@ -137,7 +137,7 @@ HDG.Locale:Register("koKR", {
     HT_PICKER_TITLE = "대시보드 사용자 지정",
     LUM_END_SESSION = "세션 종료",
     LUM_TITLE = "목재 추적기",
-    MOG_AUCTIONS = "경매",
+    MOG_AUCTIONS = "내 경매",
     MOG_DETAIL_COL_COST = "비용",
     MOG_DETAIL_COL_OWNED = "보유",
     MOG_DETAIL_COL_QTY = "수량",

@@ -137,7 +137,7 @@ HDG.Locale:Register("deDE", {
     HT_PICKER_TITLE = "Dashboard anpassen",
     LUM_END_SESSION = "Sitzung beenden",
     LUM_TITLE = "Holz-Tracker",
-    MOG_AUCTIONS = "Auktionen",
+    MOG_AUCTIONS = "Eure Auktionen",
     MOG_DETAIL_COL_COST = "Kosten",
     MOG_DETAIL_COL_OWNED = "Im Besitz",
     MOG_DETAIL_COL_QTY = "Anz.",

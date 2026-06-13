@@ -136,7 +136,7 @@ HDG.Locale:Register("esMX", {
     HT_PICKER_TITLE = "Personalizar panel principal",
     LUM_END_SESSION = "Terminar Sesión",
     LUM_TITLE = "Rastreador de Madera",
-    MOG_AUCTIONS = "Subastas",
+    MOG_AUCTIONS = "Tus subastas",
     MOG_DETAIL_COL_COST = "Costo",
     MOG_DETAIL_COL_OWNED = "En posesión",
     MOG_DETAIL_COL_QTY = "Cant.",

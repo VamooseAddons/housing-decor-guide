@@ -136,7 +136,7 @@ HDG.Locale:Register("zhCN", {
     HT_PICKER_TITLE = "自定义仪表盘",
     LUM_END_SESSION = "结束会话",
     LUM_TITLE = "木料追踪器",
-    MOG_AUCTIONS = "拍卖",
+    MOG_AUCTIONS = "我的拍卖",
     MOG_DETAIL_COL_COST = "费用",
     MOG_DETAIL_COL_OWNED = "已有",
     MOG_DETAIL_COL_QTY = "数量",

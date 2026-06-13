@@ -136,7 +136,7 @@ HDG.Locale:Register("ruRU", {
     HT_PICKER_TITLE = "Настройка панели управления",
     LUM_END_SESSION = "Завершить сессию",
     LUM_TITLE = "Трекер древесины",
-    MOG_AUCTIONS = "Аукцион",
+    MOG_AUCTIONS = "Ваши аукционы",
     MOG_DETAIL_COL_COST = "Стоимость",
     MOG_DETAIL_COL_OWNED = "В наличии",
     MOG_DETAIL_COL_QTY = "Кол-во",

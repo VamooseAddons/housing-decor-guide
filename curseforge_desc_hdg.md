@@ -12,21 +12,13 @@
 
 ---
 
-## What's New in v3.4.0
+## What's New in v3.5.0
 
-**See what each patch adds: the "New in <patch>" filter**
+**Goblin: see your own listings before you craft another one**
 
-- The decor browser now remembers which decor exist in the catalog. When a patch (or hotfix) adds more, a "New in 12.0.7"-style chip appears in the filter row -- click it to browse exactly what was added, or combine it with the Uncollected toggle to see what you're missing from the patch.
-- **Log in once with HDG enabled before 12.0.7 patch day.** That records the 12.0.5 catalog as your baseline, so when the patch arrives the filter shows its new decor. If your first login with this version happens after the patch, that decor folds into your baseline and the filter waits for the following patch instead.
-
-**House Editor companion**
-
-- Decor cards now sit flush with no gaps between them, the grid fits its five columns exactly, and the freed width goes to the category list on the left.
-- The owned-count number on each card is smaller and tucked into the corner, matching the placement-cost badge.
-
-**Fixes**
-
-- The decor browser's filtered count now counts each decor once. Owned dyed copies appear as a "+ N dyed" tail instead of inflating the count (the Dyeable tag previously read 157 when there are 143 dyeable decor).
+- The #AH count turns green when any of those listed units are yours, so you can tell at a glance which items you already have on the Auction House. The count comes from your owned auctions, recorded each time you open the AH.
+- Row tooltips in Goblin and Recipes now show "Yours on AH: xN" and "In bags: N" for the crafted item.
+- The "Auctions" filter button is now labeled "Your Auctions" -- it filters to items you have listed, not the market at large.
 
 ---
 
@@ -59,7 +51,7 @@ Housing crafting runs on lumber, so there's a dedicated **Lumber Tracker** -- a 
 
 ## Mogul -- make gold (or finish your collection) from decor
 
-- **Goblin** -- a profit table for every craftable: material cost, sell price, profit, margin %, and gold-per-lumber, sortable and filterable, with a per-reagent cost breakdown on each row. Prices from TSM, Auctionator, a live AH scan, or vendor fallback.
+- **Goblin** -- a profit table for every craftable: material cost, sell price, profit, margin %, and gold-per-lumber, sortable and filterable, with a per-reagent cost breakdown on each row. Prices from TSM, Auctionator, a live AH scan, or vendor fallback. The #AH count highlights green when your own listings are among them, and a "Your Auctions" filter shows just the items you have listed.
 - **Optimizer** -- ranks your recipes by **profit** *or* by **new appearances** for collection. Choose owned-mats vs buy-from-AH, scope to one character or the whole account, then **Queue All** or push the shopping list straight to Auctionator.
 
 ## Styles -- organize and design
@@ -112,7 +104,7 @@ A companion window injects into Blizzard's House Editor so you can **place decor
 ---
 
 **Author:** Vamoose
-**Version:** 3.4.0
+**Version:** 3.5.0
 **Game Version:** 12.0.5+ (Midnight)
 **Source / Issues:** https://github.com/VamooseAddons/housing-decor-guide
 **Discord:** https://discord.gg/RWZaxJaHFP

@@ -828,7 +828,15 @@ local function _goblinRowFactory(template)
             row._sellFs:SetText(  ed.sellPrice    and moneyText(ed.sellPrice)    or "?")
             _paintTsmColumns(row, ed)
             -- #AH: live AH count (Direct scan). nil = unscanned -> "-"; 0 = scanned, none listed.
-            row._ahFs:SetText(ed.ahQty ~= nil and tostring(ed.ahQty) or "-")
+            -- Green when any listed units are YOURS (Deadi, Discord 2026-06-13):
+            -- the "don't craft another one" glance signal. Count source for the
+            -- tint is the AH-open ownedAuctions snapshot, not the live scan.
+            local ahText = ed.ahQty ~= nil and tostring(ed.ahQty) or "-"
+            if ed.myListedQty then
+                row._ahFs:SetText(HDG.Theme:StateLabel("success", ahText))
+            else
+                row._ahFs:SetText(ahText)
+            end
             _paintProfitCell(row, ed)
             row._pctFs:SetText(ed.margin and string.format("%d%%",
                 math.floor(ed.margin + 0.5)) or "?")

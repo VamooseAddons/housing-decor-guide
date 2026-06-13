@@ -405,11 +405,28 @@ function R.RecipeRow(self)
         extras[#extras + 1] = { text = ("Queued: %dx -- materials below are for all %d"):format(mult, mult), r = 0.6, g = 0.78, b = 0.95 }
     end
 
+    -- Seller stock context (Deadi, Discord 2026-06-13): own-listings count from
+    -- the AH-open ownedAuctions snapshot + the crafted item's bag count.
+    -- Snapshot refreshes on AH open; the Goblin view surfaces freshness.
+    local counts = HDG.BagObserver:GetCounts() or {}
+    local mine = HDG.Store:GetState().account.prices.ownedAuctions[self._itemID]  -- top-level only: hover-time read
+    if mine then
+        extras[#extras + 1] = {
+            text = ("Yours on AH: x%d"):format(mine.qty),
+            r = 0.45, g = 0.82, b = 0.45,
+        }
+    end
+    extras[#extras + 1] = {
+        text = ("In bags: %d"):format(counts[self._itemID] or 0),  -- exception(nullable): sparse bag map; miss = 0
+        r = 0.75, g = 0.75, b = 0.75,
+    }
+
     -- Materials (have / need x qty), colored by sufficiency. VisitReagents
-    -- yields the immediate reagents; bag counts come from the BagObserver.
+    -- yields the immediate reagents; bag counts come from the BagObserver
+    -- fetch above.
     local recipe = self._recipeID and HDG.StaticData.Recipes:Get(self._recipeID)
     if recipe then
-        local counts, mats = HDG.BagObserver:GetCounts() or {}, {}
+        local mats = {}
         HDG.StaticData.Recipes:VisitReagents(recipe, function(slot)
             if slot.itemID and slot.qty then
                 mats[#mats + 1] = {

@@ -136,7 +136,7 @@ HDG.Locale:Register("zhTW", {
     HT_PICKER_TITLE = "自訂儀表板",
     LUM_END_SESSION = "結束工作階段",
     LUM_TITLE = "木材追蹤器",
-    MOG_AUCTIONS = "拍賣",
+    MOG_AUCTIONS = "我的拍賣",
     MOG_DETAIL_COL_COST = "費用",
     MOG_DETAIL_COL_OWNED = "持有",
     MOG_DETAIL_COL_QTY = "數量",

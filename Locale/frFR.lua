@@ -136,7 +136,7 @@ HDG.Locale:Register("frFR", {
     HT_PICKER_TITLE = "Personnaliser le Tableau de Bord",
     LUM_END_SESSION = "Terminer Session",
     LUM_TITLE = "Suivi du Bois",
-    MOG_AUCTIONS = "Enchères",
+    MOG_AUCTIONS = "Vos enchères",
     MOG_DETAIL_COL_COST = "Coût",
     MOG_DETAIL_COL_OWNED = "Possédé",
     MOG_DETAIL_COL_QTY = "Qté",

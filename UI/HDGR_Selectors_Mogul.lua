@@ -520,7 +520,14 @@ Selectors:Register("goblin.rows", {
             if keep and auctionsOnly then
                 keep = auctionSet[row.itemID] ~= nil
             end
-            if keep then out[#out + 1] = row end
+            if keep then
+                -- ADR-041 ed-projection: own-listings qty rides the row so the
+                -- #AH painter stays state-dive-free. Re-stamped every run
+                -- (including back to nil) so an emptied AH snapshot clears it.
+                local mine = auctionSet[row.itemID]
+                row.myListedQty = mine and mine.qty or nil  -- exception(nullable): no own listings for this item
+                out[#out + 1] = row
+            end
         end
 
         -- Sort by user column; nil values sink to bottom regardless of direction.

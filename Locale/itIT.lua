@@ -136,7 +136,7 @@ HDG.Locale:Register("itIT", {
     HT_PICKER_TITLE = "Personalizza Dashboard",
     LUM_END_SESSION = "Termina Sessione",
     LUM_TITLE = "Tracker Legno",
-    MOG_AUCTIONS = "Aste",
+    MOG_AUCTIONS = "Le tue aste",
     MOG_DETAIL_COL_COST = "Costo",
     MOG_DETAIL_COL_OWNED = "Posseduto",
     MOG_DETAIL_COL_QTY = "Qtà",

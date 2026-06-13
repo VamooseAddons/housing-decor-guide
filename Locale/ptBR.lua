@@ -136,7 +136,7 @@ HDG.Locale:Register("ptBR", {
     HT_PICKER_TITLE = "Personalizar Painel",
     LUM_END_SESSION = "Encerrar Sessão",
     LUM_TITLE = "Rastreador de Madeira",
-    MOG_AUCTIONS = "Leilões",
+    MOG_AUCTIONS = "Seus leilões",
     MOG_DETAIL_COL_COST = "Custo",
     MOG_DETAIL_COL_OWNED = "Possuído",
     MOG_DETAIL_COL_QTY = "Qtd",
