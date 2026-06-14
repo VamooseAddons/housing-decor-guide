@@ -272,6 +272,19 @@ HDG.Constants = {
         houseTab     = true,
     },
 
+    -- Views that consume house level/favor/reward data (House tab + Projects/Architect
+    -- placement caps). HousingObserver only touches the SHARED C_Housing level/favor
+    -- async channel (GetCurrentHouseLevelFavor / GetHouseLevelRewardsForLevel) while one
+    -- of these is the active view AND the window is shown -- otherwise HDG's fetches
+    -- boomerang into Blizzard's housing dashboard, whose reward track re-inits on every
+    -- RECEIVED_HOUSE_LEVEL_REWARDS and blanks the level nodes to "0". See HDGR_HousingObserver.
+    HOUSE_LEVEL_VIEWS = {
+        houseTab          = true,
+        projectsLanding   = true,
+        projectsArchitect = true,
+        projectsLayouts   = true,
+    },
+
     -- Top-level tabs. Each entry maps to a `view` in LayoutConfig.window.views.
     -- Chrome strip generates one button per entry. Adding a tab = one line here + a matching window.views block.
     TABS = {

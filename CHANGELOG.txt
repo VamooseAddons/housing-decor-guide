@@ -1,3 +1,12 @@
+## [3.5.1] - 2026-06-14 (June 2026)
+
+FIXED:
+- Blizzard's house dashboard no longer shows zeroed-out level milestones
+  ("0" on the level nodes + "Coming Soon!") while HDG is enabled. HDG now
+  only reads house level/reward data while its House or Projects tab is open,
+  so it stays out of the way of the in-game dashboard (clicking the arrow to
+  fix it is no longer needed).
+
 ## [3.5.0] - 2026-06-13 (June 2026)
 
 ADDED:

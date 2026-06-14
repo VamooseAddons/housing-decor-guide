@@ -145,6 +145,18 @@ local function _houseListSignature(houseInfoList)
     return table.concat(parts, "\30")
 end
 
+-- Gate for the REWARD fetch only (GetHouseLevelRewardsForLevel). That call fires
+-- RECEIVED_HOUSE_LEVEL_REWARDS, which Blizzard's housing dashboard rebuilds its reward track
+-- on every time -- blanking the level nodes to "0" with no repaint. HDG's reward data only
+-- feeds the House + Projects/Architect tabs, so we only request it while one of those is the
+-- active view AND the window is shown. (Favor/level fetching stays ungated -- it drives the
+-- ring and is harmless to the dashboard.) account.ui.view persists across closes, hence the
+-- mainWindowShown half. Mirrors the CATALOG_CONSUMING_TAB_VIEWS gate.
+local function _houseLevelViewActive()
+    local ui = HDG.Store:GetState().account.ui
+    return ui.mainWindowShown == true and HDG.Constants.HOUSE_LEVEL_VIEWS[ui.view] == true
+end
+
 -- PLAYER_HOUSE_LIST_UPDATED: { houseGUID, neighborhoodGUID, neighborhoodName,
 -- houseName, plotID, ... }. Faction derived here; reducer preserves level/favor on re-fire.
 function HO:OnHouseList(houseInfoList)
@@ -170,6 +182,8 @@ function HO:OnHouseList(houseInfoList)
         payload = { houses = enriched },
     })
     -- Kick per-house favor fetch; each fires HOUSE_LEVEL_FAVOR_UPDATED async.
+    -- Ungated: favor drives the house-level ring (always needed), and HOUSE_LEVEL_FAVOR_UPDATED
+    -- does NOT disturb Blizzard's dashboard -- only the reward fetch does (see RequestRewardsForLevel).
     if C_Housing and C_Housing.GetCurrentHouseLevelFavor then
         for _, h in ipairs(houseInfoList) do
             if h.houseGUID then
@@ -236,6 +250,9 @@ end
 
 function HO:OnHouseLevelFavor(houseLevelFavor)
     if type(houseLevelFavor) ~= "table" then return end
+    -- Capture only: dispatches the house level (drives the ring + My Homes). It does NOT kick a
+    -- reward fetch -- rewards are pulled lazily when a House/Projects view is shown (see onEnable),
+    -- matching Blizzard's fetch-once-on-open instead of re-fetching on every favor tick.
     local guid = houseLevelFavor.houseGUID
     if type(guid) ~= "string" then return end
     -- Blizz struct; fields may be omitted for brand-new houses.
@@ -259,9 +276,20 @@ function HO:OnHouseLevelFavor(houseLevelFavor)
             thresholds = thresholds,
         },
     })
-    -- Kick async rewards fetch; RECEIVED_HOUSE_LEVEL_REWARDS fires once -> reducer caches by level.
-    local target = (level < maxLevel) and (level + 1) or maxLevel
-    HO:RequestRewardsForLevel(target)
+end
+
+-- Lazy reward pull -- the ONLY initiator of reward fetches (the favor handler no longer kicks
+-- them). Called when a House/Projects view is shown; fetches each owned house's next-level
+-- rewards, once per level (RequestRewardsForLevel dedups on the cache). Self-gates on the view so
+-- it stays off Blizzard's dashboard reward track whenever HDG isn't actually displaying rewards.
+function HO:RequestRewardsForOwnedHouses()
+    if not _houseLevelViewActive() then return end
+    for _, h in pairs(HDG.Store:GetState().session.house.ownedHouses) do
+        if h.level and h.maxLevel then
+            local target = (h.level < h.maxLevel) and (h.level + 1) or h.maxLevel
+            HO:RequestRewardsForLevel(target)
+        end
+    end
 end
 
 -- =============================================================================
@@ -271,6 +299,11 @@ end
 -- GetHouseLevelRewardsForLevel is AllowedWhenUntainted; can throw when tainted -> pcall.
 function HO:RequestRewardsForLevel(level)
     if type(level) ~= "number" then return end
+    -- Once per level, ever: rewards are level-based + immutable, so a cached level never needs
+    -- re-fetching (the HOUSE_REWARDS_RECEIVED reducer comment anticipates exactly this dedup).
+    -- Skipping the redundant fetch is also what keeps us off Blizzard's dashboard reward track --
+    -- each GetHouseLevelRewardsForLevel fires RECEIVED_HOUSE_LEVEL_REWARDS, which re-inits + blanks it.
+    if HDG.Store:GetState().session.house.rewardsByLevel[level] then return end
     if not (C_Housing and C_Housing.GetHouseLevelRewardsForLevel) then return end
     local ok, err = pcall(C_Housing.GetHouseLevelRewardsForLevel, level)
     if not ok then HDG.Log:Warn("housing_api",
@@ -862,19 +895,34 @@ HDG.Modules:Declare({
         -- Defer to MAIN_WINDOW_OPENING: housing C_* null-derefs -> CTD on cold client
         -- at PLAYER_LOGIN. Steady-state events still arrive via blizzardEvents.
         -- See docs/COLD_CLIENT_CTD_INVESTIGATION.md.
-        self._kickToken = HDG.Store:Subscribe(function(actionType)
-            if actionType ~= HDG.Constants.ACTIONS.MAIN_WINDOW_OPENING then return end
-            if self._kicked then return end
-            self._kicked = true
-            -- Kick: GetPlayerOwnedHouses -> PLAYER_HOUSE_LIST_UPDATED -> GetCurrentHouseLevelFavor
-            -- -> HOUSE_LEVEL_FAVOR_UPDATED -> session.house.ownedHouses filled.
-            if C_Housing and C_Housing.GetPlayerOwnedHouses then
-                C_Housing.GetPlayerOwnedHouses()
+        local A = HDG.Constants.ACTIONS
+        self._kickToken = HDG.Store:Subscribe(function(actionType, invalidation)
+            if actionType == A.MAIN_WINDOW_OPENING then
+                if not self._kicked then
+                    self._kicked = true
+                    -- Kick: GetPlayerOwnedHouses -> PLAYER_HOUSE_LIST_UPDATED. Favor fetch
+                    -- downstream is view-gated (OnHouseList loop) so it only fires when a
+                    -- house-level view is the one being opened onto.
+                    if C_Housing and C_Housing.GetPlayerOwnedHouses then
+                        C_Housing.GetPlayerOwnedHouses()
+                    end
+                    -- Seed active-neighborhood (sync; may be nil before initiative settles -> next event updates).
+                    HO:OnActiveNeighborhood()
+                    -- Seed Projects budget/floor slot (same cold-client gate; C_HousingLayout touches housing C_*).
+                    HO:_PushHouseTick()
+                else
+                    -- Reopen: UI_SET_PERSISTENT won't fire (view unchanged), so pull here. Self-gates.
+                    HO:RequestRewardsForOwnedHouses()
+                end
+            elseif actionType == A.UI_SET_PERSISTENT then
+                -- Tab switch -> pull rewards (self-gates to house-level views). Filter on the view write.
+                if type(invalidation) == "table" and invalidation[1] ~= "account.ui.view" then return end
+                HO:RequestRewardsForOwnedHouses()
+            elseif actionType == A.HOUSE_LEVEL_UPDATED then
+                -- A house's level just became known (favor captured) -> pull its rewards. Covers
+                -- first-open, where favor lands after the House tab is already on screen. Self-gates.
+                HO:RequestRewardsForOwnedHouses()
             end
-            -- Seed active-neighborhood (sync; may be nil before initiative settles -> next event updates).
-            HO:OnActiveNeighborhood()
-            -- Seed Projects budget/floor slot (same cold-client gate; C_HousingLayout touches housing C_*).
-            HO:_PushHouseTick()
         end)
     end,
     onShutdown = function(self)

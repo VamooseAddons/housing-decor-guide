@@ -12,13 +12,11 @@
 
 ---
 
-## What's New in v3.5.0
+## What's New in v3.5.1
 
-**Goblin: see your own listings before you craft another one**
+**Fix: the in-game house dashboard no longer reads zero**
 
-- The #AH count turns green when any of those listed units are yours, so you can tell at a glance which items you already have on the Auction House. The count comes from your owned auctions, recorded each time you open the AH.
-- Row tooltips in Goblin and Recipes now show "Yours on AH: xN" and "In bags: N" for the crafted item.
-- The "Auctions" filter button is now labeled "Your Auctions" -- it filters to items you have listed, not the market at large.
+- While HousingDecorGuide was enabled, the in-game house dashboard's level milestones could show "0" on the level nodes with a "Coming Soon" label, on the primary or a secondary house. The addon now reads house level and reward data only while its own House or Projects tab is open, so it no longer interferes with the dashboard.
 
 ---
 
@@ -104,7 +102,7 @@ A companion window injects into Blizzard's House Editor so you can **place decor
 ---
 
 **Author:** Vamoose
-**Version:** 3.5.0
+**Version:** 3.5.1
 **Game Version:** 12.0.5+ (Midnight)
 **Source / Issues:** https://github.com/VamooseAddons/housing-decor-guide
 **Discord:** https://discord.gg/RWZaxJaHFP
