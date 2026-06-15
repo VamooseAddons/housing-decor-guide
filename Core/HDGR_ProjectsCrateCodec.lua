@@ -71,5 +71,7 @@ function C.Decode(encoded)
             if e then decor[#decor + 1] = e end
         end
     end
+    name = HDG.Codec.AsciiOnly(name)  -- strip emoji/unicode (Lua 5.1 / ASCII DBs)
+    if name == "" then name = "Imported crate" end
     return { name = name, decor = decor }
 end

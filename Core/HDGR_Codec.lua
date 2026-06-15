@@ -48,3 +48,14 @@ function M.urldecode(str)
     if type(str) ~= "string" then return "" end
     return (str:gsub("%%(%x%x)", function(hex) return string.char(tonumber(hex, 16)) end))
 end
+
+-- Strip non-ASCII bytes (emoji / unicode) from imported names. External build
+-- strings can carry them; Lua 5.1 + our ASCII-only DBs have no use for them, so
+-- drop bytes >127 and trim the whitespace the strip can leave bare.
+function M.AsciiOnly(str)
+    if type(str) ~= "string" then return str end
+    local cleaned = (str:gsub("[\128-\255]", ""))
+    cleaned = (cleaned:gsub("^%s+", ""))
+    cleaned = (cleaned:gsub("%s+$", ""))
+    return cleaned
+end

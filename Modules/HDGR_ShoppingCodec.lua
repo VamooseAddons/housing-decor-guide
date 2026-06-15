@@ -30,53 +30,13 @@ local MAGIC_PREFIX = "HDGVL"
 local FORMAT_VERSION = "1"
 local MAX_IMPORT_ENTRIES = 500   -- HDG cap; protects against pathological imports
 
--- ===== Base64 codec ========================================================
--- Pure Lua 5.1 (no bit library) so it runs in WoW + headless tests.
--- Standard alphabet with "=" padding; interop-safe with HDG.
-local b64chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
-
-local function b64encode(data)
-    return ((data:gsub('.', function(x)
-        local r, b = '', x:byte()
-        for i = 8, 1, -1 do r = r .. (b % 2 ^ i - b % 2 ^ (i - 1) > 0 and '1' or '0') end
-        return r
-    end) .. '0000'):gsub('%d%d%d?%d?%d?%d?', function(x)
-        if (#x < 6) then return '' end
-        local c = 0
-        for i = 1, 6 do c = c + (x:sub(i, i) == '1' and 2 ^ (6 - i) or 0) end
-        return b64chars:sub(c + 1, c + 1)
-    end) .. ({ '', '==', '=' })[#data % 3 + 1])
-end
-
-local function b64decode(data)
-    data = string.gsub(data, '[^' .. b64chars .. '=]', '')
-    return (data:gsub('.', function(x)
-        if (x == '=') then return '' end
-        local r, f = '', (b64chars:find(x) - 1)
-        for i = 6, 1, -1 do r = r .. (f % 2 ^ i - f % 2 ^ (i - 1) > 0 and '1' or '0') end
-        return r
-    end):gsub('%d%d%d?%d?%d?%d?%d?%d?', function(x)
-        if (#x ~= 8) then return '' end
-        local c = 0
-        for i = 1, 8 do c = c + (x:sub(i, i) == '1' and 2 ^ (8 - i) or 0) end
-        return string.char(c)
-    end))
-end
-
--- ===== URL encode / decode (for meta.desc which may contain "," or "=") ====
-local function urlencode(str)
-    if type(str) ~= "string" then return "" end
-    return (str:gsub("([^%w%-_%.~])", function(c)
-        return string.format("%%%02X", string.byte(c))
-    end))
-end
-
-local function urldecode(str)
-    if type(str) ~= "string" then return "" end
-    return (str:gsub("%%(%x%x)", function(hex)
-        return string.char(tonumber(hex, 16))
-    end))
-end
+-- ===== Shared codec primitives =============================================
+-- Base64 + URL + ASCII helpers are the ONE copy in HDG.Codec (Core/HDGR_Codec.lua,
+-- loaded first in the TOC), shared with ProjectsCrateCodec. These were previously
+-- duplicated here verbatim from the HDG donor port -- folded back into HDG.Codec.
+local b64encode, b64decode = HDG.Codec.b64encode, HDG.Codec.b64decode
+local urlencode, urldecode = HDG.Codec.urlencode, HDG.Codec.urldecode
+local asciiOnly            = HDG.Codec.AsciiOnly
 
 -- ===== Encode ===============================================================
 function C.Encode(listRecord)
@@ -182,8 +142,9 @@ function C.Decode(encoded)
     --   else               -> non-decor (reagent/junk from 3rd-party); drop.
     -- Cold import (catalog not swept): keep as-is; selector drops non-decor on sweep.
     local obs = HDG.HousingCatalogObserver
+    local droppedCount = 0   -- entries the live catalog couldn't match (surfaced in the import status)
     if obs:IsReady() then
-        local resolved = {}
+        local resolved, dropped = {}, {}
         for _, e in ipairs(items) do
             local mapped = obs:GetItemIDByDecorID(e.itemID)
             if mapped then
@@ -191,20 +152,31 @@ function C.Decode(encoded)
                 resolved[#resolved + 1] = e
             elseif obs:GetRow(e.itemID) then
                 resolved[#resolved + 1] = e
+            else
+                dropped[#dropped + 1] = e.itemID   -- neither a known decorID nor itemID
             end
+        end
+        droppedCount = #dropped
+        -- Diagnostic (Debug tab only): which IDs the live catalog couldn't match.
+        -- Lets us tell wowhead ID-mismatch / removed decor apart from real gaps.
+        if #dropped > 0 then
+            HDG.Log:Warn("import", ("ShoppingCodec: %d of %d entries matched the catalog; unmatched IDs: %s")
+                :format(#resolved, #items, table.concat(dropped, ", ")))
         end
         items = resolved
     end
 
-    local name = meta.desc  -- meta.desc > "Imported list"
-    if type(name) ~= "string" or name == "" then name = "Imported list" end
+    -- meta.desc carries the list name; strip emoji/unicode (Lua 5.1 / ASCII DBs).
+    local name = asciiOnly(meta.desc or "")
+    if name == "" then name = "Imported list" end
 
     local createdAt = tonumber(meta.date) or time()  -- meta.date > now
 
     return {
-        name      = name,
-        items     = items,
-        meta      = meta,
-        createdAt = createdAt,
+        name         = name,
+        items        = items,
+        meta         = meta,
+        createdAt    = createdAt,
+        droppedCount = droppedCount,   -- entries not in the live catalog (e.g. unreleased)
     }
 end

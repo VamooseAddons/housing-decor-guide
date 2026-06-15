@@ -156,6 +156,7 @@ local ENGINE_TAGS = {
     -- waypoints registered by HDGR_Waypoints.lua at file-load (no Modules:Declare block).
     settings      = { user = false, level = "warn" },   -- Settings panel not yet registered (PRE-LOGIN race)
     model_preview = { user = false, level = "warn" },   -- 3D model SetModelByFileID failures
+    import        = { user = false, level = "warn" },   -- ShoppingCodec: decor IDs that didn't resolve to a catalog item (dropped from import)
 
     -- User tags: also surface on the status rail
     error     = { user = true,  level = "error",   duration = nil  },  -- sticky

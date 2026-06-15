@@ -342,7 +342,8 @@ local function NewStylesSessionUI()
             selectedItems     = {},             -- set: [itemID] = true
             selectedCount     = 0,              -- cached count of selectedItems
             selectedTargetID  = nil,            -- highlighted FILE INTO target
-            recentUndo        = {},             -- LIFO stack of move records
+            searchQuery       = "",             -- case-insensitive substring filter on the card grid
+            recentUndo        = {},             -- LIFO stack of move/copy records
             hoverItemID       = nil,
         },
         -- 14.4 Smart Set Builder draft state. `draft` holds the working
@@ -359,7 +360,7 @@ local function NewStylesSessionUI()
             rules          = {},     -- { [axis] = { [tag] = severity } }
             dirty          = false,
         },
-        import     = { urlText = "", parseError = nil, previewItems = nil },
+        import     = { urlText = "", parseError = nil, previewItems = nil, destination = "style" },
     }
 end
 
@@ -3040,6 +3041,13 @@ HDG.Actions:Register{ name = "STYLES_CURATOR_SET_SOURCE",
         state.session.ui.styles.curator.selectedCount = 0
     end }
 
+HDG.Actions:Register{ name = "STYLES_CURATOR_SET_SEARCH",
+    persists = false, combatUnsafe = false, noisy = true,
+    invalidates = { "session.ui.styles.curator.searchQuery" },
+    reduce = function(state, payload)
+        state.session.ui.styles.curator.searchQuery = payload.text or ""
+    end }
+
 HDG.Actions:Register{ name = "STYLES_CURATOR_SET_CATEGORY",
     persists = false, combatUnsafe = false, 
     invalidates = { "session.ui.styles.curator.focusedCategoryID",
@@ -3061,7 +3069,8 @@ HDG.Actions:Register{ name = "STYLES_CURATOR_SET_SUBCATEGORY",
 
 HDG.Actions:Register{ name = "STYLES_CURATOR_TOGGLE_SELECT",
     persists = false, combatUnsafe = false, retainsScroll = true,
-    invalidates = { "session.ui.styles.curator.selectedItems" },
+    invalidates = { "session.ui.styles.curator.selectedItems",
+                                                "session.ui.styles.curator.selectedCount" },
     reduce = function(state, payload)
         local id = payload.itemID
         if id then
@@ -3493,6 +3502,7 @@ HDG.Actions:Register{ name = "STYLES_IMPORT_SET_URL",
                                                    "session.ui.styles.import.parseDisplayName",
                                                    "session.ui.styles.import.parseSource",
                                                    "session.ui.styles.import.previewItems",
+                                                   "session.ui.styles.import.parseUnmatched",
                                                    "session.ui.styles.import.parseError" },
     reduce = function(state, payload)
         state.session.ui.styles.import.urlText = payload.text
@@ -3502,6 +3512,7 @@ HDG.Actions:Register{ name = "STYLES_IMPORT_SET_URL",
         state.session.ui.styles.import.parseError        = nil
         state.session.ui.styles.import.parseSource       = nil
         state.session.ui.styles.import.parseDisplayName  = nil
+        state.session.ui.styles.import.parseUnmatched    = nil
     end }
 
 HDG.Actions:Register{ name = "STYLES_IMPORT_PARSE",
@@ -3509,7 +3520,8 @@ HDG.Actions:Register{ name = "STYLES_IMPORT_PARSE",
     invalidates = { "session.ui.styles.import.previewItems",
                                                    "session.ui.styles.import.parseError",
                                                    "session.ui.styles.import.parseDisplayName",
-                                                   "session.ui.styles.import.parseSource" },
+                                                   "session.ui.styles.import.parseSource",
+                                                   "session.ui.styles.import.parseUnmatched" },
     reduce = function(state, payload)
         -- Delegate to HDG.Parsers (Modules/HDGR_Parsers.lua). Walks the
         -- parser registry; first parser to recognize the pasted text wins.
@@ -3524,12 +3536,15 @@ HDG.Actions:Register{ name = "STYLES_IMPORT_PARSE",
             state.session.ui.styles.import.previewItems = result.items
             state.session.ui.styles.import.parseError   = nil
             -- Stash hints so the commit step can pick up a parser-suggested
-            -- name + source URL.
+            -- name + source URL. parseUnmatched = entries the live catalog
+            -- couldn't resolve (e.g. unreleased decor IDs); drives the status line.
             state.session.ui.styles.import.parseSource     = result.source
             state.session.ui.styles.import.parseDisplayName = result.displayName
+            state.session.ui.styles.import.parseUnmatched   = result.unmatched
         else
             state.session.ui.styles.import.previewItems = nil
             state.session.ui.styles.import.parseError   = result.error or "Parse failed"
+            state.session.ui.styles.import.parseUnmatched = nil
         end
     end }
 
@@ -3565,6 +3580,85 @@ HDG.Actions:Register{ name = "STYLES_IMPORT_COMMIT",
         state.session.ui.styles.import.parseError        = nil
         state.session.ui.styles.import.parseSource       = nil
         state.session.ui.styles.import.parseDisplayName  = nil
+        state.session.ui.styles.import.destination       = "style"
+    end }
+
+-- Import destination radio: My Styles (style) | Project Set (set) | Shopping List (shopping).
+HDG.Actions:Register{ name = "STYLES_IMPORT_SET_DESTINATION",
+    persists = false, combatUnsafe = false,
+    invalidates = { "session.ui.styles.import" },
+    reduce = function(state, payload)
+        local d = payload.destination
+        if d == "style" or d == "set" or d == "shopping" then
+            state.session.ui.styles.import.destination = d
+        end
+    end }
+
+-- Editable import title. The parser seeds parseDisplayName; the player can override
+-- it before committing. Empty -> nil so the commit name falls back to a default
+-- (never an empty "" name -- Lua treats "" as truthy).
+HDG.Actions:Register{ name = "STYLES_IMPORT_SET_TITLE",
+    persists = false, combatUnsafe = false, noisy = true,
+    invalidates = { "session.ui.styles.import.parseDisplayName" },
+    reduce = function(state, payload)
+        local t = payload.text
+        state.session.ui.styles.import.parseDisplayName = (t and t ~= "" and t) or nil
+    end }
+
+-- Commit the parsed preview as a "My Style" -- an editable type=style collection
+-- (shows in Browse -> My Styles, openable in the Style Curator).
+HDG.Actions:Register{ name = "STYLES_IMPORT_COMMIT_AS_STYLE",
+    persists = false, combatUnsafe = false,
+    invalidates = { "account.collections", "session.ui.styles.import" },
+    reduce = function(state, payload)
+        local imp = state.session.ui.styles.import
+        local preview = imp.previewItems
+        if not (preview and #preview > 0) then return end
+        local ts   = (_G.time and _G.time()) or 0
+        local id   = "style:import:" .. tostring(ts)
+        local name = payload.displayName or imp.parseDisplayName or ("Imported Style " .. tostring(ts))
+        local items = {}
+        for i, itemID in ipairs(preview) do items[i] = itemID end
+        state.account.collections = state.account.collections or {}  -- exception(boundary): lazily-created collections map
+        state.account.collections[id] = {
+            id          = id,
+            type        = "style",
+            displayName = name,
+            description = "",
+            items       = items,
+            createdAt   = ts,
+            source      = imp.parseSource or imp.urlText,
+        }
+        imp.urlText, imp.previewItems, imp.parseError    = "", nil, nil
+        imp.parseSource, imp.parseDisplayName            = nil, nil
+        imp.destination                                  = "style"
+    end }
+
+-- Commit the parsed preview as a Project "My Design" -- a furnishing set in Projects.
+-- Mirrors FURN_SET_CREATE's record shape (id/name/items/createdAt + session.furn bump).
+HDG.Actions:Register{ name = "STYLES_IMPORT_COMMIT_AS_SET",
+    persists = false, combatUnsafe = false,
+    invalidates = { "account.furnishingSets", "session.furn", "session.ui.styles.import" },
+    reduce = function(state, payload)
+        local imp = state.session.ui.styles.import
+        local preview = imp.previewItems
+        if not (preview and #preview > 0) then return end
+        local acct = state.account
+        acct.furnishingSetSeq = acct.furnishingSetSeq + 1
+        local id, items = "set:" .. acct.furnishingSetSeq, {}
+        for i, itemID in ipairs(preview) do items[i] = { id = itemID, count = 1 } end
+        local ts = (_G.time and _G.time()) or 0
+        acct.furnishingSets[id] = {
+            id        = id,
+            name      = payload.displayName or imp.parseDisplayName or ("Imported Set " .. tostring(ts)),
+            items     = items,
+            createdAt = ts,
+        }
+        state.session.furn.lastSetID = id
+        state.session.furn.changeSeq = state.session.furn.changeSeq + 1
+        imp.urlText, imp.previewItems, imp.parseError    = "", nil, nil
+        imp.parseSource, imp.parseDisplayName            = nil, nil
+        imp.destination                                  = "style"
     end }
 
 HDG.Actions:Register{ name = "STYLES_IMPORT_RESET",
@@ -3576,6 +3670,22 @@ HDG.Actions:Register{ name = "STYLES_IMPORT_RESET",
         state.session.ui.styles.import.parseError        = nil
         state.session.ui.styles.import.parseSource       = nil
         state.session.ui.styles.import.parseDisplayName  = nil
+        state.session.ui.styles.import.parseUnmatched    = nil
+        state.session.ui.styles.import.destination       = "style"
+    end }
+
+HDG.Actions:Register{ name = "STYLES_OPEN_IMPORT",
+    persists = true,  combatUnsafe = false,
+    -- Writes the persistent top-tab (account.ui.view) AND the transient sub-view, so the
+    -- Tools > Import launcher (which doesn't go through setView) can land the user in one dispatch.
+    invalidates = { "account.ui.view", "session.ui.styles.view", "session.ui.styles.import" },
+    reduce = function(state, payload)
+        state.account.ui.view = "styles"
+        state.session.ui.styles.view = "import"
+        local imp = state.session.ui.styles.import
+        imp.urlText, imp.previewItems, imp.parseError       = "", nil, nil
+        imp.parseSource, imp.parseDisplayName, imp.destination = nil, nil, "style"
+        imp.parseUnmatched = nil
     end }
 
 HDG.Actions:Register{ name = "STYLES_INVALIDATE_CACHE",
@@ -4478,6 +4588,7 @@ HDG.Actions:Register{ name = "STYLES_CURATOR_MOVE",
     persists = false, combatUnsafe = false, 
     invalidates = { "account.collections",
                                                "session.ui.styles.curator.selectedItems",
+                                               "session.ui.styles.curator.selectedCount",
                                                "session.ui.styles.curator.recentUndo" },
     reduce = function(state, payload)
         -- Move every currently-selected item from the active source to
@@ -4490,14 +4601,16 @@ HDG.Actions:Register{ name = "STYLES_CURATOR_MOVE",
         local cur = state.session.ui.styles.curator
         local targetID = payload.targetID or cur.selectedTargetID
         local sourceMode = cur.sourceMode
+        local isCopy = payload.copy and true or false   -- Copy = add to target, keep in source
         local target = targetID and state.account.collections[targetID]
         if not target then return end
         target.items = target.items or {}
 
         -- Source collection (when sourceMode is "style:<id>"); nil for
         -- "unassigned" or "all" -- those modes only ADD to the target.
+        -- Copy never removes from source either, regardless of mode.
         local sourceID, sourceColl
-        if type(sourceMode) == "string" and sourceMode:sub(1, 6) == "style:" then
+        if not isCopy and type(sourceMode) == "string" and sourceMode:sub(1, 6) == "style:" then
             sourceID = sourceMode
             sourceColl = state.account.collections[sourceID]
         end
@@ -4512,7 +4625,7 @@ HDG.Actions:Register{ name = "STYLES_CURATOR_MOVE",
             if not exists then
                 target.items[#target.items + 1] = itemID
             end
-            -- Remove from source if any.
+            -- Remove from source if any (move only; copy leaves sourceColl nil).
             if sourceColl and sourceColl.items then
                 for i, id in ipairs(sourceColl.items) do
                     if id == itemID then
@@ -4524,10 +4637,12 @@ HDG.Actions:Register{ name = "STYLES_CURATOR_MOVE",
             movedIDs[#movedIDs + 1] = itemID
         end
         -- Record an undo entry (capped to 20; older entries silently drop).
+        -- Copy records from=nil so undo only pulls the items back out of the
+        -- target (nothing was removed from a source to restore).
         local undo = cur.recentUndo
         undo[#undo + 1] = {
-            action   = "move",
-            from     = sourceID,    -- may be nil (Unassigned / All source)
+            action   = isCopy and "copy" or "move",
+            from     = sourceID,    -- nil for copy, and for Unassigned / All source
             to       = targetID,
             items    = movedIDs,
             ts       = (_G.time and _G.time()) or 0,

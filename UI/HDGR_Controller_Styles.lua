@@ -1173,20 +1173,35 @@ function StylesController:Wire(rootFrame)
 
     -- ===== Curator surface =====
     -- Source-mode picker self-wires via kind="dropdown".
-    -- Move button: reducer guards reject missing target/items.
-    HDG.UI.OnClick(rootFrame, "stylesPanel.curatorMove", function()
+    -- Card-grid search: dedicated action (nested curator.searchQuery slot, like detail).
+    local curatorSearch = HDG.UI.W(rootFrame, "stylesPanel.curatorSearch")
+    if curatorSearch and curatorSearch.SetScript then
+        curatorSearch:SetScript("OnTextChanged", function(self_, userInput)
+            if not userInput then return end
+            HDG.Store:Dispatch({
+                type    = HDG.Constants.ACTIONS.STYLES_CURATOR_SET_SEARCH,
+                payload = { text = (self_.GetText and self_:GetText()) or "" },
+            })
+        end)
+    end
+
+    -- Move / Copy: reducer guards reject missing target/items. Move removes from the
+    -- source style; Copy (payload.copy) keeps the items in their source.
+    local function _curatorFile(copy)
         local state = HDG.Store:GetState()  -- exception(false-positive): OnClick handler, not a row factory
         local targetID = state.session.ui.styles.curator.selectedTargetID
         if not targetID then return end
-        local targetColl = state.account.collections[targetID]  -- nil for invalid ID (handled below)
+        local targetColl = state.account.collections[targetID]  -- nil for invalid ID (handled by reducer)
+        local targetName = (targetColl and targetColl.displayName) or targetID
         HDG.Store:Dispatch({
             type    = HDG.Constants.ACTIONS.STYLES_CURATOR_MOVE,
-            payload = { targetID = targetID },
+            payload = { targetID = targetID, copy = copy },
         })
         HDG.Log:Info("styles_action",
-            "Moved selected items to "
-            .. ((targetColl and targetColl.displayName) or targetID))
-    end)
+            (copy and "Copied selected items to " or "Moved selected items to ") .. targetName)
+    end
+    HDG.UI.OnClick(rootFrame, "stylesPanel.curatorMove", function() _curatorFile(false) end)
+    HDG.UI.OnClick(rootFrame, "stylesPanel.curatorCopy", function() _curatorFile(true) end)
 
     HDG.UI.OnClick(rootFrame, "stylesPanel.curatorNewStyle", function()
         HDG.UI.Confirm({
@@ -1305,11 +1320,8 @@ function StylesController:Wire(rootFrame)
     end)
 
     HDG.UI.OnClick(rootFrame, "stylesPanel.openImport", function()
-        HDG.Store:Dispatch({ type = HDG.Constants.ACTIONS.STYLES_IMPORT_RESET })
-        HDG.Store:Dispatch({
-            type    = HDG.Constants.ACTIONS.STYLES_SET_VIEW,
-            payload = { view = "import" },
-        })
+        -- One action sets the Styles tab + import sub-view + clean slate (same as Tools > Import).
+        HDG.Store:Dispatch({ type = HDG.Constants.ACTIONS.STYLES_OPEN_IMPORT })
     end)
 
     HDG.UI.OnClick(rootFrame, "stylesPanel.importBack", function()
@@ -1318,30 +1330,40 @@ function StylesController:Wire(rootFrame)
             payload = { view = "landing" },
         })
     end)
-    HDG.UI.OnClick(rootFrame, "stylesPanel.importParse", function()
-        HDG.Store:Dispatch({ type = HDG.Constants.ACTIONS.STYLES_IMPORT_PARSE })
-        local p   = HDG.Store:GetState().session.ui.styles.import  -- exception(false-positive): top-level controller read
-        local n   = (p.previewItems and #p.previewItems) or 0
-        local err = p.parseError
-        if err then
-            HDG.Log:Info("styles_action", "Parse error: " .. tostring(err))
-        else
-            HDG.Log:Info("styles_action", "Parsed " .. n .. " item(s)")
-        end
-    end)
     HDG.UI.OnClick(rootFrame, "stylesPanel.importReset", function()
         HDG.Store:Dispatch({ type = HDG.Constants.ACTIONS.STYLES_IMPORT_RESET })
     end)
     HDG.UI.OnClick(rootFrame, "stylesPanel.importCommit", function()
-        HDG.Store:Dispatch({ type = HDG.Constants.ACTIONS.STYLES_IMPORT_COMMIT })
-        HDG.Store:Dispatch({
-            type    = HDG.Constants.ACTIONS.STYLES_SET_VIEW,
-            payload = { view = "landing" },
-        })
-        HDG.Log:Info("styles_action", "Imported shopping list")
+        local A    = HDG.Constants.ACTIONS
+        local imp  = HDG.Store:GetState().session.ui.styles.import
+        local dest = imp.destination
+        -- Default destination is "style" (My Styles); see the import factory + radio.
+        local commit = (dest == "set"      and A.STYLES_IMPORT_COMMIT_AS_SET)
+                    or (dest == "shopping" and A.STYLES_IMPORT_COMMIT)
+                    or A.STYLES_IMPORT_COMMIT_AS_STYLE
+        -- Snapshot count + name BEFORE committing -- the commit reducer resets import state.
+        local count    = #(imp.previewItems or {})
+        local destName = (dest == "set" and "Project Sets")
+                      or (dest == "shopping" and "Shopping List")
+                      or "My Styles"
+        local name     = imp.parseDisplayName
+        HDG.Store:Dispatch({ type = commit })
+        if dest == "set" then
+            -- Project Sets live in Projects -- jump there so the user sees the new set.
+            HDG.Store:Dispatch({ type = A.UI_SET_PERSISTENT, payload = { key = "view", value = "projectsLanding" } })
+        else
+            HDG.Store:Dispatch({ type = A.STYLES_SET_VIEW, payload = { view = "landing" } })
+        end
+        -- styles_action is a user-tag -> this toasts the status rail for ~2s (ADR-013).
+        if name and name ~= "" then
+            HDG.Log:Info("styles_action", ("Imported \"%s\" to %s (%d items)"):format(name, destName, count))
+        else
+            HDG.Log:Info("styles_action", ("Imported %d items to %s"):format(count, destName))
+        end
     end)
 
-    -- URL editbox: dispatches STYLES_IMPORT_SET_URL on user typing.
+    -- URL editbox: captures the text and auto-parses it (no separate Parse step).
+    -- userInput guard skips the binding's own SetText echo, so no feedback loop.
     local urlBox = HDG.UI.W(rootFrame, "stylesPanel.importUrlEdit")
     if urlBox and urlBox.SetScript then
         urlBox:SetScript("OnTextChanged", function(self_, userInput)
@@ -1350,6 +1372,20 @@ function StylesController:Wire(rootFrame)
             HDG.Store:Dispatch({
                 type    = HDG.Constants.ACTIONS.STYLES_IMPORT_SET_URL,
                 payload = { text = text },
+            })
+            HDG.Store:Dispatch({ type = HDG.Constants.ACTIONS.STYLES_IMPORT_PARSE })
+        end)
+    end
+
+    -- Title editbox: player can rename the parsed build before importing.
+    -- userInput guard skips the binding's own SetText echo (parser-seeded value).
+    local titleBox = HDG.UI.W(rootFrame, "stylesPanel.importTitleEdit")
+    if titleBox and titleBox.SetScript then
+        titleBox:SetScript("OnTextChanged", function(self_, userInput)
+            if not userInput then return end
+            HDG.Store:Dispatch({
+                type    = HDG.Constants.ACTIONS.STYLES_IMPORT_SET_TITLE,
+                payload = { text = (self_.GetText and self_:GetText()) or "" },
             })
         end)
     end

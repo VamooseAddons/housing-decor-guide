@@ -81,24 +81,56 @@ table.insert(Parsers._parsers, {
     name = "shoppingListBlob",
     parse = function(text)
         if not (text and text:match("^HDGVL:1:")) then return nil end
-        if not (HDG.StyleSerializer and HDG.StyleSerializer.ImportShoppingList) then  -- exception(boundary): optional module / not yet built
+        -- Use ShoppingCodec.Decode -- the SAME decoder the Shopping tab import uses and which
+        -- handles wowdb builds + HDG exports + decorID resolution. (The old StyleSerializer
+        -- :ImportShoppingList path mis-parsed full wowdb URLs and returned 0 items.)
+        if not (HDG.ShoppingCodec and HDG.ShoppingCodec.Decode) then  -- exception(boundary): optional module / not yet built
             return { ok = false, error = "Shopping list importer unavailable" }
         end
-        local result, err = HDG.StyleSerializer:ImportShoppingList(text)
+        local result = HDG.ShoppingCodec.Decode(text)
         if not result then
-            return { ok = false, error = err or "Shopping list decode failed" }
+            return { ok = false, error = "Shopping list decode failed -- expected HDGVL:1:..." }
         end
-        -- result is a snapshot or { items = { [id] = { placed, stored } } }; flatten to array.
+        -- result.items = array of { itemID, npcID, qty }; flatten to a deduped itemID array.
         local itemIDs = {}
-        if type(result.items) == "table" then
-            for itemID in pairs(result.items) do itemIDs[#itemIDs + 1] = itemID end
+        for _, e in ipairs(result.items or {}) do
+            if e.itemID then itemIDs[#itemIDs + 1] = e.itemID end
         end
         return {
             ok          = true,
             items       = _dedupe(itemIDs),
-            displayName = result.displayName or result.name,
-            source      = (result.source == "snapshot") and "snapshot blob" or "shopping list blob",
+            displayName = result.name,
+            source      = (result.meta and result.meta.source) or "shopping list blob",  -- exception(nullable): meta.source optional
+            unmatched   = result.droppedCount,   -- decor IDs not in the live catalog (unreleased etc.)
             parserName  = "shoppingListBlob",
+        }
+    end,
+})
+
+-- ===== Parser 2b: HDGRCRATE:1:<base64> furnishing-set blob ================
+-- HDG's furnishing-set share code (Projects "Export Set"). Item-bearing -> importable,
+-- so the unified importer handles it too (e.g. when reached from the Projects Import button).
+table.insert(Parsers._parsers, {
+    name = "crateBlob",
+    parse = function(text)
+        if not (text and text:match("^HDGRCRATE:1:")) then return nil end
+        if not (HDG.Projects and HDG.Projects.CrateCodec and HDG.Projects.CrateCodec.Decode) then  -- exception(boundary): optional module
+            return { ok = false, error = "Set importer unavailable" }
+        end
+        local decoded = HDG.Projects.CrateCodec.Decode(text)
+        if not decoded then
+            return { ok = false, error = "Set decode failed -- expected HDGRCRATE:1:..." }
+        end
+        local itemIDs = {}
+        for _, d in ipairs(decoded.decor or {}) do
+            if d.id then itemIDs[#itemIDs + 1] = d.id end
+        end
+        return {
+            ok          = true,
+            items       = _dedupe(itemIDs),
+            displayName = decoded.name,
+            source      = "furnishing set",
+            parserName  = "crateBlob",
         }
     end,
 })

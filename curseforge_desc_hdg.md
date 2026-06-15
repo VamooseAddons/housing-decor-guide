@@ -12,12 +12,17 @@
 
 ---
 
-## What's New in v3.5.2
+## What's New in v3.6.0
 
-**Fix: non-English clients show item names and filters in your language**
+**Import a Build**
 
-- On a non-English client, recipe names, reagent and material names, the crafting queue, and the Goblin profit list showed in English. They now read from the game's localized data, so they appear in your client language. (Decor names already did.)
-- On a non-English client, the Size, Styles, and Expansions filters in the Decor catalog were empty. They populate again. Vendor names are still English for now, as the game does not provide them to addons in other languages.
+- Paste a string shared by a friend, a wowhead.com URL, or a housing.wowdb.com build, and the preview fills in as you type. Choose where it lands: My Styles, a Project Set, or a Shopping List. Open it from Tools > Import, the Styles import button, or the Projects Import button.
+- When a build lists decor that is not in your live catalog yet (for example unreleased items), the status line shows how many of the items matched, so the count is clear.
+
+**Style Curator**
+
+- A search box above the card grid filters the shown decor by name.
+- Copy and Move are now separate actions. Copy files the selected decor into the target style and keeps it in its source. Move relocates it out of the source style.
 
 ---
 
@@ -59,7 +64,7 @@ Housing crafting runs on lumber, so there's a dedicated **Lumber Tracker** -- a 
 - **Style Curator** -- a workspace to file your decor into named styles: pick a source, multi-select from a category-browsable grid, move into a target style, with single-step undo and a coverage bar showing how much of your collection is organized.
 - **Smart Sets** -- build filter-based sets from a deep tag taxonomy (room, mood, material, color, culture, motif, season, and more). Mark tags **Signature / Accent / Clashing** and watch a live, scored preview update against the whole catalog.
 - **Snapshots** -- capture everything you've placed in a house as a saved set.
-- **Import** -- paste a Wowhead URL, item IDs, or any list of numbers to build a shopping list instantly.
+- **Import a Build** -- paste a friend's string, a wowhead.com URL, or a housing.wowdb.com build, preview it, and file it into My Styles, a Project Set, or a Shopping List.
 
 ## Projects -- plan your house before you build
 
@@ -103,7 +108,7 @@ A companion window injects into Blizzard's House Editor so you can **place decor
 ---
 
 **Author:** Vamoose
-**Version:** 3.5.2
+**Version:** 3.6.0
 **Game Version:** 12.0.5+ (Midnight)
 **Source / Issues:** https://github.com/VamooseAddons/housing-decor-guide
 **Discord:** https://discord.gg/RWZaxJaHFP

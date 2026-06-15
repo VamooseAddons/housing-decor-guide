@@ -1,5 +1,33 @@
 ## [Unreleased]
 
+## [3.6.0] - 2026-06-15 (June 2026)
+
+ADDED:
+- Styles "Import a Build": paste a friend's share string, a wowhead.com URL,
+  or a housing.wowdb.com build, and file it straight into My Styles, a
+  Project Set, or a Shopping List. The preview fills in automatically as
+  you paste -- no separate Parse step. Reachable from the new Tools > Import
+  entry, the Styles import button, and the Projects "Import" button (which
+  preselects Project Set). When a build lists decor that isn't in your live
+  catalog yet (e.g. unreleased items), the status line shows how many matched.
+- Style Curator: a search box above the card grid filters the shown decor
+  by name.
+- Style Curator: separate Copy and Move buttons. Copy files the selected
+  decor into the target style and keeps it in its source; Move (shown only
+  when you're viewing one of your styles) relocates it out of the source.
+
+CHANGED:
+- Style Curator: the action row now shows "N selected" alongside the
+  Copy/Move buttons, and "Undo last move" is now just "Undo".
+
+FIXED:
+- Importing a housing.wowdb.com build (or other full URL) into Styles now
+  works -- it previously imported 0 items.
+- Imported style/list names that contained emoji or other special
+  characters are now cleaned to plain text.
+- Style Curator: the Recent (Undo) list now labels Copy actions as
+  "Copied" (it always said "Moved"). Imports also confirm on the status bar.
+
 ## [3.5.2] - 2026-06-15 (June 2026)
 
 FIXED:

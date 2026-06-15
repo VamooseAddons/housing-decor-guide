@@ -1142,26 +1142,12 @@ function PC:Wire(rootFrame)
         })
     end)
     HDG.UI.OnClick(rootFrame, "projectsLandingPanel.importSet", function()
-        HDG.UI:PromptInput("Import Furnishing Set", {
-            hint = "Paste a set code, then Import.", acceptText = "Import",
-            onAccept = function(value)
-                local decoded = HDG.Projects.CrateCodec.Decode(value)
-                if not decoded then
-                    if _G.UIErrorsFrame then   -- exception(boundary): Blizzard toast
-                        _G.UIErrorsFrame:AddMessage("Projects: unrecognised set code (expected HDGRCRATE:1:...)", 1, 0.3, 0.3)
-                    end
-                    return
-                end
-                local items = {}
-                for i, d in ipairs(decoded.decor or {}) do items[i] = { id = d.id, count = d.count or 1 } end
-                HDG.Store:Dispatch({ type = A.FURN_SET_CREATE, payload = {
-                    name = decoded.name or "Imported Set", items = items,
-                    ts = (time and time()) or 0 } })  -- exception(boundary): time absent in headless harness
-                HDG.Log:Success("projects_save",
-                    ("Set \"%s\" imported to your library (%d items)"):format(
-                        tostring(decoded.name or "Imported Set"), #items))
-            end,
-        })
+        -- Route to the unified "Import a Build" view (Styles tab) with Project Set preselected.
+        -- Handles wowdb/wowhead builds AND HDG set codes (HDGRCRATE:1:); commits as a furnishing set.
+        HDG.Store:Dispatch({ type = A.STYLES_IMPORT_RESET })
+        HDG.Store:Dispatch({ type = A.STYLES_IMPORT_SET_DESTINATION, payload = { destination = "set" } })
+        HDG.Store:Dispatch({ type = A.STYLES_SET_VIEW, payload = { view = "import" } })
+        HDG.Store:Dispatch({ type = A.UI_SET_PERSISTENT, payload = { key = "view", value = "styles" } })
     end)
     -- Rooms-list identity dialogs (shared StaticPopups; data carries the roomID).
     HDG.UI:RegisterInputDialog("HDGR_PROJECTS_NEW_ROOM", {

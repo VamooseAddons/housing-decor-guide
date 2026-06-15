@@ -364,6 +364,9 @@ HDG.Constants = {
           iconPressed = "decor-controls-inspect-pressed", children = {
             { label = "Shopping",  launcher = "SHOPPING_WIDGET_TOGGLE" },
             { label = "Zone",      launcher = "ZONE_POPUP_TOGGLE" },
+            -- Import: launcher (no hubView under noNavigate Tools) -- the action sets
+            -- BOTH the Styles tab and the import sub-view, so one dispatch lands the user there.
+            { label = "Import",    launcher = "STYLES_OPEN_IMPORT" },
             { label = "Config",    view = "config" },
             { label = "Your Data", view = "data" },
             -- Debug leaf: shown only in debug mode (gatedBy selector -> omitted when false).
@@ -597,11 +600,12 @@ HDG.Constants = {
         STYLES_CACHE_BUILDING_STARTED    = "HDGR_STYLES_CACHE_BUILDING_STARTED",    -- payload: { collectionID = string? }
         STYLES_CACHE_BUILDING_FINISHED   = "HDGR_STYLES_CACHE_BUILDING_FINISHED",   -- payload: { collectionID = string?, durationMs = number? }
         STYLES_CURATOR_SET_SOURCE    = "HDGR_STYLES_CURATOR_SET_SOURCE",    -- payload: { mode = "unassigned"|"all"|"style:<id>" }
+        STYLES_CURATOR_SET_SEARCH    = "HDGR_STYLES_CURATOR_SET_SEARCH",    -- payload: { text = string } -- card-grid name filter
         STYLES_CURATOR_SET_CATEGORY  = "HDGR_STYLES_CURATOR_SET_CATEGORY",  -- payload: { categoryID = number|nil }
         STYLES_CURATOR_SET_SUBCATEGORY = "HDGR_STYLES_CURATOR_SET_SUBCATEGORY", -- payload: { subcategoryID = number|nil }
         STYLES_CURATOR_TOGGLE_SELECT = "HDGR_STYLES_CURATOR_TOGGLE_SELECT", -- payload: { itemID = number }
         STYLES_CURATOR_CLEAR_SELECT  = "HDGR_STYLES_CURATOR_CLEAR_SELECT",
-        STYLES_CURATOR_MOVE          = "HDGR_STYLES_CURATOR_MOVE",          -- payload: { targetID = string }
+        STYLES_CURATOR_MOVE          = "HDGR_STYLES_CURATOR_MOVE",          -- payload: { targetID = string, copy? = bool } -- copy=true keeps items in source
         STYLES_CURATOR_UNDO          = "HDGR_STYLES_CURATOR_UNDO",
         STYLES_CURATOR_UNDO_AT       = "HDGR_STYLES_CURATOR_UNDO_AT",       -- payload: { ord = N } -- cascade-undo from top to ord
         STYLES_CURATOR_HOVER         = "HDGR_STYLES_CURATOR_HOVER",         -- payload: { itemID = number? }
@@ -630,8 +634,13 @@ HDG.Constants = {
         RECENT_DECOR_PLACED            = "HDGR_RECENT_DECOR_PLACED",            -- payload: { houseKey, itemID }
         STYLES_IMPORT_SET_URL          = "HDGR_STYLES_IMPORT_SET_URL",          -- payload: { text = string }
         STYLES_IMPORT_PARSE            = "HDGR_STYLES_IMPORT_PARSE",
-        STYLES_IMPORT_COMMIT           = "HDGR_STYLES_IMPORT_COMMIT",           -- payload: { displayName? = string }
+        STYLES_IMPORT_SET_DESTINATION  = "HDGR_STYLES_IMPORT_SET_DESTINATION",  -- payload: { destination = "style"|"set"|"shopping" }
+        STYLES_IMPORT_SET_TITLE        = "HDGR_STYLES_IMPORT_SET_TITLE",        -- payload: { text = string } -- editable import title (seeds the committed name)
+        STYLES_IMPORT_COMMIT           = "HDGR_STYLES_IMPORT_COMMIT",           -- payload: { displayName? = string } -- Shopping List
+        STYLES_IMPORT_COMMIT_AS_STYLE  = "HDGR_STYLES_IMPORT_COMMIT_AS_STYLE",  -- payload: { displayName? = string } -- My Styles (type=style collection)
+        STYLES_IMPORT_COMMIT_AS_SET    = "HDGR_STYLES_IMPORT_COMMIT_AS_SET",    -- payload: { displayName? = string } -- Project Set (account.furnishingSets entry)
         STYLES_IMPORT_RESET            = "HDGR_STYLES_IMPORT_RESET",
+        STYLES_OPEN_IMPORT             = "HDGR_STYLES_OPEN_IMPORT",            -- open Import view fresh: sets Styles tab + import sub-view + resets. Used by the in-Styles button AND the Tools > Import nav leaf.
         COLLECTION_STYLE_ITEM_ADDED  = "HDGR_COLLECTION_STYLE_ITEM_ADDED",  -- payload: { collectionID, itemID }
         COLLECTION_STYLE_ITEM_REMOVED = "HDGR_COLLECTION_STYLE_ITEM_REMOVED",-- payload: { collectionID, itemID }
 

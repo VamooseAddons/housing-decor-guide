@@ -71,6 +71,7 @@ Selectors:DefineEnum("styles.landing.isFilter", "session.ui.styles.landing.filte
 
 Selectors:DefinePath("styles.landing.search", "session.ui.styles.landing.search")
 Selectors:DefinePath("styles.detail.search",  "session.ui.styles.detail.search")
+Selectors:DefinePath("styles.curator.searchQuery", "session.ui.styles.curator.searchQuery")
 
 -- ===== Landing surface ======================================================
 -- countSuffix: unit word for the header badge (singular; painter appends "s" for != 1).
@@ -926,7 +927,9 @@ Selectors:Register("styles.curator.targetsEmpty", {
     end,
 })
 
-Selectors:Register("styles.curator.canMove", {
+-- Copy is valid from ANY source (add membership to target, keep in source).
+-- Requires a selection + a chosen FILE-INTO target.
+Selectors:Register("styles.curator.canCopy", {
     reads = { "session.ui.styles.curator.selectedItems",
               "session.ui.styles.curator.selectedTargetID",
               "account.collections" },
@@ -938,19 +941,48 @@ Selectors:Register("styles.curator.canMove", {
     end,
 })
 
--- Move button label: "Move" / "Move (N)" / "Move to Target" / "Move (N) to Target".
-Selectors:Register("styles.curator.moveButtonLabel", {
-    reads = { "session.ui.styles.curator.selectedTargetID",
+-- Move only applies when the source is a user style (there's a membership to
+-- remove). From All Items / Unassigned there's nothing to move out of -> Copy only.
+Selectors:Register("styles.curator.moveApplies", {
+    reads = { "session.ui.styles.curator.sourceMode" },
+    fn = function(state)
+        local m = state.session.ui.styles.curator.sourceMode
+        return type(m) == "string" and m:sub(1, 6) == "style:"
+    end,
+})
+
+-- Move = Copy's preconditions AND a user-style source.
+Selectors:Register("styles.curator.canMove", {
+    reads = { "session.ui.styles.curator.selectedItems",
+              "session.ui.styles.curator.selectedTargetID",
+              "session.ui.styles.curator.sourceMode",
               "account.collections" },
-    calls = { "styles.curator.selectedCount" },
+    calls = { "styles.curator.canCopy", "styles.curator.moveApplies" },
     fn = function(state, ctx)
-        local n = Selectors:Call("styles.curator.selectedCount", state, ctx)
-        local targetID = state.session.ui.styles.curator.selectedTargetID
-        local target = targetID and (state.account.collections)[targetID]
-        local targetName = target and target.displayName
-        local base = (n == 0) and "Move" or string.format("Move (%d)", n)
-        if targetName then return base .. " to " .. targetName end
-        return base
+        return Selectors:Call("styles.curator.canCopy", state, ctx)
+           and Selectors:Call("styles.curator.moveApplies", state, ctx)
+    end,
+})
+
+-- Button labels: "Move to <target>" / "Copy to <target>" (count lives in the
+-- separate "N selected" label). No target yet -> bare verb (button disabled).
+local function _curatorTargetName(state)
+    local targetID = state.session.ui.styles.curator.selectedTargetID
+    local target = targetID and (state.account.collections)[targetID]
+    return target and target.displayName
+end
+Selectors:Register("styles.curator.moveButtonLabel", {
+    reads = { "session.ui.styles.curator.selectedTargetID", "account.collections" },
+    fn = function(state)
+        local name = _curatorTargetName(state)
+        return name and ("Move to " .. name) or "Move"
+    end,
+})
+Selectors:Register("styles.curator.copyButtonLabel", {
+    reads = { "session.ui.styles.curator.selectedTargetID", "account.collections" },
+    fn = function(state)
+        local name = _curatorTargetName(state)
+        return name and ("Copy to " .. name) or "Copy"
     end,
 })
 
@@ -964,6 +996,7 @@ Selectors:Register("styles.curator.sourceItems", {
         "session.ui.styles.curator.focusedCategoryID",
         "session.ui.styles.curator.focusedSubcategoryID",
         "session.ui.styles.curator.selectedItems",
+        "session.ui.styles.curator.searchQuery",
         "account.collections",
         "session.styles.changeSeq",
         "session.resolvers.catalog.tick",
@@ -1015,6 +1048,8 @@ Selectors:Register("styles.curator.sourceItems", {
         -- Filter by numeric categoryID / subcategoryID (nil categoryName rows would
         -- never match a string-keyed filter; 0 = synthetic "Uncategorized" bucket).
         local subFilt = state.session.ui.styles.curator.focusedSubcategoryID   -- nil = All
+        -- Case-insensitive substring filter on the (sync, localized) catalog name.
+        local query = (state.session.ui.styles.curator.searchQuery or ""):lower()
         local out = {}
         for _, itemID in ipairs(sourceIDs) do
             local row    = HDG.HousingCatalogObserver:GetRow(itemID)
@@ -1023,7 +1058,8 @@ Selectors:Register("styles.curator.sourceItems", {
             local subID  = (row and row.subcategoryID) or 0
             local catOk = (catFilt == nil) or (catFilt == catID)
             local subOk = (subFilt == nil) or (subFilt == subID)
-            if catOk and subOk then
+            local nameOk = (query == "") or (name:lower():find(query, 1, true) ~= nil)
+            if catOk and subOk and nameOk then
                 local iconTex, iconAtl = HDG.Format.CoerceIconPair(
                     row and row.iconTexture, row and row.iconAtlas)
                 -- memberCount: user style memberships, excluding the current source style.
@@ -1185,7 +1221,7 @@ Selectors:Register("styles.curator.unassignedIsWarning", {
     end,
 })
 
--- Undo rows: recentUndo LIFO -> "Moved N items to <Style>". Most-recent first.
+-- Undo rows: recentUndo LIFO -> "Moved/Copied N items to <Style>". Most-recent first.
 Selectors:Register("styles.curator.recentUndoRows", {
     reads = { "session.ui.styles.curator.recentUndo", "account.collections" },
     fn = function(state)
@@ -1200,10 +1236,11 @@ Selectors:Register("styles.curator.recentUndoRows", {
                 toName = (coll and coll.displayName) or entry.to
             end
             local n = entry.items and #entry.items or 0
+            local verb = (entry.action == "copy") and "Copied" or "Moved"
             out[#out + 1] = {
                 kind  = "stylesCuratorRecentRow",
-                label = string.format("Moved %d item%s to %s",
-                            n, n == 1 and "" or "s", toName),
+                label = string.format("%s %d item%s to %s",
+                            verb, n, n == 1 and "" or "s", toName),
                 ord   = i,
             }
         end
@@ -1286,12 +1323,13 @@ Selectors:Register("styles.curator.sourceMenuItems", {
 })
 
 
--- "N selected" text for the multi-select indicator. "ctrl-click to multi-select" when none.
+-- "N selected" text for the multi-select indicator; blank when nothing is
+-- selected (multi-select is just click-multiple, so no hint needed).
 Selectors:Register("styles.curator.selectedCountLabel", {
     calls = { "styles.curator.selectedCount" },
     fn = function(state, ctx)
         local n = Selectors:Call("styles.curator.selectedCount", state, ctx)
-        if n == 0 then return "ctrl-click to multi-select" end
+        if n == 0 then return "" end
         return string.format("%d selected", n)
     end,
 })
@@ -1758,6 +1796,27 @@ Selectors:Register("styles.snapshot.canSave", {
 Selectors:DefinePath("styles.import.urlText",     "session.ui.styles.import.urlText")
 Selectors:DefinePath("styles.import.parseError",  "session.ui.styles.import.parseError")
 Selectors:DefinePath("styles.import.previewItems","session.ui.styles.import.previewItems")
+-- Editable title editbox value. Coalesce nil -> "" so the box clears on reset
+-- (dispatchEditbox skips a nil value, which would leave stale text).
+Selectors:Register("styles.import.title", {
+    reads = { "session.ui.styles.import.parseDisplayName" },
+    fn = function(state)
+        return state.session.ui.styles.import.parseDisplayName or ""
+    end,
+})
+-- Destination radio: which surface Import lands in. Default "style" (My Styles).
+Selectors:DefinePath("styles.import.destination", "session.ui.styles.import.destination")
+Selectors:Register("styles.import.destinationItems", {
+    reads    = {},
+    memoized = true,
+    fn = function()
+        return {
+            { text = "My Styles",     value = "style" },
+            { text = "Project Set",   value = "set" },
+            { text = "Shopping List", value = "shopping" },
+        }
+    end,
+})
 
 -- previewRows: previewItems int-array -> scrollbox rows with name/icon from catalog.
 Selectors:Register("styles.import.previewRows", {
@@ -1800,16 +1859,23 @@ Selectors:Register("styles.import.statusLabel", {
     reads = {
         "session.ui.styles.import.previewItems",
         "session.ui.styles.import.parseError",
+        "session.ui.styles.import.parseUnmatched",
         "session.ui.styles.import.urlText",
     },
     fn = function(state)
         local s = state.session.ui.styles.import
         if s.parseError then return "Error: " .. tostring(s.parseError) end
         if s.previewItems and #s.previewItems > 0 then
-            return string.format("%d item%s parsed", #s.previewItems,
-                                  #s.previewItems == 1 and "" or "s")
+            local matched   = #s.previewItems
+            local unmatched = s.parseUnmatched or 0
+            if unmatched > 0 then
+                -- N of M matched; the rest aren't in the live catalog (e.g. unreleased decor).
+                return string.format("%d of %d matched -- %d not in live catalog, may be unreleased items",
+                                      matched, matched + unmatched, unmatched)
+            end
+            return string.format("%d item%s parsed", matched, matched == 1 and "" or "s")
         end
-        if s.urlText and s.urlText ~= "" then return "Click Parse to scan for item IDs" end
+        if s.urlText and s.urlText ~= "" then return "Reading..." end
         return ""
     end,
 })

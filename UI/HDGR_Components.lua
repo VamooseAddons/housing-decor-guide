@@ -1371,6 +1371,10 @@ local function _ensureRadios(group, items)
         group._radios[#group._radios + 1] = r
     end
     group._built = true
+    -- Stamp the content width (item widths + inter-item gaps, no trailing gap) so a
+    -- width="auto" radioGroup gets a real slot on the next layout pass. Without this,
+    -- getAlong treats an unreported intrinsic as "fill". Fixed-width radios ignore it.
+    group._intrinsicWidth = (x > 0) and (x - group._spacing) or 0
 end
 
 local function buildRadioGroup(parent, spec)

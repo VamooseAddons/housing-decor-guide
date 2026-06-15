@@ -207,6 +207,13 @@ LC.sections["styles.curator.controls"] = {
     gap      = "md",
     order    = 10,
 }
+-- Search row: full-width name filter directly above the card grid.
+LC.sections["styles.curator.searchRow"] = {
+    ["in"]   = "styles.curator.centerColumn",
+    layout   = "horizontal",
+    height   = 22,
+    order    = 15,
+}
 LC.sections["styles.curator.itemGrid"] = {
     ["in"]   = "styles.curator.centerColumn",
     layout   = "fill",
@@ -224,7 +231,8 @@ LC.sections["styles.curator.rightColumn"] = {
 LC.sections["styles.curator.rightColumnTopSpacer"] = {
     ["in"]   = "styles.curator.rightColumn",
     layout   = "horizontal",
-    height   = 28,    -- controls height (24) + contentRow gap (~4)
+    -- Aligns RECENT with the grid top: controls(24) + searchRow(22) + 2 gaps (~sm).
+    height   = 54,
     order    = 5,
 }
 LC.sections["styles.curator.recentLabelRow"] = {
@@ -404,11 +412,27 @@ LC.sections["styles.import.statusRow"] = {
     height  = 18,
     order   = 40,
 }
+-- Editable title for the import, shown only once a build has parsed (canCommit).
+LC.sections["styles.import.titleRow"] = {
+    ["in"]    = "styles.import",
+    layout    = "horizontal",
+    height    = 24,
+    gap       = "sm",
+    order     = 45,
+    visible   = "styles.import.canCommit",
+}
 LC.sections["styles.import.previewList"] = {
     ["in"]   = "styles.import",
     layout   = "fill",
     order    = 50,
     chrome   = "inset",
+}
+LC.sections["styles.import.destRow"] = {
+    ["in"]  = "styles.import",
+    layout  = "horizontal",
+    height  = 24,
+    gap     = "md",
+    order   = 55,
 }
 LC.sections["styles.import.footer"] = {
     ["in"]   = "styles.import",
@@ -573,10 +597,32 @@ LC.widgets["stylesPanel.curatorTargetList"] = {
     order = 10,
 }
 -- Move: requires selectedItems > 0 AND selectedTargetID; label reads "Move (N)".
+-- "N selected" (blank when nothing selected). Sits AFTER Copy/Move (order 7,
+-- before the fill spacer) so an empty selection leaves no dead gap at the left.
+-- FIXED width: the label starts empty at layout, so "auto" would measure 0 and
+-- never grow when a selection arrives (the row doesn't re-flow on a text-only
+-- binding update).
+LC.widgets["stylesPanel.curatorSelectionLabel"] = {
+    tooltip = false,
+    kind = "label", role = "TextDim", ["in"] = "styles.curator.controls", font = "small",
+    text = "", height = 22, width = 92, order = 7,
+    binding = { text = "styles.curator.selectedCountLabel" },
+}
+-- Copy: add to target, keep in source. Valid from any source (All Items / a style).
+LC.widgets["stylesPanel.curatorCopy"] = {
+    tooltip = false,
+    kind = "button", ["in"] = "styles.curator.controls", font = "small",
+    text = "locale:STY_CURATOR_COPY", width = "auto", height = 22, order = 4, variant = "primary",
+    binding = { text = "styles.curator.copyButtonLabel",
+                enabled = "styles.curator.canCopy" },
+}
+-- Move: add to target, remove from source style. Shown ONLY when the source is a
+-- user style (moveApplies); from All Items / Unassigned there's nothing to move out of.
 LC.widgets["stylesPanel.curatorMove"] = {
     tooltip = { recipe = "CuratorMove" },
     kind = "button", ["in"] = "styles.curator.controls", font = "small",
     text = "locale:STY_CURATOR_MOVE", width = "auto", height = 22, order = 5, variant = "primary",
+    visible = "styles.curator.moveApplies",
     binding = { text = "styles.curator.moveButtonLabel",
                 enabled = "styles.curator.canMove" },
 }
@@ -596,6 +642,15 @@ LC.widgets["stylesPanel.curatorUndoBtn"] = {
     kind = "button", ["in"] = "styles.curator.controls", font = "small",
     text = "locale:STY_CURATOR_UNDO_LAST_MOVE", width = "auto", height = 22, order = 30, variant = "tertiary",
     binding = { enabled = "styles.curator.canUndo" },
+}
+-- Card-grid name filter. Dedicated action (nested curator.searchQuery slot);
+-- wired in Controller_Styles, mirroring the detail-search box.
+LC.widgets["stylesPanel.curatorSearch"] = {
+    tooltip = false,
+    kind = "editbox", ["in"] = "styles.curator.searchRow", font = "small",
+    height = 22, width = "fill", order = 10,
+    placeholder = "locale:STY_CURATOR_SEARCH_PLACEHOLDER",
+    binding = { text = "styles.curator.searchQuery" },
 }
 -- Card-grid: icon tiles; selection via cell atlas swap.
 LC.widgets["stylesPanel.curatorItemGrid"] = {
@@ -706,16 +761,23 @@ LC.widgets["stylesPanel.importUrlEdit"] = {
     placeholder = "locale:STY_IMPORT_URL_PLACEHOLDER",
     binding = { text = "styles.import.urlText" },
 }
-LC.widgets["stylesPanel.importParse"] = {
-    tooltip = false,
-    kind = "button", ["in"] = "styles.import.pasteRow", font = "small",
-    text = "locale:STY_IMPORT_PARSE", width = "auto", height = 22, order = 20, variant = "tertiary",
-}
 LC.widgets["stylesPanel.importStatus"] = {
     tooltip = false,
     kind = "label", role = "TextDim", ["in"] = "styles.import.statusRow", font = "small",
     text = "", height = 14, width = "fill", order = 10,
     binding = "styles.import.statusLabel",
+}
+LC.widgets["stylesPanel.importTitleLabel"] = {
+    tooltip = false,
+    kind = "label", role = "TextDim", ["in"] = "styles.import.titleRow", font = "small",
+    text = "locale:STY_IMPORT_TITLE_LABEL", height = 22, width = "auto", order = 10,
+}
+LC.widgets["stylesPanel.importTitleEdit"] = {
+    tooltip = false,
+    kind = "editbox", ["in"] = "styles.import.titleRow", font = "small",
+    width = "fill", height = 22, order = 20,
+    placeholder = "locale:STY_IMPORT_TITLE_PLACEHOLDER",
+    binding = { text = "styles.import.title" },
 }
 LC.widgets["stylesPanel.importPreviewList"] = {
     tooltip = false,
@@ -724,6 +786,24 @@ LC.widgets["stylesPanel.importPreviewList"] = {
     rowKind = "stylesImportPreviewRow",
     spacing = 1,
     order = 10,
+}
+LC.widgets["stylesPanel.importDestLabel"] = {
+    tooltip = false,
+    kind = "label", role = "TextDim", ["in"] = "styles.import.destRow", font = "small",
+    text = "locale:STY_IMPORT_DEST_LABEL", height = 20, width = "auto", order = 10,
+}
+-- Slack absorber: ordered BEFORE the label so the "Import into:" label AND the
+-- radios both ride the right edge of the row.
+LC.widgets["stylesPanel.importDestSpacer"] = {
+    tooltip = false,
+    kind = "spacer", ["in"] = "styles.import.destRow", width = "fill", height = 20, order = 5,
+}
+LC.widgets["stylesPanel.importDestRadio"] = {
+    tooltip = false,
+    kind = "radioGroup", ["in"] = "styles.import.destRow", font = "small",
+    height = 20, width = "auto", spacing = 14, order = 20,
+    binding  = { menu = "styles.import.destinationItems", current = "styles.import.destination" },
+    dispatch = { type = "STYLES_IMPORT_SET_DESTINATION", payloadKey = "destination" },
 }
 LC.widgets["stylesPanel.importReset"] = {
     tooltip = false,
