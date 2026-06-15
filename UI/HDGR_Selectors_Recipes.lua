@@ -12,6 +12,16 @@ local Selectors = HDG.Selectors
 -- Forward declarations so closures bind deterministically regardless of registration order.
 local reagentInfo, reagentName, expansionShort
 
+-- Locale-correct display name: ItemNameResolver (live C_Item.GetItemInfo first) wins; the baked
+-- English name is the cold-load placeholder. Matches old HDG's GetLocalizedName "prefer WoW API
+-- over hardcoded DB name." Every selector calling this MUST read "session.itemNames.names" so the
+-- async resolve (ITEM_INFO_RESOLVED) re-fires it (sweep resolver-facade contract enforces this).
+local function _localName(itemID, baked)
+    if not itemID then return baked or "?" end
+    local name, resolved = HDG.ItemNameResolver:ResolveName(itemID)
+    return (resolved and name) or baked or name
+end
+
 -- ---------- Filter state mirrors ---------------------------------------------
 Selectors:DefinePath("recipes.searchQuery",      "session.ui.recipes.searchQuery")
 Selectors:DefinePath("recipes.selectedRecipeID", "session.ui.recipes.selectedRecipeID")
@@ -129,6 +139,7 @@ Selectors:Register("warehouse.autoShowLumber", {
 -- Used In panel header. Reagent name via ReagentsDB (ADR-003a carve-out).
 Selectors:Register("warehouse.usedInTitle", {
     calls = {"warehouse.selectedMaterialID"},
+    reads = {"session.itemNames.names"},   -- reagentName -> resolver; re-fire when the name localises
     fn = function(state, ctx)
         local id = Selectors:Call("warehouse.selectedMaterialID", state, ctx)
         if not id then return "Used In" end
@@ -268,7 +279,7 @@ local function _collectDistinctBasicReagents(recipes)
     for _, r in ipairs(recipes) do
         HDG.StaticData.Recipes:VisitReagents(HDG.StaticData.Recipes:Get(r.recipeID), function(slot)
             if slot.itemID and not distinct[slot.itemID] then
-                distinct[slot.itemID] = slot.name or reagentName(slot.itemID)
+                distinct[slot.itemID] = _localName(slot.itemID, slot.name)
             end
         end)
     end
@@ -306,7 +317,7 @@ Selectors:Register("warehouse.allMaterialsRows", {
     -- Cross-file calls dependency on filteredRecipes is intentional (scoped to recipe filter).
     calls = {"recipes.filteredRecipes",
              "warehouse.matSearch"},
-    reads = {"session.resolvers.bag.tick", "account.craft.queue"},
+    reads = {"session.resolvers.bag.tick", "account.craft.queue", "session.itemNames.names"},
     fn = function(state, ctx)
         local recipes  = Selectors:Call("recipes.filteredRecipes",       state, ctx)
         local query    = Selectors:Call("warehouse.matSearch",           state, ctx):lower()
@@ -442,7 +453,7 @@ Selectors:Register("recipes.allRecipes", {
                 out[#out + 1] = {
                     recipeID         = r.itemID,
                     itemID           = r.itemID,
-                    name             = r.name or ("recipe " .. r.itemID),
+                    name             = _localName(r.itemID, r.name or ("recipe " .. r.itemID)),
                     profession       = r.profession or "",
                     expansion        = exp,
                     expansionShort   = expansionShort(exp),
@@ -761,8 +772,9 @@ Selectors:Register("recipes.queueRows", {
         local out = {}
         for pos, row in ipairs(q) do
             local recipe     = HDG.StaticData.Recipes:Get(row.recipeID)
-            local recipeName = (recipe and recipe.name)
-                or ("recipe " .. tostring(row.recipeID))
+            -- recipeID == crafted-decor itemID -> resolver localises (catalog/live API); baked name fallback.
+            local recipeName = _localName(row.recipeID, (recipe and recipe.name)
+                or ("recipe " .. tostring(row.recipeID)))
             local knownRow   = recipe and known[recipe.itemID]
             local spellID    = recipe and recipe.spellID
             local selfKnown  = (knownRow and knownRow.selfKnown) and true or false
@@ -891,8 +903,8 @@ Selectors:Register("recipes.queueReadinessRows", {
                 kind             = "queueReadinessRow",
                 recipeID         = row.recipeID,
                 itemID           = row.itemID,
-                name             = (recipe and recipe.name)
-                                   or ("recipe " .. tostring(row.recipeID)),
+                name             = _localName(row.recipeID, (recipe and recipe.name)
+                                   or ("recipe " .. tostring(row.recipeID))),
                 pct              = s.pct,
                 bottleneckItemID = s.bottleneckItemID,
                 missingQty       = s.missingQty,
@@ -1210,9 +1222,10 @@ reagentInfo = function(itemID)
     if row then
         local source = row[1] or "Other"
         local clean = source:match("^([^:]+)") or source   -- strip ":price" suffix
-        return row[2] or ("item " .. tostring(itemID)), clean
+        -- Name via resolver (locale-correct); baked row[2] is its cold-load placeholder.
+        return _localName(itemID, row[2]), clean
     end
-    return "item " .. tostring(itemID), "Other"
+    return _localName(itemID, nil), "Other"
 end
 
 -- Name-only accessor.
@@ -1290,7 +1303,7 @@ Selectors:Register("recipes.materials.direct", {
     -- queueSelectedRecipeID is read inside effectiveQueue -- the scope
     -- filter narrows the queue to a single recipe. Track here so toggling
     -- it invalidates the materials list.
-    reads = {"session.resolvers.bag.tick", "session.ui.recipes.queueSelectedRecipeID", "session.resolvers.staticData.tick"},
+    reads = {"session.resolvers.bag.tick", "session.ui.recipes.queueSelectedRecipeID", "session.resolvers.staticData.tick", "session.itemNames.names"},
     fn = function(state, ctx)
         local queue = effectiveQueue(state, ctx)
         if not queue then return {} end
@@ -1309,7 +1322,7 @@ Selectors:Register("recipes.materials.direct", {
 
 Selectors:Register("recipes.materials.raw", {
     calls = {"recipes.queue", "recipes.selectedRecipe"},
-    reads = {"session.resolvers.bag.tick", "session.ui.recipes.queueSelectedRecipeID"},
+    reads = {"session.resolvers.bag.tick", "session.ui.recipes.queueSelectedRecipeID", "session.itemNames.names"},
     fn = function(state, ctx)
         local queue = effectiveQueue(state, ctx)
         if not queue then return {} end
@@ -1330,8 +1343,9 @@ local function emitByRecipeGroups(queue, groups)
         if group and group.materials then
             local row = queue[pos]
             local recipe = HDG.StaticData.Recipes:Get(group.recipeID)
-            local recipeName = (recipe and recipe.name)
-                or ("recipe " .. tostring(group.recipeID))
+            -- recipeID == the crafted-decor itemID (see recipes.allRecipes build) -> resolver localises it.
+            local recipeName = _localName(group.recipeID, (recipe and recipe.name)
+                or ("recipe " .. tostring(group.recipeID)))
             local remaining = (row and row.remaining) or 1
             -- Recipe header with position so same-recipe queue rows don't merge.
             out[#out + 1] = {
@@ -1374,7 +1388,7 @@ end
 
 Selectors:Register("recipes.materials.byRecipe", {
     calls = {"recipes.queue", "recipes.selectedRecipe"},
-    reads = {"session.resolvers.bag.tick", "session.ui.recipes.queueSelectedRecipeID", "session.resolvers.staticData.tick"},
+    reads = {"session.resolvers.bag.tick", "session.ui.recipes.queueSelectedRecipeID", "session.resolvers.staticData.tick", "session.itemNames.names"},
     fn = function(state, ctx)
         local queue = effectiveQueue(state, ctx)
         if not queue then return {} end
@@ -1384,7 +1398,7 @@ Selectors:Register("recipes.materials.byRecipe", {
 
 Selectors:Register("recipes.materials.byRecipeRaw", {
     calls = {"recipes.queue", "recipes.selectedRecipe"},
-    reads = {"session.resolvers.bag.tick", "session.ui.recipes.queueSelectedRecipeID", "session.resolvers.staticData.tick"},
+    reads = {"session.resolvers.bag.tick", "session.ui.recipes.queueSelectedRecipeID", "session.resolvers.staticData.tick", "session.itemNames.names"},
     fn = function(state, ctx)
         local queue = effectiveQueue(state, ctx)
         if not queue then return {} end

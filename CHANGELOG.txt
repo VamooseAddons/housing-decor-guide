@@ -1,3 +1,15 @@
+## [Unreleased]
+
+## [3.5.2] - 2026-06-15 (June 2026)
+
+FIXED:
+- Non-English clients: recipe names, reagent/material names, the crafting
+  queue, and the Goblin profit list now show in your client language instead
+  of English (item names are read from the game's localized data first).
+- Non-English clients: the Size, Styles, and Expansions filters in the Decor
+  catalog populate again. They were empty because the catalog's filter groups
+  were matched by their English names, which no other language matches.
+
 ## [3.5.1] - 2026-06-14 (June 2026)
 
 FIXED:

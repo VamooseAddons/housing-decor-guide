@@ -76,7 +76,11 @@ local function buildMaps()
     if not groups then return nil, nil end
     local cat, lbl = {}, {}
     for _, group in ipairs(groups) do
-        local category = GROUP_NAME_TO_CATEGORY[group.groupName or ""] or "Other"
+        -- groupName is LOCALIZED -> matching it misses off enUS. Use the stable groupID -> canonical
+        -- category; fall back to expansion tag-value detection if Blizzard renumbers, then groupName.
+        local canonical = HDG.Constants.FILTER_TAG_GROUP_BY_ID[group.groupID]
+                       or (HDG.Expansion.IsExpansionTagGroup(group) and "Expansion")
+        local category = GROUP_NAME_TO_CATEGORY[canonical or group.groupName or ""] or "Other"
         -- group.tags is an array of { tagID, tagName, anyAssociatedEntries };
         -- keys are sequential indices, not real tagIDs (per HDG_TagData:38), so
         -- _indexTagInfo keys off tagInfo.tagID.

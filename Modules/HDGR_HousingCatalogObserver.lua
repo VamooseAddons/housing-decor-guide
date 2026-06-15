@@ -444,9 +444,14 @@ function R:_BuildTagIDIndex()
     local groups = _G.C_HousingCatalog.GetAllFilterTagGroups()  -- exception(boundary): C_HousingCatalog nil before catalog load
     if not groups then return end  -- exception(boundary): API may return nil before housing DB loads
     for _, g in ipairs(groups) do
+        -- groupName is a LOCALIZED cstring -> _classifyTag's `== "Expansion"` check misses off enUS.
+        -- Use the stable groupID; fall back to expansion tag-value detection if Blizzard renumbers.
+        local groupKey = HDG.Constants.FILTER_TAG_GROUP_BY_ID[g.groupID]
+                      or (HDG.Expansion.IsExpansionTagGroup(g) and "Expansion")
+                      or g.groupName
         for _, tag in pairs(g.tags or {}) do
-            if tag.tagID and g.groupName then
-                R.tagIDToGroup[tag.tagID] = g.groupName
+            if tag.tagID and groupKey then
+                R.tagIDToGroup[tag.tagID] = groupKey
             end
         end
     end

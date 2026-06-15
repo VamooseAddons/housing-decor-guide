@@ -7,6 +7,14 @@ HDG = HDG or {}
 HDG.Selectors = HDG.Selectors or {}
 local Selectors = HDG.Selectors
 
+-- Locale-correct display name: resolver (catalog/live API) wins; baked English is the fallback.
+-- Callers MUST read "session.itemNames.names" so the async resolve re-fires them.
+local function _localName(itemID, baked)
+    if not itemID then return baked or "?" end
+    local name, resolved = HDG.ItemNameResolver:ResolveName(itemID)
+    return (resolved and name) or baked or name
+end
+
 -- File-local lazy index: lumberType itemID -> shortName. Built once on first use.
 local _lumberShortByID = nil
 local function lumberShortByID()
@@ -79,18 +87,18 @@ local function expandedRecipe(state)
 end
 
 Selectors:Register("goblin.detailTitle", {
-    reads = {"session.ui.mogul.goblin.expandedItemID"},
+    reads = {"session.ui.mogul.goblin.expandedItemID", "session.itemNames.names"},
     fn = function(state)
         local r = expandedRecipe(state)
         if not r then return "" end
-        return string.format("Materials for %s", r.name or "?")
+        return string.format("Materials for %s", _localName(r.itemID, r.name))
     end,
 })
 
 -- Per-material breakdown for the expanded recipe. Sorted by total cost DESC (budget driver first).
 Selectors:Register("goblin.detailRows", {
     reads = {"account.prices", "session.ui.mogul.goblin.expandedItemID",
-             "session.resolvers.prices.tick", "session.resolvers.bag.tick"},
+             "session.resolvers.prices.tick", "session.resolvers.bag.tick", "session.itemNames.names"},
     fn = function(state)
         local r = expandedRecipe(state)
         if not r or type(r.reagents) ~= "table" then return {} end
@@ -102,7 +110,7 @@ Selectors:Register("goblin.detailRows", {
             out[#out + 1] = {
                 kind       = "goblinDetailRow",
                 itemID     = reagentID,
-                name       = info.name or "?",
+                name       = _localName(reagentID, info.name),
                 qty        = qty,
                 owned      = owned,
                 price      = price,
@@ -220,7 +228,8 @@ local function buildPlanRowElement(planRow, viewMode, isRunnerUp)
         kind         = "mogulRow",
         spellID      = r.spellID,
         itemID       = r.itemID,
-        name         = r.name,
+        -- Crafted decor itemID -> resolver localises (catalog/live API); baked r.name is the fallback.
+        name         = _localName(r.itemID, r.name),
         profession   = r.profession,
         expansion    = r.expansion,
         expShort     = expShort,
@@ -452,6 +461,7 @@ Selectors:Register("goblin.rows", {
     calls = { "goblin.isTSMActive" },
     reads = {
         "account.prices",  -- resolver-facade contract (sweep rule 4c)
+        "session.itemNames.names",  -- row.name localised via _localName -> re-fire when names resolve
         "account.config.scheme",   -- lumber column bakes Theme color codes -> re-emit on scheme swap to repaint
         "account.recipes",
         "account.collection.ownedDecorIDs",
@@ -490,6 +500,9 @@ Selectors:Register("goblin.rows", {
         local data = HDG.Goblin:BuildProfitData()
         local out = {}
         for _, row in ipairs(data) do
+            -- Localise the crafted-item name (catalog/live API; baked stays as cold placeholder).
+            -- Done before the filters so search + sort + display all read the client-language name.
+            row.name = _localName(row.itemID, row.name)
             local keep = true
             -- Profession filter ("All" passes).
             if keep and profFilter ~= "All" and row.profession ~= profFilter then

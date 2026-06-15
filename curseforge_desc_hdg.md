@@ -12,11 +12,12 @@
 
 ---
 
-## What's New in v3.5.1
+## What's New in v3.5.2
 
-**Fix: the in-game house dashboard no longer reads zero**
+**Fix: non-English clients show item names and filters in your language**
 
-- While HousingDecorGuide was enabled, the in-game house dashboard's level milestones could show "0" on the level nodes with a "Coming Soon" label, on the primary or a secondary house. The addon now reads house level and reward data only while its own House or Projects tab is open, so it no longer interferes with the dashboard.
+- On a non-English client, recipe names, reagent and material names, the crafting queue, and the Goblin profit list showed in English. They now read from the game's localized data, so they appear in your client language. (Decor names already did.)
+- On a non-English client, the Size, Styles, and Expansions filters in the Decor catalog were empty. They populate again. Vendor names are still English for now, as the game does not provide them to addons in other languages.
 
 ---
 
@@ -102,7 +103,7 @@ A companion window injects into Blizzard's House Editor so you can **place decor
 ---
 
 **Author:** Vamoose
-**Version:** 3.5.1
+**Version:** 3.5.2
 **Game Version:** 12.0.5+ (Midnight)
 **Source / Issues:** https://github.com/VamooseAddons/housing-decor-guide
 **Discord:** https://discord.gg/RWZaxJaHFP

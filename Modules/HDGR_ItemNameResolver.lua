@@ -43,30 +43,31 @@ end
 function R:GetTick()    return self._tick    end
 function R:GetPending() return self._pending end
 
--- ResolveName: catalog row -> reagent DB -> Blizzard live cache -> async load.
--- Returns (name, resolved); resolved=false means "item N" placeholder (load pending).
+-- ResolveName: locale-correct sources first. The C_HousingCatalog row name is BOTH localized
+-- (like every Blizzard *.name field) AND synchronous/always-populated, so it's the trusted #1
+-- source -- it's what makes decor names "always work". For non-catalog items (reagents, lumber,
+-- mats) the catalog has no entry, so we fall to live GetItemInfo (also locale-correct), ranked
+-- ABOVE the baked English DB. The baked name was wrongly above GetItemInfo before -> reagents
+-- showed English; it's now just the cold-load placeholder. (old HDG's GetLocalizedName likewise
+-- "prefers WoW API over hardcoded DB name.") Returns (name, resolved); resolved=false = placeholder.
 function R:ResolveName(itemID)
     if not itemID then return "?", false end
-    -- 1. Catalog row (fast path: sync, no API call).
+    -- 1. Catalog row: locale-correct AND sync/always-on -- the reliable source for decor.
     local obs = HDG.HousingCatalogObserver
     local row = obs and obs.byItemID and obs.byItemID[itemID]
     if row and row.name then return row.name, true end
-    -- 2. State cache (survives Blizzard cache eviction across long sessions).
-    local cache = HDG.Store:GetState().session.itemNames.names
-    local cached = cache[itemID]
+    -- 2. State cache: async-resolved locale-correct name (survives Blizzard cache eviction).
+    local cached = HDG.Store:GetState().session.itemNames.names[itemID]
     if cached then return cached, true end
-    -- 3. Static reagent DB (pre-baked names from build pipeline).
-    local rdb = HDG.StaticData.Reagents:GetAll()
-    if rdb and rdb[itemID] and rdb[itemID].name then
-        return rdb[itemID].name, true
-    end
-    -- 4. Blizzard's live cache (warm if user has seen the item recently).
+    -- 3. Blizzard live cache: locale-correct name for non-catalog items (reagents/mats). Beats baked English.
     if _G.C_Item and _G.C_Item.GetItemInfo then
         local name = _G.C_Item.GetItemInfo(itemID)
         if name then return name, true end
     end
-    -- 5. Cold cache: register ItemEventListener callback -> batch -> Drain -> ITEM_INFO_RESOLVED.
+    -- 4. Cold cache: kick async load; baked English DB name is the placeholder until step 2 fills in.
     self:_Request(itemID)
+    local rdb = HDG.StaticData.Reagents:GetAll()
+    if rdb and rdb[itemID] and rdb[itemID].name then return rdb[itemID].name, false end
     return "item " .. tostring(itemID), false
 end
 

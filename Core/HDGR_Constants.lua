@@ -75,6 +75,18 @@ HDG.Constants = {
           aliases = { "至暗之夜", "한밤" } },
     },
 
+    -- C_HousingCatalog filter-tag groupID -> canonical category. The API's `groupName` is a
+    -- LOCALIZED cstring, so matching it against English ("Expansion"/"Size"/...) empties those
+    -- filters on every non-enUS client. groupID is the stable DB2 ID (same on all locales).
+    -- Verified in-game 2026-06-15. (No "Faction" group in 12.0.5 -- replaced by Culture/Theme.)
+    FILTER_TAG_GROUP_BY_ID = {
+        [2] = "Size",
+        [3] = "Culture",
+        [4] = "Expansion",
+        [5] = "Style",
+        [6] = "Theme",
+    },
+
     -- Profession master data. Each entry: name, TradeSkillLineID, 2-letter code, atlas, shortLabel.
     -- shortLabel trims the longer names for cramped strips (Goblin filter pills).
     -- First 9 are crafting professions; last 3 are gathering. "Mobile-*" atlases have transparent backgrounds.

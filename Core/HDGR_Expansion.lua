@@ -155,3 +155,22 @@ function E.FromSkillLine(raw)
     if not raw or raw == "" then return nil end
     return E.GetFull(raw) or E.GetFull(raw:match("^(%S+)"))
 end
+
+-- IsExpansionTagGroup: identify the catalog's Expansion filter-tag group locale-independently,
+-- by its tag VALUES resolving to known expansions via the alias map. The group's `groupName`
+-- (from GetAllFilterTagGroups) is a LOCALIZED cstring, so matching it against the English
+-- "Expansion" empties the Expansion filter on every non-enUS client.
+-- Require a MAJORITY of tags to resolve: the alias map carries loose tokens ("Dragon", "Kul",
+-- "Khaz") that can coincidentally match a single Style/Faction tag, so one hit is not enough.
+-- The real Expansion group resolves nearly all of its tags; a stray collision never reaches half.
+function E.IsExpansionTagGroup(group)
+    if not (group and group.tags) then return false end
+    local total, hits = 0, 0
+    for _, tag in pairs(group.tags) do
+        if tag and tag.tagName then
+            total = total + 1
+            if E.GetFull(tag.tagName) then hits = hits + 1 end
+        end
+    end
+    return total > 0 and hits * 2 > total
+end

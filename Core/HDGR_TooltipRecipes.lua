@@ -429,8 +429,11 @@ function R.RecipeRow(self)
         local mats = {}
         HDG.StaticData.Recipes:VisitReagents(recipe, function(slot)
             if slot.itemID and slot.qty then
+                -- Locale-correct reagent name (resolver first); baked slot.name is the fallback.
+                -- Render-time resolve: a cold miss shows the placeholder, the next hover shows localized.
+                local rn, resolved = HDG.ItemNameResolver:ResolveName(slot.itemID)
                 mats[#mats + 1] = {
-                    name = slot.name or HDG.ItemNameResolver:ResolveName(slot.itemID),
+                    name = (resolved and rn) or slot.name or ("item " .. tostring(slot.itemID)),
                     have = counts[slot.itemID] or 0,
                     need = slot.qty * mult,
                 }
