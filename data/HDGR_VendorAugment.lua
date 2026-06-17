@@ -88,6 +88,7 @@ HDGR_VendorAugment = {
     [148924] = { name = "Provisioner Mukra", zone = "Dazar'alor", mapID = 1165, x = 51.2, y = 95.1, faction = "H", exp = "Battle for Azeroth" },
     [150359] = { name = "Pascal-K1N6", zone = "Mechagon", mapID = 1462, x = 71.2, y = 32.7, faction = "N", exp = "Battle for Azeroth" },
     [150716] = { name = "Stolen Royal Vendorbot", zone = "Mechagon", mapID = 1462, x = 73.6, y = 36.4, faction = "N", exp = "Battle for Azeroth" },
+    [151941] = { name = "Dershway the Triggered", zone = "Deeprun Tram", mapID = 500, x = 56.6, y = 28.6, faction = "A", exp = "Classic" },
     [152194] = { name = "MOTHER", zone = "Chamber of Heart", mapID = 1473, x = 48.2, y = 72.4, faction = "N", exp = "Battle for Azeroth" },
     [162804] = { name = "Ve'nari", zone = "The Maw", mapID = 1543, x = 46.8, y = 41.6, faction = "N", exp = "Shadowlands" },
     [174710] = { name = "Chachi the Artiste", zone = "Sinfall", mapID = 1699, x = 54.0, y = 24.7, faction = "N", exp = "Shadowlands" },

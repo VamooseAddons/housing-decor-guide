@@ -3045,7 +3045,7 @@ HDG.Actions:Register{ name = "STYLES_CURATOR_SET_SEARCH",
     persists = false, combatUnsafe = false, noisy = true,
     invalidates = { "session.ui.styles.curator.searchQuery" },
     reduce = function(state, payload)
-        state.session.ui.styles.curator.searchQuery = payload.text or ""
+        state.session.ui.styles.curator.searchQuery = payload.text
     end }
 
 HDG.Actions:Register{ name = "STYLES_CURATOR_SET_CATEGORY",
@@ -3549,7 +3549,7 @@ HDG.Actions:Register{ name = "STYLES_IMPORT_PARSE",
     end }
 
 HDG.Actions:Register{ name = "STYLES_IMPORT_COMMIT",
-    persists = false, combatUnsafe = false, 
+    persists = true,  combatUnsafe = false,  -- writes account.collections -> must QueueSave
     invalidates = { "account.collections",
                                                    "session.ui.styles.import" },
     reduce = function(state, payload)
@@ -3608,7 +3608,7 @@ HDG.Actions:Register{ name = "STYLES_IMPORT_SET_TITLE",
 -- Commit the parsed preview as a "My Style" -- an editable type=style collection
 -- (shows in Browse -> My Styles, openable in the Style Curator).
 HDG.Actions:Register{ name = "STYLES_IMPORT_COMMIT_AS_STYLE",
-    persists = false, combatUnsafe = false,
+    persists = true,  combatUnsafe = false,  -- writes account.collections -> must QueueSave
     invalidates = { "account.collections", "session.ui.styles.import" },
     reduce = function(state, payload)
         local imp = state.session.ui.styles.import
@@ -3637,7 +3637,7 @@ HDG.Actions:Register{ name = "STYLES_IMPORT_COMMIT_AS_STYLE",
 -- Commit the parsed preview as a Project "My Design" -- a furnishing set in Projects.
 -- Mirrors FURN_SET_CREATE's record shape (id/name/items/createdAt + session.furn bump).
 HDG.Actions:Register{ name = "STYLES_IMPORT_COMMIT_AS_SET",
-    persists = false, combatUnsafe = false,
+    persists = true,  combatUnsafe = false,  -- writes account.furnishingSets -> must QueueSave
     invalidates = { "account.furnishingSets", "session.furn", "session.ui.styles.import" },
     reduce = function(state, payload)
         local imp = state.session.ui.styles.import

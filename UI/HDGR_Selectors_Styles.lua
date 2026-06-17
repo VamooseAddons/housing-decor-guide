@@ -930,13 +930,12 @@ Selectors:Register("styles.curator.targetsEmpty", {
 -- Copy is valid from ANY source (add membership to target, keep in source).
 -- Requires a selection + a chosen FILE-INTO target.
 Selectors:Register("styles.curator.canCopy", {
-    reads = { "session.ui.styles.curator.selectedItems",
-              "session.ui.styles.curator.selectedTargetID",
+    reads = { "session.ui.styles.curator.selectedTargetID",
               "account.collections" },
-    fn = function(state)
-        local cur = state.session.ui.styles.curator
-        if (cur.selectedCount or 0) == 0 then return false end
-        local target = cur.selectedTargetID
+    calls = { "styles.curator.selectedCount" },
+    fn = function(state, ctx)
+        if Selectors:Call("styles.curator.selectedCount", state, ctx) == 0 then return false end
+        local target = state.session.ui.styles.curator.selectedTargetID
         return target ~= nil and (state.account.collections)[target] ~= nil
     end,
 })
@@ -1049,7 +1048,7 @@ Selectors:Register("styles.curator.sourceItems", {
         -- never match a string-keyed filter; 0 = synthetic "Uncategorized" bucket).
         local subFilt = state.session.ui.styles.curator.focusedSubcategoryID   -- nil = All
         -- Case-insensitive substring filter on the (sync, localized) catalog name.
-        local query = (state.session.ui.styles.curator.searchQuery or ""):lower()
+        local query = state.session.ui.styles.curator.searchQuery:lower()
         local out = {}
         for _, itemID in ipairs(sourceIDs) do
             local row    = HDG.HousingCatalogObserver:GetRow(itemID)
@@ -1801,7 +1800,7 @@ Selectors:DefinePath("styles.import.previewItems","session.ui.styles.import.prev
 Selectors:Register("styles.import.title", {
     reads = { "session.ui.styles.import.parseDisplayName" },
     fn = function(state)
-        return state.session.ui.styles.import.parseDisplayName or ""
+        return state.session.ui.styles.import.parseDisplayName or ""  -- exception(nullable): parseDisplayName cleared to nil on reset/commit; coalesce so the editbox clears
     end,
 })
 -- Destination radio: which surface Import lands in. Default "style" (My Styles).

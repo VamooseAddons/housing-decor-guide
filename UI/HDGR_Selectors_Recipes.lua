@@ -818,7 +818,7 @@ Selectors:Register("recipes.queueRows", {
 -- craftOrderRows: aggregate craft order across the queue, numbered + knowledge-stamped.
 -- Also drives craftTheseRows (materials panel footer).
 Selectors:Register("recipes.craftOrderRows", {
-    reads = {"account.craft.queue", "session.resolvers.staticData.tick"},
+    reads = {"account.craft.queue", "session.resolvers.staticData.tick", "session.itemNames.names"},
     calls = {"decor.craftableState"},
     fn = function(state, ctx)
         local craftableState = Selectors:Call("decor.craftableState", state, ctx)
@@ -830,7 +830,7 @@ Selectors:Register("recipes.craftOrderRows", {
                 order          = i,
                 itemID         = e.itemID,
                 recipeID       = e.recipeID,
-                name           = e.name,
+                name           = _localName(e.itemID, e.name),   -- localized; baked e.name is English
                 qty            = e.qty,
                 craftableState = craftableState(e.itemID),
             }

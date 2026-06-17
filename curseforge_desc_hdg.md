@@ -12,17 +12,13 @@
 
 ---
 
-## What's New in v3.6.0
+## What's New in v3.6.1
 
-**Import a Build**
+A maintenance release with three fixes:
 
-- Paste a string shared by a friend, a wowhead.com URL, or a housing.wowdb.com build, and the preview fills in as you type. Choose where it lands: My Styles, a Project Set, or a Shopping List. Open it from Tools > Import, the Styles import button, or the Projects Import button.
-- When a build lists decor that is not in your live catalog yet (for example unreleased items), the status line shows how many of the items matched, so the count is clear.
-
-**Style Curator**
-
-- A search box above the card grid filters the shown decor by name.
-- Copy and Move are now separate actions. Copy files the selected decor into the target style and keeps it in its source. Move relocates it out of the source style.
+- **Shop by Vendor freeze.** Selecting a vendor that the catalog lists without a known map location (for example "Dershway the Triggered" in Deeprun Tram) could freeze the game. These vendors, and the "World Vendors" groupings, now open and show their own items.
+- **Imported builds now save.** Builds you import into My Styles, a Project Set, or a Shopping List now persist across a reload. They were being lost on logout or reload.
+- **Crafting queue language.** The crafting queue now shows item names in your client's language instead of English on non-English clients.
 
 ---
 
@@ -108,7 +104,7 @@ A companion window injects into Blizzard's House Editor so you can **place decor
 ---
 
 **Author:** Vamoose
-**Version:** 3.6.0
+**Version:** 3.6.1
 **Game Version:** 12.0.5+ (Midnight)
 **Source / Issues:** https://github.com/VamooseAddons/housing-decor-guide
 **Discord:** https://discord.gg/RWZaxJaHFP

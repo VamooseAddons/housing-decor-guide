@@ -1325,13 +1325,23 @@ Selectors:Register("acq.selectedNpcID", {
 })
 
 Selectors:Register("acq.selectedVendor", {
+    -- npcID-less vendors (catalog-only NPCs absent from VendorAugment, and
+    -- synthetic "World Vendors" groupings) carry no npcID, so they resolve via
+    -- the (name, zone) the row click stamps -- mirrors acq.selected.items.
+    reads = {
+        "session.ui.acquisition.selectedVendorName",
+        "session.ui.acquisition.selectedVendorZone",
+    },
     calls = {"acq.selectedNpcID", "acq.allVendors", "decor.isCollected"},
     fn = function(state, ctx)
-        local id  = Selectors:Call("acq.selectedNpcID", state, ctx)
-        if not id then return nil end
+        local id   = Selectors:Call("acq.selectedNpcID", state, ctx)
+        local acq  = state.session.ui.acquisition
+        local name, zone = acq.selectedVendorName, acq.selectedVendorZone
+        if not id and not name then return nil end
         local all = Selectors:Call("acq.allVendors", state, ctx)
         for _, v in ipairs(all) do
-            if v.npcID == id then
+            if (id and v.npcID == id)
+            or (not id and v.name == name and (v.catalogZone or v.zone) == zone) then
                 -- Shallow-copy and stamp allCollected. acq.allVendors is
                 -- memoized so we can't mutate the cached row.
                 local isColl  = Selectors:Call("decor.isCollected", state, ctx)

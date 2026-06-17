@@ -1,5 +1,19 @@
 ## [Unreleased]
 
+## [3.6.1] - 2026-06-17 (June 2026)
+
+FIXED:
+- Shop by Vendor: selecting certain vendors could freeze the game -- most
+  reliably when a name search narrowed the list to a single result (e.g.
+  "Dershway the Triggered" in Deeprun Tram). Vendors the live catalog lists
+  but that aren't yet mapped to a known NPC -- and the "World Vendors"
+  groupings -- now select correctly and show their own items, instead of
+  silently jumping to the wrong vendor.
+- Importing a build into My Styles, a Project Set, or a Shopping List now
+  saves correctly. Imported entries were being lost on reload.
+- Crafting queue now shows item names in your client's language. They could
+  appear in English on non-English clients.
+
 ## [3.6.0] - 2026-06-15 (June 2026)
 
 ADDED:

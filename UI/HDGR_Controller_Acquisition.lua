@@ -758,13 +758,23 @@ function AcquisitionController:Refresh(rootFrame, ctx)
         return
     end
     local state = HDG.Store:GetState()  -- exception(false-positive): top-level controller method (not a row factory)
-    if state.session.ui.acquisition.viewMode ~= "vendor" then return end
+    local acqUI = state.session.ui.acquisition
+    if acqUI.viewMode ~= "vendor" then return end
     local vendors = HDG.Selectors:Call("acq.vendors", state, {})
     if #vendors == 0 then return end
-    local current = state.session.ui.acquisition.selectedNpcID
-    if current then
+    -- A selection is "still present" if it matches a visible vendor by npcID
+    -- (authoritative when set) OR, for npcID-less vendors, by the (name, zone)
+    -- the row click stamps. Catalog-only NPCs absent from VendorAugment and
+    -- synthetic "World Vendors" groupings have npcID == nil; matching them on
+    -- npcID alone never converges -- auto-select would re-stamp nil every pass,
+    -- re-triggering Refresh -> Notify -> Refresh until "script ran too long".
+    local curID, curName, curZone = acqUI.selectedNpcID, acqUI.selectedVendorName, acqUI.selectedVendorZone
+    if curID or curName then
         for _, v in ipairs(vendors) do
-            if v.npcID == current then return end
+            if (curID and v.npcID == curID)
+            or (not curID and curName and v.name == curName and (v.catalogZone or v.zone) == curZone) then
+                return
+            end
         end
     end
     local first = vendors[1]

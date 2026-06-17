@@ -1335,7 +1335,7 @@ function StylesController:Wire(rootFrame)
     end)
     HDG.UI.OnClick(rootFrame, "stylesPanel.importCommit", function()
         local A    = HDG.Constants.ACTIONS
-        local imp  = HDG.Store:GetState().session.ui.styles.import
+        local imp  = HDG.Store:GetState().session.ui.styles.import  -- exception(false-positive): top-level commit handler reads view-global import state, not a row factory
         local dest = imp.destination
         -- Default destination is "style" (My Styles); see the import factory + radio.
         local commit = (dest == "set"      and A.STYLES_IMPORT_COMMIT_AS_SET)
