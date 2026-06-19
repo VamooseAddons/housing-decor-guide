@@ -2,20 +2,15 @@
 ## Title: Vamoose's Housing Decor Guide
 ## Notes: Track, craft, preview, and acquire housing decorations across all professions
 ## Author: Vamoose
-## Version: 3.6.1
+## Version: 3.6.2
 ## SavedVariables: HDG_DB
 ## SavedVariablesPerCharacter: HDG_DB_CURRENT_PROFILE
-## IconTexture: Interface\Icons\INV_Misc_Coin_02
-## Category-enUS: Vamoose
+## IconTexture: Interface\AddOns\HousingDecorGuide\textures\HousingDecorIcon
+## Category-enUS: Housing
 ## DefaultState: enabled
 ## AddonCompartmentFunc: HDGR_OnAddonCompartmentClick
 ## AddonCompartmentFuncOnEnter: HDGR_OnAddonCompartmentEnter
 ## AddonCompartmentFuncOnLeave: HDGR_OnAddonCompartmentLeave
-
-# Phase 1: full VFN engine ported via namespace rename (VFN -> HDG).
-# VFN-specific feature code (libraries/sets/waypoints + per-tab Controller_*
-# files + Minimap + Audio + NotificationCenter + FlowRunner + locale) is
-# NOT carried over -- Phase 2+ designs HDG's own state shape + features.
 
 # ===== Shared libraries (LibStub + LibDataBroker + LibDBIcon) ================
 # Required by HDGR_MinimapButton. Load before Core engines so LibStub is
@@ -118,6 +113,7 @@ UI\HDGR_CategoryNav.lua
 # Validates the audit's "dead selectors" list against real runtime usage.
 Modules\HDGR_SelectorCallLog.lua
 UI\HDGR_Selectors_Status.lua
+UI\HDGR_DecorWidgets.lua
 UI\HDGR_Selectors_Decor.lua
 UI\HDGR_Selectors_Acquisition.lua
 UI\HDGR_Selectors_Catalog.lua

@@ -786,13 +786,17 @@ HDG.Constants.SOURCE_KINDS = {
     { key="QUEST",    donorCode=2,  filterValue="quest",       label="Quest",        chipLabel="QUST", useInFilter=true },
     { key="ACH",      donorCode=1,  filterValue="achievement", label="Achievement",  chipLabel="ACH",  useInFilter=true },
     -- PROMO ranks above VENDOR: for promo-reward items also buyable, the promo IS the acquisition.
-    { key="PROMO",    donorCode=10, filterValue="promotional", label="Promotional",  chipLabel="PROM", useInFilter=true },
+    { key="PROMO",    donorCode=10, filterValue="promotional", label="Promotional",  chipLabel="PROMO", useInFilter=true },
     { key="VENDOR",   donorCode=5,  filterValue="vendor",      label="Vendor",       chipLabel="VEND", useInFilter=false },
     { key="SHOP",     donorCode=12, filterValue="shop",        label="In-Game Shop", chipLabel="SHOP", useInFilter=true },
     -- EVENT (donor 14): catalog "Event:" prefix; distinct from PROMO (out-of-game promos).
     { key="EVENT",    donorCode=14, filterValue="event",       label="Event",        chipLabel="EVNT", useInFilter=true },
     { key="TREASURE", donorCode=9,  filterValue="treasure",    label="Treasure",     chipLabel="TREA", useInFilter=true },
     { key="DROP",     donorCode=4,  filterValue="drop",        label="Drop",         chipLabel="DROP", useInFilter=true },
+    -- Honest fallback when NO source signal exists. donorCode 0 = the existing
+    -- [0] UNKNOWN color. Lowest priority so any real signal wins; filterable so
+    -- the data gaps surface (never silently default to DROP).
+    { key="UNKN",     donorCode=0,  filterValue="unknown",     label="Unknown",      chipLabel="UNKN", useInFilter=true },
 }
 
 -- Derived indexes -- built once, O(1) lookup thereafter.
@@ -820,6 +824,7 @@ HDG.Constants.CATALOG_SOURCE_TOKENS = {
     ["Event"]        = "EVENT",
     ["Shop"]         = "SHOP",      -- bare line, no colon
     ["In-Game Shop"] = "SHOP",      -- bare line, no colon
+    ["Promotion"]    = "PROMO",     -- bare line, no colon
 }
 
 -- Acquisition source-filter options. Derived from SOURCE_KINDS where useInFilter.

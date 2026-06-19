@@ -59,14 +59,28 @@ HDGR_CatalogOverrides = {
     [246424] = { sources = { { type = 5, name = 'Thanthaldis Snowgleam', detail = 'Hillsbrad Foothills' } } },
     -- Retired Industrial Gnomegrabber
     [246481] = { sources = { { type = 3, name = 'Self-Assembling Homeware Kit', detail = 'Mechagon' } } },
+    -- Mechanical Gnomish Lamppost (Junkyard Tinkering -- Pascal-K1N6 in Mechagon, NOT the Endeavor Pascal; catalog ships these as "Profession: Junkyard Tinkering")
+    [246482] = { sources = { { type = 5, name = 'Pascal-K1N6', detail = 'Mechagon' } } },
+    -- Mechagnome Sustenance Distributor (Junkyard Tinkering)
+    [246485] = { sources = { { type = 5, name = 'Pascal-K1N6', detail = 'Mechagon' } } },
     -- Gnomish Tesla Coil
     [246487] = { sources = { { type = 2, name = 'Spare A Chair', detail = 'Stormwind City' }, { type = 5, name = 'Second Chair Pawdo', detail = 'Dornogal', cost = { gold = 750000 } } } },
+    -- Gnomish Fencepost (Junkyard Tinkering)
+    [246595] = { sources = { { type = 5, name = 'Pascal-K1N6', detail = 'Mechagon' } } },
+    -- Gnomish Fence (Junkyard Tinkering)
+    [246596] = { sources = { { type = 5, name = 'Pascal-K1N6', detail = 'Mechagon' } } },
+    -- Perpetual Motion Crate (Junkyard Tinkering)
+    [246597] = { sources = { { type = 5, name = 'Pascal-K1N6', detail = 'Mechagon' } } },
     -- Self-Sealing Stembarrel
     [246599] = { sources = { { type = 3, name = 'Self-Assembling Homeware Kit', detail = 'Mechagon' } } },
     -- Small Mechanical Crate
     [246600] = { sources = { { type = 3, name = 'Self-Assembling Homeware Kit', detail = 'Mechagon' } } },
     -- Small H.O.M.E. Cog
     [246602] = { sources = { { type = 3, name = 'Self-Assembling Homeware Kit', detail = 'Mechagon' } } },
+    -- Mechagon Armory Rack (Junkyard Tinkering)
+    [246606] = { sources = { { type = 5, name = 'Pascal-K1N6', detail = 'Mechagon' } } },
+    -- "Shu'halo Perspective" Painting (Cravitz Lorent in the Murder Row dungeon -- catalog-empty, not a catalog vendor). Sargle's Fortunes tracker: HDGR_DecorWidgets / decor.fortune.*
+    [246857] = { sources = { { type = 5, name = 'Cravitz Lorent', detail = 'Murder Row' } } },
     -- Square Suramar Table
     [247915] = { sources = { { type = 2, name = 'Last Light', detail = 'Stormwind City' }, { type = 5, name = 'Second Chair Pawdo', detail = 'Dornogal', cost = { gold = 1000000 } } } },
     -- Valdrakken Chandelier
@@ -177,6 +191,8 @@ HDGR_CatalogOverrides = {
     [263290] = { sources = { { type = 12, name = 'In-Game Shop' } } },
     -- Spring Blossom Tree Pond
     [263291] = { sources = { { type = 12, name = 'In-Game Shop' } } },
+    -- Corked Bottle of Liquid Mystery (promo, NOT Shop -- catalog mis-tags as Shop/World Vendors)
+    [263383] = { shop = false, sources = { { type = 10, name = 'Promotional' } } },
     -- Midnight Alchemist's Shop Sign
     [263997] = { sources = { { type = 5, name = 'Melaris', detail = 'Silvermoon City', cost = { gold = 50000 } }, { type = 1, name = 'Alchemizing at Midnight', detail = 'Professions' } } },
     -- Midnight Blacksmith's Shop Sign
@@ -207,6 +223,12 @@ HDGR_CatalogOverrides = {
     [264276] = { sources = { { type = 12, name = 'In-Game Shop' } } },
     -- Paw Pal Dog House Shadowglen Roof
     [264277] = { sources = { { type = 12, name = 'In-Game Shop' } } },
+    -- Sturdy Portable Ice Chest (promo, NOT Shop -- catalog mis-tags as Shop/World Vendors)
+    [264278] = { shop = false, sources = { { type = 10, name = 'Promotional' } } },
+    -- Tall Corked Bottle of Liquid Mystery (promo)
+    [264279] = { shop = false, sources = { { type = 10, name = 'Promotional' } } },
+    -- Short Corked Bottle of Liquid Mystery (promo)
+    [264280] = { shop = false, sources = { { type = 10, name = 'Promotional' } } },
     -- Bluebird's Golden Cage
     [264282] = { sources = { { type = 12, name = 'In-Game Shop' } } },
     -- Amani Ritual Altar
@@ -241,6 +263,8 @@ HDGR_CatalogOverrides = {
     [268457] = { sources = { { type = 5, name = 'Disguised Decor Duel Vendor', detail = 'Silvermoon City', cost = { currencies = { { id = 3393, amount = 50 } } } } } },
     -- Lush Garden Rug
     [268550] = { sources = { { type = 12, name = 'In-Game Shop' } } },
+    -- Bartender Bob's "No Weapons Allowed" Rack (Highly Decorated achievement; extra copies from Morta Gage in Arcantina). Achievement+ID lives in ItemAugment.
+    [269316] = { sources = { { type = 5, name = 'Morta Gage', detail = 'Arcantina', cost = { currencies = { { id = 3316, amount = 2500 } } } } } },
     -- Sin'dorei Covered Cookpot
     [269613] = { sources = { { type = 5, name = 'Disguised Decor Duel Vendor', detail = 'Silvermoon City', cost = { currencies = { { id = 3393, amount = 30 } } } } } },
     -- Sin'dorei Open Cookpot

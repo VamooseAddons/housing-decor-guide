@@ -1012,6 +1012,7 @@ HDGR_ItemAugment = {
     [268049] = { sources = { { type = 4, name = "Crown of the Cosmos", detail = "The Voidspire" } } },
     [268550] = { sources = { { type = 12, name = "Blizzard Shop" } } },
     [269269] = { sources = { { type = 4, name = "Alleria Windrunner", detail = "The Voidspire" } } },
+    [269316] = { sources = { { type = 1, achievementID = 61083, name = "Highly Decorated" } } },  -- Bartender Bob's Rack: achievement unlock (extra copies from Morta Gage -- see CatalogOverrides)
     [273135] = { factionID = 2792, minRep = 3, factionName = "Ritual Sites" },
     [273142] = { factionID = 2792, minRep = 3, factionName = "Ritual Sites" },
     [273147] = { factionID = 2792, minRep = 3, factionName = "Ritual Sites" },

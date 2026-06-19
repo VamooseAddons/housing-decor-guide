@@ -1011,6 +1011,7 @@ function R:_bakeSourceTags(row)
     if row.treasure  then emit("TREASURE", { text = _composeSourceText(row.treasure) }) end
     if row.event     then emit("EVENT",    { text = _composeSourceText(row.event)    }) end
     if row.shop      then emit("SHOP",     {}) end   -- catalog bare "Shop"/"In-Game Shop" line
+    if row.promo     then emit("PROMO",    {}) end   -- catalog bare "Promotion" line
 
     -- type->kind mapper: type 3 (WQ) -> QUEST; type 11 (PROFESSION) dropped; else donor index.
     local function fromSourceType(code)
@@ -1050,9 +1051,10 @@ function R:_bakeSourceTags(row)
         end
     end
 
-    -- DROP fallback: items with no other source signal default to a chip-
-    -- only DROP entry (no text -- nothing specific to say beyond "drops").
-    if #order == 0 then emit("DROP", {}) end
+    -- No source signal at all -> honest chip-only [UNKN], never [DROP].
+    -- Defaulting to DROP masked catalog/data gaps; UNKN surfaces them (and is
+    -- filterable). DROP now appears only when the data actually says "Drop:".
+    if #order == 0 then emit("UNKN", {}) end
 
     -- Sort by SOURCE_KIND_PRIORITY; head entry is highest-priority kind (gateLine + primarySourceCode).
     local tags = {}
@@ -1168,6 +1170,10 @@ function R:_ParseSourceText(sourceText, row)
             -- Bare "Shop"/"In-Game Shop" line. NOTE: Profession: lines deliberately
             -- not handled here (CRAFT comes from recipe DB; catalog 'prof' false-positives).
             row.shop = true
+            pendingZoneTarget = nil
+        elseif bareKind == "PROMO" then
+            -- Bare "Promotion" line -> promotional source (e.g. Framed Alliance/Horde Pride).
+            row.promo = true
             pendingZoneTarget = nil
         elseif zone and current then
             current.zone = zone

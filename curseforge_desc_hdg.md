@@ -12,13 +12,16 @@
 
 ---
 
-## What's New in v3.6.1
+## What's New in v3.6.2
 
-A maintenance release with three fixes:
+A maintenance release with source-data fixes and a few small additions:
 
-- **Shop by Vendor freeze.** Selecting a vendor that the catalog lists without a known map location (for example "Dershway the Triggered" in Deeprun Tram) could freeze the game. These vendors, and the "World Vendors" groupings, now open and show their own items.
-- **Imported builds now save.** Builds you import into My Styles, a Project Set, or a Shopping List now persist across a reload. They were being lost on logout or reload.
-- **Crafting queue language.** The crafting queue now shows item names in your client's language instead of English on non-English clients.
+- **Item sources corrected.** Several pieces that showed no source, or the wrong one, now show where they come from. The Framed Alliance Pride, Framed Horde Pride, and Prized Orb of Azeroth show as Promotion. The Mechagon "Junkyard Tinkering" decor show as crafted at Pascal-K1N6 in Mechagon. Bartender Bob's "No Weapons Allowed" Rack shows the Highly Decorated achievement, with extra copies from Morta Gage. The Liquid Mystery bottles and the Sturdy Portable Ice Chest show as Promotion rather than Shop.
+- **Unknown source chip.** Decor with no known source now shows an "Unknown" chip instead of a misleading "Drop", and can be filtered under Sources.
+- **Endeavor vendors.** The Founder's Point endeavor vendors now show which endeavor they belong to, for example "Endeavor: Mechagon", and their map pins were corrected.
+- **Sargle's Fortunes tracker.** The "Shu'halo Perspective" Painting detail page now lists the 13 Sargle's Fortunes and highlights the ones you hold. The painting drops to 999g from Cravitz Lorent in the Murder Row dungeon once you have all 13.
+- **Preview background.** The decor preview Background picker has a new Vamoose option.
+- **New logo.** The addon logo and the AddOns-list icon are now the Vamoose house emblem.
 
 ---
 
@@ -104,7 +107,7 @@ A companion window injects into Blizzard's House Editor so you can **place decor
 ---
 
 **Author:** Vamoose
-**Version:** 3.6.1
+**Version:** 3.6.2
 **Game Version:** 12.0.5+ (Midnight)
 **Source / Issues:** https://github.com/VamooseAddons/housing-decor-guide
 **Discord:** https://discord.gg/RWZaxJaHFP

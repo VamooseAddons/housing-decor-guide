@@ -248,27 +248,41 @@ local function shouldTrace(entry)
     if not HDG.Store or not HDG.Store.GetState then return false end
     local state = HDG.Store:GetState()
     if not (state and state.session and state.session.log) then return false end
-    -- Errors + warnings always print; notify always chats.
-    if entry.level == "error" or entry.level == "warn" then return true end
+    -- notify is user-facing -- always chats (deferred at the sink, _RenderEntry).
     if entry.tag == "notify" then return true end
+    -- Diagnostics (warn/error) live in the Debug tab via session.log; they mirror
+    -- to chat ONLY in debug mode. Normal sessions keep a quiet chat and the
+    -- chat-taint surface shrinks to user-facing notifies (own-surface, option 3).
+    if (entry.level == "error" or entry.level == "warn") and state.account.config.debug then
+        return true
+    end
     -- Active traces (set by /hdgr trace <tag>)
     if state.session.log.activeTraces[entry.tag] then return true end
     -- Legacy: debug flag enables the dispatch firehose.
-    if entry.tag == "dispatch" and state.account and state.account.config
-       and state.account.config.debug then
+    if entry.tag == "dispatch" and state.account.config.debug then
         return true
     end
     return false
 end
 
--- Render a single entry to chat.
+-- Render a single entry to chat. DEFERRED (Tier 4): LOG_PUSH dispatches
+-- synchronously, so this is reached in the CALLER's execution -- frequently
+-- tainted (Blizzard event handlers, housing-mode hooksecurefunc callbacks). A
+-- print() there tags the new chat line's lineID secret, and Blizzard's later
+-- FCF_RemoveAllMessagesFromChanSender crashes comparing it ("tainted by
+-- HousingDecorGuide"). RunNextFrame re-enters in a clean top-level context so the
+-- WHOLE string graph -- formatter included -- is built untainted. The shouldTrace
+-- gate stays synchronous (it only reads our own state, no secret ops).
+-- See Reference/MIDNIGHT_SECRET_VALUES.md "Case 2".
 function Log:_RenderEntry(entry)
     if not entry or not shouldTrace(entry) then return end
-    local formatter = self._formatters[entry.tag] or self._formatters.default
-    local ok, line = pcall(formatter, entry)  -- exception(fire-forget): inside Log:_RenderEntry; recursive log would cause stack overflow on broken formatter
-    if not ok or type(line) ~= "string" then return end
-    local printer = _G and _G.print or function() end
-    printer(line)
+    RunNextFrame(function()
+        local formatter = self._formatters[entry.tag] or self._formatters.default
+        local ok, line = pcall(formatter, entry)  -- exception(fire-forget): deferred render; recursive log would stack-overflow on a broken formatter
+        if not ok or type(line) ~= "string" then return end
+        local printer = _G and _G.print or function() end
+        printer(line)
+    end)
 end
 
 -- Subscriber callback: walks new entries since the last call.

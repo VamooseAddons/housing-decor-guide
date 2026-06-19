@@ -716,6 +716,68 @@ for slot = 1, HDG.Constants.TAG_SLOT_COUNT do
     })
 end
 
+-- ===== Shu'halo fortunes tracker (DecorWidgets special) ======================
+-- Renders only when the selected item is the registered "shuhalo_fortunes" special
+-- (DecorWidgets gate). Ownership is impure (GetItemCount) so it goes through the
+-- BagObserver facade keyed by session.resolvers.bag.tick -- the selectors stay pure.
+local FORTUNE_KEY = "shuhalo_fortunes"
+
+-- The registered entry IFF the selected item is the fortunes special, else nil.
+Selectors:Register("decor.fortune.entry", {
+    calls = {"decor.selectedItemID"},
+    fn = function(state, ctx)
+        local id = Selectors:Call("decor.selectedItemID", state, ctx)
+        if not id then return nil end
+        if HDG.DecorWidgets:KeyFor(id) ~= FORTUNE_KEY then return nil end
+        return HDG.DecorWidgets:Get(FORTUNE_KEY)
+    end,
+})
+
+-- Block visibility: every fortune widget gates on this so the block collapses
+-- for non-special items.
+Selectors:Register("decor.fortune.visible", {
+    calls = {"decor.fortune.entry"},
+    fn = function(state, ctx)
+        return Selectors:Call("decor.fortune.entry", state, ctx) ~= nil
+    end,
+})
+
+-- "Sargle's Fortunes  X/13  (full set = 999g, else gold cap)" header. Live count
+-- via BagObserver; the price hook is folded in (the vendor/zone is already on the
+-- source line) to keep the block to two lines in the tight detail pane.
+Selectors:Register("decor.fortune.header", {
+    calls = {"decor.fortune.entry"},
+    reads = {"session.resolvers.bag.tick"},
+    fn = function(state, ctx)
+        local e = Selectors:Call("decor.fortune.entry", state, ctx)
+        if not e then return "" end
+        local have = 0
+        for _, iid in ipairs(e.items) do
+            if HDG.BagObserver:GetTotal(iid) > 0 then have = have + 1 end
+        end
+        return string.format("%s  %d/%d   (%s)", e.title, have, #e.items, e.note)
+    end,
+})
+
+-- Numbered cells as a single colored string: green (owned) / dim (missing).
+-- Cell N == fortune #N (verified itemID-ascending == in-name #N).
+Selectors:Register("decor.fortune.cells", {
+    calls = {"decor.fortune.entry"},
+    reads = {"session.resolvers.bag.tick"},
+    fn = function(state, ctx)
+        local e = Selectors:Call("decor.fortune.entry", state, ctx)
+        if not e then return "" end
+        local ownedCC = HDG.Theme:ColorCode("semantic.success")
+        local dimCC   = HDG.Theme:ColorCode("text.dim")
+        local pieces = {}
+        for i, iid in ipairs(e.items) do
+            local cc = (HDG.BagObserver:GetTotal(iid) > 0) and ownedCC or dimCC
+            pieces[i] = cc .. i .. "|r"
+        end
+        return table.concat(pieces, "   ")
+    end,
+})
+
 -- "Tags:" label visibility. Explicit boolean (callers expect false/true, not false/nil).
 Selectors:Register("decor.hasTagsRow", {
     calls = {"decor.tagsForFilter"},

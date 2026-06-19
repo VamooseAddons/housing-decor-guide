@@ -1,4 +1,38 @@
-## [Unreleased]
+## [3.6.2] - 2026-06-19 (June 2026)
+
+### Added
+- "Shu'halo Perspective" Painting now has a live Sargle's Fortunes checklist on
+  its detail page -- the 13 fortunes light up as you collect them. The painting
+  is sold by Cravitz Lorent in the Murder Row dungeon and drops to 999g once you
+  hold all 13 fortunes (which can be bought from the Auction House).
+- Endeavor vendors now show which endeavor they belong to on the vendor panel
+  (e.g. "Endeavor: Mechagon", "Endeavor: K'aresh"), and curated vendor hints --
+  like Pascal-K1N6's Junkyard Tinkering note -- now surface there too.
+- The decor preview's Background picker has a new "Vamoose" option that fills the
+  preview area with the addon's house emblem.
+
+### Changed
+- New addon logo -- a glowing house-and-spiral emblem, created by Madailein. Thank
+  you! It now also shows as the addon's icon in the AddOns list (was a gold coin).
+- The "PROM" source chip is now labelled "PROMO".
+
+### Fixed
+- Eliminated a Lua error that could fire from the chat frame while in the housing
+  area (a "secret value" taint error originating from HDG's chat notifications).
+  Notifications now post safely, and routine diagnostics stay in the Debug tab.
+- Decor with no known source now shows an "Unknown" chip instead of a misleading
+  "Drop", and can be filtered under Sources.
+- Corrected the source for several items that previously showed none: the Framed
+  Alliance Pride, Framed Horde Pride, and Prized Orb of Azeroth now show as
+  Promotion; the six Mechagon "Junkyard Tinkering" decor now show they're made at
+  Pascal-K1N6 in Mechagon (who now also appears in Shop by Vendor); and Bartender
+  Bob's "No Weapons Allowed" Rack now shows the Highly Decorated achievement, with
+  extra copies from Morta Gage in Arcantina. The Liquid Mystery bottles and the
+  Sturdy Portable Ice Chest now show as Promotion instead of Shop.
+- Corrected the map pins for the Founder's Point endeavor vendors (Pascal-K1N6,
+  Brother Dovetail, Aeeshna, Hesta Forlath, Harlowe Marl), which pointed at the
+  wrong spot. Hordranin, mislabeled as Razorwind Shores, now shows under
+  Founder's Point.
 
 ## [3.6.1] - 2026-06-17 (June 2026)
 

@@ -1043,15 +1043,23 @@ end
 -- Cover-fit a background atlas to `frame` preserving the atlas's native aspect ratio:
 -- scale to the larger axis so the pane is fully covered, anchor centered, let the frame
 -- clip the overflow. SetAllPoints would stretch + distort the landscape housing atlases.
-local function _fitCoverAtlas(tex, frame, atlasName)
-    local info = C_Texture.GetAtlasInfo(atlasName)  -- exception(boundary): nil on unknown atlas (patch removal)
-    if not info then return end
+-- Scale-to-cover: oversize the texture so it fills the frame (aspect preserved);
+-- the frame's SetClipsChildren crops the overflow. Centered.
+local function _fitCoverSize(tex, frame, tw, th)
     local fw, fh = frame:GetWidth(), frame:GetHeight()
     if fw <= 0 or fh <= 0 then return end  -- exception(boundary): pre-layout; OnSizeChanged re-fits
-    local scale = math.max(fw / info.width, fh / info.height)
-    tex:SetSize(info.width * scale, info.height * scale)
+    local scale = math.max(fw / tw, fh / th)
+    tex:SetSize(tw * scale, th * scale)
     tex:ClearAllPoints()
     tex:SetPoint("CENTER")
+end
+
+local LOGO_BG_SIZE = 400   -- textures/Vamoose_HDG_400.tga is 400x400
+local function _fitCoverAtlas(tex, frame, atlasName)
+    if atlasName == "__logo__" then return _fitCoverSize(tex, frame, LOGO_BG_SIZE, LOGO_BG_SIZE) end
+    local info = C_Texture.GetAtlasInfo(atlasName)  -- exception(boundary): nil on unknown atlas (patch removal)
+    if not info then return end
+    _fitCoverSize(tex, frame, info.width, info.height)
 end
 
 local function buildModelPreview(parent, spec)
@@ -1285,6 +1293,15 @@ local function dispatchModelPreview(widget, values)
             widget._bgAtlas:ClearAllPoints()
             widget._bgAtlas:SetAllPoints()
             widget._bgAtlasName = nil
+            widget._bgAtlas:Show()
+        elseif bg == "logo" then
+            -- Vamoose emblem (textures/Vamoose_HDG_400, on black). Fills the pane via the
+            -- same scale-to-cover as the atlas backgrounds; sentinel "__logo__" so the
+            -- OnSizeChanged hook re-fits it. SetTexCoord resets any prior atlas texcoords.
+            widget._bgAtlas:SetTexture("Interface\\AddOns\\HousingDecorGuide\\textures\\Vamoose_HDG_400")
+            widget._bgAtlas:SetTexCoord(0, 1, 0, 1)
+            widget._bgAtlasName = "__logo__"
+            _fitCoverAtlas(widget._bgAtlas, widget, "__logo__")
             widget._bgAtlas:Show()
         elseif bg and bg ~= "" and bg ~= "default" then
             widget._bgAtlas:SetAtlas(bg)

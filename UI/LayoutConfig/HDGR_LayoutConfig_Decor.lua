@@ -259,6 +259,19 @@ LC.sections["decor.detailNote"] = {
     width     = "fill",
     order     = 10,
 }
+-- Full-width special-widget row under the detail cards. Every child gates on
+-- decor.fortune.visible, so the section collapses to nothing for normal items
+-- (no chrome/padding). Hosts the Sargle's Fortunes tracker (DecorWidgets special).
+LC.sections["decor.fortuneRow"] = {
+    ["in"]    = "decor.detailBody",
+    layout    = "vertical",
+    gap       = "xs",
+    height    = 40,   -- FIXED: a height-less section is treated as "fill" (flex) and would
+                      -- steal half of detailBody's slack from the detail cards. 40px fits the
+                      -- 2-line block (header 14 + cells 18 + gap).
+    order     = 25,
+    visible   = "decor.fortune.visible",   -- collapses entirely for non-special items
+}
 -- (Dye variant strip removed: dye variants are already surfaced as the dye-dots
 -- on browser rows, and the in-card swatch preview was a non-functional stub.)
 
@@ -402,7 +415,7 @@ LC.widgets["decorDetailPanel.itemPreview"] = {
     configurableBg = true,                           -- preview-bg dropdown overrides the tile with an atlas
     placeholder  = "locale:DECOR_PREVIEW_PLACEHOLDER",
     -- sceneInsets: declarative budget; build fn has no fallback by design.
-    sceneInsets    = { top = 30, right = 10, bottom = 25, left = 10 },
+    sceneInsets    = { top = 2, right = 2, bottom = 2, left = 2 },
     defaultSceneID = 859,   -- HOUSING_CATALOG_DECOR_MODELSCENEID_DEFAULT (12.0.5)
 }
 -- Detail meta column (left).
@@ -468,6 +481,24 @@ LC.widgets["decorDetailPanel.note"] = {
     multiline   = true,
     placeholder = "locale:DECOR_NOTE_PLACEHOLDER",
     binding = { text = "decor.selectedItem.note" },
+}
+
+-- Sargle's Fortunes tracker (DecorWidgets special). All three gate on
+-- decor.fortune.visible -> the row is empty (collapsed) for normal items.
+-- Cells = a single colored label (green owned / dim missing), see decor.fortune.cells.
+LC.widgets["decorDetailPanel.fortuneHeader"] = {
+    tooltip = false,
+    kind = "label", ["in"] = "decor.fortuneRow", font = "small",
+    text = "", height = 14, order = 10,
+    binding = "decor.fortune.header",
+    visible = "decor.fortune.visible",
+}
+LC.widgets["decorDetailPanel.fortuneCells"] = {
+    tooltip = false,
+    kind = "label", ["in"] = "decor.fortuneRow", font = "body",
+    text = "", height = 18, order = 20,
+    binding = "decor.fortune.cells",
+    visible = "decor.fortune.visible",
 }
 
 -- ===== Widgets -- dynamic (generated at load time) ===========================

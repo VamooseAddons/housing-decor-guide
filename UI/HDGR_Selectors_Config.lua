@@ -106,6 +106,7 @@ local _CONTRIBUTORS = {
     { name = "JodouKast",     note = "Community support & feature ideas" },
     { name = "Katsmiaou",     note = "Feature suggestions" },
     { name = "KeeperHarvest", note = "Detailed vendor audit & bug reports" },
+    { name = "Madailein",     note = "New HDG logo artwork (the house-and-spiral emblem)" },
     { name = "Medivha",       note = "Detailed trainer & vendor data audit" },
     { name = "Nunuman",       note = "Korean localization testing & bug reports" },
     { name = "pxspin",        note = "Found the bugs, dreamed up the features, never stopped testing" },

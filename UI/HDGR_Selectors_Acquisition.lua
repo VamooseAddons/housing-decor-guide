@@ -104,6 +104,7 @@ Selectors:Register("acq.allVendors", {
                 faction    = FACTION_LABEL[factionRaw] or factionRaw,
                 factionRaw = factionRaw,
                 expansion  = meta and meta.expansion,
+                note       = meta and meta.note,   -- exception(nullable): curated endeavor/vendor note; VendorAugment lookup can miss
                 itemCount  = #catalogVendor.items,
                 recipeCount = 0,
                 reps       = reps,
@@ -1392,6 +1393,7 @@ Selectors:Register("acq.selected.headerLine", {
         if v.x and v.y and v.x > 0 and v.y > 0 then
             parts[#parts+1] = string.format("%.1f, %.1f", v.x, v.y)
         end
+        if v.note and v.note ~= "" then parts[#parts+1] = v.note end
         return table.concat(parts, "  -  ")
     end,
 })
