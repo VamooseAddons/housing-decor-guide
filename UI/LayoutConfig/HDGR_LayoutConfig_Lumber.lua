@@ -186,7 +186,13 @@ LC.widgets["lumberRadarPanel.radar"] = {
 }
 
 -- ===== Action bar widgets ====================================================
--- Spacer + End Session. End Session finalizes but keeps window open; [X] dismisses.
+-- Goal toggle (left) + spacer + End Session. End Session finalizes but keeps window open; [X] dismisses.
+LC.widgets["lumberActionPanel.goalToggle"] = {
+    tooltip = { recipe = "LumberGoal" },
+    kind = "checkbox", ["in"] = "lumber.action.bar", font = "small",
+    text = "locale:LUM_GOAL_TOGGLE", width = "auto", height = 20, order = 5,
+    binding = { checked = "lumber.goalIsQueue" },
+}
 LC.widgets["lumberActionPanel.spacer"] = {
     tooltip = false,
     kind = "spacer", ["in"] = "lumber.action.bar",

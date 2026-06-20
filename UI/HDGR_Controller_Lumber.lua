@@ -51,9 +51,10 @@ local function _paintLumberCounterRow(row, ed)
     HDG.UI.applyFontRole(row._nameFs,
         ed.isActive and "body_strong" or "body")
 
-    -- "44/520" against the ALL-DECOR total when one exists; bare held otherwise.
-    local heldText = (ed.decorNeed or 0) > 0
-        and string.format("%d/%d", ed.held, ed.decorNeed)
+    -- "44/520" against the goal need (all-decor or queued, per the toggle) when
+    -- one exists; bare held otherwise.
+    local heldText = (ed.displayNeed or 0) > 0
+        and string.format("%d/%d", ed.held, ed.displayNeed)
         or tostring(ed.held)
 
     row._iconTex:SetTexture(ed.icon)
@@ -113,6 +114,14 @@ function HDG.LumberController:Wire(rootFrame)
     HDG.UI.OnClick(rootFrame, "lumberPanel.listToggle", function()
         HDG.Store:Dispatch({
             type = HDG.Constants.ACTIONS.LUMBER_LIST_COLLAPSE_TOGGLE,
+        })
+    end)
+
+    -- Goal toggle (action bar): flips the row denominator between all-uncollected-decor
+    -- need and queued-craft need. Checked = queue; the tooltip explains both states.
+    HDG.UI.OnClick(rootFrame, "lumberActionPanel.goalToggle", function()
+        HDG.Store:Dispatch({
+            type = HDG.Constants.ACTIONS.LUMBER_GOAL_TOGGLE,
         })
     end)
 end

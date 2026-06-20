@@ -12,16 +12,9 @@
 
 ---
 
-## What's New in v3.6.2
+## What's New in v3.6.3
 
-A maintenance release with source-data fixes and a few small additions:
-
-- **Item sources corrected.** Several pieces that showed no source, or the wrong one, now show where they come from. The Framed Alliance Pride, Framed Horde Pride, and Prized Orb of Azeroth show as Promotion. The Mechagon "Junkyard Tinkering" decor show as crafted at Pascal-K1N6 in Mechagon. Bartender Bob's "No Weapons Allowed" Rack shows the Highly Decorated achievement, with extra copies from Morta Gage. The Liquid Mystery bottles and the Sturdy Portable Ice Chest show as Promotion rather than Shop.
-- **Unknown source chip.** Decor with no known source now shows an "Unknown" chip instead of a misleading "Drop", and can be filtered under Sources.
-- **Endeavor vendors.** The Founder's Point endeavor vendors now show which endeavor they belong to, for example "Endeavor: Mechagon", and their map pins were corrected.
-- **Sargle's Fortunes tracker.** The "Shu'halo Perspective" Painting detail page now lists the 13 Sargle's Fortunes and highlights the ones you hold. The painting drops to 999g from Cravitz Lorent in the Murder Row dungeon once you have all 13.
-- **Preview background.** The decor preview Background picker has a new Vamoose option.
-- **New logo.** The addon logo and the AddOns-list icon are now the Vamoose house emblem.
+- **Lumber Tracker goal toggle.** A new "Queued only" checkbox sits in the Lumber Tracker's bottom bar, left of End Session. With it off (the default), each lumber row shows how much you need across all the decor you haven't collected yet. Turn it on and the rows show only what your queued crafts need. The checkbox tooltip explains both, and hovering a lumber row still shows the full breakdown.
 
 ---
 
@@ -107,7 +100,7 @@ A companion window injects into Blizzard's House Editor so you can **place decor
 ---
 
 **Author:** Vamoose
-**Version:** 3.6.2
+**Version:** 3.6.3
 **Game Version:** 12.0.5+ (Midnight)
 **Source / Issues:** https://github.com/VamooseAddons/housing-decor-guide
 **Discord:** https://discord.gg/RWZaxJaHFP

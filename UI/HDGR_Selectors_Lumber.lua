@@ -38,6 +38,15 @@ Selectors:Register("lumber.radarScale", {
     end,
 })
 
+-- Goal toggle: true when the row denominator should be the queued-craft need
+-- (action-bar checkbox checked); false = all-uncollected-decor need (default).
+Selectors:Register("lumber.goalIsQueue", {
+    reads = { "account.lumber.config.lumberGoal" },
+    fn = function(state, _ctx)
+        return state.account.lumber.config.lumberGoal == "queue"
+    end,
+})
+
 Selectors:Register("lumber.activeFarmingID", {
     reads = { "session.lumber.activeFarmingID" },
     fn = function(state, _ctx)
@@ -92,6 +101,7 @@ Selectors:Register("lumber.counterRows", {
               "session.itemNames.names",
               "session.lumber.activeFarmingID",
               "account.collection.ownedDecorIDs",      -- denominator drops as decor is collected
+              "account.lumber.config.lumberGoal",      -- decor-need vs queue-need denominator
               "session.resolvers.catalog.tick" },     -- recipe->decorID map warms async
     calls = { "lumber.activeFarmingID", "lumber.queueNeed", "warehouse.lumberRequired" },
     fn = function(state, ctx)
@@ -103,6 +113,8 @@ Selectors:Register("lumber.counterRows", {
         -- Same algorithm as the Warehouse Need column: lumber for UNCOLLECTED
         -- decor only (owner call 2026-06-11) -- one shared selector, no drift.
         local decorNeed = Selectors:Call("warehouse.lumberRequired", state, ctx)
+        -- Goal toggle decides which need drives the row's "held/N" denominator.
+        local goalQueue = state.account.lumber.config.lumberGoal == "queue"
 
         local out = {}
         for i, row in ipairs(LUMBER) do
@@ -114,6 +126,8 @@ Selectors:Register("lumber.counterRows", {
             local shortName   = row.shortName or row.name
             -- Active-row: leading asterisk so the player can see which lumber is accumulating.
             local displayName = isActive and ("* " .. shortName) or shortName
+            local qNeed = queueNeed[row.id]       -- dense map pre-seeded 0 for all LUMBER_DATA ids
+            local dNeed = decorNeed[row.id] or 0  -- exception(boundary): sparse map (uncollected-decor need)
             out[#out + 1] = {
                 lumberID     = row.id,
                 name         = row.name,
@@ -122,8 +136,9 @@ Selectors:Register("lumber.counterRows", {
                 expansion    = row.expansion,
                 icon         = icon,
                 held         = held,
-                queueNeed    = queueNeed[row.id],       -- dense map pre-seeded 0 for all LUMBER_DATA ids
-                decorNeed    = decorNeed[row.id] or 0,  -- exception(boundary): sparse map (uncollected-decor need)
+                queueNeed    = qNeed,
+                decorNeed    = dNeed,
+                displayNeed  = goalQueue and qNeed or dNeed,  -- denominator per the goal toggle (tooltip still shows both)
                 isActive     = isActive,
                 order        = i,
             }

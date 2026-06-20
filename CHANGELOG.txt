@@ -1,3 +1,12 @@
+## [3.6.3] - 2026-06-20 (June 2026)
+
+### Added
+- The Lumber Tracker has a new "Queued only" toggle in the bottom bar, left of End
+  Session. With it off (the default) each lumber row shows how much you need across
+  all the decor you haven't collected yet; turn it on and the rows show only what
+  your queued crafts need. The tooltip explains both, and hovering a lumber row
+  still shows the full breakdown (held, all-decor need, and queued need).
+
 ## [3.6.2] - 2026-06-19 (June 2026)
 
 ### Added

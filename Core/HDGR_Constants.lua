@@ -682,6 +682,7 @@ HDG.Constants = {
         LUMBER_AUTOSHOW_TOGGLE      = "HDGR_LUMBER_AUTOSHOW_TOGGLE",      -- toggle account.lumber.config.autoShowOnHarvest
         LUMBER_RADAR_SCALE_SET      = "HDGR_LUMBER_RADAR_SCALE_SET",      -- payload: { scale } (0.5..2.0)
         LUMBER_LIST_COLLAPSE_TOGGLE = "HDGR_LUMBER_LIST_COLLAPSE_TOGGLE",
+        LUMBER_GOAL_TOGGLE          = "HDGR_LUMBER_GOAL_TOGGLE",            -- denominator: decor-need vs queue-need
         LUMBER_TICK                 = "HDGR_LUMBER_TICK",                 -- 1s heartbeat while farming; bumps session.lumber.tick
         REP_PROGRESS_TICK           = "HDGR_REP_PROGRESS_TICK",           -- UPDATE_FACTION/renown; bumps session.resolvers.rep.tick
 

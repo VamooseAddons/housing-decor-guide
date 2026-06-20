@@ -587,6 +587,7 @@ local function NewLumberConfig()
         radarScale       = 1.0,              -- 0.5..2.0 (settings slider)
         autoShowOnHarvest = true,            -- opt-out; suppressed for current
                                               -- session when user closes window
+        lumberGoal       = "decor",          -- row denominator: "decor" = all uncollected-decor need (default); "queue" = queued-craft need
     }
 end
 
@@ -3944,6 +3945,14 @@ HDG.Actions:Register{ name = "LUMBER_LIST_COLLAPSE_TOGGLE",
     reduce = function(state, payload)
         local c = state.account.lumber.config
         c.listCollapsed = not (c.listCollapsed == true)
+    end }
+
+HDG.Actions:Register{ name = "LUMBER_GOAL_TOGGLE",
+    persists = true, combatUnsafe = false,
+            invalidates = { "account.lumber.config.lumberGoal" },
+    reduce = function(state, payload)
+        local c = state.account.lumber.config
+        c.lumberGoal = (c.lumberGoal == "queue") and "decor" or "queue"
     end }
 
 HDG.Actions:Register{ name = "LUMBER_RADAR_SCALE_SET",

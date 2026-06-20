@@ -135,6 +135,7 @@ R.ProjectsImportSet    = { title = "locale:TIP_PROJECTS_IMPORT_SET_TITLE",   bod
 R.ProjectsDetachCrate  = { title = "locale:TIP_PROJECTS_DETACH_CRATE_TITLE", body = "locale:TIP_PROJECTS_DETACH_CRATE_BODY" }
 R.ProjectsCaptureAll   = { title = "locale:TIP_PROJECTS_CAPTURE_ALL_TITLE",  body = "locale:TIP_PROJECTS_CAPTURE_ALL_BODY" }
 R.LumberAutoShow       = { title = "locale:TIP_LUMBER_AUTO_SHOW_TITLE",      body = "locale:TIP_LUMBER_AUTO_SHOW_BODY" }
+R.LumberGoal           = { title = "locale:TIP_LUMBER_GOAL_TITLE",           body = "locale:TIP_LUMBER_GOAL_BODY" }
 
 -- Layouts tab actions (effect-focused -- what each does, not just the label).
 R.LayoutLoad      = { title = "locale:TIP_LAYOUT_LOAD_TITLE",      body = "locale:TIP_LAYOUT_LOAD_BODY",      anchor = "ANCHOR_TOP" }
