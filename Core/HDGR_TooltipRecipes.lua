@@ -556,6 +556,39 @@ function R.ProfessionStatus(self)
     }
 end
 
+-- R9: Material stock -- warehouse + recipes materials rows. Per-stash breakdown of
+-- what you're holding (bags / bank / warband). Title-only (NO itemID/SetItemByID) so
+-- other addons' item-data processors (TSM, Auctionator, ...) don't bleed in.
+-- stamp: row._tipName, _tipBag, _tipBank, _tipWarband, _tipNeed
+local STOCK_TIP_ATLAS = { bag = "ParagonReputation_Bag", bank = "Banker", warband = "warbands-icon" }
+local function _stockStashLine(lines, key, label, count)
+    if count > 0 then
+        lines[#lines + 1] = {
+            text  = "|A:" .. STOCK_TIP_ATLAS[key] .. ":14:14|a " .. label,
+            right = tostring(count),
+            r = 0.75, g = 0.75, b = 0.75,   -- inline: GameTooltip is outside the theme registry
+        }
+    end
+end
+function R.MaterialStock(self)
+    local name = self._tipName
+    if not name then return nil end
+    local total = self._tipBag + self._tipBank + self._tipWarband
+    local lines = { { text = "Your stock", right = total > 0 and tostring(total) or nil,
+                      r = 1, g = 0.82, b = 0 } }   -- gold header + summed total
+    _stockStashLine(lines, "bag",     "Bags",    self._tipBag)
+    _stockStashLine(lines, "bank",    "Bank",    self._tipBank)
+    _stockStashLine(lines, "warband", "Warband", self._tipWarband)
+    if #lines == 1 then   -- header only -> nothing on hand anywhere
+        lines[#lines + 1] = { text = "None on hand", r = 0.6, g = 0.6, b = 0.6 }
+    end
+    if self._tipNeed > 0 then
+        lines[#lines + 1] = { text = "Needed by queue", right = tostring(self._tipNeed),
+                              r = 0.75, g = 0.75, b = 0.75, rr = 0.95, rg = 0.55, rb = 0.45 }
+    end
+    return { title = name, extraLines = lines }
+end
+
 -- ============================================================================
 -- Dynamic toggle recipes (function form -- read live state at hover)
 -- ============================================================================

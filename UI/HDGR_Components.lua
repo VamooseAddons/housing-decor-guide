@@ -616,9 +616,10 @@ local function buildClickHints(parent, spec)
         tex:SetPoint("LEFT", frame, "LEFT", count * (CLICKHINT_GLYPH + CLICKHINT_GAP), 0)
         count = count + 1
     end
-    -- Left button covers both click and drag, so one leftclick glyph serves both.
-    if spec.leftText or spec.dragText then addGlyph("housing-hotkey-icon-leftclick")  end
-    if spec.rightText                 then addGlyph("housing-hotkey-icon-rightclick") end
+    -- Left button covers click, drag, AND shift-click (shift is a left-button modifier),
+    -- so one leftclick glyph serves all three (shift-only hints still get a glyph).
+    if spec.leftText or spec.dragText or spec.shiftText then addGlyph("housing-hotkey-icon-leftclick")  end
+    if spec.rightText                                    then addGlyph("housing-hotkey-icon-rightclick") end
     frame:SetWidth(math.max(1, count * CLICKHINT_GLYPH + math.max(0, count - 1) * CLICKHINT_GAP))
 
     -- Shared with row tooltips so wording never drifts. Shift is a keyboard

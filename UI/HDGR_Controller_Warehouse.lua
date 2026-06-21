@@ -118,38 +118,9 @@ local WH_MAT_CHIP_GAP  = 2
 -- Total right-edge reservation for 3 chips: 3*(14+2) = 48px, minus trailing gap.
 local WH_MAT_CHIPS_W   = 3 * (WH_MAT_CHIP_SIZE + WH_MAT_CHIP_GAP) - WH_MAT_CHIP_GAP
 
--- Materials-row tooltip: item name + a per-stash breakdown of what you're holding.
--- The right-side chips show only PRESENCE; this shows the actual bag / bank / warband
--- counts. Built as a pure title + lines (NO itemID/SetItemByID) on purpose: SetItemByID
--- fires the item-data tooltip processors, which every other addon hooks (TSM, Auctionator,
--- sell-value, etc.) -> their lines bleed into ours. A title-only def renders no item data,
--- so the engine tooltip stays clean. Fields stamped per-paint (pool-safe); read live at hover.
-local WH_MAT_TIP_ATLAS = { bag = "ParagonReputation_Bag", bank = "Banker", warband = "warbands-icon" }
-local function _whMatStashLine(lines, key, label, count)
-    if count > 0 then
-        lines[#lines + 1] = {
-            text  = "|A:" .. WH_MAT_TIP_ATLAS[key] .. ":14:14|a " .. label,
-            right = tostring(count),
-            r = 0.75, g = 0.75, b = 0.75,   -- inline: GameTooltip is outside the theme registry (see lumber def)
-        }
-    end
-end
-local function _warehouseMatRowTooltipDef(row)
-    local name = row._tipName
-    if not name then return nil end
-    local lines = { { text = "Your stock", r = 1, g = 0.82, b = 0 } }   -- gold header
-    _whMatStashLine(lines, "bag",     "Bags",    row._tipBag)
-    _whMatStashLine(lines, "bank",    "Bank",    row._tipBank)
-    _whMatStashLine(lines, "warband", "Warband", row._tipWarband)
-    if #lines == 1 then   -- header only -> nothing on hand anywhere
-        lines[#lines + 1] = { text = "None on hand", r = 0.6, g = 0.6, b = 0.6 }
-    end
-    if row._tipNeed > 0 then
-        lines[#lines + 1] = { text = "Needed by queue", right = tostring(row._tipNeed),
-                              r = 0.75, g = 0.75, b = 0.75, rr = 0.95, rg = 0.55, rb = 0.45 }
-    end
-    return { title = name, extraLines = lines }
-end
+-- Materials-row tooltip ("Your stock" per-stash breakdown) is shared with the Recipes
+-- materials pane -- see HDG.TooltipRecipes.MaterialStock. Both stamp the same _tip* fields
+-- per-paint (pool-safe) and the def reads them live at hover.
 
 local function _layoutWarehouseMatRow(row)
     local name = HDG.UI.RowText(row, "caption", "Text", "LEFT")
@@ -176,9 +147,9 @@ local function _layoutWarehouseMatRow(row)
     name:SetPoint("RIGHT", qty, "LEFT", -8, 0)
     row._nameFs = name
     row._qtyFs  = qty
-    -- Hover -> item tooltip + bag/bank/warband counts (def reads stamped fields
-    -- live; Attach is pool-safe). Row is a selectable Button -> mouse already on.
-    HDG.TooltipEngine:Attach(row, _warehouseMatRowTooltipDef)
+    -- Hover -> "Your stock" per-stash breakdown (shared TooltipRecipes.MaterialStock,
+    -- reads stamped _tip* fields live; Attach is pool-safe). Row is a selectable Button.
+    HDG.TooltipEngine:Attach(row, HDG.TooltipRecipes.MaterialStock)
 end
 
 local function _paintWarehouseMatRow(row, ed)
@@ -265,10 +236,12 @@ local function _paintUsedInRow(row, ed)
     row._nameFs:SetText(ed.name or "?")
     row._metaFs:SetText(ed.expansionShort or "")
     row:SetScript("OnClick", function()
-        HDG.Store:Dispatch({
-            type    = A.RECIPES_SELECT_RECIPE,
-            payload = { recipeID = ed.recipeID },
-        })
+        -- Shift-click queues the recipe (1/click). Plain click is intentionally a no-op:
+        -- selecting here would clobber the player's recipe-list selection + filters.
+        if IsShiftKeyDown() then
+            local r = HDG.StaticData.Recipes:Get(ed.recipeID)
+            if r then HDG.UI.QueueRecipe(ed.recipeID, r.itemID, ed.name) end
+        end
     end)
 end
 
@@ -306,7 +279,7 @@ HDG.Rows:Register("usedInRow", {
 
 function WarehouseController:Wire(rootFrame)
     -- Bail early if warehouse widgets are absent (other standalone frames).
-    local matsList = HDG.UI.W(rootFrame, "warehousePanel.allMatsList")
+    local matsList = HDG.UI.W(rootFrame, "warehouseMaterialsPanel.list")
     if not matsList then return end
 
     -- All-materials selection sync. warehouse.allMaterialsRows drops the
@@ -317,12 +290,12 @@ function WarehouseController:Wire(rootFrame)
     end
 
     -- Auto-show-on-harvest toggle (title bar). Same flag the LumberObserver reads.
-    HDG.UI.OnClick(rootFrame, "warehousePanel.autoShowToggle", function()
+    HDG.UI.OnClick(rootFrame, "warehouseLumberPanel.autoShowToggle", function()
         HDG.Store:Dispatch({ type = A.LUMBER_AUTOSHOW_TOGGLE })
     end)
 
     -- Materials search: filters the All Materials scrollbox.
-    local matSearch = HDG.UI.W(rootFrame, "warehousePanel.allMatsSearch")
+    local matSearch = HDG.UI.W(rootFrame, "warehouseMaterialsPanel.search")
     if matSearch and matSearch.SetScript then
         matSearch:SetScript("OnTextChanged", function(self, userInput)
             if not userInput then return end

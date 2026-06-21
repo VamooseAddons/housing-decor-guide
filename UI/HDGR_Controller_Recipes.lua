@@ -343,6 +343,12 @@ local function _layoutMatRow(row)
     row._qtyFs = qty
 
     name:SetPoint("RIGHT", qty, "LEFT", -8, 0)
+    -- Hover -> "Your stock" per-stash breakdown, shared with the Warehouse mat rows
+    -- (TooltipRecipes.MaterialStock reads stamped _tip* fields live; def is pool-safe).
+    -- EnableMouse so the non-selectable row receives hover; matSubHeader rows clear
+    -- _tipName so the def renders nothing for section headers.
+    row:EnableMouse(true)
+    HDG.TooltipEngine:Attach(row, HDG.TooltipRecipes.MaterialStock)
     row._matLaidOut = true
 end
 
@@ -351,6 +357,7 @@ end
 local function _paintMatSubHeader(row, ed)
     row._nameFs:SetText(HDG.Theme:ColorCode("semantic.accent") .. (ed.label or "") .. "|r")
     row._qtyFs:SetText("")
+    row._tipName = nil   -- section header: no stock tooltip
 end
 
 -- matRow: name (left) + have/need, green when covered, red when short.
@@ -360,6 +367,12 @@ local function _paintMatRow(row, ed)
     local have = ed.have  -- recipes.materialRows stamps have (counts or 0)
     local color = HDG.Theme:GetTextStateColorToken(ed.covered and "success" or "error")
     row._qtyFs:SetText(string.format("%s%d / %d|r", color, have, need))
+    -- Stamp the hover tooltip's per-stash fields (read live by TooltipRecipes.MaterialStock).
+    row._tipName    = ed.name
+    row._tipBag     = ed.bag
+    row._tipBank    = ed.bank
+    row._tipWarband = ed.warband
+    row._tipNeed    = need
 end
 
 local function _matRowFactory(template)
@@ -376,6 +389,7 @@ local function _matRowFactory(template)
         Reset = function(row)
             HDG.UI.ClearRowText(row, "_nameFs")
             if row._qtyFs  then row._qtyFs:SetText("")  end
+            row._tipName = nil   -- no tooltip on a pooled-but-unpainted row
         end,
     }
 end

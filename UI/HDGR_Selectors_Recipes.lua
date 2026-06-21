@@ -143,7 +143,10 @@ Selectors:Register("warehouse.usedInTitle", {
     fn = function(state, ctx)
         local id = Selectors:Call("warehouse.selectedMaterialID", state, ctx)
         if not id then return "Used In" end
-        return reagentName(id) .. " is used in recipes:"
+        -- Accent the reagent name (scheme accent = gold in the Housing theme), matching
+        -- the "From Vendor"/"From Gathering" section headers. Theme switch full-re-renders.
+        local accent = HDG.Theme:ColorCode("semantic.accent")
+        return accent .. reagentName(id) .. "|r is used in recipes:"
     end,
 })
 
@@ -1248,10 +1251,12 @@ local SOURCE_ORDER = {
 -- Grouped by source category; matSubHeader between sections; single-section = no header.
 local function stampBagCounts(qtyMap)
     local counts = HDG.BagObserver:GetCounts()
+    local bo     = HDG.BagObserver
     local buckets, seen = {}, {}
     for itemID, need in pairs(qtyMap) do
         local name, source = reagentInfo(itemID)
         local have = counts[itemID] or 0  -- exception(boundary): sparse bag map
+        local bag, bank, warband = bo:GetSplitWithVariants(itemID)
         buckets[source] = buckets[source] or {}
         local b = buckets[source]
         b[#b + 1] = {
@@ -1262,6 +1267,9 @@ local function stampBagCounts(qtyMap)
             have    = have,
             covered = have >= need,
             source  = source,
+            bag     = bag,
+            bank    = bank,
+            warband = warband,
         }
         seen[source] = true
     end
@@ -1337,6 +1345,7 @@ Selectors:Register("recipes.materials.raw", {
 -- so same-itemID-across-recipes doesn't collide in the scrollbox key map.
 local function emitByRecipeGroups(queue, groups)
     local counts = HDG.BagObserver:GetCounts()
+    local bo     = HDG.BagObserver
     local out = {}
     for pos = 1, #queue do
         local group = groups[pos]
@@ -1370,6 +1379,7 @@ local function emitByRecipeGroups(queue, groups)
             end)
             for _, r in ipairs(sorted) do
                 local have = counts[r.itemID] or 0  -- exception(boundary): sparse bag map
+                local bag, bank, warband = bo:GetSplitWithVariants(r.itemID)
                 out[#out + 1] = {
                     kind         = "matRow",
                     itemID       = r.itemID,
@@ -1377,6 +1387,9 @@ local function emitByRecipeGroups(queue, groups)
                     qty          = r.need,
                     have         = have,
                     covered      = have >= r.need,
+                    bag          = bag,
+                    bank         = bank,
+                    warband      = warband,
                     fromPosition = pos,
                     fromRecipeID = group.recipeID,
                 }

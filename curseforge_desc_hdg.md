@@ -12,9 +12,10 @@
 
 ---
 
-## What's New in v3.6.3
+## What's New in v3.7.0
 
-- **Lumber Tracker goal toggle.** A new "Queued only" checkbox sits in the Lumber Tracker's bottom bar, left of End Session. With it off (the default), each lumber row shows how much you need across all the decor you haven't collected yet. Turn it on and the rows show only what your queued crafts need. The checkbox tooltip explains both, and hovering a lumber row still shows the full breakdown.
+- **Material stock at a glance.** Reagent rows in the Recipes and Warehouse tabs now show a stock tooltip that splits what you hold across Bags, Bank, and Warband, along with how many your craft queue still needs. The Warehouse materials view was reorganized into clearer sections: Lumber, History, Materials, and Used In.
+- **Shopping list fix.** Imported items that no vendor sells, such as world drops, no longer appear under a misleading "Unknown" vendor heading. They now sit in the Wishlist section, where their source chip shows how to obtain them.
 
 ---
 
@@ -100,7 +101,7 @@ A companion window injects into Blizzard's House Editor so you can **place decor
 ---
 
 **Author:** Vamoose
-**Version:** 3.6.3
+**Version:** 3.7.0
 **Game Version:** 12.0.5+ (Midnight)
 **Source / Issues:** https://github.com/VamooseAddons/housing-decor-guide
 **Discord:** https://discord.gg/RWZaxJaHFP

@@ -343,9 +343,11 @@ HDG.Locale:Register("enUS", {
     WARE_LUMBER_HDR_WARBAND        = "Wband",
     WARE_LUMBER_HDR_NEED           = "Need",
     WARE_LUMBER_HDR_STOCK          = "In Stock",
+    WARE_LUMBER_STOCK_HDR          = "Lumber Stock",
     WARE_LUMBER_HISTORY_HDR        = "Lumber Farming History",
     WARE_ALL_MATS_HDR              = "Materials",
     WARE_USED_IN_HDR               = "Used In",
+    WARE_USED_IN_HINT_SHIFT        = "Add the recipe to the craft queue.",
     WARE_MAT_SEARCH_PLACEHOLDER    = "Search materials...",
     -- Data tab
     DATA_PANEL_TITLE               = "Your Data",

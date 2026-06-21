@@ -1,265 +1,165 @@
--- HDG.LayoutConfig -- Warehouse view (extracted from the Recipes tab).
--- Sections: lumber stocks (top) + All Materials + Used-In (horizontal split, bottom).
+-- HDG.LayoutConfig -- Warehouse view.
+-- Four panes, each its OWN panel with a PanelHeader beam slot (matches the Recipes
+-- tab columns): Lumber Stock | Lumber Farming History (top), Materials | Used In (bottom).
 -- Selectors: HDGR_Selectors_Warehouse.lua; wiring: HDGR_Controller_Warehouse.lua.
 
 local LC = HDG.LayoutConfig
 
 -- ===== View ==================================================================
--- 854px wide matches Crafting so the window doesn't resize on tab switch.
+-- 2x2 grid. Top row = lumber (stock 392 | history 462), bottom row = materials | used-in.
 LC.window.views.warehouse = {
     explicit = true,
     width    = "auto",
     height   = "auto",
-    columns  = { 854 },
-    rows     = { 600 },      -- raised 500->600 so the nav column fills (no nav scroll)
+    columns  = { 392, 462 },        -- stock | history  (materials | used-in share the split)
+    rows     = { 300, 294 },        -- top: lumber (~270 list + beam header) ; bottom: mats/used-in
     cells    = {
-        main = { col = 1, row = 1, colSpan = 1, rowSpan = 1 },
+        lumberStock   = { col = 1, row = 1, colSpan = 1, rowSpan = 1 },
+        lumberHistory = { col = 2, row = 1, colSpan = 1, rowSpan = 1 },
+        materials     = { col = 1, row = 2, colSpan = 1, rowSpan = 1 },
+        usedIn        = { col = 2, row = 2, colSpan = 1, rowSpan = 1 },
     },
 }
 
--- ===== Panel =================================================================
-LC.panels.warehousePanel = {
-    kind = "panel",
-    cell = { warehouse = "main" },
-    visibleInViews = { "warehouse" },
-    slots = {
+-- ===== Panels (one per pane; each gets a PanelHeader beam slot) ===============
+-- Fresh table per call so each panel owns its slot spec (engine stamps per-slot state).
+local function whHeader()
+    return {
         header = {
             height = 26, layout = "horizontal", gap = "md",
-            padding = { top = 0, right = "xl", bottom = 0, left = "xl" },
+            padding = { top = 0, right = "lg", bottom = 0, left = "lg" },
             chrome = "PanelHeader",
         },
-    },
-}
-LC.widgets["warehousePanel.title"] = {
+    }
+end
+LC.panels.warehouseLumberPanel    = { kind = "panel", cell = { warehouse = "lumberStock" },   visibleInViews = { "warehouse" }, slots = whHeader() }
+LC.panels.warehouseHistoryPanel   = { kind = "panel", cell = { warehouse = "lumberHistory" }, visibleInViews = { "warehouse" }, slots = whHeader() }
+LC.panels.warehouseMaterialsPanel = { kind = "panel", cell = { warehouse = "materials" },     visibleInViews = { "warehouse" }, slots = whHeader() }
+LC.panels.warehouseUsedInPanel    = { kind = "panel", cell = { warehouse = "usedIn" },        visibleInViews = { "warehouse" }, slots = whHeader() }
+
+-- ===== Lumber Stock panel ====================================================
+-- Header: title + (right) the auto-open lumber tracker toggle.
+LC.widgets["warehouseLumberPanel.title"] = {
     tooltip = false,
-    kind = "label", ["in"] = "warehousePanel", slot = "header",
-    text = "locale:WARE_PANEL_TITLE", font = "heading",
-    height = 18, width = "fill", order = 10,   -- fill absorbs slack -> toggle right-aligns
+    kind = "label", ["in"] = "warehouseLumberPanel", slot = "header",
+    text = "locale:WARE_LUMBER_STOCK_HDR", font = "heading",
+    height = 18, width = "auto", order = 10,
 }
--- Auto-show toggle, right of the title bar: pop the lumber tracker on harvest,
--- or keep it out of the way (LumberObserver reads account.lumber.config.autoShowOnHarvest).
-LC.widgets["warehousePanel.autoShowToggle"] = {
+LC.widgets["warehouseLumberPanel.headerSpacer"] = {
+    tooltip = false,
+    kind = "spacer", ["in"] = "warehouseLumberPanel", slot = "header",
+    width = "fill", height = 14, order = 15,
+}
+LC.widgets["warehouseLumberPanel.autoShowToggle"] = {
     tooltip = { recipe = "LumberAutoShow" },
-    kind = "checkbox", ["in"] = "warehousePanel", slot = "header", font = "button",
+    kind = "checkbox", ["in"] = "warehouseLumberPanel", slot = "header", font = "button",
     text = "locale:WARE_AUTOSHOW_TOGGLE", width = 200, height = 22, order = 20,
     binding = { checked = "warehouse.autoShowLumber" },
 }
-
--- ===== Sections ==============================================================
-
-LC.sections["warehouse.body"] = {
-    ["in"] = "warehousePanel",
-    layout = "vertical",
-    padding = "md",
-    gap = "sm",
-    order = 10,
+-- Body: column-header row (widths match LUMBER_COLS) + the stock list.
+LC.sections["warehouse.lumberBody"] = {
+    ["in"] = "warehouseLumberPanel", layout = "vertical", padding = "sm", gap = "xs", order = 10,
 }
--- Lumber stocks: 270px = 12 rows * 20 + gaps + header; matsRow absorbs remainder.
-LC.sections["warehouse.lumberSection"] = {
-    ["in"] = "warehouse.body",
-    layout = "horizontal",   -- lumber stock (left) + farming history (right)
-    height = 270,
-    gap = "sm",
-    order = 10,
-}
--- Lumber stock column (left, 392px). farming-history panel fills the remainder.
-LC.sections["warehouse.lumberStock"] = {
-    ["in"] = "warehouse.lumberSection",
-    layout = "vertical",
-    width = 392,
-    gap = "xs",
-    order = 10,
-}
--- Column header: widths match LUMBER_COLS in Controller_Warehouse.
 LC.sections["warehouse.lumberHeader"] = {
-    ["in"] = "warehouse.lumberStock",
-    layout = "horizontal",
-    height = 14,
-    gap = "xs",
-    order = 10,
+    ["in"] = "warehouse.lumberBody", layout = "horizontal", height = 14, gap = "xs", order = 10,
 }
 LC.sections["warehouse.lumberList"] = {
-    ["in"] = "warehouse.lumberStock",
-    layout = "fill",
-    order = 20,
-    chrome = "inset",
+    ["in"] = "warehouse.lumberBody", layout = "fill", order = 20, chrome = "inset",
 }
--- Lumber farming history (right): newest-first scrollbox.
-LC.sections["warehouse.lumberHistory"] = {
-    ["in"] = "warehouse.lumberSection",
-    layout = "vertical",
-    width = "fill",
-    gap = "xs",
-    order = 20,
-}
-LC.sections["warehouse.lumberHistoryHeader"] = {
-    ["in"] = "warehouse.lumberHistory",
-    layout = "horizontal",
-    height = 14,
-    order = 10,
-}
-LC.sections["warehouse.lumberHistoryList"] = {
-    ["in"] = "warehouse.lumberHistory",
-    layout = "fill",
-    order = 20,
-    chrome = "inset",
-}
--- All Materials + Used-In: horizontal split, fills remaining vertical.
-LC.sections["warehouse.matsRow"] = {
-    ["in"] = "warehouse.body",
-    layout = "horizontal",
-    gap = "sm",
-    order = 20,
-}
-LC.sections["warehouse.allMats"] = {
-    ["in"] = "warehouse.matsRow",
-    layout = "vertical",
-    width = "fill",
-    gap = "xs",
-    order = 10,
-}
-LC.sections["warehouse.allMatsHeader"] = {
-    ["in"] = "warehouse.allMats",
-    layout = "horizontal",
-    height = 14,
-    order = 10,
-}
--- Materials search row (independent of Recipes search).
-LC.sections["warehouse.allMatsSearch"] = {
-    ["in"] = "warehouse.allMats",
-    layout = "horizontal",
-    height = 22,
-    order = 15,
-}
-LC.sections["warehouse.allMatsList"] = {
-    ["in"] = "warehouse.allMats",
-    layout = "fill",
-    order = 20,
-    chrome = "inset",
-}
-LC.sections["warehouse.usedIn"] = {
-    ["in"] = "warehouse.matsRow",
-    layout = "vertical",
-    width = "fill",
-    gap = "xs",
-    order = 20,
-}
-LC.sections["warehouse.usedInHeader"] = {
-    ["in"] = "warehouse.usedIn",
-    layout = "horizontal",
-    height = 14,
-    order = 10,
-}
-LC.sections["warehouse.usedInList"] = {
-    ["in"] = "warehouse.usedIn",
-    layout = "fill",
-    order = 20,
-    chrome = "inset",
-}
-
--- ===== Widgets ===============================================================
-LC.widgets["warehousePanel.lumberHdr.name"] = {
-    tooltip = false,
-    kind = "label", ["in"] = "warehouse.lumberHeader",
-    font = "caption", text = "locale:WARE_LUMBER_HDR_NAME",
-    width = 90, height = 12, order = 10,
-}
-LC.widgets["warehousePanel.lumberHdr.exp"] = {
-    tooltip = false,
-    kind = "label", ["in"] = "warehouse.lumberHeader",
-    font = "caption", text = "locale:WARE_LUMBER_HDR_EXP",
-    width = 44, height = 12, order = 15,
-}
-LC.widgets["warehousePanel.lumberHdr.bag"] = {
-    tooltip = false,
-    kind = "label", ["in"] = "warehouse.lumberHeader",
-    font = "caption", text = "locale:WARE_LUMBER_HDR_BAG", justifyH = "RIGHT",
-    width = 36, height = 12, order = 20,
-}
-LC.widgets["warehousePanel.lumberHdr.bank"] = {
-    tooltip = false,
-    kind = "label", ["in"] = "warehouse.lumberHeader",
-    font = "caption", text = "locale:WARE_LUMBER_HDR_BANK", justifyH = "RIGHT",
-    width = 36, height = 12, order = 30,
-}
-LC.widgets["warehousePanel.lumberHdr.warband"] = {
-    tooltip = false,
-    kind = "label", ["in"] = "warehouse.lumberHeader",
-    font = "caption", text = "locale:WARE_LUMBER_HDR_WARBAND", justifyH = "RIGHT",
-    width = 44, height = 12, order = 40,
-}
-LC.widgets["warehousePanel.lumberHdr.needed"] = {
-    tooltip = false,
-    kind = "label", ["in"] = "warehouse.lumberHeader",
-    font = "caption", text = "locale:WARE_LUMBER_HDR_NEED", justifyH = "RIGHT",
-    width = 42, height = 12, order = 50,
-}
-LC.widgets["warehousePanel.lumberHdr.stock"] = {
-    tooltip = false,
-    kind = "label", ["in"] = "warehouse.lumberHeader",
-    font = "caption", text = "locale:WARE_LUMBER_HDR_STOCK", justifyH = "RIGHT",
-    width = 64, height = 12, order = 60,
-}
-LC.widgets["warehousePanel.lumberList"] = {
+LC.widgets["warehouseLumberPanel.hdr.name"]    = { tooltip = false, kind = "label", ["in"] = "warehouse.lumberHeader", font = "caption", text = "locale:WARE_LUMBER_HDR_NAME",    width = 90, height = 12, order = 10 }
+LC.widgets["warehouseLumberPanel.hdr.exp"]     = { tooltip = false, kind = "label", ["in"] = "warehouse.lumberHeader", font = "caption", text = "locale:WARE_LUMBER_HDR_EXP",     width = 44, height = 12, order = 15 }
+LC.widgets["warehouseLumberPanel.hdr.bag"]     = { tooltip = false, kind = "label", ["in"] = "warehouse.lumberHeader", font = "caption", text = "locale:WARE_LUMBER_HDR_BAG",     justifyH = "RIGHT", width = 36, height = 12, order = 20 }
+LC.widgets["warehouseLumberPanel.hdr.bank"]    = { tooltip = false, kind = "label", ["in"] = "warehouse.lumberHeader", font = "caption", text = "locale:WARE_LUMBER_HDR_BANK",    justifyH = "RIGHT", width = 36, height = 12, order = 30 }
+LC.widgets["warehouseLumberPanel.hdr.warband"] = { tooltip = false, kind = "label", ["in"] = "warehouse.lumberHeader", font = "caption", text = "locale:WARE_LUMBER_HDR_WARBAND", justifyH = "RIGHT", width = 44, height = 12, order = 40 }
+LC.widgets["warehouseLumberPanel.hdr.needed"]  = { tooltip = false, kind = "label", ["in"] = "warehouse.lumberHeader", font = "caption", text = "locale:WARE_LUMBER_HDR_NEED",    justifyH = "RIGHT", width = 42, height = 12, order = 50 }
+LC.widgets["warehouseLumberPanel.hdr.stock"]   = { tooltip = false, kind = "label", ["in"] = "warehouse.lumberHeader", font = "caption", text = "locale:WARE_LUMBER_HDR_STOCK",   justifyH = "RIGHT", width = 64, height = 12, order = 60 }
+LC.widgets["warehouseLumberPanel.lumberList"] = {
     tooltip = false,
     kind = "scrollbox", ["in"] = "warehouse.lumberList",
-    binding = "warehouse.lumberRows",
-    rowKind = "lumberRow",
-    spacing = 1,
-    order = 10,
+    binding = "warehouse.lumberRows", rowKind = "lumberRow", spacing = 1, order = 10,
 }
--- Lumber farming history: reuses "dataRow" factory (farmHistRow / emptyRow).
-LC.widgets["warehousePanel.lumberHistoryHeader"] = {
+
+-- ===== Lumber Farming History panel ==========================================
+LC.widgets["warehouseHistoryPanel.title"] = {
     tooltip = false,
-    kind = "label", ["in"] = "warehouse.lumberHistoryHeader",
-    font = "caption", text = "locale:WARE_LUMBER_HISTORY_HDR",
-    width = "fill", height = 12, order = 10,
+    kind = "label", ["in"] = "warehouseHistoryPanel", slot = "header",
+    text = "locale:WARE_LUMBER_HISTORY_HDR", font = "heading",
+    height = 18, width = "fill", order = 10,
 }
-LC.widgets["warehousePanel.lumberHistoryList"] = {
-    tooltip = false,
-    kind = "scrollbox", ["in"] = "warehouse.lumberHistoryList",
-    binding = "warehouse.farmingHistoryRows",
-    rowKind = "dataRow",
-    spacing = 1,
-    order = 10,
+LC.sections["warehouse.historyBody"] = {
+    ["in"] = "warehouseHistoryPanel", layout = "vertical", padding = "sm", order = 10,
 }
--- Sub-panel headers: "Materials" + selection-aware "Used In: X".
-LC.widgets["warehousePanel.allMatsHeader"] = {
-    tooltip = false,
-    kind = "label", ["in"] = "warehouse.allMatsHeader",
-    font = "caption", text = "locale:WARE_ALL_MATS_HDR",
-    width = "fill", height = 12, order = 10,
+LC.sections["warehouse.historyList"] = {
+    ["in"] = "warehouse.historyBody", layout = "fill", order = 10, chrome = "inset",
 }
-LC.widgets["warehousePanel.usedInHeader"] = {
+LC.widgets["warehouseHistoryPanel.list"] = {
     tooltip = false,
-    kind = "label", ["in"] = "warehouse.usedInHeader",
-    font = "caption", text = "locale:WARE_USED_IN_HDR",
-    width = "fill", height = 12, order = 10,
-    binding = "warehouse.usedInTitle",
+    kind = "scrollbox", ["in"] = "warehouse.historyList",
+    binding = "warehouse.farmingHistoryRows", rowKind = "dataRow", spacing = 1, order = 10,
 }
-LC.widgets["warehousePanel.allMatsSearch"] = {
+
+-- ===== Materials panel =======================================================
+LC.widgets["warehouseMaterialsPanel.title"] = {
     tooltip = false,
-    kind = "editbox", ["in"] = "warehouse.allMatsSearch", font = "body",
+    kind = "label", ["in"] = "warehouseMaterialsPanel", slot = "header",
+    text = "locale:WARE_ALL_MATS_HDR", font = "heading",
+    height = 18, width = "fill", order = 10,
+}
+LC.sections["warehouse.materialsBody"] = {
+    ["in"] = "warehouseMaterialsPanel", layout = "vertical", padding = "sm", gap = "xs", order = 10,
+}
+LC.sections["warehouse.matsSearch"] = {
+    ["in"] = "warehouse.materialsBody", layout = "horizontal", height = 22, order = 10,
+}
+LC.sections["warehouse.matsList"] = {
+    ["in"] = "warehouse.materialsBody", layout = "fill", order = 20, chrome = "inset",
+}
+LC.widgets["warehouseMaterialsPanel.search"] = {
+    tooltip = false,
+    kind = "editbox", ["in"] = "warehouse.matsSearch", font = "body",
     height = 22, width = "fill", order = 10,
-    multiline   = false,
-    placeholder = "locale:WARE_MAT_SEARCH_PLACEHOLDER",
+    multiline = false, placeholder = "locale:WARE_MAT_SEARCH_PLACEHOLDER",
     binding = { text = "warehouse.matSearch" },
 }
-LC.widgets["warehousePanel.allMatsList"] = {
+LC.widgets["warehouseMaterialsPanel.list"] = {
     tooltip = false,
-    kind = "scrollbox", ["in"] = "warehouse.allMatsList",
-    binding = "warehouse.allMaterialsRows",
-    rowKind  = "warehouseMatRow",
-    spacing  = 1,
+    kind = "scrollbox", ["in"] = "warehouse.matsList",
+    binding = "warehouse.allMaterialsRows", rowKind = "warehouseMatRow", spacing = 1,
     -- SelectionBehavior: highlight via behavior; selectedMaterialID dropped from reads.
     selection = { deselectable = false },
     order = 10,
 }
-LC.widgets["warehousePanel.usedInList"] = {
+
+-- ===== Used In panel =========================================================
+-- Title is selection-aware ("Used In: X"); clickHints surface left=select / shift=queue.
+LC.widgets["warehouseUsedInPanel.title"] = {
+    tooltip = false,
+    kind = "label", ["in"] = "warehouseUsedInPanel", slot = "header",
+    text = "locale:WARE_USED_IN_HDR", font = "heading",
+    height = 18, width = "auto", order = 10,
+    binding = "warehouse.usedInTitle",
+}
+LC.widgets["warehouseUsedInPanel.headerSpacer"] = {
+    tooltip = false,
+    kind = "spacer", ["in"] = "warehouseUsedInPanel", slot = "header",
+    width = "fill", height = 14, order = 15,
+}
+-- Shift-click-to-queue has no row affordance, so the header hint surfaces it.
+-- Shift-only: buildClickHints renders the left-click glyph for shiftText.
+LC.widgets["warehouseUsedInPanel.clickHints"] = {
+    tooltip = false,   -- self-owned tooltip composed from shiftText
+    kind = "clickHints", ["in"] = "warehouseUsedInPanel", slot = "header",
+    shiftText = "locale:WARE_USED_IN_HINT_SHIFT",
+    width = 16, height = 16, order = 20,
+}
+LC.sections["warehouse.usedInBody"] = {
+    ["in"] = "warehouseUsedInPanel", layout = "vertical", padding = "sm", order = 10,
+}
+LC.sections["warehouse.usedInList"] = {
+    ["in"] = "warehouse.usedInBody", layout = "fill", order = 10, chrome = "inset",
+}
+LC.widgets["warehouseUsedInPanel.list"] = {
     tooltip = false,
     kind = "scrollbox", ["in"] = "warehouse.usedInList",
-    binding = "warehouse.usedInRows",
-    rowKind = "usedInRow",
-    spacing = 1,
-    order = 10,
+    binding = "warehouse.usedInRows", rowKind = "usedInRow", spacing = 1, order = 10,
 }

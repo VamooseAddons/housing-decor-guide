@@ -86,9 +86,10 @@ Selectors:Register("shopping.summary", {
         for _, entry in ipairs(entries) do
             local qty = entry.qty or 1   -- migration: legacy imports may omit qty
             out.itemCount = out.itemCount + qty
-            -- Three lanes (mirrors _bucketShoppingEntries): vendor (npcID) | AH
-            -- (no npcID + tradeable BoE/crafted) | wishlist (everything else).
-            if entry.npcID then
+            -- Three lanes (mirrors _bucketShoppingEntries): vendor (RESOLVED
+            -- vendor) | AH (no resolved vendor + tradeable BoE/crafted) | wishlist.
+            -- A bare npcID that isn't a real vendor (imported drop) is NOT a vendor.
+            if entry.vendor then
                 vendors[entry.npcID] = true
             elseif entry.isTradeable then
                 out.ahCount = out.ahCount + qty
@@ -262,14 +263,16 @@ Selectors:Register("shopping.activeListEntries", {
     end,
 })
 
--- Bucket entries into three lanes: vendor (npcID -> zone>vendor>items), Auction
--- House (no vendor but BoE/crafted), and wishlist (everything else -- the
--- non-purchasable drops/quests/achievements). Vendor wins over AH: a crafted item
--- a vendor also sells is something you can physically buy, so it routes to the vendor.
+-- Bucket entries into three lanes: vendor (RESOLVED vendor -> zone>vendor>items),
+-- Auction House (no resolved vendor but BoE/crafted), and wishlist (everything else
+-- -- non-purchasable drops/quests/achievements). Routing keys on a RESOLVED vendor,
+-- not a bare npcID: an imported drop/quest can carry an npcID that ISN'T a real
+-- vendor in VendorAugment, and those belong in wishlist, not a bogus "Unknown" zone
+-- (you can't buy a world-drop from a vendor). Vendor wins over AH.
 local function _bucketShoppingEntries(entries)
     local wish, ah, zones, zoneOrder = {}, {}, {}, {}
     for _, entry in ipairs(entries) do
-        if not entry.npcID then
+        if not entry.vendor then
             if entry.isTradeable then ah[#ah + 1] = entry else wish[#wish + 1] = entry end
         else
             local zoneName = entry.vendor and entry.vendor.zone or "Unknown"

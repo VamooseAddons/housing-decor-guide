@@ -1,3 +1,19 @@
+## [3.7.0] - 2026-06-21 (June 2026)
+
+### Added
+- Reagent rows in the Recipes and Warehouse tabs now carry a stock tooltip that
+  splits what you hold across Bags, Bank, and Warband, plus how many your craft
+  queue still needs.
+
+### Changed
+- The Warehouse materials view was reorganized into clearer sections: Lumber,
+  History, Materials, and Used In.
+
+### Fixed
+- Shopping list: imported items that no vendor sells (world drops and the like)
+  no longer pile up under a misleading "Unknown" vendor heading -- they now sit in
+  the Wishlist section, where their source chip tells you how to get them.
+
 ## [3.6.3] - 2026-06-20 (June 2026)
 
 ### Added
