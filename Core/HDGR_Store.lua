@@ -74,6 +74,10 @@ local function NewConfig()
         -- catalogTooltip: append HDG's decor-sourcing block to the Housing
         -- catalog hover tooltip (HDG.CatalogTooltip). Surfaced under Helpers.
         catalogTooltip         = true,
+        -- autoDepositLumber: on a banker open with Warband Bank access, move all
+        -- lumber from bags into the Warband Bank (Helpers > Lumber). Opt-in default
+        -- OFF -- it moves the player's items.
+        autoDepositLumber      = false,
         -- hideInCombat: auto-hide all HDG windows on entering combat (restore on exit).
         hideInCombat           = true,
         -- showCompartment: gate the AddonCompartment click/enter handlers.

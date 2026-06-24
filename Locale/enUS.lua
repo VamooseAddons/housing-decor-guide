@@ -465,6 +465,8 @@ HDG.Locale:Register("enUS", {
     TIP_PROJECTS_CAPTURE_ALL_BODY = "Captures every room on each floor of your house. NOTE: the game doesn't tell addons how your rooms connect, so HDG can't auto-arrange them -- after capturing, drag the rooms into their real layout yourself (rooms join where their doors touch).",
     TIP_LUMBER_AUTO_SHOW_TITLE = "Auto-open Lumber Tracker",
     TIP_LUMBER_AUTO_SHOW_BODY = "Pop the lumber tracker automatically when you harvest lumber. Turn off to keep it out of the way -- the Warehouse tab always has the numbers.",
+    TIP_ZONE_MAP_TITLE = "Zone Map",
+    TIP_ZONE_MAP_BODY = "Open the zone map for your current area. Click again to close it.",
     TIP_LUMBER_GOAL_TITLE   = "Lumber goal",
     TIP_LUMBER_GOAL_BODY    = "Off: the number after the slash is the lumber for all decor you haven't collected yet. On: only the lumber your queued crafts need.",
     TIP_REMOVALIST_FILTER_TITLE = "Filter plots",

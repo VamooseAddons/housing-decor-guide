@@ -466,7 +466,9 @@ HDG.Theme.Skinners = {
     Button = function(button, _scheme, state)
         -- Native UIPanelButton (BlizzardUI): Blizzard owns the art/font/states; the
         -- HDG skin would only fight it. (_hdgrNative set by HDG.UI:Button.)
-        if button._hdgrNative then return end
+        -- _ownedArt: content-icon buttons whose atlas IS the art (minimap glyphs);
+        -- skip skinning so the coloured glyph isn't vertex-tinted by the scheme.
+        if button._hdgrNative or button._ownedArt then return end
         local variant = button._hdgrVariant or "default"
         local active  = state and state.active and true or false
         -- Atlas-based (SetNormalAtlas) vs backdrop-based (SetBackdrop).

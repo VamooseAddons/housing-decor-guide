@@ -117,6 +117,14 @@ LC.widgets["lumberPanel.headerSpacer"] = {
     kind = "spacer", ["in"] = "lumberPanel", slot = "header",
     width = "fill", height = 18, order = 15,
 }
+-- Zone Map: opens/closes the Blizzard zone map (BattlefieldMap) for the current area.
+LC.widgets["lumberPanel.zoneMapBtn"] = {
+    tooltip = { recipe = "ZoneMapOpen" },
+    kind = "button", ["in"] = "lumberPanel", slot = "header",
+    normalAtlas    = "map-icon_bullletinboard-default-minimap",
+    highlightAtlas = "map-icon_bullletinboard-highlight-minimap",
+    size = 20, width = 20, height = 20, order = 80,
+}
 -- Minimize toggle: collapses counter + action bar to just the header. Always available
 -- while the window is open (not session-gated -- players review totals out of session too).
 -- Glyph rotates UP (rows shown) / DOWN (hidden). NOTE: rotation signs assume atlas points left;

@@ -68,7 +68,7 @@ local SCALE_MAX  = 1.5
 -- Keep in sync with settings registered below. Values pulled from GetDefaultConfig().
 local RESETTABLE_KEYS = {
     "showMinimapButton", "showCompartment", "showProfessionButtons", "tooltipDecorTag",
-    "catalogTooltip", "hideInCombat", "waypointProvider", "scale",
+    "catalogTooltip", "autoDepositLumber", "hideInCombat", "waypointProvider", "scale",
     "debug", "mockTSM", "locale", "fontFamily",
     "zoneScannerEnabled", "zoneScannerPopup", "zoneScannerPopupShopping",
     "zoneScannerChat", "zoneScannerSound",
@@ -81,6 +81,7 @@ local SEARCH_TAGS = {
     showProfessionButtons  = { "profession", "trade skill", "filter" },
     tooltipDecorTag        = { "tooltip", "reagent", "decor", "crafting", "recipe", "bag" },
     catalogTooltip         = { "tooltip", "decor", "source", "cost", "catalog", "helper" },
+    autoDepositLumber      = { "lumber", "warband", "bank", "deposit", "auto", "helper" },
     hideInCombat           = { "combat", "hide", "auto", "fight", "lockdown" },
     waypointProvider       = { "waypoint", "map", "pin", "tomtom" },
     scale                  = { "scale", "size", "zoom", "ui" },
@@ -325,6 +326,11 @@ local function _buildHelpersSubcategory(category)
         "On a reagent's tooltip, show how many decor recipes use it -- flags useful mats "
         .. "before you've learned the recipe. Also tags decor items in your bags (e.g. dropped "
         .. "decor you haven't learned yet) with their source.")
+
+    layout:AddInitializer(CreateSettingsListSectionHeaderInitializer("Lumber"))
+    BindProxyBool(sub, layout, "autoDepositLumber", "Auto-deposit lumber to the Warband Bank",
+        "When you open a banker with Warband Bank access, automatically move all lumber "
+        .. "from your bags into the Warband Bank.")
 end
 
 -- Advanced: debug, mockTSM, locale dropdown.

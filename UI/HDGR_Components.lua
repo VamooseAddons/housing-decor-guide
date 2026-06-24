@@ -1797,6 +1797,21 @@ local function buildAtlasButton(parent, spec)
     return button
 end
 
+-- IconButton: explicit normal/highlight atlas names (NOT the
+-- -default/-pressed/-active suffix convention buildAtlasButton uses). The
+-- atlases ARE the art (e.g. a minimap POI glyph), so `_ownedArt` tells the
+-- Button Skinner to skip vertex-tinting -- otherwise the scheme would recolour
+-- the coloured glyph. Normal = default state; highlight shows on hover/press.
+local function buildIconButton(parent, spec)
+    local button = _makeSquareButton(parent, spec.size)
+    button._ownedArt = true
+    _setButtonAtlases(button, spec.normalAtlas,
+        spec.highlightAtlas or spec.normalAtlas,
+        spec.highlightAtlas or spec.normalAtlas)
+    -- Tooltip is wired centrally by the Layout build chokepoint (recipe-only).
+    return button
+end
+
 -- ToggleButton: TWO-base Blizzard atlas button. Default state uses
 -- spec.atlas; active state swaps to spec.activeAtlas entirely. Both bases
 -- ship with -default and -highlight suffixes (no -pressed; pressed falls
@@ -1970,6 +1985,8 @@ HDG.WidgetTypes:Register("button", {
     build = function(parent, spec)
         if spec.close then
             return buildCloseButton(parent, spec)
+        elseif spec.normalAtlas then
+            return buildIconButton(parent, spec)
         elseif spec.atlas and spec.activeAtlas then
             return buildToggleButton(parent, spec)
         elseif spec.atlas then
@@ -2008,11 +2025,12 @@ HDG.WidgetTypes:Register("button", {
     -- atlas/close) do need a font. The validator (Layout) consults this
     -- predicate instead of peeking at the spec itself; spec section 5.
     requiresFont = function(spec)
-        return not (spec.close == true or spec.atlas ~= nil)
+        return not (spec.close == true or spec.atlas ~= nil or spec.normalAtlas ~= nil)
     end,
     specFields = {
         "text", "font", "variant", "textTone",         -- text-button path
         "close", "atlas", "activeAtlas", "rotation",   -- icon paths
+        "normalAtlas", "highlightAtlas",               -- explicit content-icon (no suffix convention)
         "size", "iconSize", "tooltip",                 -- icon sizing + tooltip
         -- Controller-side identifiers. LayoutConfig stamps these on
         -- dynamically-generated button clusters so the matching Controller

@@ -1,3 +1,19 @@
+## [3.9.0] - 2026-06-24 (June 2026)
+
+### Added
+- New Helpers setting "Auto-deposit lumber to the Warband Bank": when you open a
+  banker that can reach the Warband Bank, all lumber in your bags is moved into
+  the Warband Bank automatically, with a chat line listing what was deposited by
+  type (e.g. "Deposited 2 Bamboo, 4 Ironwood"). Off by default.
+- A Zone Map button in the Lumber Tracker's header opens the zone map (the Shift-M
+  map) for your current area, and closes it on a second click -- so you can check
+  where you are while farming without leaving the tracker.
+
+### Fixed
+- Withdrawing lumber from the Warband Bank no longer starts a phantom farming
+  session in the Lumber Tracker. A harvest is now counted only when your total
+  lumber actually rises, so moving stock out of storage doesn't read as gathering.
+
 ## [3.8.0] - 2026-06-24 (June 2026)
 
 ### Added

@@ -26,6 +26,9 @@
 --      Armed on SESSION_START; bumps session.lumber.tick every 1s so the
 --      counter panel's duration + rate texts update between harvests.
 --      Cancels itself the tick after activeFarmingID clears.
+--   5. Warband auto-deposit (opt-in, Helpers > Lumber)
+--      On a banker open, if autoDepositLumber is set, moves all bag lumber into
+--      the Warband Bank via C_Container.UseContainerItem (command side; no dispatch).
 --
 -- ownsBlizzardNamespaces = { "C_Map.GetPlayerMapPosition" } -- sub-API claim;
 -- ZoneObserver owns GetBestMapForUnit (zone probe). C_Map calls are safe in open-world.
@@ -47,11 +50,13 @@ L.GC_INTERVAL     = GC_INTERVAL
 
 -- Per-lumber-id last-known bag total. First sweep is conservative (unknown->known = no harvest).
 L._lastTotals    = L._lastTotals    or {}
+L._lastTotalsAll = L._lastTotalsAll or {}  -- per-id all-storage total (bags+bank+warband); gates harvest vs withdraw
 L._initialized   = L._initialized   or false
 L._lumberIDSet   = L._lumberIDSet   or nil  -- built lazily from Constants.LUMBER_DATA
 L._gcTicker      = L._gcTicker      or nil   -- C_Timer handle; nil when no blips to sweep (self-terminating)
 L._liveTicker    = L._liveTicker    or nil   -- C_Timer handle; nil when no active farming session
 L._suspended     = L._suspended     or false -- true while a transfer UI (mail/bank/merchant/trade) is open
+L._autoDepositDone = L._autoDepositDone or false -- guard: auto-deposit runs once per bank-open
 
 -- Build + cache the lumber-ID set (avoids iterating LUMBER_DATA every BAG_UPDATE).
 local function _ensureLumberIDSet()
@@ -99,11 +104,21 @@ function L:Scan()
     self._initialized = true
 
     for lumberID, _ in pairs(lumberSet) do
-        local cur  = Bag:GetBagCount(lumberID)  -- bags ONLY: bank/warband swings are not harvests
-        local prev = self._lastTotals[lumberID] or cur  -- first observation = no delta
-        self._lastTotals[lumberID] = cur
+        local cur     = Bag:GetBagCount(lumberID)  -- bags ONLY
+        local prev    = self._lastTotals[lumberID] or cur  -- first observation = no delta
+        local curAll  = Bag:GetTotal(lumberID)             -- all storage (bags+bank+warband)
+        local prevAll = self._lastTotalsAll[lumberID] or curAll
+        self._lastTotals[lumberID]    = cur
+        self._lastTotalsAll[lumberID] = curAll
         if not firstPass and cur > prev then
-            self:_HandleHarvest(lumberID, cur - prev, cur)
+            -- A harvest raises the player's TOTAL holdings (new lumber from the
+            -- world). A Warband-bank WITHDRAW raises bags but only MOVES it from
+            -- storage, so total is flat -- count only what the total grew by, so
+            -- a withdraw (total delta 0) never starts a phantom session.
+            local gained = math.min(cur - prev, curAll - prevAll)
+            if gained > 0 then
+                self:_HandleHarvest(lumberID, gained, cur)
+            end
         end
     end
     -- Satellite-window live totals (Discord report 2026-06-11): BagObserver's
@@ -124,7 +139,8 @@ function L:_RefreshBaseline()
     local Bag = HDG.BagObserver
     if not Bag then return end
     for lumberID in pairs(_ensureLumberIDSet()) do
-        self._lastTotals[lumberID] = Bag:GetBagCount(lumberID)
+        self._lastTotals[lumberID]    = Bag:GetBagCount(lumberID)
+        self._lastTotalsAll[lumberID] = Bag:GetTotal(lumberID)
     end
     self._initialized = true  -- we now hold a known-good baseline
 end
@@ -295,6 +311,59 @@ function L:FinalizeSession()
     })
 end
 
+-- "2 Bamboo, 4 Ironwood" -- per-type breakdown of a deposit, sorted by name.
+local function _enumerateDeposit(byType)
+    local nameByID = {}
+    for _, row in ipairs(HDG.Constants.LUMBER_DATA) do
+        nameByID[row.id] = row.shortName or row.name
+    end
+    local rows = {}
+    for id, n in pairs(byType) do
+        rows[#rows + 1] = { name = nameByID[id] or ("item " .. id), n = n }
+    end
+    table.sort(rows, function(a, b) return a.name < b.name end)
+    local parts = {}
+    for _, r in ipairs(rows) do parts[#parts + 1] = r.n .. " " .. r.name end
+    return table.concat(parts, ", ")
+end
+
+-- ===== Warband auto-deposit (opt-in, Helpers > Lumber) =======================
+-- On a banker open, if "Auto-deposit lumber" is on and the Warband Bank is
+-- usable, move every lumber stack from bags into the Warband Bank. Pure
+-- side-effecting command (no dispatch). Harvest detection is suspended for the
+-- bank session and the close handler re-snaps the baseline, so the bag drop
+-- never reads as a "consumed" delta.
+function L:_MaybeAutoDepositLumber()
+    if self._autoDepositDone then return end
+    if not HDG.Store:GetConfig("autoDepositLumber") then return end
+    local Bank, Container, Enum = _G.C_Bank, _G.C_Container, _G.Enum
+    -- exception(boundary): bank/container APIs absent in the headless harness + pre-Midnight clients
+    if not (Bank and Container and Enum and Enum.BankType) then return end
+    local warband = Enum.BankType.Account
+    if not warband then return end  -- exception(boundary): BankType.Account name unverified on older clients
+    if not (Bank.CanUseBank and Bank.CanUseBank(warband)) then return end  -- exception(boundary): Warband Bank not reachable at this banker
+    self._autoDepositDone = true
+
+    local lumberSet  = _ensureLumberIDSet()
+    local lastBag    = (Enum.BagIndex and Enum.BagIndex.ReagentBag) or 5  -- exception(boundary): BagIndex absent in headless
+    local byType, moved = {}, 0
+    for bag = 0, lastBag do
+        for slot = 1, (Container.GetContainerNumSlots(bag) or 0) do
+            local id = Container.GetContainerItemID(bag, slot)
+            if id and lumberSet[id] then
+                local info  = Container.GetContainerItemInfo(bag, slot)
+                local count = (info and info.stackCount) or 1
+                Container.UseContainerItem(bag, slot, nil, warband)
+                byType[id] = (byType[id] or 0) + count
+                moved = moved + count
+            end
+        end
+    end
+    if moved > 0 then
+        HDG.Log:Notify("info", "Deposited " .. _enumerateDeposit(byType) .. " to the Warband Bank.")
+    end
+end
+
 -- ===== Module registration ===================================================
 HDG.Modules:Declare({
     name = "LumberObserver",
@@ -307,7 +376,7 @@ HDG.Modules:Declare({
         MAIL_SHOW        = { handler = "OnTransferUIOpen"  },
         MERCHANT_SHOW    = { handler = "OnTransferUIOpen"  },
         TRADE_SHOW       = { handler = "OnTransferUIOpen"  },
-        BANKFRAME_OPENED = { handler = "OnTransferUIOpen"  },
+        BANKFRAME_OPENED = { handler = "OnBankFrameOpen"   },
         MAIL_CLOSED      = { handler = "OnTransferUIClose" },
         MERCHANT_CLOSED  = { handler = "OnTransferUIClose" },
         TRADE_CLOSED     = { handler = "OnTransferUIClose" },
@@ -320,20 +389,27 @@ HDG.Modules:Declare({
         L:Scan()  -- the GC + live tickers self-arm from the harvest path now
     end,
     OnTransferUIOpen  = function() L._suspended = true end,
+    OnBankFrameOpen   = function()
+        L._suspended = true
+        L:_MaybeAutoDepositLumber()
+    end,
     OnTransferUIClose = function()
         L._suspended = false
+        L._autoDepositDone = false
         L:_RefreshBaseline()  -- items gained while suspended become the baseline
     end,
     OnInteractionOpen = function(_, interactionType)
         local PI = _G.Enum.PlayerInteractionType
         if interactionType == PI.Banker or interactionType == PI.AccountBanker then
             L._suspended = true
+            L:_MaybeAutoDepositLumber()
         end
     end,
     OnInteractionClose = function(_, interactionType)
         local PI = _G.Enum.PlayerInteractionType
         if interactionType == PI.Banker or interactionType == PI.AccountBanker then
             L._suspended = false
+            L._autoDepositDone = false
             L:_RefreshBaseline()
         end
     end,

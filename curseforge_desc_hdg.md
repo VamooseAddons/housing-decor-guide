@@ -12,13 +12,11 @@
 
 ---
 
-## What's New in v3.8.0
+## What's New in v3.9.0
 
-- **New theme: Panseit's Blizzard UI.** A stone-and-gold palette contributed by Panseit, using native Blizzard action buttons (the red Game Menu style). Selecting it, or switching away from it, prompts a UI reload because the buttons are rebuilt as Blizzard widgets.
-- **Decor sourcing on the in-game catalog.** Hovering a piece in the Housing Dashboard now adds a "Housing Decor Guide - Decor sourcing" block to its tooltip: how to get it (achievement, reputation, vendor with zone) and its cost on the last line.
-- **New Helpers settings section.** The settings panel now has a Helpers section with toggles for the decor sourcing tooltip and for the reagent-use tooltip, which shows on a reagent in your bags how many decor recipes use it.
-- **Lumber Tracker held and target.** The session line now shows your held amount and target for the lumber you are farming, such as 108/110, next to the per-session count.
-- **Cost fix.** Decor that costs a currency plus gold, such as Order Resources and gold, now shows both amounts wherever the cost appears. The gold portion was previously dropped.
+- **Auto-deposit lumber to the Warband Bank.** A new Helpers setting, off by default: when you open a banker that can reach the Warband Bank, all lumber in your bags moves into the Warband Bank, and a chat line lists what was deposited by type.
+- **Zone Map button in the Lumber Tracker.** The tracker header has a button that opens the zone map (the Shift-M map) for your current area, and closes it on a second click, so you can check where you are while farming.
+- **Lumber Tracker fix.** Withdrawing lumber from the Warband Bank no longer starts a phantom farming session. A harvest now counts only when your total lumber rises, so moving stock out of storage is not read as gathering.
 
 ---
 
@@ -104,7 +102,7 @@ A companion window injects into Blizzard's House Editor so you can **place decor
 ---
 
 **Author:** Vamoose
-**Version:** 3.8.0
+**Version:** 3.9.0
 **Game Version:** 12.0.5+ (Midnight)
 **Source / Issues:** https://github.com/VamooseAddons/housing-decor-guide
 **Discord:** https://discord.gg/RWZaxJaHFP

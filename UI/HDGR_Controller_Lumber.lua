@@ -103,6 +103,14 @@ function HDG.LumberController:Wire(rootFrame)
         })
     end)
 
+    -- Zone Map icon: open/close the Blizzard BattlefieldMap (the Shift-M "Zone Map")
+    -- for the current area. LoadOnDemand addon -- frame is nil until first loaded,
+    -- so load Blizzard's UI, then Toggle (which also closes it on reclick).
+    HDG.UI.OnClick(rootFrame, "lumberPanel.zoneMapBtn", function()
+        if not BattlefieldMapFrame then BattlefieldMap_LoadUI() end  -- exception(boundary): Blizzard LoD addon, frame nil until loaded
+        if BattlefieldMapFrame then BattlefieldMapFrame:Toggle() end  -- exception(boundary): LoadUI no-ops if the LoD addon is user-disabled
+    end)
+
     -- Collapse toggle: flips radar visibility (binding + dynamicRows = 0 shrinks the window).
     HDG.UI.OnClick(rootFrame, "lumberPanel.collapseToggle", function()
         HDG.Store:Dispatch({
