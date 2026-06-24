@@ -71,6 +71,9 @@ local function NewConfig()
         zoneScannerSound   = false,
         -- tooltipDecorTag: show the HDG catalog line on item tooltips.
         tooltipDecorTag        = true,
+        -- catalogTooltip: append HDG's decor-sourcing block to the Housing
+        -- catalog hover tooltip (HDG.CatalogTooltip). Surfaced under Helpers.
+        catalogTooltip         = true,
         -- hideInCombat: auto-hide all HDG windows on entering combat (restore on exit).
         hideInCombat           = true,
         -- showCompartment: gate the AddonCompartment click/enter handlers.

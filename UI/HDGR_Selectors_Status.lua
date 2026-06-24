@@ -219,7 +219,7 @@ Selectors:Register("decor.previewBgMenuItems", {
         return {
             { value = "default",                                text = "Default" },
             { value = "black",                                  text = "Black" },
-            { value = "logo",                                   text = "Vamoose" },
+            { value = "logo",                                   text = "Madailein" },
             { value = "housing-basic-panel--stone-background",   text = "Stone" },
             { value = "housing-dashboard-bg-empty",              text = "Welcome" },
             { value = "housing-dashboard-bg-durotar",            text = "Durotar" },

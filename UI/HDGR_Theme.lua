@@ -130,6 +130,10 @@ function HDG.Theme:_InstallSchemeSubscriber()
             HDG.Log:Warn("theme", "scheme " .. newScheme .. " not found in HDGR_SchemeConstants")
             return
         end
+        -- Native-button schemes (Panseit's Blizzard UI) build a different button
+        -- WIDGET (UIPanelButtonTemplate vs HDG's atlas), which a repaint can't swap.
+        -- When that flips, the buttons need a /reload to rebuild -> prompt the user.
+        local nativeChanged = (self.currentScheme.nativeButtons or false) ~= (scheme.nativeButtons or false)
         self.currentScheme = scheme
         self:BuildFontObjects()   -- resolves the (possibly newly-overridden) font face
         self:ApplyAll()
@@ -137,6 +141,18 @@ function HDG.Theme:_InstallSchemeSubscriber()
         -- Theme:GetColor at Configure-time and would keep the old scheme until
         -- the next data refresh. Force a full re-render.
         if HDG.RefreshMainWindow then HDG:RefreshMainWindow("*") end  -- exception(boundary): RefreshMainWindow nil in tests / partial load-order
+        if nativeChanged and _G.StaticPopup_Show then   -- exception(boundary): StaticPopup_Show nil in tests
+            if not _G.StaticPopupDialogs["HDGR_THEME_RELOAD"] then
+                _G.StaticPopupDialogs["HDGR_THEME_RELOAD"] = {
+                    text = "Panseit's Blizzard UI uses native Blizzard buttons. Switching to or from it needs a UI reload to rebuild them. Reload now?",
+                    button1 = "Reload Now",
+                    button2 = "Later",
+                    OnAccept = function() _G.ReloadUI() end,
+                    timeout = 0, whileDead = true, hideOnEscape = true,
+                }
+            end
+            _G.StaticPopup_Show("HDGR_THEME_RELOAD")
+        end
     end)
 end
 
@@ -448,6 +464,9 @@ HDG.Theme.Skinners = {
     -- Active wins paint regardless of variant family.
     -- Variants: primary / danger / tertiary / ghost / default
     Button = function(button, _scheme, state)
+        -- Native UIPanelButton (BlizzardUI): Blizzard owns the art/font/states; the
+        -- HDG skin would only fight it. (_hdgrNative set by HDG.UI:Button.)
+        if button._hdgrNative then return end
         local variant = button._hdgrVariant or "default"
         local active  = state and state.active and true or false
         -- Atlas-based (SetNormalAtlas) vs backdrop-based (SetBackdrop).

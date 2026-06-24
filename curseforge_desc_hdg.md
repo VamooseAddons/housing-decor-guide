@@ -12,10 +12,13 @@
 
 ---
 
-## What's New in v3.7.0
+## What's New in v3.8.0
 
-- **Material stock at a glance.** Reagent rows in the Recipes and Warehouse tabs now show a stock tooltip that splits what you hold across Bags, Bank, and Warband, along with how many your craft queue still needs. The Warehouse materials view was reorganized into clearer sections: Lumber, History, Materials, and Used In.
-- **Shopping list fix.** Imported items that no vendor sells, such as world drops, no longer appear under a misleading "Unknown" vendor heading. They now sit in the Wishlist section, where their source chip shows how to obtain them.
+- **New theme: Panseit's Blizzard UI.** A stone-and-gold palette contributed by Panseit, using native Blizzard action buttons (the red Game Menu style). Selecting it, or switching away from it, prompts a UI reload because the buttons are rebuilt as Blizzard widgets.
+- **Decor sourcing on the in-game catalog.** Hovering a piece in the Housing Dashboard now adds a "Housing Decor Guide - Decor sourcing" block to its tooltip: how to get it (achievement, reputation, vendor with zone) and its cost on the last line.
+- **New Helpers settings section.** The settings panel now has a Helpers section with toggles for the decor sourcing tooltip and for the reagent-use tooltip, which shows on a reagent in your bags how many decor recipes use it.
+- **Lumber Tracker held and target.** The session line now shows your held amount and target for the lumber you are farming, such as 108/110, next to the per-session count.
+- **Cost fix.** Decor that costs a currency plus gold, such as Order Resources and gold, now shows both amounts wherever the cost appears. The gold portion was previously dropped.
 
 ---
 
@@ -101,7 +104,7 @@ A companion window injects into Blizzard's House Editor so you can **place decor
 ---
 
 **Author:** Vamoose
-**Version:** 3.7.0
+**Version:** 3.8.0
 **Game Version:** 12.0.5+ (Midnight)
 **Source / Issues:** https://github.com/VamooseAddons/housing-decor-guide
 **Discord:** https://discord.gg/RWZaxJaHFP

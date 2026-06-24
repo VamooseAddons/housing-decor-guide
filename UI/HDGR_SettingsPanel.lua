@@ -7,8 +7,9 @@
 --   Housing Decor Guide (main category)
 --     Open / Reset buttons (Special Thanks moved to the Config tab)
 --   Housing Decor Guide / Interface (subcategory)
---     General: minimap, compartment, profession buttons, tooltip
+--     General: minimap, compartment, profession buttons
 --     Zone Scanner: master toggle + popup/chat/sound sub-flags
+--   Housing Decor Guide / Helpers: decor sourcing tooltip + reagent-use tooltip
 --   Housing Decor Guide / Advanced: debug, mockTSM, scale, waypoint, locale, font
 --   Housing Decor Guide / Profiles: active profile dropdown + New/Delete
 --
@@ -67,7 +68,7 @@ local SCALE_MAX  = 1.5
 -- Keep in sync with settings registered below. Values pulled from GetDefaultConfig().
 local RESETTABLE_KEYS = {
     "showMinimapButton", "showCompartment", "showProfessionButtons", "tooltipDecorTag",
-    "hideInCombat", "waypointProvider", "scale",
+    "catalogTooltip", "hideInCombat", "waypointProvider", "scale",
     "debug", "mockTSM", "locale", "fontFamily",
     "zoneScannerEnabled", "zoneScannerPopup", "zoneScannerPopupShopping",
     "zoneScannerChat", "zoneScannerSound",
@@ -78,7 +79,8 @@ local SEARCH_TAGS = {
     showMinimapButton      = { "minimap", "icon", "launcher" },
     showCompartment        = { "compartment", "drawer", "icon" },
     showProfessionButtons  = { "profession", "trade skill", "filter" },
-    tooltipDecorTag        = { "tooltip", "decor", "source", "item" },
+    tooltipDecorTag        = { "tooltip", "reagent", "decor", "crafting", "recipe", "bag" },
+    catalogTooltip         = { "tooltip", "decor", "source", "cost", "catalog", "helper" },
     hideInCombat           = { "combat", "hide", "auto", "fight", "lockdown" },
     waypointProvider       = { "waypoint", "map", "pin", "tomtom" },
     scale                  = { "scale", "size", "zoom", "ui" },
@@ -278,8 +280,6 @@ local function _buildInterfaceSubcategory(category)
               .. "The icon itself always appears (Blizzard limitation); disable it via Edit Mode." },
         { key = "showProfessionButtons",  name = "Show profession window buttons",
           desc = "Inject 'Decor Guide' and 'Filter Decor' buttons into the Professions window." },
-        { key = "tooltipDecorTag",        name = "Show decor tag on item tooltips",
-          desc = "Append the HDG decor catalog source line to item tooltips." },
         { key = "hideInCombat",           name = "Hide windows in combat",
           desc = "Automatically hide all HDG windows when you enter combat, and "
               .. "restore the ones that were open when combat ends." },
@@ -312,6 +312,19 @@ local function _buildInterfaceSubcategory(category)
         local _, init = BindProxyBool(sub, layout, entry.key, entry.name, entry.desc)
         init:SetParentInitializer(zoneMasterInit, function() return zoneMasterSetting:GetValue() end)
     end
+end
+
+-- Helpers: optional convenience features that ride alongside the catalog/editor.
+local function _buildHelpersSubcategory(category)
+    local sub, layout = Settings.RegisterVerticalLayoutSubcategory(category, "Helpers")
+
+    layout:AddInitializer(CreateSettingsListSectionHeaderInitializer("Tooltips"))
+    BindProxyBool(sub, layout, "catalogTooltip", "Show decor sourcing tooltip",
+        "Add HDG's sourcing and cost lines to the Housing catalog tooltip when you hover decor.")
+    BindProxyBool(sub, layout, "tooltipDecorTag", "Show reagent use in decor crafting",
+        "On a reagent's tooltip, show how many decor recipes use it -- flags useful mats "
+        .. "before you've learned the recipe. Also tags decor items in your bags (e.g. dropped "
+        .. "decor you haven't learned yet) with their source.")
 end
 
 -- Advanced: debug, mockTSM, locale dropdown.
@@ -484,6 +497,7 @@ local function BuildSettingsPanel()
 
     _buildMainPage(layout)
     _buildInterfaceSubcategory(category)
+    _buildHelpersSubcategory(category)
     _buildAdvancedSubcategory(category)
     _buildProfilesSubcategory(category)
 

@@ -670,6 +670,26 @@ local function _applyTertiaryButtonChrome(button)
 end
 
 function HDG.UI:Button(parent, text, font)
+    -- BlizzardUI (scheme.nativeButtons): build the NATIVE Blizzard button
+    -- (UIPanelButtonTemplate), left unskinned -- the real Blizzard look the dark
+    -- atlas only approximated. The Button Skinner no-ops on _hdgrNative, so Blizzard
+    -- owns the art + font + state textures.
+    local scheme = HDG.Theme.currentScheme
+    if scheme and scheme.nativeButtons then   -- exception(nullable): currentScheme unset until Theme:Initialize (headless tests build first)
+        local button = CreateFrame("Button", nil, parent, "UIPanelButtonTemplate")
+        button:SetSize(60, 22)  -- placeholder; layout supplies real width/height
+        button._hdgrNative = true
+        button:SetText(text or "")
+        function button:SetState(updates) HDG.Theme:SetState(self, updates) end
+        function button:SetActive(value) HDG.Theme:SetState(self, { active = value and true or false }) end
+        button.RefreshIntrinsicWidth = function(btn)
+            local fs = btn.GetFontString and btn:GetFontString()
+            local w  = _naturalTextWidth(fs, btn.GetText and btn:GetText())
+            if w > 0 then btn._intrinsicWidth = math.ceil(w) + 28 end
+        end
+        button:RefreshIntrinsicWidth()
+        return button
+    end
     -- common-button-tertiary: dark fill + white border (tints cleanly).
     -- Hand-built (no template) so the FontString + state textures stay under direct control.
     local button = CreateFrame("Button", nil, parent)

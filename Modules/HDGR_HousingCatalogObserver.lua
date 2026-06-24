@@ -1118,6 +1118,15 @@ local function _extractCostEntries(raw)
             entries[#entries + 1] = { currencyID = id, amount = n, icon = iconByID[id] }
         end
     end
+    -- Gold is a money texture ("<amt>|TInterface\MoneyFrame\UI-GoldIcon...|t"), NOT a
+    -- |Hcurrency: link, so the loop above misses it -- an item can charge a currency AND
+    -- gold (e.g. 2000 Order Resources + 1000g). Match the gold icon and emit a GOLD entry.
+    for amt in raw:lower():gmatch("([%d,]+)|t[^|]-moneyframe") do
+        local g = tonumber((amt:gsub(",", "")))
+        if g and g > 0 then
+            entries[#entries + 1] = { currencyID = HDG.Constants.CURRENCY_GOLD, amount = g }
+        end
+    end
     return entries
 end
 

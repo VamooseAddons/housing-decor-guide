@@ -276,6 +276,9 @@ local function BuildScheme(palette)
         -- only on the Housing scheme; nil elsewhere => the atlas-aware Skinners
         -- take the solid/watercolor path. No DEFAULT -- absence IS the signal.
         chrome  = palette.chrome,
+        -- nativeButtons: build action buttons as native UIPanelButtonTemplate
+        -- (BlizzardUI). nil elsewhere => HDG's hand-built dark-atlas buttons.
+        nativeButtons = palette.nativeButtons,
     }
 end
 
@@ -1178,6 +1181,84 @@ Palettes.Green = {
     diag_hint           = hex("#72f13e"),  -- bright green
 }
 
+-- ----- BlizzardUI -----------------------------------------------------------
+-- Matches the default Blizzard WoW frame (PortraitFrameTemplate / ButtonFrame-
+-- Template -- the frame used by Toy Box, Collections, Encounter Journal, etc.).
+--
+-- Verified against Blizzard's own source + textures:
+--   - SharedXML/SharedUIPanelTemplates.xml (tekkub/wow-ui-source): the frame
+--     body is Interface\FrameGeneral\UI-Background-Rock (tiled), insets are
+--     UI-Background-Marble, and the gold metal border is sliced from UI-Frame.
+--   - Measured fills (Gethe/wow-ui-textures):
+--       UI-Background-Rock   avg #332e2a  (warm dark stone-brown -> frame body)
+--       UI-Background-Marble avg #0d0d0d  (near-black            -> content insets)
+--
+-- So the authentic WoW look is a warm stone-brown OUTER frame with near-black
+-- content insets and a gold metal border -- NOT a flat pure-black panel. The
+-- surface ramp below reproduces those exact fills, so the colours read right on
+-- HDG's standard window chrome. (The gold frame itself was dropped -- see the
+-- chrome note below Palettes.BlizzardUI for the post-mortem.)
+--
+--   bg / panel_header  -> Rock-brown frame body (#2b2724 .. #38322d)
+--   panel / sunken     -> Marble near-black content insets (#0d0d0d ..)
+--   border             -> #5a4a2e bronze-brown (the UI-Frame metal edge tone)
+--   accent / headers   -> Blizzard Gold #ffd100 (titles, section labels)
+Palettes.BlizzardUI = {
+    -- Surface ramp: warm stone-brown frame body + near-black Marble insets,
+    -- matching UI-Background-Rock (#332e2a) and UI-Background-Marble (#0d0d0d).
+    sunken          = hex("#080808"),                   -- deepest inset well (below Marble)
+    bg              = hex("#2b2724"),                   -- canvas: Rock-brown frame body (dark end), OPAQUE
+    panel_soft      = hex("#0d0d0d"),                   -- recessed inset (Marble near-black)
+    panel           = hex("#111111"),                   -- content panel (Marble inset, hair lighter)
+    panel_footer    = hex("#322c28"),                   -- footer band (Rock-brown)
+    panel_header    = hex("#38322d"),                   -- header band (Rock-brown, lit end)
+    raised          = hex("#473d31"),                   -- raised chrome / button base (warm stone)
+    border          = hex("#5a4a2e"),                   -- bronze-brown metal frame edge (UI-Frame tone)
+    text            = hex("#f0e6c0"),                   -- WoW warm cream (NORMAL_FONT_COLOR-adjacent)
+    text_header     = hex("#ffd100"),                   -- Blizzard Gold titles (real WoW header colour)
+    text_label      = hex("#ffd100"),                   -- gold labels (section headers are gold in WoW)
+    text_dim        = hex("#b5a98c"),                   -- warm dim parchment (readable on brown)
+    text_disabled   = hex("#7a7058"),                   -- muted warm grey-brown
+    text_inverse    = hex("#1a160f"),                   -- dark brown (text on gold bg)
+    button_normal   = hex("#3d342a"),                   -- warm stone button base
+    button_hover    = hex("#4d4234"),                   -- lifted warm stone (hover)
+    button_active   = hex("#2a2620"),                   -- depressed warm stone
+    button_disabled = hex("#3d342a", 0.40),
+    accent          = hex("#ffd100"),                   -- Blizzard Gold (Trim & Accents bright end)
+    accent_brighter = hex("#ffe45c"),                   -- lighter gold (hover)
+    accent_darker   = hex("#cc9900"),                   -- Trim & Accents dark end (documented)
+    success         = hex("#1eff00"),                   -- WoW uncommon-green (status positive)
+    warning         = hex("#ffd100"),                   -- gold doubles as warning in WoW chrome
+    error           = hex("#ff2020"),                   -- WoW red (error / debuff)
+    error_deep      = hex("#a00000"),                   -- deep red (danger fills)
+    -- UI tokens (WoW interface canonical conventions)
+    tab_active_bg       = hex("#473d31"),  -- raised warm stone (active tab)
+    tab_active_text     = hex("#ffd100"),  -- Blizzard Gold on active tab (canonical WoW)
+    popup_selected_bg   = hex("#4d4234"),  -- warm stone highlight (selected row)
+    popup_selected_text = hex("#ffffff"),  -- white on selection
+    statusline_bg       = hex("#0d0d0d"),  -- Marble inset (status strip over content)
+    text_on_accent      = hex("#1a160f"),  -- dark brown (legible on #FFD100 gold)
+    float_bg            = hex("#0d0d0d"),  -- Marble near-black (tooltip/float bg, OPAQUE)
+    float_border        = hex("#ffd100"),  -- Blizzard Gold (tooltip "thin gold border")
+    diag_error          = hex("#ff2020"),  -- red
+    diag_warn           = hex("#ffd100"),  -- gold
+    diag_info           = hex("#4ea3f1"),  -- blue (info channel)
+    diag_hint           = hex("#1eff00"),  -- green (hint channel)
+}
+-- chrome = nil (intentional). A Blizzard nine-slice gold frame was tried (a
+-- companion HDGR_BlizzardFrame.lua) but force-fit badly against HDG's OWN title
+-- bar: the Blizzard ButtonFrame art assumes a content-inset window with a title
+-- margin, so it either covered HDG's title or floated above it as a second bar.
+-- Dropped 2026-06-23 -- BlizzardUI is a COLOUR theme (the palette above) on HDG's
+-- standard window chrome, like every other non-Housing scheme. Post-mortem:
+-- docs/HDG_BLIZZARDUI_FRAME_RESEARCH.md.
+
+-- nativeButtons: BlizzardUI builds its action buttons as native UIPanelButtonTemplate
+-- (left unskinned -- the real Blizzard button), instead of HDG's hand-built dark
+-- atlas. Read by HDG.UI:Button at build time. Structural (not a repaint), so
+-- switching to/from BlizzardUI needs a /reload to rebuild the buttons.
+Palettes.BlizzardUI.nativeButtons = true
+
 -- ===== Scheme exports =======================================================
 -- Each scheme is the BuildScheme output for its palette. Theme:LoadScheme
 -- takes the name; the global table here is the registry.
@@ -1203,6 +1284,7 @@ HDGR_SchemeConstants = {
     Housing          = BuildScheme(Palettes.Housing),   -- Badwolf clone + gold/wood overrides + chrome atlas
     Purpura          = BuildScheme(Palettes.Purpura),
     Green            = BuildScheme(Palettes.Green),
+    BlizzardUI       = BuildScheme(Palettes.BlizzardUI),
 }
 
 -- Display metadata for the slash command + Config tab buttons.
@@ -1213,6 +1295,7 @@ HDGR_SchemeMeta = {
         "ColorblindSafe",
         -- Dark family
         "Housing",   -- the addon's signature atlas theme; featured first in the dark family
+        "BlizzardUI",  -- Blizzard WoW interface: warm stone-brown + Blizzard Gold
         "Mocha", "TokyonightNight", "RosePineMain", "GruvboxDarkHard",
         "SolarizedDark", "EverforestDark", "KanagawaWave",
         "Nord", "Dracula", "Nightfly", "OneNord", "Badwolf",
@@ -1239,6 +1322,7 @@ HDGR_SchemeMeta = {
         OneNord          = "OneNord",
         Badwolf          = "Badwolf",
         Housing          = "Housing Decor Guide",
+        BlizzardUI       = "Panseit's Blizzard UI",
         Purpura          = "Purpura",
         Green            = "Green",
     },

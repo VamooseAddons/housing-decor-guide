@@ -1,3 +1,33 @@
+## [3.8.0] - 2026-06-24 (June 2026)
+
+### Added
+- The Lumber Tracker's session line now shows your held/target for the lumber
+  you're farming (e.g. 108/110), to the right of the "+N this session" count. The
+  target follows the Queued only toggle, matching the counter rows.
+- Hovering a piece in the in-game Housing Dashboard now adds a "Housing Decor
+  Guide - Decor sourcing" block to its tooltip: how to get it (achievement,
+  reputation, vendor(s) with zone, and the like) and its cost on the last line.
+- New theme **Panseit's Blizzard UI** (contributed by panseit): a warm
+  stone-and-gold palette with native Blizzard action buttons (the red Game Menu /
+  Auction House style). Selecting it -- or switching away -- prompts a UI reload,
+  since the buttons are rebuilt as native Blizzard widgets.
+- A new **Helpers** section in the settings panel, with a toggle to show or hide
+  the decor sourcing tooltip.
+
+### Changed
+- The decor preview's "Vamoose" background option is now labelled "Madailein",
+  crediting the artist who created the house-and-spiral emblem it shows.
+- The "Uncollected" filter toggle moved into the Decor Browser's title bar
+  (beside the click hints), off the filter row.
+- The item-tooltip setting (was "Show decor tag on item tooltips") moved into the
+  new Helpers section and is now "Show reagent use in decor crafting", with a
+  clearer description -- on a reagent's tooltip it shows how many decor recipes
+  use it.
+
+### Fixed
+- Decor that costs a currency plus gold (e.g. Order Resources and gold) now shows
+  both amounts wherever the cost appears -- the gold portion was being dropped.
+
 ## [3.7.0] - 2026-06-21 (June 2026)
 
 ### Added

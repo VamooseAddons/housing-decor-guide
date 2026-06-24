@@ -1,0 +1,93 @@
+-- HDG.CatalogTooltip
+-- ============================================================================
+-- Appends HDG's decor-sourcing block to Blizzard's Housing Dashboard tooltip,
+-- under a "Housing Decor Guide - Decor sourcing:" header. Lists the same source
+-- data that drives the decor-browser chips -- achievement / quest / reputation /
+-- promotion / shop / drop / vendor(s) -- with the cost on the last line.
+--
+-- Uses Blizzard's own extension event HousingCatalogEntry.TooltipCreated, fired
+-- by HousingCatalogEntryMixin:OnEnter right before GameTooltip:Show(). Additive
+-- lines on the live GameTooltip -- no hooksecurefunc, no taint. The hovered cell
+-- carries entryVariantID.recordID; resolve to an itemID via the catalog observer
+-- (O(1) byItemID facade) and read the baked source fields at hover time. Colours
+-- are inline because GameTooltip lives outside HDG's Theme registry.
+
+HDG = HDG or {}
+HDG.CatalogTooltip = HDG.CatalogTooltip or {}
+local M = HDG.CatalogTooltip
+
+local HEAD_R,   HEAD_G,   HEAD_B   = 1.0,  0.82, 0.0   -- HDG-brand gold header
+local VENDOR_R, VENDOR_G, VENDOR_B = 0.55, 0.78, 1.0   -- "where to buy" blue (matches companion)
+local COST_R,   COST_G,   COST_B   = 0.78, 0.78, 0.6   -- muted gold (matches companion cost line)
+local GATE_R,   GATE_G,   GATE_B   = 0.82, 0.82, 0.82  -- achievement / quest / rep / promo / shop / drop
+
+-- "Drop: <source> -- <zone>" for a {source, zone} record (drop/treasure/event); nil if absent.
+local function _sourceLine(label, rec)
+    if not rec then return nil end   -- exception(nullable): this source kind absent on the row
+    local z = (rec.zone and rec.zone ~= "") and (" in " .. rec.zone) or ""
+    return label .. ": " .. rec.source .. z
+end
+
+local function _onTooltipCreated(_, entry, tooltip)
+    if not HDG.Store:GetConfig("catalogTooltip") then return end   -- Helpers toggle: user disabled the sourcing tooltip
+    local vid = entry.entryVariantID   -- exception(boundary): Blizzard cell mixin field; nil on non-decor entries
+    local recordID = vid and vid.recordID
+    if not recordID then return end    -- exception(boundary): bundle/non-decor cell carries no recordID
+    local Obs = HDG.HousingCatalogObserver
+    local itemID = Obs:GetItemIDByDecorID(recordID)
+    if not itemID then return end      -- exception(nullable): decor not mapped in HDG's catalog
+    local row = Obs:GetRow(itemID)
+    if not row then return end         -- exception(nullable): row not swept yet
+
+    -- Collect the sourcing lines first so the header only prints when there's content.
+    local body = {}   -- { {text, r, g, b}, ... }
+    local function add(text, r, g, b) body[#body + 1] = { text = text, r = r, g = g, b = b } end
+
+    if row.achievement then add("Achievement: " .. row.achievement, GATE_R, GATE_G, GATE_B) end
+    if row.quest       then add("Quest: " .. row.quest, GATE_R, GATE_G, GATE_B) end
+    if row.factionGate then
+        local fg = row.factionGate
+        local s  = (fg.standing and fg.standing ~= "") and (" (" .. fg.standing .. ")") or ""
+        add("Reputation: " .. fg.factionName .. s, GATE_R, GATE_G, GATE_B)
+    end
+    if row.promo then add("Promotion", GATE_R, GATE_G, GATE_B) end
+    if row.shop  then add("In-Game Shop", GATE_R, GATE_G, GATE_B) end
+    local drop = _sourceLine("Drop", row.drop) or _sourceLine("Treasure", row.treasure) or _sourceLine("Event", row.event)
+    if drop then add(drop, GATE_R, GATE_G, GATE_B) end
+
+    -- Vendors: list every one. Names containing "world vendor" sort last so the
+    -- named vendor leads.
+    local vendors = row.vendors
+    if vendors and #vendors > 0 then   -- exception(nullable): item has no vendor source
+        local named, world, seen = {}, {}, {}
+        for _, v in ipairs(vendors) do
+            local label = "Vendor: " .. v.name .. ((v.zone and v.zone ~= "") and (" in " .. v.zone) or "")
+            if not seen[label] then   -- catalog + override can list one vendor 2-3x; show once
+                seen[label] = true
+                if v.name:lower():find("world vendor", 1, true) then
+                    world[#world + 1] = label
+                else
+                    named[#named + 1] = label
+                end
+            end
+        end
+        for _, l in ipairs(named) do add(l, VENDOR_R, VENDOR_G, VENDOR_B) end
+        for _, l in ipairs(world) do add(l, VENDOR_R, VENDOR_G, VENDOR_B) end
+    end
+
+    -- Cost on the last line.
+    if row.costEntries and #row.costEntries > 0 then   -- exception(nullable): item has no vendor cost
+        local parts = {}
+        for _, ce in ipairs(row.costEntries) do
+            parts[#parts + 1] = HDG.Format.FormatCurrency(ce.amount, ce.currencyID)
+        end
+        add("Cost: " .. table.concat(parts, "  +  "), COST_R, COST_G, COST_B)
+    end
+
+    if #body == 0 then return end   -- nothing HDG can add -> leave Blizzard's tooltip untouched
+    tooltip:AddLine("Housing Decor Guide - Decor sourcing:", HEAD_R, HEAD_G, HEAD_B)
+    for _, l in ipairs(body) do tooltip:AddLine(l.text, l.r, l.g, l.b) end
+end
+
+-- Register at file-load: the callback fires at hover time, when the observer is warm.
+EventRegistry:RegisterCallback("HousingCatalogEntry.TooltipCreated", _onTooltipCreated, M)

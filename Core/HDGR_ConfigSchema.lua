@@ -53,6 +53,7 @@ local schema = {
     SHOW_COMPARTMENT     = { key = "showCompartment",   default = true,  scope = Scope.Profile },
     SHOW_PROFESSION_BUTTONS = { key = "showProfessionButtons", default = true, scope = Scope.Profile },
     TOOLTIP_DECOR_TAG    = { key = "tooltipDecorTag",   default = true,  scope = Scope.Profile },
+    CATALOG_TOOLTIP      = { key = "catalogTooltip",    default = true,  scope = Scope.Profile },
     -- Auto-hide all HDG windows on entering combat; restored on combat end.
     HIDE_IN_COMBAT       = { key = "hideInCombat",      default = true,  scope = Scope.Profile },
 

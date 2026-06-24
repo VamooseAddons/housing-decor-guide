@@ -95,6 +95,7 @@ local function _computeRate(sessionTotal, duration)
 end
 
 Selectors:Register("lumber.counterRows", {
+    memoized = true,   -- trackingPanelLine2 calls this on the 1s session ticker; memo so it re-runs only on real read changes
     -- session.itemNames.names: boundary signal from ItemNameResolver.
     -- ITEM_INFO_RESOLVED bumps it so cold-cache rows re-bind with the real icon.
     reads = { "session.resolvers.bag.tick",
@@ -249,8 +250,8 @@ Selectors:Register("lumber.trackingPanelLine1", {
 })
 
 Selectors:Register("lumber.trackingPanelLine2", {
-    reads = {},     -- composed via sessionStats; reads-closure handled by calls
-    calls = { "lumber.sessionStats" },
+    reads = {},     -- composed via sessionStats + counterRows; reads-closure handled by calls
+    calls = { "lumber.sessionStats", "lumber.counterRows" },
     fn = function(state, ctx)
         local stats = Selectors:Call("lumber.sessionStats", state, ctx)
         if not stats then return "" end
@@ -258,8 +259,17 @@ Selectors:Register("lumber.trackingPanelLine2", {
         local rate = stats.perHour > 0
             and string.format("+%d/hr", math.floor(stats.perHour + 0.5))
             or "+-/hr"        -- cold-start: not enough samples yet
-        return string.format("%s  -  %s  -  +%d this session",
+        local line = string.format("%s  -  %s  -  +%d this session",
             dur, rate, stats.totalGathered)
+        -- Append the active lumber's held/target -- the same "held/N" the counter
+        -- row shows, denominator following the Queued-only goal toggle. Omit on no target.
+        for _, r in ipairs(Selectors:Call("lumber.counterRows", state, ctx)) do
+            if r.isActive and r.displayNeed > 0 then
+                line = line .. string.format("  -  %d/%d", r.held, r.displayNeed)
+                break
+            end
+        end
+        return line
     end,
 })
 

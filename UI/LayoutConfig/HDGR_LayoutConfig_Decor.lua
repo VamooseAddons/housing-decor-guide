@@ -345,6 +345,15 @@ LC.widgets["decorPanel.clickHints"] = {
     shiftText = "locale:DECOR_HINT_SHIFT",
     width = 34, height = 16, order = 90,
 }
+-- Uncollected toggle in the browser header (moved here from the filter row), left
+-- of the mouse hints. tertiary so it tints with the active scheme like the rest.
+LC.widgets["decorPanel.onlyUncollectedToggle"] = {
+    tooltip = false,
+    kind = "button", ["in"] = "decorPanel", slot = "header", font = "button",
+    text = "locale:DECOR_UNCOLLECTED", width = "auto", height = 20, order = 60, variant = "tertiary",
+    binding = { active = "decor.onlyUncollected" },
+    toggle = "onlyUncollected",
+}
 -- Ownership ratio + filtered count, below the list (diag.info tone).
 LC.widgets["decorPanel.count"] = {
     tooltip = false,
@@ -548,15 +557,8 @@ for slot = 1, (HDG.Constants.TAG_SLOT_COUNT or 12) do
     }
 end
 
--- Right-side toggles: Uncollected + Only Stored (destroyable items; textTone="error").
-LC.widgets["decorPanel.onlyUncollectedToggle"] = {
-    tooltip = false,
-    kind = "button", ["in"] = "decor.filterRowBottom", font = "button",
-    text = "locale:DECOR_UNCOLLECTED", width = "auto", height = 22, order = 40, variant = "tertiary",
-    binding = { active = "decor.onlyUncollected" },
-    toggle = "onlyUncollected",
-}
 -- "Destroy decor" chip: textTone="error" telegraphs the destructive intent.
+-- (The Uncollected toggle moved to the Decor Browser header -- decorPanel.onlyUncollectedToggle.)
 LC.widgets["decorPanel.onlyStoredToggle"] = {
     tooltip = { recipe = "DecorStoredFilter" },
     kind = "button", ["in"] = "decor.filterRowBottom", font = "button",
