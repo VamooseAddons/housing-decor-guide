@@ -12,11 +12,22 @@
 
 ---
 
-## What's New in v3.9.0
+## What's New in v3.10.0
 
-- **Auto-deposit lumber to the Warband Bank.** A new Helpers setting, off by default: when you open a banker that can reach the Warband Bank, all lumber in your bags moves into the Warband Bank, and a chat line lists what was deposited by type.
-- **Zone Map button in the Lumber Tracker.** The tracker header has a button that opens the zone map (the Shift-M map) for your current area, and closes it on a second click, so you can check where you are while farming.
-- **Lumber Tracker fix.** Withdrawing lumber from the Warband Bank no longer starts a phantom farming session. A harvest now counts only when your total lumber rises, so moving stock out of storage is not read as gathering.
+This covers the player-facing changes since the last description update at 3.6.
+
+- **Collection marks on Blizzard's own windows.** At a vendor, decor you have collected shows a green check and decor you still need shows a plus, in the corner of each item. In the Housing catalog, decor you have not collected yet shows a red plus. Each is optional under Settings > Helpers.
+- **Bag reagent marks.** Bag slots holding a decor crafting reagent show a small Housing Decor Guide icon in the corner. Works with the default bags, Bagnon, Baganator, and Ellesmere.
+- **Decor sourcing in the Housing Dashboard tooltip.** Hovering a piece in Blizzard's catalog adds a Housing Decor Guide block that shows how to get it (achievement, reputation, vendor with zone) and its cost.
+- **Toggle buttons in the title bar.** Buttons beside the close button open and close the Lumber Tracker and the Shopping List.
+- **Auto-deposit lumber to the Warband Bank.** A Helpers setting, off by default, that moves all lumber from your bags into the Warband Bank when you open a banker with Warband Bank access.
+- **Zone Map button in the Lumber Tracker.** Opens the zone map for your current area, and closes it on a second click.
+- **Reagent stock tooltips.** Reagent rows in the Recipes and Warehouse tabs show what you hold split across Bags, Bank, and Warband, plus how much your craft queue still needs.
+- **Warehouse materials reorganized** into Lumber, History, Materials, and Used In sections.
+- **Lumber Tracker session target.** The session line shows your held and target amount for the lumber you are farming, following the Queued only toggle.
+- **Panseit's Blizzard UI theme.** A stone-and-gold palette with native Blizzard action buttons, contributed by panseit. Switching to or from it prompts a UI reload.
+- **Shu'halo Perspective fortunes checklist.** The painting's detail page tracks the 13 Sargle's Fortunes and lights each one up as you collect it.
+- **New addon logo.** A house-and-spiral emblem created by Madailein, also shown as the addon's icon in the AddOns list.
 
 ---
 
@@ -81,6 +92,7 @@ A companion window injects into Blizzard's House Editor so you can **place decor
 - **Zone alerts** -- entering a zone with a decor vendor (selling something you're missing or have listed) can pop a window, ping chat, and play a sound -- each toggle optional.
 - **Your Data** -- collection KPIs, achievement progress (decor, coupons, lumber milestones), and full crafting/farming history.
 - **Config** -- multiple color themes with a live preview, UI scaling, and account profiles.
+- **Helpers** -- optional collection marks on Blizzard's own windows: a collected/needed mark on vendor items and in the Housing catalog, and a reagent mark on bag slots, plus a decor-sourcing block on catalog tooltips. Each toggles under Settings > Helpers.
 
 ## Integrations (all optional)
 
@@ -102,7 +114,7 @@ A companion window injects into Blizzard's House Editor so you can **place decor
 ---
 
 **Author:** Vamoose
-**Version:** 3.9.0
+**Version:** 3.10.0
 **Game Version:** 12.0.5+ (Midnight)
 **Source / Issues:** https://github.com/VamooseAddons/housing-decor-guide
 **Discord:** https://discord.gg/RWZaxJaHFP

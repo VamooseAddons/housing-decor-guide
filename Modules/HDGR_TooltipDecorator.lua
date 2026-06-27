@@ -13,10 +13,12 @@ HDG = HDG or {}
 HDG.TooltipDecorator = HDG.TooltipDecorator or {}
 local TD = HDG.TooltipDecorator
 
--- Function not constant: Theme:Initialize fires after TOC load;
--- a file-load-time ColorCode call would crash on nil scheme.
+-- HDG-branded prefix for tooltip lines: the addon icon inline (same glyph as the
+-- bag-slot decor-reagent badge), replacing the old "HDG:" text tag. 14px matches
+-- the COIN_ATLAS inline-icon convention. Kept as a function for call-site parity.
+local HDG_ICON_INLINE = "|TInterface\\AddOns\\HousingDecorGuide\\textures\\HousingDecorIcon:14:14|t "
 local function ACCENT_PREFIX()
-    return HDG.Theme:ColorCode("semantic.accent") .. "HDG:|r "
+    return HDG_ICON_INLINE
 end
 
 -- Decor catalog line. row.vendors[1].name = first vendor (empty if none).

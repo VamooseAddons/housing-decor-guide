@@ -263,6 +263,27 @@ HDG.LayoutConfig.widgets["chromePanel.version"] = {
     height   = 14, order = 90,
 }
 
+-- Lumber Tracker toggle: the Find Lumber glyph, just left of the close button.
+-- Click opens/closes the floating Lumber Tracker. LUMBER_WINDOW_TOGGLE auto-flips
+-- when dispatched without `visible`; ChromeController wires the OnClick.
+HDG.LayoutConfig.widgets["chromePanel.lumberToggle"] = {
+    tooltip = { recipe = "LumberToggle" },
+    kind = "button", ["in"] = "chrome.body",
+    normalAtlas = "Lumber_Tracking", highlightAtlas = "Lumber_Tracking",
+    width = 20, height = 20, size = 20, order = 95,
+}
+
+-- Shopping List toggle: the cart glyph (same atlas the Shopping window title uses),
+-- next to the lumber toggle. Click opens/closes the floating Shopping List window;
+-- SHOPPING_WIDGET_TOGGLE auto-flips. ChromeController wires the OnClick.
+HDG.LayoutConfig.widgets["chromePanel.shoppingToggle"] = {
+    tooltip = { recipe = "ShoppingToggle" },
+    kind = "button", ["in"] = "chrome.body",
+    normalAtlas = HDG.Constants.SHOPPING_LIST_ICON_ATLAS,
+    highlightAtlas = HDG.Constants.SHOPPING_LIST_ICON_ATLAS,
+    width = 20, height = 20, size = 20, order = 96,
+}
+
 -- Close button: right-anchored via chrome.spacer slack absorber. Dispatches
 -- MAIN_WINDOW_TOGGLE so the window can be reopened from the slash command.
 HDG.LayoutConfig.widgets["chromePanel.close"] = {

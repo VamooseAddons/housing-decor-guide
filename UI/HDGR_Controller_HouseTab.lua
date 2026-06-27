@@ -426,7 +426,7 @@ local function _renderDecoratorProfile(cell, ed)
     local bar = CreateFrame("StatusBar", nil, rightZone)
     bar:SetHeight(6)
     bar:SetPoint("TOPLEFT", titleLbl, "BOTTOMLEFT", 0, -4)
-    bar:SetPoint("RIGHT",   rightZone, "RIGHT", -4, 0)
+    bar:SetPoint("RIGHT",   chip, "LEFT", -10, 0)   -- stop short of the right-side progress numbers (no overlap)
     bar:SetStatusBarTexture("Interface\\TargetingFrame\\UI-StatusBar")
     HDG.Theme:Register(bar, "progressbar", { variant = "success" })
     local t = d.titleTier
@@ -756,6 +756,7 @@ local function _renderFeatured(cell, ed)
         lbl:SetPoint("TOP", btn, "BOTTOM", 0, -2)
         lbl:SetWidth(tileSize); lbl:SetJustifyH("CENTER")
         lbl:SetWordWrap(true)
+        lbl:SetMaxLines(2)   -- cap long names to 2 lines so they can't overflow into the rewards box; full name is in the tile tooltip
         lbl:SetText(item.name or "?")
     end
 end

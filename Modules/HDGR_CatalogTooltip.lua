@@ -34,6 +34,9 @@ local function _onTooltipCreated(_, entry, tooltip)
     local recordID = vid and vid.recordID
     if not recordID then return end    -- exception(boundary): bundle/non-decor cell carries no recordID
     local Obs = HDG.HousingCatalogObserver
+    -- Warm the catalog if the main window hasn't opened yet (idempotent cold-start,
+    -- no-op unless idle). First hover kicks the sweep; data fills in on later hovers.
+    Obs:RequestLoad()
     local itemID = Obs:GetItemIDByDecorID(recordID)
     if not itemID then return end      -- exception(nullable): decor not mapped in HDG's catalog
     local row = Obs:GetRow(itemID)

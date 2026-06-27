@@ -106,6 +106,13 @@ LC.sections["lumber.action.bar"] = {
 }
 
 -- ===== Header widgets ========================================================
+-- Lumber glyph, left of the title (same atlas the Alts tab uses).
+LC.widgets["lumberPanel.titleIcon"] = {
+    tooltip = false,
+    kind = "atlas", ["in"] = "lumberPanel", slot = "header",
+    atlas = "Lumber_Tracking",
+    width = 18, height = 18, order = 5,
+}
 LC.widgets["lumberPanel.title"] = {
     tooltip = false,
     kind = "label", role = "TextHeading", ["in"] = "lumberPanel", slot = "header",

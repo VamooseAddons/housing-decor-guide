@@ -53,7 +53,7 @@ LC.sections["data.body"] = {
 LC.sections["data.kpiStrip"] = {
     ["in"]  = "data.body",
     layout  = "horizontal",
-    height  = 84,
+    height  = 48,
     gap     = "sm",
     order   = 10,
 }
@@ -81,28 +81,28 @@ LC.widgets["dataPanel.kpiAchievements"] = {
     tooltip = false,
     kind = "statCard", ["in"] = "data.kpiStrip",
     label = "locale:DATA_KPI_ACHIEVEMENTS", value = "--",
-    width = "fill", height = 84, order = 10,
+    width = "fill", height = 48, order = 10,
     binding = { value = "data.kpiAchievements" },
 }
 LC.widgets["dataPanel.kpiAcquired"] = {
     tooltip = false,
     kind = "statCard", ["in"] = "data.kpiStrip",
     label = "locale:DATA_KPI_ACQUIRED", value = "--",
-    width = "fill", height = 84, order = 20,
+    width = "fill", height = 48, order = 20,
     binding = { value = "data.kpiAcquired" },
 }
 LC.widgets["dataPanel.kpiFarmSessions"] = {
     tooltip = false,
     kind = "statCard", ["in"] = "data.kpiStrip",
     label = "locale:DATA_KPI_FARM_SESSIONS", value = "--",
-    width = "fill", height = 84, order = 30,
+    width = "fill", height = 48, order = 30,
     binding = { value = "data.kpiFarmSessions" },
 }
 LC.widgets["dataPanel.kpiLumber"] = {
     tooltip = false,
     kind = "statCard", ["in"] = "data.kpiStrip",
     label = "locale:DATA_KPI_LUMBER", value = "--",
-    width = "fill", height = 84, order = 40,
+    width = "fill", height = 48, order = 40,
     binding = { value = "data.kpiLumber" },
 }
 

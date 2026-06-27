@@ -13,6 +13,17 @@ function ChromeController:Wire(rootFrame)
     HDG.UI.OnClick(rootFrame, "chromePanel.close", function()
         HDG.Store:Dispatch({ type = HDG.Constants.ACTIONS.MAIN_WINDOW_TOGGLE })
     end)
+
+    -- Lumber glyph: toggles the floating Lumber Tracker. No `visible` payload --
+    -- the reducer flips windowVisible itself (HDGR_Store LUMBER_WINDOW_TOGGLE).
+    HDG.UI.OnClick(rootFrame, "chromePanel.lumberToggle", function()
+        HDG.Store:Dispatch({ type = HDG.Constants.ACTIONS.LUMBER_WINDOW_TOGGLE })
+    end)
+
+    -- Cart glyph: toggles the floating Shopping List window (SHOPPING_WIDGET_TOGGLE flips it).
+    HDG.UI.OnClick(rootFrame, "chromePanel.shoppingToggle", function()
+        HDG.Store:Dispatch({ type = HDG.Constants.ACTIONS.SHOPPING_WIDGET_TOGGLE })
+    end)
 end
 
 function ChromeController:Refresh(rootFrame, ctx)

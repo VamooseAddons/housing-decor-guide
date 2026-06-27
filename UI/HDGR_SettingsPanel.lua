@@ -68,7 +68,7 @@ local SCALE_MAX  = 1.5
 -- Keep in sync with settings registered below. Values pulled from GetDefaultConfig().
 local RESETTABLE_KEYS = {
     "showMinimapButton", "showCompartment", "showProfessionButtons", "tooltipDecorTag",
-    "catalogTooltip", "autoDepositLumber", "hideInCombat", "waypointProvider", "scale",
+    "catalogTooltip", "bagBadge", "merchantDecorOverlay", "catalogDecorOverlay", "autoDepositLumber", "hideInCombat", "waypointProvider", "scale",
     "debug", "mockTSM", "locale", "fontFamily",
     "zoneScannerEnabled", "zoneScannerPopup", "zoneScannerPopupShopping",
     "zoneScannerChat", "zoneScannerSound",
@@ -81,6 +81,9 @@ local SEARCH_TAGS = {
     showProfessionButtons  = { "profession", "trade skill", "filter" },
     tooltipDecorTag        = { "tooltip", "reagent", "decor", "crafting", "recipe", "bag" },
     catalogTooltip         = { "tooltip", "decor", "source", "cost", "catalog", "helper" },
+    bagBadge               = { "bag", "badge", "icon", "reagent", "decor", "marker", "helper" },
+    merchantDecorOverlay   = { "vendor", "merchant", "decor", "collected", "marker", "helper" },
+    catalogDecorOverlay    = { "catalog", "decor", "uncollected", "marker", "plus", "helper" },
     autoDepositLumber      = { "lumber", "warband", "bank", "deposit", "auto", "helper" },
     hideInCombat           = { "combat", "hide", "auto", "fight", "lockdown" },
     waypointProvider       = { "waypoint", "map", "pin", "tomtom" },
@@ -326,6 +329,22 @@ local function _buildHelpersSubcategory(category)
         "On a reagent's tooltip, show how many decor recipes use it -- flags useful mats "
         .. "before you've learned the recipe. Also tags decor items in your bags (e.g. dropped "
         .. "decor you haven't learned yet) with their source.")
+
+    layout:AddInitializer(CreateSettingsListSectionHeaderInitializer("Bags"))
+    BindProxyBool(sub, layout, "bagBadge", "Mark decor reagents in bags",
+        "Show a small HDG icon in the top-right corner of bag items used in decor recipes. "
+        .. "Works with the default bags, Bagnon, Baganator, and Ellesmere.")
+
+    layout:AddInitializer(CreateSettingsListSectionHeaderInitializer("Vendors"))
+    BindProxyBool(sub, layout, "merchantDecorOverlay", "Mark collected decor at vendors",
+        "On a vendor's items, show a check on housing decor you've collected and a plus "
+        .. "on decor you still need. Default merchant window only.")
+
+    layout:AddInitializer(CreateSettingsListSectionHeaderInitializer("Catalog"))
+    BindProxyBool(sub, layout, "catalogDecorOverlay", "Mark uncollected decor in the catalog",
+        "In Blizzard's Housing catalog, put a red plus on decor you have not collected yet. "
+        .. "(The catalog's own number only counts stored copies, so placed decor can look "
+        .. "uncollected -- this uses your true collection state.)")
 
     layout:AddInitializer(CreateSettingsListSectionHeaderInitializer("Lumber"))
     BindProxyBool(sub, layout, "autoDepositLumber", "Auto-deposit lumber to the Warband Bank",

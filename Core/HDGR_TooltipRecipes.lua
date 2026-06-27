@@ -134,6 +134,8 @@ R.ProjectsEquipSet     = { title = "locale:TIP_PROJECTS_EQUIP_SET_TITLE",    bod
 R.ProjectsImportSet    = { title = "locale:TIP_PROJECTS_IMPORT_SET_TITLE",   body = "locale:TIP_PROJECTS_IMPORT_SET_BODY" }
 R.ProjectsDetachCrate  = { title = "locale:TIP_PROJECTS_DETACH_CRATE_TITLE", body = "locale:TIP_PROJECTS_DETACH_CRATE_BODY" }
 R.ProjectsCaptureAll   = { title = "locale:TIP_PROJECTS_CAPTURE_ALL_TITLE",  body = "locale:TIP_PROJECTS_CAPTURE_ALL_BODY" }
+R.LumberToggle         = { title = "locale:TIP_LUMBER_TOGGLE_TITLE",         body = "locale:TIP_LUMBER_TOGGLE_BODY" }
+R.ShoppingToggle       = { title = "locale:TIP_SHOPPING_TOGGLE_TITLE",       body = "locale:TIP_SHOPPING_TOGGLE_BODY" }
 R.LumberAutoShow       = { title = "locale:TIP_LUMBER_AUTO_SHOW_TITLE",      body = "locale:TIP_LUMBER_AUTO_SHOW_BODY" }
 R.LumberGoal           = { title = "locale:TIP_LUMBER_GOAL_TITLE",           body = "locale:TIP_LUMBER_GOAL_BODY" }
 R.ZoneMapOpen          = { title = "locale:TIP_ZONE_MAP_TITLE",              body = "locale:TIP_ZONE_MAP_BODY" }

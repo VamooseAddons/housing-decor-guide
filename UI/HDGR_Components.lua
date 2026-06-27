@@ -2926,10 +2926,14 @@ function HDG.UI:StatCard(parent, value, label)
     -- Raised tile (surface.raised) lifts the card off its panel (surface ramp rule 4).
     HDG.Theme:Register(frame, "Raised")
     if frame.CreateFontString then  -- exception(false-positive): Frame always has CreateFontString; mock-fidelity guard
+        -- Value + label are anchored as one tight pair, vertically centred in the
+        -- tile: value sits just above centre, label directly beneath it. Number stays
+        -- on top; the old top/bottom-edge split left a big mid-card gap that made it
+        -- ambiguous which label belonged to which number.
         local v = frame:CreateFontString(nil, "OVERLAY")
         if v.SetPoint then  -- exception(false-positive): FontString always has SetPoint; mock-fidelity guard
-            v:SetPoint("TOPLEFT", 8, -6)
-            v:SetPoint("TOPRIGHT", -8, -6)
+            v:SetPoint("BOTTOMLEFT",  frame, "LEFT", 8, 1)
+            v:SetPoint("BOTTOMRIGHT", frame, "RIGHT", -8, 1)
         end
         v:SetJustifyH("LEFT")
         applyFontRole(v, "heading")
@@ -2939,8 +2943,8 @@ function HDG.UI:StatCard(parent, value, label)
 
         local l = frame:CreateFontString(nil, "OVERLAY")
         if l.SetPoint then  -- exception(false-positive): FontString always has SetPoint; mock-fidelity guard
-            l:SetPoint("BOTTOMLEFT", 8, 4)
-            l:SetPoint("BOTTOMRIGHT", -8, 4)
+            l:SetPoint("TOPLEFT",  v, "BOTTOMLEFT", 0, -2)
+            l:SetPoint("TOPRIGHT", v, "BOTTOMRIGHT", 0, -2)
         end
         l:SetJustifyH("LEFT")
         applyFontRole(l, "caption")

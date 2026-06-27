@@ -54,6 +54,9 @@ local schema = {
     SHOW_PROFESSION_BUTTONS = { key = "showProfessionButtons", default = true, scope = Scope.Profile },
     TOOLTIP_DECOR_TAG    = { key = "tooltipDecorTag",   default = true,  scope = Scope.Profile },
     CATALOG_TOOLTIP      = { key = "catalogTooltip",    default = true,  scope = Scope.Profile },
+    BAG_BADGE            = { key = "bagBadge",          default = true,  scope = Scope.Profile },
+    MERCHANT_DECOR_OVERLAY = { key = "merchantDecorOverlay", default = true, scope = Scope.Profile },
+    CATALOG_DECOR_OVERLAY  = { key = "catalogDecorOverlay",  default = true, scope = Scope.Profile },
     AUTO_DEPOSIT_LUMBER  = { key = "autoDepositLumber", default = false, scope = Scope.Profile },
     -- Auto-hide all HDG windows on entering combat; restored on combat end.
     HIDE_IN_COMBAT       = { key = "hideInCombat",      default = true,  scope = Scope.Profile },

@@ -1,3 +1,37 @@
+## [3.10.0] - 2026-06-27 (June 2026)
+
+### Added
+- Decor reagents in your bags are now marked with a small Housing Decor Guide
+  icon in the top-right corner of the item, so you can spot crafting mats at a
+  glance. Works with the default bags, Bagnon, Baganator, and Ellesmere, and can
+  be turned off under Settings > Helpers > Bags. The reagent tooltip line now
+  leads with the same icon.
+- Decor sold by vendors is now marked at a glance: a green check on the decor
+  you have already collected and a plus on the decor you still need, in the
+  top-right corner of each vendor item. Other items are left unmarked. Turn it
+  off under Settings > Helpers > Vendors.
+- In Blizzard's Housing catalog, decor you have not collected yet is flagged with
+  a small red plus in the corner of the cell, so the gaps in your collection stand
+  out. This is more reliable than the catalog's own number, which only counts
+  stored copies -- decor you have placed shows no number but is not a gap. Turn it
+  off under Settings > Helpers > Catalog.
+- Quick toggle buttons in the main window's title bar, beside the close button:
+  a lumber glyph that opens and closes the Lumber Tracker, and a shopping cart
+  that opens and closes the Shopping List. The Lumber Tracker's own title bar now
+  shows the lumber icon as well.
+
+### Changed
+- On the "Your Data" page, each statistic's number now sits directly above its
+  label instead of being separated by a large gap, so it is clear which number
+  belongs to which heading.
+
+### Fixed
+- A "Featured of the Week" decor with a long name no longer overflows into the
+  "Current Level Rewards" box beneath it; long names are trimmed to two lines and
+  shown in full on the item tooltip.
+- The Decor Master rank progress bar no longer runs underneath the progress
+  numbers on the right side of the header.
+
 ## [3.9.0] - 2026-06-24 (June 2026)
 
 ### Added

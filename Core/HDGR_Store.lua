@@ -74,6 +74,12 @@ local function NewConfig()
         -- catalogTooltip: append HDG's decor-sourcing block to the Housing
         -- catalog hover tooltip (HDG.CatalogTooltip). Surfaced under Helpers.
         catalogTooltip         = true,
+        -- bagBadge: mark decor-reagent bag slots with the HDG logo (Helpers).
+        bagBadge               = true,
+        -- merchantDecorOverlay: mark vendor decor with collected/needed icons (Helpers > Vendors).
+        merchantDecorOverlay   = true,
+        -- catalogDecorOverlay: red plus on uncollected decor in Blizzard's catalog (Helpers > Catalog).
+        catalogDecorOverlay    = true,
         -- autoDepositLumber: on a banker open with Warband Bank access, move all
         -- lumber from bags into the Warband Bank (Helpers > Lumber). Opt-in default
         -- OFF -- it moves the player's items.
