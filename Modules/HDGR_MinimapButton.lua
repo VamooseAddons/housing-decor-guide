@@ -10,7 +10,7 @@ HDG.MinimapButton = HDG.MinimapButton or {}
 local MB = HDG.MinimapButton
 
 local ADDON_KEY  = "HousingDecorGuideR"
-local ICON_PATH  = "Interface/AddOns/HousingDecorGuide/textures/HousingDecorIcon"
+local ICON_PATH  = "Interface/AddOns/HousingDecorGuide/textures/Vamoose_HDG_400_trans"
 
 -- LibStub references resolved at onEnable time (libs loaded by TOC ordering).
 local _ldb    -- LibDataBroker-1.1 object
@@ -44,6 +44,25 @@ local function _showContextMenu(owner)
             HDG.Store:Dispatch({ type = HDG.Constants.ACTIONS.LUMBER_WINDOW_TOGGLE })
         end)
     end)
+end
+
+-- LibDBIcon wraps the icon in the minimap tracking-border ring (file 136430) plus
+-- a round background (136467), and circle-crops the icon via UpdateCoord. Strip
+-- both textures and drop the crop so just the emblem shows -- no button frame.
+-- They're locals inside the lib's createButton, so find them by file id.
+local function _stripBorder()
+    local button = _dbicon:GetMinimapButton(ADDON_KEY)
+    if not button then return end   -- exception(boundary): LibDBIcon button not built
+    for _, region in ipairs({ button:GetRegions() }) do
+        if region:IsObjectType("Texture") then
+            local tex = region:GetTexture()
+            if tex == 136430 or tex == 136467 then region:Hide() end  -- TrackingBorder + Background
+        end
+    end
+    local icon = button.icon
+    icon.UpdateCoord = function(self) self:SetTexCoord(0, 1, 0, 1) end  -- emblem is round; no crop
+    icon:UpdateCoord()
+    icon:SetSize(28, 28)                                                -- fill the button (no frame to inset for)
 end
 
 -- ===== Init ==================================================================
@@ -81,6 +100,7 @@ function MB:Init()
     local cfg = HDG.Store:GetState().account.config  -- minimapPos seeded in NewConfig
 
     DBIcon:Register(ADDON_KEY, _launcher, cfg.minimapPos)
+    _stripBorder()
 
     _applyVisibility()
 end

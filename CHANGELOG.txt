@@ -1,3 +1,26 @@
+## [3.11.0] - 2026-06-28 (June 2026)
+
+### Added
+- Mogul > Goblin: the expansion filter is back -- a row of expansion pills (Classic
+  through Midnight) under the profession filter, each tinted in its expansion's
+  colour. Click one to show only that expansion's craftable decor, click it again
+  to clear. It combines with the profession filter.
+- Mogul > Goblin: a "Have lumber" toggle beside "Your Auctions" that hides any craft
+  you cannot cover with the lumber you currently hold -- and it accounts for what
+  your craft queue has already committed.
+
+### Changed
+- Mogul > Goblin: the Lumber column now shows how much you hold versus how much you
+  need (e.g. "Ironwood 170/20"), where the need rolls in any of that lumber your craft
+  queue has already committed -- so the need climbs as you queue and the held figure
+  turns red the moment you can't cover a craft on top of the queue (exactly when "Have
+  lumber" would hide it). The column header sorts by lumber needed.
+- The Housing Decor Guide mark on bag reagents now has a dark outline, so it stands
+  out over bright item icons.
+- The minimap button is now borderless, showing just the emblem without the ring.
+- The addon icon across the minimap, add-on compartment, tooltips and bag mark now
+  uses a brighter version of the emblem.
+
 ## [3.10.0] - 2026-06-27 (June 2026)
 
 ### Added

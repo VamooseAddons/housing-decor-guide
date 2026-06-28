@@ -166,6 +166,12 @@ LC.sections["mogul.goblinProfRow"] = {
     layout = "horizontal",
     height = 22, gap = "xs", order = 5,
 }
+-- Expansion filter: 12 short codes from EXPANSION_DATA (toggle-to-clear, composes with profession).
+LC.sections["mogul.goblinExpRow"] = {
+    ["in"] = "mogul.subView_goblin",
+    layout = "horizontal",
+    height = 22, gap = "xs", order = 6,
+}
 -- Filter row: search + knowledge + queue dropdowns + auctions toggle.
 LC.sections["mogul.goblinFilterRow"] = {
     ["in"] = "mogul.subView_goblin",
@@ -481,7 +487,7 @@ LC.widgets["mogulPanel.goblinCol_lumber"] = {
     tooltip = false,
     kind = "button", ["in"] = "mogul.goblinColumnHeader",
     font = "small", variant = "tertiary",
-    width = 100, height = 16, order = 20,
+    width = 140, height = 16, order = 20,
     binding = { text = "goblin.sortHeader_lumber", active = "goblin.sortActive_lumber" },
 }
 LC.widgets["mogulPanel.goblinCol_perLum"] = {
@@ -583,7 +589,7 @@ LC.widgets["mogulPanel.goblinCol_soldPerDay"] = {
 LC.widgets["mogulPanel.goblinSearch"] = {
     tooltip = false,
     kind = "editbox", ["in"] = "mogul.goblinFilterRow", font = "body",
-    height = 22, width = 160, order = 10,
+    height = 22, width = 145, order = 10,
     multiline = false,
     placeholder = "locale:MOG_SEARCH_PLACEHOLDER",
 }
@@ -622,6 +628,12 @@ LC.widgets["mogulPanel.goblinAuctions"] = {
     kind = "button", ["in"] = "mogul.goblinFilterRow", font = "small",
     text = "locale:MOG_AUCTIONS", width = "auto", height = 20, order = 40, variant = "tertiary",
     binding = { active = "goblin.auctionsActive" },
+}
+LC.widgets["mogulPanel.goblinHaveLumber"] = {
+    tooltip = false,
+    kind = "button", ["in"] = "mogul.goblinFilterRow", font = "small",
+    text = "Have lumber", width = "auto", height = 20, order = 45, variant = "tertiary",
+    binding = { active = "goblin.haveLumberActive" },
 }
 LC.widgets["mogulPanel.goblinList"] = {
     tooltip = false,
@@ -709,4 +721,28 @@ for i, p in ipairs(HDG.Constants.PROFESSION_DATA or {}) do
             profession = p.name,
         }
     end
+end
+
+-- Goblin expansion pills: short code per EXPANSION_DATA entry, tinted by its expansion colour.
+LC.widgets["mogulPanel.goblinExpLabel"] = {
+    tooltip = false,
+    kind = "label", role = "TextDim", ["in"] = "mogul.goblinExpRow",
+    text = "Exp:", font = "caption", width = "auto", height = 20, order = 1,
+}
+-- Inline expansion-colour hex (mirrors HDGR_Expansion.buildColorHex) so the pill
+-- labels bake at LayoutConfig load with no load-order dependency on HDG.Expansion.
+local function _expHex(c)
+    return string.format("|cFF%02x%02x%02x",
+        math.floor((c[1] or 1) * 255 + 0.5),
+        math.floor((c[2] or 1) * 255 + 0.5),
+        math.floor((c[3] or 1) * 255 + 0.5))
+end
+for i, e in ipairs(HDG.Constants.EXPANSION_DATA) do
+    LC.widgets["mogulPanel.goblinExp_" .. e.short] = {
+        tooltip = false,
+        kind = "button", ["in"] = "mogul.goblinExpRow", font = "small",
+        text = _expHex(e.color) .. e.short .. "|r",
+        width = "auto", height = 20, order = 10 + i, variant = "tertiary",
+        binding = { active = "goblin.expActive_" .. e.short },
+    }
 end

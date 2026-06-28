@@ -528,10 +528,12 @@ HDG.Constants = {
         MOGUL_TOGGLE_FRUGAL          = "HDGR_MOGUL_TOGGLE_FRUGAL",
         -- ===== Goblin sub-view =====
         GOBLIN_SET_PROFESSION        = "HDGR_GOBLIN_SET_PROFESSION",
+        GOBLIN_SET_EXPANSION         = "HDGR_GOBLIN_SET_EXPANSION",
         GOBLIN_SET_SEARCH            = "HDGR_GOBLIN_SET_SEARCH",
         GOBLIN_SET_KNOWLEDGE         = "HDGR_GOBLIN_SET_KNOWLEDGE",        -- payload: { mode = "all"|"known"|"alt" }
         GOBLIN_SET_QUEUE             = "HDGR_GOBLIN_SET_QUEUE",            -- payload: { mode = "all"|"only"|"hide" }
         GOBLIN_TOGGLE_AUCTIONS       = "HDGR_GOBLIN_TOGGLE_AUCTIONS",
+        GOBLIN_TOGGLE_HAVE_LUMBER    = "HDGR_GOBLIN_TOGGLE_HAVE_LUMBER",
         GOBLIN_SET_SORT              = "HDGR_GOBLIN_SET_SORT",             -- payload: { col = "name"|"lumber"|... }
         GOBLIN_TOGGLE_ROW_EXPAND     = "HDGR_GOBLIN_TOGGLE_ROW_EXPAND",   -- payload: { itemID }
         PRICES_SET_PREFERRED_SOURCE  = "HDGR_PRICES_SET_PREFERRED_SOURCE", -- payload: { source = "TSM"|"Auctionator"|"Direct"|nil }

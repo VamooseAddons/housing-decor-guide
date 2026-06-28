@@ -12,22 +12,15 @@
 
 ---
 
-## What's New in v3.10.0
+## What's New in v3.11.0
 
-This covers the player-facing changes since the last description update at 3.6.
+This covers the player-facing changes in 3.11.0.
 
-- **Collection marks on Blizzard's own windows.** At a vendor, decor you have collected shows a green check and decor you still need shows a plus, in the corner of each item. In the Housing catalog, decor you have not collected yet shows a red plus. Each is optional under Settings > Helpers.
-- **Bag reagent marks.** Bag slots holding a decor crafting reagent show a small Housing Decor Guide icon in the corner. Works with the default bags, Bagnon, Baganator, and Ellesmere.
-- **Decor sourcing in the Housing Dashboard tooltip.** Hovering a piece in Blizzard's catalog adds a Housing Decor Guide block that shows how to get it (achievement, reputation, vendor with zone) and its cost.
-- **Toggle buttons in the title bar.** Buttons beside the close button open and close the Lumber Tracker and the Shopping List.
-- **Auto-deposit lumber to the Warband Bank.** A Helpers setting, off by default, that moves all lumber from your bags into the Warband Bank when you open a banker with Warband Bank access.
-- **Zone Map button in the Lumber Tracker.** Opens the zone map for your current area, and closes it on a second click.
-- **Reagent stock tooltips.** Reagent rows in the Recipes and Warehouse tabs show what you hold split across Bags, Bank, and Warband, plus how much your craft queue still needs.
-- **Warehouse materials reorganized** into Lumber, History, Materials, and Used In sections.
-- **Lumber Tracker session target.** The session line shows your held and target amount for the lumber you are farming, following the Queued only toggle.
-- **Panseit's Blizzard UI theme.** A stone-and-gold palette with native Blizzard action buttons, contributed by panseit. Switching to or from it prompts a UI reload.
-- **Shu'halo Perspective fortunes checklist.** The painting's detail page tracks the 13 Sargle's Fortunes and lights each one up as you collect it.
-- **New addon logo.** A house-and-spiral emblem created by Madailein, also shown as the addon's icon in the AddOns list.
+- **Expansion filter on the Goblin tab.** A row of expansion pills under the profession filter. Click one to show only that expansion's craftable decor, click it again to clear. It combines with the profession filter.
+- **Lumber column shows held against need.** The Goblin tab's Lumber column reads as held over needed (for example "Ironwood 170/20"). The need includes any of that lumber your craft queue has already committed, so it climbs as you queue, and the held figure turns red when you cannot cover a craft on top of the queue. The column header sorts by lumber needed.
+- **Have lumber toggle on the Goblin tab.** A toggle beside Your Auctions that hides any craft you cannot cover from the lumber you hold, after the queue's commitment.
+- **Bag reagent mark outline.** The Housing Decor Guide mark on bag reagents now has a dark outline, so it stands out over bright item icons.
+- **Borderless minimap button.** The minimap button now shows just the emblem, without the surrounding ring.
 
 ---
 
@@ -114,7 +107,7 @@ A companion window injects into Blizzard's House Editor so you can **place decor
 ---
 
 **Author:** Vamoose
-**Version:** 3.10.0
+**Version:** 3.11.0
 **Game Version:** 12.0.5+ (Midnight)
 **Source / Issues:** https://github.com/VamooseAddons/housing-decor-guide
 **Discord:** https://discord.gg/RWZaxJaHFP

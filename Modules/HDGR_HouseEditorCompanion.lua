@@ -472,10 +472,10 @@ function CreateLauncher()
     -- The HDG icon (same texture the minimap button uses). Hover brightens it
     -- (additive). Framed with a gold border + an expandable arrow (below).
     local icon = btn:CreateTexture(nil, "ARTWORK")
-    icon:SetTexture("Interface/AddOns/HousingDecorGuide/textures/HousingDecorIcon")
+    icon:SetTexture("Interface/AddOns/HousingDecorGuide/textures/Vamoose_HDG_400_trans")
     icon:SetAllPoints()
 
-    btn:SetHighlightTexture("Interface/AddOns/HousingDecorGuide/textures/HousingDecorIcon")
+    btn:SetHighlightTexture("Interface/AddOns/HousingDecorGuide/textures/Vamoose_HDG_400_trans")
     local hl = btn:GetHighlightTexture()
     hl:SetAllPoints()
     hl:SetBlendMode("ADD")

@@ -137,7 +137,7 @@ LC.sections["companionRecent.strip"] = {
 LC.widgets["companionPanel.icon"] = {
     tooltip = false,
     kind = "atlas", ["in"] = "companionPanel", slot = "header",
-    texture = "Interface/AddOns/HousingDecorGuide/textures/HousingDecorIcon",
+    texture = "Interface/AddOns/HousingDecorGuide/textures/Vamoose_HDG_400_trans",
     width = 20, height = 20, order = 5,
 }
 LC.widgets["companionPanel.title"] = {

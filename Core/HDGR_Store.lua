@@ -319,10 +319,12 @@ local function NewMogulSessionUI()
         frugal = false,
         goblin     = {
             profession   = "All",    -- "All" | PROFESSION_DATA[i].name
+            expansion    = "",       -- "" (no filter) | EXPANSION_DATA[i].display; toggle-clear, composes with profession
             search       = "",       -- substring filter on item name (case-insensitive)
             knowledge    = "all",    -- all | known (char) | alt (account-known)
             queue        = "all",    -- all | only (queued only) | hide (hide queued)
             auctionsOnly = false,    -- true: only show items with active player AH listings
+            haveLumber   = false,    -- true: hide crafts whose lumber need exceeds held minus queued (lumber-only)
             sortCol         = "profit", -- name | lumber | perLum | cost | sell | tsmMin | tsmMarket | tsmRegion | tsmPct | profit | pct
             sortDir         = "desc",   -- "asc" | "desc"
             expandedItemID  = nil,      -- itemID of the row whose detail panel is showing (nil = collapsed)
@@ -2620,10 +2622,19 @@ HDG.Actions:Register{ name = "MOGUL_TOGGLE_FRUGAL",
     end }
 
 HDG.Actions:Register{ name = "GOBLIN_SET_PROFESSION",
-    persists = false, combatUnsafe = false, 
+    persists = false, combatUnsafe = false,
     invalidates = { "session.ui.mogul.goblin.profession" },
     reduce = function(state, payload)
         state.session.ui.mogul.goblin.profession = payload.profession
+    end }
+
+HDG.Actions:Register{ name = "GOBLIN_SET_EXPANSION",
+    persists = false, combatUnsafe = false,
+    invalidates = { "session.ui.mogul.goblin.expansion" },
+    reduce = function(state, payload)
+        -- Toggle-to-clear: re-clicking the active expansion clears the filter ("").
+        local cur = state.session.ui.mogul.goblin.expansion
+        state.session.ui.mogul.goblin.expansion = (cur == payload.expansion) and "" or payload.expansion
     end }
 
 HDG.Actions:Register{ name = "GOBLIN_SET_SEARCH",
@@ -2648,11 +2659,19 @@ HDG.Actions:Register{ name = "GOBLIN_SET_QUEUE",
     end }
 
 HDG.Actions:Register{ name = "GOBLIN_TOGGLE_AUCTIONS",
-    persists = false, combatUnsafe = false, 
+    persists = false, combatUnsafe = false,
     invalidates = { "session.ui.mogul.goblin.auctionsOnly" },
     reduce = function(state, payload)
         local g = state.session.ui.mogul.goblin
         g.auctionsOnly = not (g.auctionsOnly == true)
+    end }
+
+HDG.Actions:Register{ name = "GOBLIN_TOGGLE_HAVE_LUMBER",
+    persists = false, combatUnsafe = false,
+    invalidates = { "session.ui.mogul.goblin.haveLumber" },
+    reduce = function(state, payload)
+        local g = state.session.ui.mogul.goblin
+        g.haveLumber = not (g.haveLumber == true)
     end }
 
 HDG.Actions:Register{ name = "GOBLIN_TOGGLE_ROW_EXPAND",

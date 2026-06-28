@@ -19,7 +19,7 @@ HDG = HDG or {}
 
 local BB = {}
 
-local BADGE_TEX  = "Interface\\AddOns\\HousingDecorGuide\\textures\\HousingDecorIcon"
+local BADGE_TEX  = "Interface\\AddOns\\HousingDecorGuide\\textures\\Vamoose_HDG_400_trans"
 local BADGE_SIZE = 16
 
 -- ===== Reagent membership (cached) ==========================================
@@ -63,6 +63,14 @@ local function ensureBadge(button)
         badge:SetSize(BADGE_SIZE, BADGE_SIZE)
         badge:SetPoint("TOPRIGHT", button, "TOPRIGHT", 1, -1)
         badge:SetTexture(BADGE_TEX)
+        -- Dark outline: a black silhouette of the emblem, a hair larger, drawn under
+        -- it (sublevel 6 < 7) so the gold reads over bright icons + the gold slot frame.
+        local outline = button:CreateTexture(nil, "OVERLAY", nil, 6)
+        outline:SetSize(BADGE_SIZE + 3, BADGE_SIZE + 3)
+        outline:SetPoint("CENTER", badge, "CENTER")
+        outline:SetTexture(BADGE_TEX)
+        outline:SetVertexColor(0, 0, 0, 0.9)
+        badge._outline = outline
         button._hdgrDecorBadge = badge
     end
     return badge
@@ -91,8 +99,11 @@ local function onSetTexture(button)
     if button.BGR then return end   -- exception(boundary): Baganator item-grid button; handled by its corner widget
     local itemID = enabled() and bagItemID(button) or nil
     if itemID and isDecorReagent(itemID) then
-        ensureBadge(button):Show()
+        local badge = ensureBadge(button)
+        badge._outline:Show()
+        badge:Show()
     elseif button._hdgrDecorBadge then
+        button._hdgrDecorBadge._outline:Hide()
         button._hdgrDecorBadge:Hide()
     end
 end
@@ -112,7 +123,13 @@ local function installBaganator()
             local f = CreateFrame("Frame", nil, itemButton)
             f:SetSize(BADGE_SIZE, BADGE_SIZE)
             f.padding = 0   -- Baganator inset multiplier; 0 = frame flush to the icon's top-right corner
-            local t = f:CreateTexture(nil, "OVERLAY")
+            -- Dark outline silhouette behind the emblem (matches the default-bag provider).
+            local outline = f:CreateTexture(nil, "OVERLAY", nil, 0)
+            outline:SetPoint("TOPLEFT", f, "TOPLEFT", 2 - 1, 1)
+            outline:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", 2 + 1, -1)
+            outline:SetTexture(BADGE_TEX)
+            outline:SetVertexColor(0, 0, 0, 0.9)
+            local t = f:CreateTexture(nil, "OVERLAY", nil, 1)
             -- Nudge the texture +2px right of the (corner-flush) frame so it sits hard against
             -- the slot's right edge. padding can't push past 0, so offset the texture itself.
             t:SetPoint("TOPLEFT", f, "TOPLEFT", 2, 0)

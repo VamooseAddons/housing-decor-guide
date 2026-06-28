@@ -15,17 +15,6 @@ local function _localName(itemID, baked)
     return (resolved and name) or baked or name
 end
 
--- File-local lazy index: lumberType itemID -> shortName. Built once on first use.
-local _lumberShortByID = nil
-local function lumberShortByID()
-    if _lumberShortByID then return _lumberShortByID end
-    _lumberShortByID = {}
-    for _, l in ipairs(HDG.Constants.LUMBER_DATA) do
-        _lumberShortByID[l.id] = l.shortName or l.name or ""
-    end
-    return _lumberShortByID
-end
-
 -- Mogul tab grows to 950px when Goblin sub-view is active AND TSM is the effective
 -- price source. source preference + prices tick so Config changes trigger resize.
 local function effectiveSourceIsTSM(state)
@@ -46,10 +35,10 @@ Selectors:Register("mogul.dynamicColumns", {
     fn = function(state)
         local subView = state.session.ui.mogul.subView
         if subView == "goblin" then
-            -- #AH (40) is always shown in Goblin -> base widens 700 -> 745.
-            -- TSM active adds Server/Market/Region/TSM% (260) + Rate/+Day (100) + gaps -> ~1135.
-            if effectiveSourceIsTSM(state) then return { 1135 } end
-            return { 745 }
+            -- #AH (40) always shown + wider Lumber column (need/held) -> base 785.
+            -- TSM active adds Server/Market/Region/TSM% (260) + Rate/+Day (100) + gaps -> ~1175.
+            if effectiveSourceIsTSM(state) then return { 1175 } end
+            return { 785 }
         end
         return { 700 }   -- mogul craft-optimizer subview
     end,
@@ -470,10 +459,12 @@ Selectors:Register("goblin.rows", {
         "session.resolvers.prices.tick",
         "session.resolvers.bag.tick",
         "session.ui.mogul.goblin.profession",
+        "session.ui.mogul.goblin.expansion",
         "session.ui.mogul.goblin.search",
         "session.ui.mogul.goblin.knowledge",
         "session.ui.mogul.goblin.queue",
         "session.ui.mogul.goblin.auctionsOnly",
+        "session.ui.mogul.goblin.haveLumber",
         "session.ui.mogul.goblin.sortCol",
         "session.ui.mogul.goblin.sortDir",
         "account.config.preferredPriceAddon",
@@ -481,10 +472,12 @@ Selectors:Register("goblin.rows", {
     fn = function(state, ctx)
         local g = state.session.ui.mogul.goblin
         local profFilter   = g.profession
+        local expFilter    = g.expansion
         local search       = g.search:lower()
         local knowledge    = g.knowledge
         local queue        = g.queue
         local auctionsOnly = g.auctionsOnly == true
+        local haveLumber   = g.haveLumber == true
         local sortCol      = g.sortCol
         local sortDir      = g.sortDir
         local isTSMActive  = Selectors:Call("goblin.isTSMActive", state, ctx)
@@ -498,6 +491,21 @@ Selectors:Register("goblin.rows", {
         local auctionSet = state.account.prices.ownedAuctions
 
         local data = HDG.Goblin:BuildProfitData()
+        -- Per-lumber-type quantity already committed by the craft queue (each queued
+        -- craft's need x remaining). The Lumber column rolls this into each row's need
+        -- (held vs need+queued), and the "Have lumber" filter hides what held can't cover.
+        local queuedLumber = {}
+        do
+            local byItem = {}
+            for _, r in ipairs(data) do byItem[r.itemID] = r end
+            for _, q in ipairs(state.account.craft.queue) do
+                local qr = q.itemID and byItem[q.itemID]
+                if qr and qr.lumberType then
+                    queuedLumber[qr.lumberType] = (queuedLumber[qr.lumberType] or 0)
+                        + qr.lumberQty * (q.remaining or 0)  -- exception(boundary): queue row from SVars may lack remaining
+                end
+            end
+        end
         local out = {}
         for _, row in ipairs(data) do
             -- Localise the crafted-item name (catalog/live API; baked stays as cold placeholder).
@@ -506,6 +514,10 @@ Selectors:Register("goblin.rows", {
             local keep = true
             -- Profession filter ("All" passes).
             if keep and profFilter ~= "All" and row.profession ~= profFilter then
+                keep = false
+            end
+            -- Expansion filter ("" passes; composes (AND) with profession).
+            if keep and expFilter ~= "" and row.expansion ~= expFilter then
                 keep = false
             end
             -- Search filter (substring on name, case-insensitive).
@@ -533,6 +545,14 @@ Selectors:Register("goblin.rows", {
             if keep and auctionsOnly then
                 keep = auctionSet[row.itemID] ~= nil
             end
+            -- Have-lumber filter (lumber-only): keep crafts you can still cover from held
+            -- lumber minus what the queue already commits. Rows with no lumber always pass.
+            if keep and haveLumber and row.lumberType then
+                local held = HDG.BagObserver:GetTotal(row.lumberType)
+                if row.lumberQty > (held - (queuedLumber[row.lumberType] or 0)) then
+                    keep = false
+                end
+            end
             if keep then
                 -- ADR-041 ed-projection: own-listings qty rides the row so the
                 -- #AH painter stays state-dive-free. Re-stamped every run
@@ -544,11 +564,10 @@ Selectors:Register("goblin.rows", {
         end
 
         -- Sort by user column; nil values sink to bottom regardless of direction.
-        -- lumber column sorts by resolved shortName via file-local lazy index.
-        local lumberShort = lumberShortByID()
+        -- lumber column sorts by the craft's lumber NEED (qty); each craft uses one lumber type.
         local function keyFor(row, col)
             if col == "name"      then return row.name end
-            if col == "lumber"    then return lumberShort[row.lumberType] end
+            if col == "lumber"    then return row.lumberQty end
             if col == "perLum"    then return row.lumberValue end
             if col == "cost"      then return row.materialCost end
             if col == "sell"      then return row.sellPrice end
@@ -581,8 +600,9 @@ Selectors:Register("goblin.rows", {
         for i = 1, #out do
             out[i].kind        = "goblinRow"
             out[i].isTSMActive = isTSMActive
-            -- Stamp ownedLumber into row so Configure reads ed (not BagObserver mid-paint). per ADR-041.
-            out[i].ownedLumber = HDG.BagObserver:GetTotal(out[i].lumberType)
+            -- Stamp held + queue-committed lumber so Configure reads ed (not BagObserver mid-paint). per ADR-041.
+            out[i].ownedLumber  = HDG.BagObserver:GetTotal(out[i].lumberType)
+            out[i].queuedLumber = queuedLumber[out[i].lumberType] or 0
         end
         return out
     end,
@@ -603,6 +623,19 @@ do
             Selectors:Register("goblin.profActive_" .. p.name,
                 { reads = {"session.ui.mogul.goblin.profession"}, fn = activeProf(p.name) })
         end
+    end
+end
+
+-- Expansion pill active selectors (one per EXPANSION_DATA entry, keyed by short code).
+do
+    local function activeExp(target)
+        return function(state)
+            return state.session.ui.mogul.goblin.expansion == target
+        end
+    end
+    for _, e in ipairs(HDG.Constants.EXPANSION_DATA) do
+        Selectors:Register("goblin.expActive_" .. e.short,
+            { reads = {"session.ui.mogul.goblin.expansion"}, fn = activeExp(e.display) })
     end
 end
 
@@ -634,6 +667,12 @@ do
         reads = {"session.ui.mogul.goblin.auctionsOnly"},
         fn = function(state)
             return state.session.ui.mogul.goblin.auctionsOnly == true
+        end,
+    })
+    Selectors:Register("goblin.haveLumberActive", {
+        reads = {"session.ui.mogul.goblin.haveLumber"},
+        fn = function(state)
+            return state.session.ui.mogul.goblin.haveLumber == true
         end,
     })
 

@@ -46,6 +46,12 @@ function MogulController:_wireGoblinControls(rootFrame)
                 function() dispatch("GOBLIN_SET_PROFESSION", { profession = captured }) end)
         end
     end
+    -- Expansion pills: dispatch the display name; the reducer toggles-to-clear on re-click.
+    for _, e in ipairs(HDG.Constants.EXPANSION_DATA) do
+        local captured = e.display
+        HDG.UI.OnClick(rootFrame, "mogulPanel.goblinExp_" .. e.short,
+            function() dispatch("GOBLIN_SET_EXPANSION", { expansion = captured }) end)
+    end
     local searchBox = HDG.UI.W(rootFrame, "mogulPanel.goblinSearch")
     if searchBox and searchBox.SetScript then  -- exception(boundary): widget may be absent
         searchBox:SetScript("OnTextChanged", function(self, userInput)
@@ -55,6 +61,8 @@ function MogulController:_wireGoblinControls(rootFrame)
     end
     HDG.UI.OnClick(rootFrame, "mogulPanel.goblinAuctions",
         function() dispatch("GOBLIN_TOGGLE_AUCTIONS", {}) end)
+    HDG.UI.OnClick(rootFrame, "mogulPanel.goblinHaveLumber",
+        function() dispatch("GOBLIN_TOGGLE_HAVE_LUMBER", {}) end)
     for _, col in ipairs({"name","lumber","perLum","cost","sell",
                           "tsmMin","tsmMarket","tsmRegion","tsmPct","saleRate","soldPerDay","profit","pct"}) do
         local captured = col
@@ -683,19 +691,20 @@ local function _layoutGoblinRow(row)
             payload = { itemID = self._currentItemID },
         })
     end)
-    -- pct fixed at 670px from row.LEFT (core right edge; ~4px under header for visual alignment).
+    -- pct fixed at 710px from row.LEFT (core right edge; +40 vs the old 670 for the
+    -- wider Lumber column, so the whole chain stays under the headers).
     row._pctFs = row:CreateFontString(nil, "OVERLAY")
     HDG.UI.applyFontRole(row._pctFs, "small")
     HDG.Theme:Register(row._pctFs, "Text")
     row._pctFs:SetSize(40, 14)
-    row._pctFs:SetPoint("RIGHT", row, "LEFT", 670, 0)
+    row._pctFs:SetPoint("RIGHT", row, "LEFT", 710, 0)
     row._pctFs:SetJustifyH("RIGHT")
     row._pctFs:SetWordWrap(false)
     row._profitFs = _addColumnCell(row, 80,  row._pctFs,    4, false)
     row._sellFs   = _addColumnCell(row, 70,  row._profitFs, 4, false)
     row._costFs   = _addColumnCell(row, 70,  row._sellFs,   4, false)
     row._perLumFs = _addColumnCell(row, 70,  row._costFs,   4, false)
-    row._lumberFs = _addColumnCell(row, 100, row._perLumFs, 4, false)
+    row._lumberFs = _addColumnCell(row, 140, row._perLumFs, 4, false)
     -- #AH (always shown) chains right off pct; TSM block then chains off #AH.
     row._ahFs        = _addRightCell(row, 40, row._pctFs,       4)
     row._tsmMinFs    = _addRightCell(row, 70, row._ahFs,        4)   -- 70 fits 999,999g (matches Cost/Sell)
@@ -739,17 +748,17 @@ local function _paintLumberColumn(row, ed)
         return
     end
     local owned = ed.ownedLumber  -- stamped by goblin.rows selector (ADR-041; no mid-paint API)
+    -- Need rolls in the lumber the craft queue already commits for this lumber type, so
+    -- held vs need shows whether you can cover this craft on TOP of what's queued.
+    local need  = ed.lumberQty + ed.queuedLumber  -- both numeric, stamped by goblin.rows
     local short = lumber.shortName or lumber.name or ""
     -- Inline |cFF (text rail): no SetTextColor to reset; repaints on scheme switch via goblin.rows.
     local hex     = HDG.Expansion.GetColorHex(lumber.expansion)
     local nameHex = hex and (hex .. short .. "|r") or short
-    if owned > 0 then
-        local countHex = HDG.Theme:GetTextStateColorToken(
-            owned >= ed.lumberQty and "success" or "uncollected")  -- goblin.rows stamps lumberQty (Goblin.lua:129, numeric)
-        row._lumberFs:SetText(nameHex .. "-" .. countHex .. owned .. "|r")
-    else
-        row._lumberFs:SetText(nameHex)
-    end
+    -- "name held/need" (matches the reagent-tooltip order); the held figure turns red when
+    -- held can't cover this craft plus the queue -- exactly when "Have lumber" hides it.
+    local heldHex = HDG.Theme:GetTextStateColorToken(owned >= need and "success" or "uncollected")
+    row._lumberFs:SetText(string.format("%s %s%d|r/%d", nameHex, heldHex, owned, need))
 end
 
 -- TSM columns: Show/populate when isTSMActive, else Hide (stamped by goblin.rows selector).

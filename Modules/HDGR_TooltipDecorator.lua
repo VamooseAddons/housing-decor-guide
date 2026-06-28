@@ -16,7 +16,7 @@ local TD = HDG.TooltipDecorator
 -- HDG-branded prefix for tooltip lines: the addon icon inline (same glyph as the
 -- bag-slot decor-reagent badge), replacing the old "HDG:" text tag. 14px matches
 -- the COIN_ATLAS inline-icon convention. Kept as a function for call-site parity.
-local HDG_ICON_INLINE = "|TInterface\\AddOns\\HousingDecorGuide\\textures\\HousingDecorIcon:14:14|t "
+local HDG_ICON_INLINE = "|TInterface\\AddOns\\HousingDecorGuide\\textures\\Vamoose_HDG_400_trans:14:14|t "
 local function ACCENT_PREFIX()
     return HDG_ICON_INLINE
 end
