@@ -72,8 +72,16 @@ end
 
 local function _onCellPaint(cell)
     _cells[cell] = true
+    -- Warm the catalog HERE, not at login: this hook fires only while Blizzard's
+    -- catalog is OPEN, so its searcher is warm and the sweep returns the real set
+    -- (a login-cold sweep returns 0 and sticks). Idempotent (no-op unless idle);
+    -- DECOR_CATALOG_READY then repaints the on-screen cells with their marks.
+    if enabled() and not HDG.HousingCatalogObserver:IsReady() then
+        HDG.HousingCatalogObserver:RequestLoad("catalog-overlay")
+    end
     _paint(cell)
 end
+CO._onCellPaint = _onCellPaint   -- exposed for tests
 
 function CO:RepaintAll()
     for cell in pairs(_cells) do _paint(cell) end
@@ -84,9 +92,11 @@ function CO:Install()
     if not (HousingCatalogDecorEntryMixin and HousingCatalogDecorEntryMixin.UpdateTypeSpecificVisuals) then return end
     self._installed = true
     hooksecurefunc(HousingCatalogDecorEntryMixin, "UpdateTypeSpecificVisuals", _onCellPaint)
-    -- Warm the catalog so the plus shows without opening the HDG window first
-    -- (idempotent cold-start, no-op unless idle).
-    if enabled() then HDG.HousingCatalogObserver:RequestLoad() end
+    -- Do NOT warm the catalog here. Install runs on ADDON_LOADED -- at the house
+    -- that's LOGIN -- and HDG does no work at login (and a login-cold sweep returns
+    -- 0, sticks the catalog at "loading", which MAIN_WINDOW_OPENING's idle-only
+    -- RequestLoad then can't recover -> empty browser). The warm happens in
+    -- _onCellPaint (catalog OPEN -> searcher warm) and on MAIN_WINDOW_OPENING.
 end
 
 HDG.Modules:Declare({

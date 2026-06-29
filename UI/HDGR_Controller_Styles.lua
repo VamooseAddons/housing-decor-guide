@@ -1116,6 +1116,147 @@ HDG.Rows:Register("stylesImportPreviewRow", {
     key = function(ed) return "imp:" .. tostring(ed and ed.itemID or "?") end,
 })
 
+-- ===== Row factory: stylesExportSourceRow ===================================
+-- "header" rows (group label + count, non-interactive) and "item" rows (name +
+-- count hint, click -> STYLES_EXPORT_SELECT). Selection highlight via ed.isSelected.
+local function _layoutExportSourceRow(row)
+    local label = HDG.UI.RowText(row, "small", "Text", "LEFT")
+    label:SetPoint("LEFT",  row, "LEFT", 10, 0)
+    label:SetPoint("RIGHT", row, "RIGHT", -70, 0)
+    row._exLabel = label
+    local tail = HDG.UI.RowText(row, "small", "TextDim", "RIGHT")
+    tail:SetPoint("RIGHT", row, "RIGHT", -8, 0)
+    row._exTail = tail
+end
+
+local function _paintExportHeader(row, ed)
+    HDG.UI.applyFontRole(row._exLabel, "subheading")
+    row._exLabel:ClearAllPoints()
+    row._exLabel:SetPoint("LEFT",  row, "LEFT", 8, 0)
+    row._exLabel:SetPoint("RIGHT", row, "RIGHT", -64, 0)
+    -- Accent-coloured label = the same distinction the landing headers use.
+    row._exLabel:SetText(HDG.Theme:ColorCode("semantic.accent") .. ed.label .. "|r")
+    row._exTail:SetText(ed.count and tostring(ed.count) or "")
+    row:SetScript("OnClick", nil)
+    row:EnableMouse(false)
+    HDG.Theme:Register(row, "RowWoodBeam", { alpha = 0.7 })            -- scheme-invariant: register first
+    HDG.Theme:Register(row, "RowChrome",   { selected = false })        -- scheme-dependent: must win
+end
+
+local function _paintExportItem(row, ed)
+    HDG.UI.applyFontRole(row._exLabel, "small")
+    row._exLabel:ClearAllPoints()
+    row._exLabel:SetPoint("LEFT",  row, "LEFT", 22, 0)   -- indent under the group header
+    row._exLabel:SetPoint("RIGHT", row, "RIGHT", -64, 0)
+    row._exLabel:SetText(ed.name or "?")
+    row._exTail:SetText(ed.countHint and (ed.countHint .. " items") or "")
+    row:EnableMouse(true)
+    row:RegisterForClicks("LeftButtonUp")
+    row:SetScript("OnClick", function()
+        HDG.Store:Dispatch({ type = HDG.Constants.ACTIONS.STYLES_EXPORT_SELECT, payload = { key = ed.key } })
+    end)
+    HDG.Theme:Register(row, "RowWoodBeam", { alpha = 0.2 })            -- scheme-invariant: register first
+    HDG.Theme:Register(row, "RowChrome",   { selected = ed.isSelected == true })  -- scheme-dependent: must win
+end
+
+local function _exportSourceRowFactory(template)
+    return {
+        Configure = function(row, ed)
+            HDG.UI:RowFirstPaint(row, "_stylesExportRowLaidOut", function() _layoutExportSourceRow(row) end)
+            if ed.kind == "header" then _paintExportHeader(row, ed) else _paintExportItem(row, ed) end
+            row:SetHeight(template.height)
+        end,
+        Reset = function(row)
+            if row._exLabel then row._exLabel:SetText("") end  -- exception(nullable): fields absent until first layout
+            if row._exTail  then row._exTail:SetText("")  end  -- exception(nullable): fields absent until first layout
+            row:SetScript("OnClick", nil)
+        end,
+    }
+end
+
+HDG.Rows:Register("stylesExportSourceRow", {
+    font = "small", height = 20, factory = _exportSourceRowFactory,
+    key = function(ed) return "exp:" .. tostring(ed and (ed.key or ed.label) or "?") end,
+})
+
+-- ===== Export code generation ================================================
+-- Controller-side: codecs + the catalog observer are non-store singletons, so
+-- the export string can't be a selector. Routed by source-key prefix + format.
+local function _exportNativeCode(key, st)
+    if key == "collection" then
+        local obs, items = HDG.HousingCatalogObserver, {}
+        obs:RequestLoad("export-collection")
+        obs:IterateRows(function(itemID, row)
+            if row.decorID and obs:IsOwned(row) then
+                items[#items + 1] = { itemID = itemID,
+                    qty = (row.quantity or 0) + (row.remainingRedeemable or 0) + (row.numPlaced or 0) }  -- exception(boundary): catalog struct fields sparse
+            end
+        end)
+        return HDG.ShoppingCodec.Encode({ name = "My Decor Collection", items = items, meta = { source = "hdg" } })
+    end
+    if key:match("^vsl:") then
+        local list = st.account.vendorShoppingLists[key:sub(5)]  -- exception(nullable): stale UI key
+        if not list then return "" end
+        return HDG.ShoppingCodec.Encode(list)
+    end
+    if key:match("^set:") then
+        local set = st.account.furnishingSets[key]  -- exception(nullable): stale UI key
+        if not set then return "" end
+        return HDG.Projects.CrateCodec.Encode({ name = set.name, decor = set.items })
+    end
+    local rec = HDG.StyleResolve.RecordFor(key, st)  -- style: / concept: / collection:
+    if not rec then return "" end
+    return HDG.StyleSerializer:Export(rec)
+end
+
+local function _exportCaption(fmt, key, count)
+    if fmt ~= "dd2" then return HDG.Locale:Get("STY_EXPORT_HDG_HINT") end
+    if key == "collection"  then return string.format(HDG.Locale:Get("STY_EXPORT_DD2_COLLECTION"), count) end
+    if key:match("^style:") then return HDG.Locale:Get("STY_EXPORT_DD2_STYLE_LOSSY") end
+    return HDG.Locale:Get("STY_EXPORT_DD2_OWNED_WARN")
+end
+
+-- Recompute code box + caption when the export selection or format changes.
+-- Dirty-check skips redundant re-encodes on unrelated rebinds.
+local _exportLast = {}
+local function _refreshExportCode(rootFrame)
+    local st = HDG.Store:GetState()  -- exception(false-positive): top-level controller refresh, not a row factory
+    if st.session.ui.styles.view ~= "export" then _exportLast.key = nil; return end
+    local exp = st.session.ui.styles.export
+    local key, fmt = exp.selectedKey, exp.format
+
+    local codeBox = HDG.UI.W(rootFrame, "stylesPanel.exportCode")
+    local caption = HDG.UI.W(rootFrame, "stylesPanel.exportCaption")
+    if codeBox.EditBox then  -- exception(boundary): inner EditBox absent in mock template
+        codeBox.EditBox:SetMaxLetters(0)
+        codeBox.EditBox:SetMaxBytes(0)
+    end
+
+    -- Collection needs a warm catalog; retry (don't cache) until ready.
+    if key == "collection" and not HDG.HousingCatalogObserver:IsReady() then
+        HDG.HousingCatalogObserver:RequestLoad("export-collection")
+        codeBox:SetText(""); caption:SetText(HDG.Locale:Get("STY_EXPORT_LOADING"))
+        _exportLast.key = nil
+        return
+    end
+
+    if _exportLast.key == key and _exportLast.fmt == fmt then return end
+    _exportLast.key, _exportLast.fmt = key, fmt
+
+    if not key then codeBox:SetText(""); caption:SetText(""); return end
+
+    local code, cap
+    if fmt == "dd2" then
+        local entries = HDG.ExportAdapter.Entries(key, st)
+        code = HDG.DecorDumpCodec.Encode(entries, {})
+        cap  = _exportCaption("dd2", key, #entries)
+    else
+        code = _exportNativeCode(key, st)
+        cap  = _exportCaption("hdg", key, 0)
+    end
+    codeBox:SetText(code or ""); caption:SetText(cap or "")
+end
+
 local StylesController = {}
 
 function StylesController:Wire(rootFrame)
@@ -1389,10 +1530,49 @@ function StylesController:Wire(rootFrame)
             })
         end)
     end
+
+    -- ===== Export surface =====
+    HDG.UI.OnClick(rootFrame, "stylesPanel.openExport", function()
+        HDG.Store:Dispatch({ type = HDG.Constants.ACTIONS.STYLES_OPEN_EXPORT })
+    end)
+    HDG.UI.OnClick(rootFrame, "stylesPanel.exportBack", function()
+        HDG.Store:Dispatch({ type = HDG.Constants.ACTIONS.STYLES_SET_VIEW, payload = { view = "landing" } })
+    end)
+    -- Copy: WoW can't write the clipboard, so focus + highlight all and the user
+    -- hits Ctrl+C (same trick as the shared CopyDialog).
+    HDG.UI.OnClick(rootFrame, "stylesPanel.exportCopy", function()
+        local codeBox = HDG.UI.W(rootFrame, "stylesPanel.exportCode")
+        codeBox:SetFocus()
+        if codeBox.EditBox then codeBox.EditBox:HighlightText() end  -- exception(boundary): inner EditBox absent in mock template
+    end)
+    -- Search editbox: dispatch SET_SEARCH on user input (userInput guard skips
+    -- the binding's own SetText echo).
+    local exportSearch = HDG.UI.W(rootFrame, "stylesPanel.exportSearch")
+    if exportSearch and exportSearch.SetScript then
+        exportSearch:SetScript("OnTextChanged", function(self_, userInput)
+            if not userInput then return end
+            HDG.Store:Dispatch({
+                type    = HDG.Constants.ACTIONS.STYLES_EXPORT_SET_SEARCH,
+                payload = { text = (self_.GetText and self_:GetText()) or "" },
+            })
+        end)
+    end
+    -- Code box: highlight-all on focus so Ctrl+C grabs everything.
+    local exportCode = HDG.UI.W(rootFrame, "stylesPanel.exportCode")
+    if exportCode and exportCode.EditBox then
+        exportCode.EditBox:SetScript("OnEditFocusGained", function(self_) self_:HighlightText() end)
+    end
+    -- URL box (single-line): highlight-all on focus so the link is one Ctrl+C away.
+    local exportUrl = HDG.UI.W(rootFrame, "stylesPanel.exportUrl")
+    if exportUrl and exportUrl.SetScript then
+        exportUrl:SetScript("OnEditFocusGained", function(self_) self_:HighlightText() end)
+    end
 end
 
 function StylesController:Refresh(rootFrame, ctx)
-    -- Chip strips are binding-engine-driven; nothing imperative here.
+    -- Chip strips are binding-engine-driven. Export code box is imperative
+    -- (codecs + observer are non-store singletons) -- recompute on rebind.
+    _refreshExportCode(rootFrame)
 end
 
 HDG.Controllers:Register("styles", StylesController)

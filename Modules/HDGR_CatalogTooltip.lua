@@ -36,7 +36,7 @@ local function _onTooltipCreated(_, entry, tooltip)
     local Obs = HDG.HousingCatalogObserver
     -- Warm the catalog if the main window hasn't opened yet (idempotent cold-start,
     -- no-op unless idle). First hover kicks the sweep; data fills in on later hovers.
-    Obs:RequestLoad()
+    Obs:RequestLoad("catalog-tooltip")
     local itemID = Obs:GetItemIDByDecorID(recordID)
     if not itemID then return end      -- exception(nullable): decor not mapped in HDG's catalog
     local row = Obs:GetRow(itemID)

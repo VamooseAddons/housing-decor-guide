@@ -2,7 +2,7 @@
 ## Title: Vamoose's Housing Decor Guide
 ## Notes: Track, craft, preview, and acquire housing decorations across all professions
 ## Author: Vamoose
-## Version: 3.11.0
+## Version: 3.12.0
 ## SavedVariables: HDG_DB
 ## SavedVariablesPerCharacter: HDG_DB_CURRENT_PROFILE
 ## IconTexture: Interface\AddOns\HousingDecorGuide\textures\Vamoose_HDG_400_trans
@@ -19,6 +19,11 @@ Libs\LibStub.lua
 Libs\CallbackHandler-1.0\CallbackHandler-1.0.lua
 Libs\LibDataBroker-1.1\LibDataBroker-1.1.lua
 Libs\LibDBIcon-1.0\LibDBIcon-1.0.lua
+
+# AceSerializer + LibDeflate: required only by the housing.wowdb.com decor-
+# collection export (DD2 format). Both self-register via LibStub.
+Libs\AceSerializer-3.0\AceSerializer-3.0.lua
+Libs\LibDeflate\LibDeflate.lua
 
 # ===== Core engines (ported from VFN) =====
 Core\HDGR_SchemeConstants.lua
@@ -171,6 +176,10 @@ Modules\HDGR_RecipeKnowledgeScanner.lua
 Modules\HDGR_Waypoints.lua
 # Shopping list codec (export/import). Pure module; no Blizzard API surface.
 Modules\HDGR_ShoppingCodec.lua
+# DD2 owned-decor export codec (housing.wowdb.com). Uses AceSerializer + LibDeflate.
+Modules\HDGR_DecorDumpCodec.lua
+# Export adapter: source (shopping/style/set/collection) -> {decorID,count} entries.
+Modules\HDGR_ExportAdapter.lua
 Modules\HDGR_NPCNameResolver.lua
 Modules\HDGR_ZoneNameResolver.lua
 Modules\HDGR_SessionIdentity.lua
@@ -193,6 +202,7 @@ Modules\HDGR_BagBadge.lua
 Modules\HDGR_CatalogTooltip.lua
 Modules\HDGR_MerchantOverlay.lua
 Modules\HDGR_CatalogOverlay.lua
+Modules\HDGR_CatalogIntro.lua
 Modules\HDGR_MinimapButton.lua
 Modules\HDGR_ProfessionButtons.lua
 Modules\HDGR_ProfessionScanner.lua
@@ -210,6 +220,7 @@ UI\HDGR_SettingsPanel.lua
 UI\HDGR_SettingsPanel.xml
 UI\HDGR_Controller_Chrome.lua
 UI\HDGR_Controller_Nav.lua
+UI\HDGR_Controller_CatalogIntro.lua
 UI\HDGR_Controller_Decor.lua
 UI\HDGR_Controller_Acquisition.lua
 UI\HDGR_AcqMapWidget.lua

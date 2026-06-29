@@ -1,3 +1,13 @@
+## [3.12.0] - 2026-06-30 (June 2026)
+
+### Added
+- Export view (Styles tab > Export, or Tools > Export): share a shopping list, style, furnishing set, or your whole owned-decor collection as a copyable code. Pick HDG format (re-imports into HDG) or DD2 format to upload your decor collection to housing.wowdb.com.
+
+### Fixed
+- Shopping list item tooltips are back for every item: hovering an item now shows its full in-game tooltip -- including the game's "Total Owned (Placed / Storage)" count -- so you can see how many you already have before buying or farming. Previously this only appeared for items with a known vendor; items without one showed no tooltip at all.
+- Decor catalog no longer loads at login -- the uncollected-decor markers were warming it on ADDON_LOADED, which could leave the Decor browser occasionally empty. The catalog now loads when you open the HDG window or Blizzard's housing catalog, and the markers still appear without opening HDG first.
+- Decor catalog no longer runs a redundant second sweep on window open (a storage event could re-kick a sweep while the first was still in flight). Sweeps now coalesce while one is running.
+
 ## [3.11.0] - 2026-06-28 (June 2026)
 
 ### Added

@@ -267,6 +267,12 @@ local function resolveWindowSlots(config, windowName, state)
         right  = s.right,
         corner = s.corner,
         fill   = Layout:ResolveFillView(config, windowName, state),  -- reads win.slots.fill + state
+        -- Catalog initial-load overlay: PARKED. The overlay panel composes but does
+        -- not paint (render bug, to fix). Revive by restoring:
+        --   introOverlay = (windowName == "main") and "catalogIntro" or nil
+        -- (and un-park the phase machine in Modules/HDGR_CatalogIntro). The view /
+        -- panel / selectors / actions / controller stay in place, just uncalled.
+        introOverlay = nil,
     }
 end
 
@@ -328,6 +334,12 @@ function Layout:ComposeWindow(config, windowName, ctx)
     if slots.corner then
         local cw = (slotDims(config, slots.corner))
         add(slots.corner, W - cw, 0, nil, nil)  -- overlay, window top-right
+    end
+    if slots.introOverlay then
+        -- Content-region overlay (initial-load intro): spans the fill rect, drawn
+        -- last (on top). Excluded from ComposeWindowDimensions, so it never affects
+        -- window size -- the window stays sized to the player's actual tab.
+        add(slots.introOverlay, lw, bodyY, fw, fh)
     end
 
     local placements = {}

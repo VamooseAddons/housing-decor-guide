@@ -12,15 +12,13 @@
 
 ---
 
-## What's New in v3.11.0
+## What's New in v3.12.0
 
-This covers the player-facing changes in 3.11.0.
+This covers the player-facing changes in 3.12.0.
 
-- **Expansion filter on the Goblin tab.** A row of expansion pills under the profession filter. Click one to show only that expansion's craftable decor, click it again to clear. It combines with the profession filter.
-- **Lumber column shows held against need.** The Goblin tab's Lumber column reads as held over needed (for example "Ironwood 170/20"). The need includes any of that lumber your craft queue has already committed, so it climbs as you queue, and the held figure turns red when you cannot cover a craft on top of the queue. The column header sorts by lumber needed.
-- **Have lumber toggle on the Goblin tab.** A toggle beside Your Auctions that hides any craft you cannot cover from the lumber you hold, after the queue's commitment.
-- **Bag reagent mark outline.** The Housing Decor Guide mark on bag reagents now has a dark outline, so it stands out over bright item icons.
-- **Borderless minimap button.** The minimap button now shows just the emblem, without the surrounding ring.
+- **Export your lists, styles, sets, and collection.** A new Export option in the Styles tab, and under Tools, turns a shopping list, a style, a furnishing set, or your whole owned-decor collection into a code you can share. Pick HDG format to share with other Housing Decor Guide users, or DD2 format to upload your decor collection to housing.wowdb.com.
+- **Item tooltips on shopping lists.** Hovering an item in a shopping list now shows its full in-game tooltip, including the game's owned count, for every item. Before, only items with a known vendor showed a tooltip.
+- **The Decor catalog no longer scans at login.** It loads when you open the Housing Decor Guide window or the in-game housing catalog. This fixes the Decor browser occasionally opening empty.
 
 ---
 
@@ -107,7 +105,7 @@ A companion window injects into Blizzard's House Editor so you can **place decor
 ---
 
 **Author:** Vamoose
-**Version:** 3.11.0
+**Version:** 3.12.0
 **Game Version:** 12.0.5+ (Midnight)
 **Source / Issues:** https://github.com/VamooseAddons/housing-decor-guide
 **Discord:** https://discord.gg/RWZaxJaHFP

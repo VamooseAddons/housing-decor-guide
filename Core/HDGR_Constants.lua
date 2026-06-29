@@ -367,6 +367,7 @@ HDG.Constants = {
             -- Import: launcher (no hubView under noNavigate Tools) -- the action sets
             -- BOTH the Styles tab and the import sub-view, so one dispatch lands the user there.
             { label = "Import",    launcher = "STYLES_OPEN_IMPORT" },
+            { label = "Export",    launcher = "STYLES_OPEN_EXPORT" },
             { label = "Config",    view = "config" },
             { label = "Your Data", view = "data" },
             -- Debug leaf: shown only in debug mode (gatedBy selector -> omitted when false).
@@ -643,6 +644,10 @@ HDG.Constants = {
         STYLES_IMPORT_COMMIT_AS_SET    = "HDGR_STYLES_IMPORT_COMMIT_AS_SET",    -- payload: { displayName? = string } -- Project Set (account.furnishingSets entry)
         STYLES_IMPORT_RESET            = "HDGR_STYLES_IMPORT_RESET",
         STYLES_OPEN_IMPORT             = "HDGR_STYLES_OPEN_IMPORT",            -- open Import view fresh: sets Styles tab + import sub-view + resets. Used by the in-Styles button AND the Tools > Import nav leaf.
+        STYLES_OPEN_EXPORT             = "HDGR_STYLES_OPEN_EXPORT",            -- open Export view fresh: sets Styles tab + export sub-view + resets. Used by the in-Styles button AND the Tools > Export nav leaf.
+        STYLES_EXPORT_SELECT           = "HDGR_STYLES_EXPORT_SELECT",          -- payload: { key } -- select a source (vsl:/style:/set:/collection) to encode.
+        STYLES_EXPORT_SET_FORMAT       = "HDGR_STYLES_EXPORT_SET_FORMAT",      -- payload: { format = "hdg"|"dd2" }
+        STYLES_EXPORT_SET_SEARCH       = "HDGR_STYLES_EXPORT_SET_SEARCH",      -- payload: { text }
         COLLECTION_STYLE_ITEM_ADDED  = "HDGR_COLLECTION_STYLE_ITEM_ADDED",  -- payload: { collectionID, itemID }
         COLLECTION_STYLE_ITEM_REMOVED = "HDGR_COLLECTION_STYLE_ITEM_REMOVED",-- payload: { collectionID, itemID }
 
@@ -694,6 +699,8 @@ HDG.Constants = {
         CATALOG_LOAD_FAILED       = "HDGR_CATALOG_LOAD_FAILED",       -- payload: { reason }
         CATALOG_REFRESH_QUEUED    = "HDGR_CATALOG_REFRESH_QUEUED",
         CATALOG_REFRESH_COMPLETED = "HDGR_CATALOG_REFRESH_COMPLETED", -- payload: { rowCount }
+        CATALOG_INTRO_SET_PHASE   = "HDGR_CATALOG_INTRO_SET_PHASE",   -- payload: { phase = "hidden"|"loading"|"success" }
+        CATALOG_FORCE_RELOAD      = "HDGR_CATALOG_FORCE_RELOAD",      -- loading-overlay Refresh; observer forces a sweep past coalesce
         -- Blizzard category/subcategory nav tree; shared by Style Curator + Projects decor picker.
         CATALOG_CATEGORY_TREE_UPDATED = "HDGR_CATALOG_CATEGORY_TREE_UPDATED", -- payload: { byID, subcatByID, rootIDs }
         CATALOG_VARIANTS_LOADED   = "HDGR_CATALOG_VARIANTS_LOADED",   -- payload: { count }

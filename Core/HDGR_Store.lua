@@ -338,7 +338,7 @@ end
 -- draft, etc.) lands as each surface is wired in 14.1-14.6.
 local function NewStylesSessionUI()
     return {
-        view       = "landing",   -- "landing" | "detail" | "curator" | "smartset" | "import"
+        view       = "landing",   -- "landing" | "detail" | "curator" | "smartset" | "import" | "export"
         selectedID = nil,         -- collectionID currently viewed in Detail
         landing    = { filter = "all", search = "", expandedSections = {} },
         detail     = {
@@ -376,6 +376,7 @@ local function NewStylesSessionUI()
             dirty          = false,
         },
         import     = { urlText = "", parseError = nil, previewItems = nil, destination = "style" },
+        export     = { selectedKey = nil, format = "hdg", search = "" },  -- format: "hdg"|"dd2"
     }
 end
 
@@ -571,6 +572,7 @@ local function NewSessionUI()
         projects     = NewProjectsSessionUI(),
         removalist   = NewRemovalistSessionUI(),    -- Removalist plot-move planner
         data         = NewDataSessionUI(),         -- Your Data tab: achievement-group collapse
+        catalogIntro = { phase = "hidden" },        -- initial-load overlay: "hidden"|"loading"|"success"
     }
 end
 
@@ -1068,6 +1070,7 @@ local function EnsureSession(state)
     state.session.ui.styles = state.session.ui.styles or NewStylesSessionUI()
     state.session.ui.houseTab = state.session.ui.houseTab or NewHouseTabSessionUI()
     state.session.ui.data = state.session.ui.data or NewDataSessionUI()  -- Your Data collapse bucket
+    state.session.ui.catalogIntro = state.session.ui.catalogIntro or { phase = "hidden" }  -- exception(boundary): session-shape backfill
     state.session.ui.shoppingList = state.session.ui.shoppingList or NewShoppingSessionUI()
     state.session.ui.zoneScanner  = state.session.ui.zoneScanner  or NewZoneScannerSessionUI()
     state.session.ui.removalist    = state.session.ui.removalist    or NewRemovalistSessionUI()
@@ -3721,6 +3724,40 @@ HDG.Actions:Register{ name = "STYLES_OPEN_IMPORT",
         imp.parseUnmatched = nil
     end }
 
+-- Export sub-view. OPEN sets the persistent top-tab + transient sub-view in one
+-- dispatch (Tools > Export launcher doesn't go through setView) and resets the
+-- selection/format/search. SELECT/SET_FORMAT/SET_SEARCH are transient (no persist).
+HDG.Actions:Register{ name = "STYLES_OPEN_EXPORT",
+    persists = true,  combatUnsafe = false,
+    invalidates = { "account.ui.view", "session.ui.styles.view", "session.ui.styles.export" },
+    reduce = function(state, payload)
+        state.account.ui.view = "styles"
+        state.session.ui.styles.view = "export"
+        local exp = state.session.ui.styles.export
+        exp.selectedKey, exp.format, exp.search = nil, "hdg", ""
+    end }
+
+HDG.Actions:Register{ name = "STYLES_EXPORT_SELECT",
+    persists = false, combatUnsafe = false,
+    invalidates = { "session.ui.styles.export" },
+    reduce = function(state, payload)
+        local exp = state.session.ui.styles.export
+        exp.selectedKey = payload.key
+        -- DD2 only targets the collection (wowdb's only importer loads ALL your
+        -- decor); every other source is HDG-native. Default the format on select.
+        exp.format = (payload.key == "collection") and "dd2" or "hdg"
+    end }
+
+HDG.Actions:Register{ name = "STYLES_EXPORT_SET_FORMAT",
+    persists = false, combatUnsafe = false,
+    invalidates = { "session.ui.styles.export" },
+    reduce = function(state, payload) state.session.ui.styles.export.format = payload.format end }
+
+HDG.Actions:Register{ name = "STYLES_EXPORT_SET_SEARCH",
+    persists = false, combatUnsafe = false,
+    invalidates = { "session.ui.styles.export" },
+    reduce = function(state, payload) state.session.ui.styles.export.search = payload.text end }
+
 HDG.Actions:Register{ name = "STYLES_INVALIDATE_CACHE",
     persists = false, combatUnsafe = false, 
     invalidates = { "session.styles.changeSeq" },
@@ -4254,12 +4291,26 @@ HDG.Actions:Register{ name = "CATALOG_LOAD_REQUESTED",
     end }
 
 HDG.Actions:Register{ name = "CATALOG_LOAD_FAILED",
-    persists = false, combatUnsafe = false, 
+    persists = false, combatUnsafe = false,
     invalidates = { "session.catalog.status" },
     reduce = function(state, payload)
         -- Without this, status stays "loading" -> infinite spinner.
         state.session.catalog.status = "error"
     end }
+
+-- Initial-load overlay phase: "hidden" | "loading" | "success". Driven by the
+-- catalogIntro controller (window-open + DECOR_CATALOG_READY + 0.5s success hold).
+HDG.Actions:Register{ name = "CATALOG_INTRO_SET_PHASE",
+    persists = false, combatUnsafe = false,
+    invalidates = { "session.ui.catalogIntro" },
+    reduce = function(state, payload) state.session.ui.catalogIntro.phase = payload.phase end }
+
+-- Signal-only: the loading overlay's Refresh button. The observer reacts (forces a
+-- fresh sweep past the in-flight coalesce + idle guard); no state mutation here.
+HDG.Actions:Register{ name = "CATALOG_FORCE_RELOAD",
+    persists = false, combatUnsafe = false,
+    invalidates = {},
+    reduce = function() end }
 
 HDG.Actions:Register{ name = "CATALOG_REFRESH_QUEUED",
     persists = false, combatUnsafe = false, 

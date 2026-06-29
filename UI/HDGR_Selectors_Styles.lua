@@ -18,7 +18,14 @@ local _resolveSmartsetItems
 -- cascade in LayoutConfig (each sub-view declares `visible = "styles.isView_X"`).
 Selectors:DefinePath("styles.view", "session.ui.styles.view")
 Selectors:DefineEnum("styles.isView",  "session.ui.styles.view",
-                     { "landing", "detail", "curator", "smartset", "import" })
+                     { "landing", "detail", "curator", "smartset", "import", "export" })
+
+-- Export sub-view: selection + format + search paths, and a format-radio enum
+-- (yields styles.export.isFormat_hdg / _dd2 for the two radio buttons).
+Selectors:DefinePath("styles.export.selectedKey", "session.ui.styles.export.selectedKey")
+Selectors:DefinePath("styles.export.format",      "session.ui.styles.export.format")
+Selectors:DefinePath("styles.export.search",      "session.ui.styles.export.search")
+Selectors:DefineEnum("styles.export.isFormat",    "session.ui.styles.export.format", { "hdg", "dd2" })
 
 -- (Per-surface headerRows retired: single dynamic title + back button in panel header.
 --  styles.notLanding removed: headerBack now gated on styles.isView_detail.)
@@ -365,6 +372,119 @@ Selectors:Register("styles.landing.sectionRows", {
             if r.kind == "header" then out[#out + 1] = r end
         end
         return out
+    end,
+})
+
+-- ===== Export surface =======================================================
+-- styles.export.sourceRows: grouped source list for the Export sub-view. Header
+-- rows + item rows for the player's shopping lists / My Styles / furnishing
+-- sets, plus a static Decor Collection row, filtered by the export search box.
+-- PURE: the export CODE is built controller-side (codecs + the catalog observer
+-- are non-store singletons), so this selector only enumerates keys + names.
+local EXPORT_GROUPS = {
+    { group = "shopping", label = "SHOPPING LISTS" },
+    { group = "style",    label = "MY STYLES" },
+    { group = "set",      label = "FURNISHING SETS" },
+}
+
+Selectors:Register("styles.export.sourceRows", {
+    reads = {
+        "account.vendorShoppingLists",
+        "account.collections",
+        "account.furnishingSets",
+        "session.ui.styles.export.search",
+        "session.ui.styles.export.selectedKey",
+    },
+    fn = function(state)
+        local raw      = state.session.ui.styles.export.search:lower()
+        local selected = state.session.ui.styles.export.selectedKey
+        local needle   = raw ~= "" and raw or nil
+        local function match(name) return (not needle) or tostring(name):lower():find(needle, 1, true) ~= nil end
+
+        local items = { shopping = {}, style = {}, set = {} }
+        for id, list in pairs(state.account.vendorShoppingLists) do
+            items.shopping[#items.shopping + 1] = { key = "vsl:" .. id, name = list.name or id, countHint = #list.items }  -- exception(nullable): list.name optional, mirror _vendorListRecord fallback
+        end
+        for id, def in pairs(state.account.collections) do
+            if id:match("^style:") then
+                items.style[#items.style + 1] = { key = id, name = _entryDisplayName({ def = def, id = id }) }
+            end
+        end
+        for key, set in pairs(state.account.furnishingSets) do
+            items.set[#items.set + 1] = { key = key, name = set.name, countHint = #set.items }
+        end
+        for _, g in pairs(items) do
+            table.sort(g, function(a, b) return tostring(a.name):lower() < tostring(b.name):lower() end)
+        end
+
+        local out = {}
+        -- Decor Collection FIRST: it's the only thing housing.wowdb.com can import,
+        -- so it leads. Always offered; owned count is painted controller-side.
+        local collName = "Your owned decor"
+        if match(collName) then
+            out[#out + 1] = { kind = "header", group = "collection", label = "DECOR COLLECTION (for housing.wowdb.com)", count = 1 }
+            out[#out + 1] = { kind = "item",   group = "collection", key = "collection", name = collName,
+                              isSelected = selected == "collection" }
+        end
+        for _, grp in ipairs(EXPORT_GROUPS) do
+            local matched = {}
+            for _, it in ipairs(items[grp.group]) do
+                if match(it.name) then matched[#matched + 1] = it end
+            end
+            if #matched > 0 then
+                out[#out + 1] = { kind = "header", group = grp.group, label = grp.label, count = #matched }
+                for _, it in ipairs(matched) do
+                    out[#out + 1] = { kind = "item", group = grp.group, key = it.key, name = it.name,
+                                      countHint = it.countHint, isSelected = it.key == selected }
+                end
+            end
+        end
+        return out
+    end,
+})
+
+-- Contextual URL for the Export view: the wowdb decor-sync page for a DD2
+-- collection export (the only thing wowdb imports), or a shopping list's source
+-- URL (wowhead/wowdb import) when it carries one. "" = no URL (row hidden).
+local WOWDB_DECOR_SYNC_URL = "https://housing.wowdb.com/tools/decor-sync/sync/"
+Selectors:Register("styles.export.url", {
+    reads = {
+        "session.ui.styles.export.selectedKey",
+        "session.ui.styles.export.format",
+        "account.vendorShoppingLists",
+    },
+    fn = function(state)
+        local exp = state.session.ui.styles.export
+        local key, fmt = exp.selectedKey, exp.format
+        if fmt == "dd2" and key == "collection" then return WOWDB_DECOR_SYNC_URL end
+        if type(key) ~= "string" or not key:match("^vsl:") then return "" end
+        local list = state.account.vendorShoppingLists[key:sub(5)]  -- exception(nullable): stale UI key
+        if not list or not list.meta then return "" end  -- exception(nullable): player-authored lists carry no meta
+        local url = list.meta.url
+        if type(url) == "string" and url ~= "" then return url end
+        return ""
+    end,
+})
+Selectors:Register("styles.export.hasUrl", {
+    calls = { "styles.export.url" },
+    fn = function(state, ctx) return Selectors:Call("styles.export.url", state, ctx) ~= "" end,
+})
+-- DD2 only targets the collection (wowdb's lone importer loads ALL your decor),
+-- so the HDG|DD2 format toggle is shown only when the collection is selected.
+Selectors:Register("styles.export.isCollection", {
+    reads = { "session.ui.styles.export.selectedKey" },
+    fn = function(state) return state.session.ui.styles.export.selectedKey == "collection" end,
+})
+
+-- Format radio menu for the Export sub-view (HDG-native vs DD2/wowdb).
+Selectors:Register("styles.export.formatItems", {
+    reads    = {},
+    memoized = true,
+    fn = function()
+        return {
+            { text = "HDG",         value = "hdg" },
+            { text = "DD2 (wowdb)", value = "dd2" },
+        }
     end,
 })
 

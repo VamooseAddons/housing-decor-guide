@@ -122,23 +122,31 @@ end
 -- ReconcileFull: kick the search. Re-applies config while not "ready" (tag groups
 -- may still be streaming in); RunSearch. Results land async in _OnSearcherResults;
 -- 0.5s settle timer coalesces bursts. Storage/catalog events re-kick until loaded.
-function R:ReconcileFull()
+function R:ReconcileFull(reason, force)
     local s = self:_EnsureSearcher()
     if not s then
         HDG.Log:Warn("catalog_error", "ReconcileFull aborted: C_HousingCatalog unavailable")
         HDG.Store:Dispatch({ type = HDG.Constants.ACTIONS.CATALOG_LOAD_FAILED, payload = { reason = "no_api" } })
         return
     end
+    -- Coalesce: a sweep is already running (RunSearch fired; awaiting results /
+    -- settle / commit). Re-kicks from CATALOG_REFRESH_QUEUED or view changes during
+    -- that window are redundant -- the in-flight sweep already reflects current
+    -- state. Cleared when the sweep concludes (commit / 0-entry / nil-result).
+    -- `force` (the loading-overlay Refresh) bypasses this: if the searcher hung,
+    -- the flag is stuck true and a guarded re-kick would no-op exactly when needed.
+    if self._sweepInFlight and not force then return end
     if HDG.Store:GetState().session.catalog.status ~= "ready" then
         self:_ConfigureSearcher(s)
     end
-    HDG.Log:Info("catalog_swept", "Starting full catalog sweep...")
+    HDG.Log:Info("catalog_swept", "Starting full catalog sweep... (by " .. (reason or "?") .. ")")
     -- Perf RTT: stamp when we fire the external catalog search. The gap to the
     -- first _OnSearcherResults callback is the EXTERNAL round-trip (Blizzard
     -- building/returning the catalog) -- not our CPU. Recorded as an "rtt" mark.
     if HDG.Perf and HDG.Perf.Enabled and HDG.Perf:Enabled() then  -- exception(false-positive): HDG.Perf is TOC-guaranteed at runtime; headless test mock omits it
         self._perfSearchFiredAt = _G.debugprofilestop and _G.debugprofilestop() or nil
     end
+    self._sweepInFlight = true
     s:RunSearch()
 end
 
@@ -226,6 +234,7 @@ function R:_OnSearcherResults(searcher)
         -- nil result set: nothing to commit yet. Stay "loading"; the next
         -- storage/catalog event re-kicks (re-applying config) until entries land.
         HDG.Log:Warn("catalog_error", "GetCatalogSearchResults returned nil; sweep not committed (will retry on next storage event)")
+        self._sweepInFlight = false   -- sweep concluded with no data; allow a re-kick to retry
         return
     end
 
@@ -276,6 +285,7 @@ function R:_CommitSweep(result)
         -- commit; storage/catalog events re-kick with the config once entries arrive.
         HDG.Log:Warn("catalog_error",
             "catalog search returned 0 entries; not loaded yet -- awaiting storage-event re-kick")
+        R._sweepInFlight = false   -- nothing to commit; allow a re-kick to retry
         return
     end
 
@@ -318,6 +328,7 @@ function R:_CommitSweep(result)
 
     R:_UpdateVintage()
 
+    R._sweepInFlight = false   -- sweep committed; subsequent triggers may re-sweep
     HDG.Log:Success("catalog_refreshed",
         string.format("Catalog ready -- %d items, %d vendors indexed", itemCount, vendorCount))
 end
@@ -1411,15 +1422,16 @@ end
 -- Sweep fires when a catalog-consuming view first activates (CATALOG_CONSUMING_TAB_VIEWS).
 
 -- RequestLoad: idempotent cold-start trigger (only when status == "idle").
-function R:RequestLoad()
+function R:RequestLoad(reason)
     local s = HDG.Store:GetState().session.catalog
     if s.status ~= "idle" then return end
-    HDG.Store:Dispatch({ type = HDG.Constants.ACTIONS.CATALOG_LOAD_REQUESTED })
-    R:_RunSweep()
+    HDG.Store:Dispatch({ type = HDG.Constants.ACTIONS.CATALOG_LOAD_REQUESTED,
+                         payload = { requestedBy = reason or "?" } })
+    R:_RunSweep(reason)
 end
 
-function R:Refresh()    R:_RunSweep() end
-function R:_RunSweep()  R:ReconcileFull() end
+function R:Refresh(reason)    R:_RunSweep(reason) end
+function R:_RunSweep(reason)  R:ReconcileFull(reason) end
 
 -- ===== Room catalog =========================================================
 -- Second persistent searcher in Layout mode (C_HousingCatalog owned here; one namespace per module).
@@ -1589,9 +1601,9 @@ function R:_OnViewChange(view)
     if not HDG.Constants.CATALOG_CONSUMING_TAB_VIEWS[view] then return end
     local s = HDG.Store:GetState().session.catalog
     if s.status == "idle" then
-        R:RequestLoad()
+        R:RequestLoad("view-change:" .. tostring(view))
     elseif s.refreshPending then
-        R:Refresh()
+        R:Refresh("view-change:" .. tostring(view))
     end
 end
 
@@ -1631,6 +1643,7 @@ function R:ClearStore()
     R.byVendor  = {}
     R.allVendorNames = {}
     R._catalogSchemaVersion = 0
+    R._sweepInFlight = false   -- reset clears any in-flight guard so the next load runs
 end
 
 -- ===== Module registration ====================================================
@@ -1694,7 +1707,9 @@ HDG.Modules:Declare({
             elseif actionType == A.MAIN_WINDOW_OPENING then
                 -- Load unconditionally on first open (most views derive from the catalog).
                 -- RequestLoad is idempotent; re-opens are no-ops.
-                R:RequestLoad()
+                R:RequestLoad("main-window-opening")
+            elseif actionType == A.CATALOG_FORCE_RELOAD then
+                R:ReconcileFull("manual-refresh", true)   -- loading-overlay Refresh: force past the coalesce
                 R:ReconcileRooms()          -- live room catalog (cheap; Layout-mode searcher)
                 R:QueueCategoryTreeRebuild()   -- Blizzard category/subcategory nav snapshot
             elseif actionType == A.MAIN_WINDOW_TOGGLE then
@@ -1710,7 +1725,7 @@ HDG.Modules:Declare({
                 -- captures in-editor changes via ReconcileEntry (targeted; avoids 1673-entry storm).
                 if HDG.Store:GetState().account.ui.mainWindowShown then
                     if HDG.Store:GetState().session.catalog.status == "loading" then
-                        R:ReconcileFull()
+                        R:ReconcileFull("refresh-queued")
                     else
                         R:_OnViewChange(HDG.Store:GetState().account.ui.view)
                     end

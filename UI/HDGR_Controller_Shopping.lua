@@ -259,14 +259,18 @@ end
 -- Only resolved wishlist rows stamp _shopVendor; every other row (items, headers,
 -- unresolved wishlist) leaves it nil -> no tooltip, behaviour unchanged.
 local function _shoppingRowTooltip(self)
+    if not self._shopItemID then return nil end  -- exception(nullable): header / non-item rows don't stamp it
     local af = self._shopVendor
-    if not af then return nil end  -- exception(nullable): only resolved wishlist rows stamp this
-    local zone = (af.zone and af.zone ~= "") and (" -- " .. af.zone) or ""
+    local extraLines
+    if af then  -- exception(nullable): only resolved rows know a vendor; the item tooltip shows regardless
+        local zone = (af.zone and af.zone ~= "") and (" -- " .. af.zone) or ""
+        extraLines = { { text = "Available from: " .. (af.name or "?") .. zone,
+                         r = 0.6, g = 0.78, b = 0.95 } }
+    end
     return {
         itemID     = self._shopItemID,
         anchor     = "ANCHOR_RIGHT",
-        extraLines = { { text = "Available from: " .. (af.name or "?") .. zone,
-                         r = 0.6, g = 0.78, b = 0.95 } },
+        extraLines = extraLines,
     }
 end
 
@@ -337,10 +341,11 @@ local function _configureItemRow(row, ed)
     row._rightFs:SetPoint("RIGHT", row, "RIGHT", -60, 0)
     row._nameFs:SetText(HDG.UI.ItemName(ed.itemID))
     row._rightFs:SetText("x" .. ed.qty)
-    -- Resolved wishlist rows carry a "where to buy" hint -> stamp for the tooltip.
-    if ed.availableFrom then
-        row._shopItemID, row._shopVendor = ed.itemID, ed.availableFrom
-    end
+    -- Stamp itemID on EVERY item row so the tooltip shows Blizzard's full item
+    -- body, incl. the native "Total Owned: N (Placed/Storage)" line. The vendor
+    -- hint is optional -- only resolved rows know a "where to buy".
+    row._shopItemID = ed.itemID
+    row._shopVendor = ed.availableFrom  -- exception(nullable): AH-only / unresolved items have no vendor
     _showItemChrome(row, ed)
     -- Right-click context menu (Set qty / Remove [/ Open vendor]).
     HDG.UI.WireLeftRightClick(row, nil, function()
@@ -531,7 +536,7 @@ function ShoppingController:Wire(rootFrame)
     -- filter in shopping.activeListEntries resolves on open instead of waiting
     -- for an incidental sweep from another surface (tabbing the main window).
     rootFrame:HookScript("OnShow", function()
-        HDG.HousingCatalogObserver:RequestLoad()
+        HDG.HousingCatalogObserver:RequestLoad("shopping")
         -- Enrich now if the catalog's already warm (re-open); a cold open no-ops
         -- here and the DECOR_CATALOG_READY subscription below catches the sweep.
         ShoppingController:_EnrichListVendors(HDG.Store:GetState().account.activeShoppingListId)

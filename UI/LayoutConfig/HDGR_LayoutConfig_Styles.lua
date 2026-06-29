@@ -443,6 +443,50 @@ LC.sections["styles.import.footer"] = {
     order    = 60,
 }
 
+-- ===== Sections -- Export ====================================================
+LC.sections["styles.export"] = {
+    ["in"]   = "stylesPanel",
+    layout   = "vertical",
+    padding  = "md",
+    gap      = "sm",
+    order    = 52,
+    visible  = "styles.isView_export",
+}
+LC.sections["styles.export.headerRow"] = {
+    ["in"] = "styles.export", layout = "horizontal", height = 28, gap = "md", order = 10,
+}
+LC.sections["styles.export.intro"] = {
+    ["in"] = "styles.export", layout = "horizontal", height = 30, order = 20,
+}
+-- Search (right). Format toggle lives in its own gated row (collection only).
+LC.sections["styles.export.toolsRow"] = {
+    ["in"] = "styles.export", layout = "horizontal", height = 24, gap = "md", order = 30,
+}
+-- Format toggle: only the collection can export as DD2, so this row shows only
+-- when the collection is selected (otherwise format is HDG, no choice to make).
+LC.sections["styles.export.formatRow"] = {
+    ["in"] = "styles.export", layout = "horizontal", height = 24, gap = "md", order = 45,
+    visible = "styles.export.isCollection",
+}
+LC.sections["styles.export.sourceList"] = {
+    ["in"] = "styles.export", layout = "fill", order = 40, chrome = "inset",
+}
+LC.sections["styles.export.captionRow"] = {
+    ["in"] = "styles.export", layout = "horizontal", height = 16, order = 50,
+}
+-- URL row: shown only when the selection has a link (DD2 collection -> wowdb sync
+-- page, or a shopping list's source URL). Selectable editbox so it can be copied.
+LC.sections["styles.export.urlRow"] = {
+    ["in"] = "styles.export", layout = "horizontal", height = 22, order = 52,
+    visible = "styles.export.hasUrl",
+}
+LC.sections["styles.export.codeRow"] = {
+    ["in"] = "styles.export", layout = "horizontal", height = 50, order = 55, chrome = "inset",
+}
+LC.sections["styles.export.footer"] = {
+    ["in"] = "styles.export", layout = "horizontal", height = 26, padding = "sm", gap = "md", order = 60,
+}
+
 -- ===== Widgets -- panel header ================================================
 -- Back shown only on `detail` (no nav leaf); Browse/Curator/Smart Sets use the nav to go back.
 
@@ -498,6 +542,11 @@ LC.widgets["stylesPanel.openImport"] = {
     tooltip = false,
     kind = "button", ["in"] = "styles.landing.heroRow", font = "small",
     text = "locale:STY_IMPORT_BTN", width = "auto", height = 22, order = 18, variant = "tertiary",
+}
+LC.widgets["stylesPanel.openExport"] = {
+    tooltip = false,
+    kind = "button", ["in"] = "styles.landing.heroRow", font = "small",
+    text = "locale:STY_EXPORT_BTN", width = "auto", height = 22, order = 19, variant = "tertiary",
 }
 LC.widgets["stylesPanel.totalLabel"] = {
     tooltip = false,
@@ -820,6 +869,84 @@ LC.widgets["stylesPanel.importCommit"] = {
     kind = "button", ["in"] = "styles.import.footer", font = "small",
     text = "locale:STY_IMPORT_COMMIT", width = "auto", height = 22, order = 30, variant = "primary",
     binding = { enabled = "styles.import.canCommit" },
+}
+
+-- ===== Widgets -- Export ======================================================
+LC.widgets["stylesPanel.exportBack"] = {
+    tooltip = false,
+    kind = "button", ["in"] = "styles.export.headerRow", font = "small",
+    text = "locale:STY_BACK", width = "auto", height = 22, order = 10, variant = "tertiary",
+}
+LC.widgets["stylesPanel.exportTitle"] = {
+    tooltip = false,
+    kind = "label", ["in"] = "styles.export.headerRow", font = "heading",
+    text = "locale:STY_EXPORT_TITLE", height = 22, width = "fill", order = 20,
+}
+LC.widgets["stylesPanel.exportIntro"] = {
+    tooltip = false,
+    kind = "label", role = "TextDim", ["in"] = "styles.export.intro", font = "small",
+    text = "locale:STY_EXPORT_INTRO", height = 26, width = "fill", order = 10,
+}
+LC.widgets["stylesPanel.exportFormatLabel"] = {
+    tooltip = false,
+    kind = "label", role = "TextDim", ["in"] = "styles.export.formatRow", font = "small",
+    text = "locale:STY_EXPORT_FORMAT_LABEL", height = 20, width = "auto", order = 5,
+}
+LC.widgets["stylesPanel.exportFormatRadio"] = {
+    tooltip = false,
+    kind = "radioGroup", ["in"] = "styles.export.formatRow", font = "small",
+    height = 20, width = "auto", spacing = 14, order = 10,
+    binding  = { menu = "styles.export.formatItems", current = "styles.export.format" },
+    dispatch = { type = "STYLES_EXPORT_SET_FORMAT", payloadKey = "format" },
+}
+LC.widgets["stylesPanel.exportToolsSpacer"] = {
+    tooltip = false,
+    kind = "spacer", ["in"] = "styles.export.toolsRow", width = "fill", height = 20, order = 5,
+}
+LC.widgets["stylesPanel.exportSearch"] = {
+    tooltip = false,
+    kind = "editbox", ["in"] = "styles.export.toolsRow", font = "small",
+    height = 22, width = 200, order = 20,
+    placeholder = "locale:STY_EXPORT_SEARCH_PLACEHOLDER",
+    binding = { text = "styles.export.search" },
+}
+LC.widgets["stylesPanel.exportSourceList"] = {
+    tooltip = false,
+    kind = "scrollbox", ["in"] = "styles.export.sourceList",
+    binding = "styles.export.sourceRows",
+    rowKind = "stylesExportSourceRow",
+    spacing = 2,
+    order = 10,
+}
+LC.widgets["stylesPanel.exportCaption"] = {
+    tooltip = false,
+    kind = "label", role = "TextDim", ["in"] = "styles.export.captionRow", font = "small",
+    text = "", height = 14, width = "fill", order = 10,
+}
+LC.widgets["stylesPanel.exportUrl"] = {
+    tooltip = false,
+    kind = "editbox", ["in"] = "styles.export.urlRow", font = "small",
+    width = "fill", height = 20, order = 10,
+    binding = { text = "styles.export.url" },
+}
+-- Read-only code box. No binding/dispatch: the controller fills the text
+-- imperatively (the code is built from codecs + the catalog observer, which are
+-- non-store singletons, so it can't come from a selector) and disables length
+-- limits so long DD2 strings aren't truncated.
+LC.widgets["stylesPanel.exportCode"] = {
+    tooltip = false,
+    kind = "editbox", ["in"] = "styles.export.codeRow", font = "small",
+    multiline = true, width = "fill", height = 42, order = 10,
+}
+LC.widgets["stylesPanel.exportCopy"] = {
+    tooltip = false,
+    kind = "button", ["in"] = "styles.export.footer", font = "small",
+    text = "locale:STY_EXPORT_COPY", width = "auto", height = 22, order = 10, variant = "primary",
+}
+LC.widgets["stylesPanel.exportFooterHint"] = {
+    tooltip = false,
+    kind = "label", role = "TextDim", ["in"] = "styles.export.footer", font = "small",
+    text = "", height = 14, width = "fill", order = 20,
 }
 
 -- ===== Widgets -- Smart Set Builder ==========================================

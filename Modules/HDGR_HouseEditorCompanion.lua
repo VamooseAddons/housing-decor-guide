@@ -408,7 +408,7 @@ local function _onEditorShown()
     -- grid cells can border decor that can't be placed from here. Via HousingObserver
     -- (owner of C_Housing).
     H._isInside = HDG.HousingObserver:IsInsideHouse()
-    HDG.HousingCatalogObserver:RequestLoad()
+    HDG.HousingCatalogObserver:RequestLoad("house-editor")
     _startRecentSession()   -- new edit session per editor open
     H._launcher:Show()
     -- Idempotent: builds the satellite the first time the editor opens (its
