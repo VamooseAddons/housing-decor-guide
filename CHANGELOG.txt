@@ -1,3 +1,9 @@
+## [3.12.1] - 2026-06-30 (June 2026)
+
+### Fixed
+- Raw materials no longer expand milled pigments and prospected gems down to herbs and ore. Milling and prospecting yield a random amount per batch, so there is no exact herb/ore count -- the Raw view now stops at the pigment or gem (what you actually buy or mill) instead of showing wildly inflated numbers like 2900 Yseralline Seed for a single craft.
+- The Decor catalog could get stuck on "Scanning catalog..." at login on some characters and never finish loading until you reloaded the interface. This reverts an over-eager catalog-sweep change from 3.12.0; the catalog now recovers a slow first scan on its own.
+
 ## [3.12.0] - 2026-06-30 (June 2026)
 
 ### Added

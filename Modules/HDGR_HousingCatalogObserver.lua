@@ -122,20 +122,21 @@ end
 -- ReconcileFull: kick the search. Re-applies config while not "ready" (tag groups
 -- may still be streaming in); RunSearch. Results land async in _OnSearcherResults;
 -- 0.5s settle timer coalesces bursts. Storage/catalog events re-kick until loaded.
-function R:ReconcileFull(reason, force)
+function R:ReconcileFull(reason)
     local s = self:_EnsureSearcher()
     if not s then
         HDG.Log:Warn("catalog_error", "ReconcileFull aborted: C_HousingCatalog unavailable")
         HDG.Store:Dispatch({ type = HDG.Constants.ACTIONS.CATALOG_LOAD_FAILED, payload = { reason = "no_api" } })
         return
     end
-    -- Coalesce: a sweep is already running (RunSearch fired; awaiting results /
-    -- settle / commit). Re-kicks from CATALOG_REFRESH_QUEUED or view changes during
-    -- that window are redundant -- the in-flight sweep already reflects current
-    -- state. Cleared when the sweep concludes (commit / 0-entry / nil-result).
-    -- `force` (the loading-overlay Refresh) bypasses this: if the searcher hung,
-    -- the flag is stuck true and a guarded re-kick would no-op exactly when needed.
-    if self._sweepInFlight and not force then return end
+    -- Do NOT coalesce concurrent ReconcileFull calls. A CATALOG_REFRESH_QUEUED or
+    -- view-change re-kick that lands while a sweep is in flight IS the recovery path
+    -- for a slow / unresponsive searcher: it re-applies config + re-RunSearch, which
+    -- is what makes a slow first response eventually commit. It's the SAME persistent
+    -- searcher, so the later RunSearch supersedes -- one commit, not a double load.
+    -- (A coalesce guard once lived here; it left slow-searcher characters stuck on
+    -- "Scanning catalog..." forever, because the recovery re-kick was the thing it
+    -- suppressed. Removed.)
     if HDG.Store:GetState().session.catalog.status ~= "ready" then
         self:_ConfigureSearcher(s)
     end
@@ -146,7 +147,6 @@ function R:ReconcileFull(reason, force)
     if HDG.Perf and HDG.Perf.Enabled and HDG.Perf:Enabled() then  -- exception(false-positive): HDG.Perf is TOC-guaranteed at runtime; headless test mock omits it
         self._perfSearchFiredAt = _G.debugprofilestop and _G.debugprofilestop() or nil
     end
-    self._sweepInFlight = true
     s:RunSearch()
 end
 
@@ -234,7 +234,6 @@ function R:_OnSearcherResults(searcher)
         -- nil result set: nothing to commit yet. Stay "loading"; the next
         -- storage/catalog event re-kicks (re-applying config) until entries land.
         HDG.Log:Warn("catalog_error", "GetCatalogSearchResults returned nil; sweep not committed (will retry on next storage event)")
-        self._sweepInFlight = false   -- sweep concluded with no data; allow a re-kick to retry
         return
     end
 
@@ -285,7 +284,6 @@ function R:_CommitSweep(result)
         -- commit; storage/catalog events re-kick with the config once entries arrive.
         HDG.Log:Warn("catalog_error",
             "catalog search returned 0 entries; not loaded yet -- awaiting storage-event re-kick")
-        R._sweepInFlight = false   -- nothing to commit; allow a re-kick to retry
         return
     end
 
@@ -328,7 +326,6 @@ function R:_CommitSweep(result)
 
     R:_UpdateVintage()
 
-    R._sweepInFlight = false   -- sweep committed; subsequent triggers may re-sweep
     HDG.Log:Success("catalog_refreshed",
         string.format("Catalog ready -- %d items, %d vendors indexed", itemCount, vendorCount))
 end
@@ -1643,7 +1640,6 @@ function R:ClearStore()
     R.byVendor  = {}
     R.allVendorNames = {}
     R._catalogSchemaVersion = 0
-    R._sweepInFlight = false   -- reset clears any in-flight guard so the next load runs
 end
 
 -- ===== Module registration ====================================================
@@ -1708,10 +1704,10 @@ HDG.Modules:Declare({
                 -- Load unconditionally on first open (most views derive from the catalog).
                 -- RequestLoad is idempotent; re-opens are no-ops.
                 R:RequestLoad("main-window-opening")
-            elseif actionType == A.CATALOG_FORCE_RELOAD then
-                R:ReconcileFull("manual-refresh", true)   -- loading-overlay Refresh: force past the coalesce
                 R:ReconcileRooms()          -- live room catalog (cheap; Layout-mode searcher)
                 R:QueueCategoryTreeRebuild()   -- Blizzard category/subcategory nav snapshot
+            elseif actionType == A.CATALOG_FORCE_RELOAD then
+                R:ReconcileFull("manual-refresh")   -- (parked) catalog-intro Refresh button
             elseif actionType == A.MAIN_WINDOW_TOGGLE then
                 -- Resume/pause searcher auto-update with window show/hide (Blizzard symmetry).
                 if R._searcher then

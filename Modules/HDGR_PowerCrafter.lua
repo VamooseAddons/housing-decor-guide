@@ -153,8 +153,15 @@ function PC:AggregateByRecipeRaw(queue)
     return out
 end
 
+-- Milling/prospecting convert raw mats in BULK with RNG output -- there's no fixed
+-- yield to divide by, and the products (pigments / gems) are AH-buyable. The raw DAG
+-- STOPS at them: expanding to herbs/ore over-counts wildly (one decor needing 145
+-- pigment would otherwise demand ~2900 Yseralline Seeds).
+local RNG_BULK_CATEGORY = { ["Mass Milling"] = true, ["Mass Prospecting"] = true }
+
 -- _RawMaterialsForRow: DAG-walk to base mats. Crafted reagents recurse (known-agnostic).
--- Cycle defense: per-branch visited set + MAX_DEPTH cap.
+-- Cycle defense: per-branch visited set + MAX_DEPTH cap. Milled/prospected products are
+-- treated as leaves (RNG_BULK_CATEGORY) -- raw stops at the pigment/gem.
 function PC:_RawMaterialsForRow(recipeID, qty)
     local out = {}
     local function expand(itemID, q, depth, visited)
@@ -165,7 +172,7 @@ function PC:_RawMaterialsForRow(recipeID, qty)
             out[itemID] = (out[itemID] or 0) + q; return
         end
         local subRecipe = self:IsCraftedReagent(itemID) and self:_GetPrimaryRecipeForItem(itemID)
-        if not subRecipe then          -- leaf: gathering/vendor/no recipe data
+        if not subRecipe or RNG_BULK_CATEGORY[subRecipe.categoryName] then  -- leaf: gathering/vendor/no recipe, or milled/prospected (stop at pigment/gem)
             out[itemID] = (out[itemID] or 0) + q; return
         end
         -- Intermediate: expand slots. Mark visited per-branch (siblings with

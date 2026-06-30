@@ -12,13 +12,12 @@
 
 ---
 
-## What's New in v3.12.0
+## What's New in v3.12.1
 
-This covers the player-facing changes in 3.12.0.
+This covers the player-facing changes in 3.12.1.
 
-- **Export your lists, styles, sets, and collection.** A new Export option in the Styles tab, and under Tools, turns a shopping list, a style, a furnishing set, or your whole owned-decor collection into a code you can share. Pick HDG format to share with other Housing Decor Guide users, or DD2 format to upload your decor collection to housing.wowdb.com.
-- **Item tooltips on shopping lists.** Hovering an item in a shopping list now shows its full in-game tooltip, including the game's owned count, for every item. Before, only items with a known vendor showed a tooltip.
-- **The Decor catalog no longer scans at login.** It loads when you open the Housing Decor Guide window or the in-game housing catalog. This fixes the Decor browser occasionally opening empty.
+- **Fixed the Decor catalog getting stuck at login.** On some characters the catalog could sit on "Scanning catalog..." and never finish loading until you reloaded the interface. It now recovers a slow first scan on its own.
+- **Fixed inflated raw-material counts for milled and prospected reagents.** Milling and prospecting give a random yield, so there is no exact herb or ore count. The Raw materials view now stops at the pigment or gem you buy or mill, instead of expanding it down to herbs and ore and showing counts like 2900 Yseralline Seed for a single craft.
 
 ---
 
@@ -105,7 +104,7 @@ A companion window injects into Blizzard's House Editor so you can **place decor
 ---
 
 **Author:** Vamoose
-**Version:** 3.12.0
+**Version:** 3.12.1
 **Game Version:** 12.0.5+ (Midnight)
 **Source / Issues:** https://github.com/VamooseAddons/housing-decor-guide
 **Discord:** https://discord.gg/RWZaxJaHFP
