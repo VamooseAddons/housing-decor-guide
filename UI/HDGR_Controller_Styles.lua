@@ -1450,7 +1450,7 @@ function StylesController:Wire(rootFrame)
             if (row.numPlaced or 0) > 0 then items[#items + 1] = itemID end  -- exception(boundary): catalog struct field sparse
         end)
         if #items == 0 then
-            HDG.Log:Warn("styles_error", "Save Placed Decor: nothing placed (or catalog not ready)")
+            HDG.Log:Warn("styles_action", "Save Placed Decor: nothing placed (or catalog not ready)")
             return
         end
         local ts = (time and time()) or 0   -- exception(boundary): wall clock

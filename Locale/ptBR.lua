@@ -106,6 +106,7 @@ HDG.Locale:Register("ptBR", {
     DECOR_HINT_RIGHT = "Marque ou desmarque o item como favorito.",
     DECOR_ITEM_ID_LABEL = "itemID:",
     DECOR_LOADING = "Verificando catálogo...",
+    DECOR_LOADING_RETRY = "O carregamento pode ter falhado -- troque de visão para tentar novamente.",
     DECOR_NOTE_PLACEHOLDER = "Adicionar uma nota pessoal...",
     DECOR_PREVIEW_PLACEHOLDER = "Clique em um item para visualizar",
     DECOR_PROFESSION_LABEL = "Profissão:",

@@ -19,23 +19,27 @@ local function _dotAlpha(t, i)
 end
 
 function IntroController:Wire(rootFrame)
-    self._dots = {}
+    -- Animation state lives on the rootFrame, NOT the controller singleton:
+    -- WireAll runs once per window (main + each satellite), and a singleton
+    -- bucket gets clobbered to empty by whichever dot-less satellite wires last.
+    local dots = {}
     for _, id in ipairs(DOT_IDS) do
         local d = HDG.UI.W(rootFrame, id)
-        if d and d.SetAlpha then self._dots[#self._dots + 1] = d end  -- exception(boundary): W returns a stub without SetAlpha in the headless mock
+        if d and d.SetAlpha then dots[#dots + 1] = d end  -- exception(boundary): W returns a stub without SetAlpha in the headless mock
     end
-    self._loading = false
-    self._t       = 0
+    rootFrame._catalogIntro = { dots = dots, loading = false, t = 0 }
 
     -- Dot wave: a gated OnUpdate (only animates while phase=="loading"; rootFrame
-    -- itself stops ticking when the HDG window is hidden). Hooked once per frame.
-    if not rootFrame._catalogIntroHooked then
+    -- itself stops ticking when the HDG window is hidden). Hooked once per frame,
+    -- and only on frames that actually compose the dots (satellites never do).
+    if #dots > 0 and not rootFrame._catalogIntroHooked then
         rootFrame._catalogIntroHooked = true
         rootFrame:HookScript("OnUpdate", function(_, elapsed)
-            if not IntroController._loading then return end
-            IntroController._t = (IntroController._t or 0) + elapsed
-            for i, d in ipairs(IntroController._dots or {}) do
-                d:SetAlpha(_dotAlpha(IntroController._t, i))   -- _dots only holds real textures (filtered in Wire)
+            local ci = rootFrame._catalogIntro   -- re-read: Wire replaces the bucket on rewire
+            if not ci.loading then return end
+            ci.t = ci.t + elapsed
+            for i, d in ipairs(ci.dots) do
+                d:SetAlpha(_dotAlpha(ci.t, i))   -- dots only holds real textures (filtered in Wire)
             end
         end)
     end
@@ -48,11 +52,12 @@ end
 
 function IntroController:Refresh(rootFrame, ctx)
     local state = HDG.Store:GetState()  -- exception(false-positive): top-level controller Refresh, not a row factory
-    self._loading = (state.session.ui.catalogIntro.phase == "loading")
+    local ci = rootFrame._catalogIntro
+    ci.loading = (state.session.ui.catalogIntro.phase == "loading")
     -- Reset dots to full when not animating so the success flash / hidden states
     -- never freeze a dot mid-fade.
-    if not self._loading then
-        for _, d in ipairs(self._dots) do d:SetAlpha(1) end
+    if not ci.loading then
+        for _, d in ipairs(ci.dots) do d:SetAlpha(1) end
     end
 end
 

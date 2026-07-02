@@ -46,6 +46,7 @@ HDG.Locale:Register("enUS", {
     DECOR_BG_PREFIX        = "Background ",
     -- Data states (loading / error / blank overlays)
     DECOR_LOADING          = "Scanning catalog...",
+    DECOR_LOADING_RETRY    = "Loading may have failed -- switch views to retry.",
     CATALOG_INTRO_LOADING  = "Loading catalog",
     CATALOG_INTRO_SUCCESS  = "Catalog loaded!",
     CATALOG_INTRO_REFRESH  = "Refresh",

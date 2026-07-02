@@ -107,6 +107,7 @@ HDG.Locale:Register("deDE", {
     DECOR_HINT_RIGHT = "Gegenstand favorisieren oder aus Favoriten entfernen.",
     DECOR_ITEM_ID_LABEL = "GegenstandsID:",
     DECOR_LOADING = "Katalog wird gescannt...",
+    DECOR_LOADING_RETRY = "Laden ist evtl. fehlgeschlagen -- Ansicht wechseln zum Wiederholen.",
     DECOR_NOTE_PLACEHOLDER = "Persönliche Notiz hinzufügen...",
     DECOR_PREVIEW_PLACEHOLDER = "Gegenstand anklicken für Vorschau",
     DECOR_PROFESSION_LABEL = "Beruf:",

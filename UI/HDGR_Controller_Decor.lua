@@ -143,7 +143,7 @@ local function _wireDecorClicks(row, ed)
                 if rid then
                     HDG.UI.QueueRecipe(rid, itemID, ed.name)
                 else
-                    HDG.Log:Debug("queue", ed.name .. " has no recipe")
+                    HDG.Log:Info("queue", ed.name .. " has no recipe")
                 end
                 return
             end
@@ -660,7 +660,7 @@ function DecorController:_wireWishlist(rootFrame)
         if not item then return end
         if state.account.activeShoppingListId == "" then
             HDG.Log:Warn("shopping",
-                "No active shopping list -- open the Shopping tab to create one")
+                "No active shopping list -- open the Shopping tab to create one (decor wishlist)")
             return
         end
         HDG.Store:Dispatch({

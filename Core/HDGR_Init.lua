@@ -270,6 +270,7 @@ SlashCmdList["HDG"] = function(msg)
         })
     elseif lower == "hardreset" then
         HDG.Store:Dispatch({ type = HDG.Constants.ACTIONS.HARD_RESET })
+        HDG.Log:Success("migration", "HDG has been hard-reset")
     elseif lower == "resetlayout" then
         -- Clears account.ui.houseTab.* overrides; dashboard renders from WidgetDefaults.
         HDG.Store:Dispatch({ type = HDG.Constants.ACTIONS.HOUSETAB_RESET_LAYOUT })

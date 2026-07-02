@@ -1250,7 +1250,7 @@ function PC:Wire(rootFrame)
         local itemID = state.session.ui.projects.pickerSelectedItemID
         if not itemID then return end
         if state.account.activeShoppingListId == "" then
-            HDG.Log:Warn("shopping", "No active shopping list -- open the Shopping tab to create one")
+            HDG.Log:Warn("shopping", "No active shopping list -- open the Shopping tab to create one (Projects picker)")
             return
         end
         HDG.Store:Dispatch({ type = A.SHOPPING_ITEM_ADD, payload = { itemID = itemID, qty = 1 } })

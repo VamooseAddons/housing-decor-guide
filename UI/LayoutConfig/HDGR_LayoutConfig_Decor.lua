@@ -284,6 +284,16 @@ LC.widgets["decorLoadingPanel.loadingLabel"] = {
     width = "fill", height = 22,
     order = 10,
 }
+-- Retry affordance: a wedged sweep (nil/0-entry dead end) only recovers on a
+-- re-kick, and a view switch is the retry gesture (_OnViewChange loading arm).
+LC.widgets["decorLoadingPanel.retryHint"] = {
+    tooltip = false,
+    kind = "label", role = "TextInfo", ["in"] = "decorLoadingPanel",
+    text = "locale:DECOR_LOADING_RETRY",
+    font = "small", justifyH = "CENTER",
+    width = "fill", height = 14,
+    order = 20,
+}
 
 -- Error data state: amber blip + headline + sub-line (semantic.warning tone).
 LC.widgets["decorErrorPanel.icon"] = {

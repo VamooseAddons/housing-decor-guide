@@ -107,6 +107,7 @@ HDG.Locale:Register("koKR", {
     DECOR_HINT_RIGHT = "아이템을 즐겨찾기에 추가하거나 해제하세요.",
     DECOR_ITEM_ID_LABEL = "아이템 ID:",
     DECOR_LOADING = "카탈로그 스캔 중...",
+    DECOR_LOADING_RETRY = "로딩이 실패했을 수 있습니다 -- 다른 탭으로 전환하면 다시 시도합니다.",
     DECOR_NOTE_PLACEHOLDER = "개인 메모 추가...",
     DECOR_PREVIEW_PLACEHOLDER = "아이템을 클릭하여 미리보기",
     DECOR_PROFESSION_LABEL = "전문기술:",

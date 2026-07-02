@@ -106,6 +106,7 @@ HDG.Locale:Register("zhCN", {
     DECOR_HINT_RIGHT = "将物品加入或移出收藏。",
     DECOR_ITEM_ID_LABEL = "物品ID:",
     DECOR_LOADING = "正在扫描目录...",
+    DECOR_LOADING_RETRY = "加载可能失败 -- 切换视图以重试。",
     DECOR_NOTE_PLACEHOLDER = "添加个人备注...",
     DECOR_PREVIEW_PLACEHOLDER = "点击物品以预览",
     DECOR_PROFESSION_LABEL = "专业:",

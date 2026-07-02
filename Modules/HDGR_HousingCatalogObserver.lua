@@ -125,7 +125,7 @@ end
 function R:ReconcileFull(reason)
     local s = self:_EnsureSearcher()
     if not s then
-        HDG.Log:Warn("catalog_error", "ReconcileFull aborted: C_HousingCatalog unavailable")
+        HDG.Log:Error("catalog_error", "ReconcileFull aborted: C_HousingCatalog unavailable")
         HDG.Store:Dispatch({ type = HDG.Constants.ACTIONS.CATALOG_LOAD_FAILED, payload = { reason = "no_api" } })
         return
     end
@@ -133,7 +133,12 @@ function R:ReconcileFull(reason)
     -- view-change re-kick that lands while a sweep is in flight IS the recovery path
     -- for a slow / unresponsive searcher: it re-applies config + re-RunSearch, which
     -- is what makes a slow first response eventually commit. It's the SAME persistent
-    -- searcher, so the later RunSearch supersedes -- one commit, not a double load.
+    -- searcher, so the later RunSearch usually supersedes into ONE commit -- but it's
+    -- a race: if the earlier sweep's 0.5s settle expires before the re-kick's results
+    -- arrive, both commit (seen in the wild 2026-07-02: generation=1 then =2, 0.5s
+    -- apart, identical data). Benign -- each commit is an atomic swap -- so we accept
+    -- the occasional double rather than cancel pending settles (discarding a good
+    -- pending commit re-opens the hang if the re-kicked search goes silent).
     -- (A coalesce guard once lived here; it left slow-searcher characters stuck on
     -- "Scanning catalog..." forever, because the recovery re-kick was the thing it
     -- suppressed. Removed.)
@@ -1593,12 +1598,19 @@ function R:QueueCategoryTreeRebuild()
     end)
 end
 
--- _OnViewChange: routes to RequestLoad (cold) or Refresh (deferred) based on catalog state.
+-- _OnViewChange: routes to RequestLoad (cold) or Refresh (deferred/retry) based on catalog state.
 function R:_OnViewChange(view)
     if not HDG.Constants.CATALOG_CONSUMING_TAB_VIEWS[view] then return end
     local s = HDG.Store:GetState().session.catalog
     if s.status == "idle" then
         R:RequestLoad("view-change:" .. tostring(view))
+    elseif s.status == "loading" then
+        -- Still "loading" on a HUMAN tab switch = the sweep dead-ended (healthy
+        -- loads take 0.5-2s, faster than anyone changes views). Re-kick, Blizzard
+        -- style: their catalog frames RunSearch on every OnShow. Same persistent
+        -- searcher, so a re-kick over a live sweep supersedes it (worst case a
+        -- redundant identical commit, see ReconcileFull).
+        R:Refresh("view-change-retry:" .. tostring(view))
     elseif s.refreshPending then
         R:Refresh("view-change:" .. tostring(view))
     end
@@ -1652,7 +1664,7 @@ HDG.Modules:Declare({
     -- Store is a top-level engine, not a module. No dependencies.
     dependencies = {},
     logTags = {
-        catalog_swept     = { user = false, level = "debug"   },
+        catalog_swept     = { user = false, level = "info"    },
         catalog_refreshed = { user = true,  level = "success", duration = 5    },
         catalog_error     = { user = true,  level = "error",   duration = nil  },
         catalog_validated = { user = false, level = "debug"   },
@@ -1662,8 +1674,8 @@ HDG.Modules:Declare({
         -- Actual sweep deferred to next catalog-tab activation (UI_SET_PERSISTENT subscriber).
         HOUSING_STORAGE_UPDATED              = { handler = "OnHousingStorageUpdated", debounce = 0.5 },
         HOUSING_STORAGE_ENTRY_UPDATED        = { handler = "OnHousingStorageEntryUpdated" },
-        HOUSING_CATALOG_CATEGORY_UPDATED     = { handler = "OnHousingCatalogChange" },
-        HOUSING_CATALOG_SUBCATEGORY_UPDATED  = { handler = "OnHousingCatalogChange" },
+        HOUSING_CATALOG_CATEGORY_UPDATED     = { handler = "OnHousingCatalogCategoryChange" },
+        HOUSING_CATALOG_SUBCATEGORY_UPDATED  = { handler = "OnHousingCatalogSubcategoryChange" },
         -- (HOUSING_DECOR_PLACE_SUCCESS/REMOVED/etc. are NOT here: redundant with
         -- the storage signals + their decorGUID is nil -- they can't drive a
         -- targeted update. In-editor place/remove is captured granularly via the
@@ -1672,8 +1684,11 @@ HDG.Modules:Declare({
         -- stormed the catalog index sweep -- see the perf profile.)
     },
     -- Handlers are pure dispatch sites; sweep deferred to UI_SET_PERSISTENT subscriber.
+    -- payload.event = triggering Blizzard event (diagnostic; shows in the dispatch log
+    -- so refresh-queued sweeps can be attributed to their source event).
     OnHousingStorageUpdated = function(self)
-        HDG.Store:Dispatch({ type = HDG.Constants.ACTIONS.CATALOG_REFRESH_QUEUED })
+        HDG.Store:Dispatch({ type = HDG.Constants.ACTIONS.CATALOG_REFRESH_QUEUED,
+                             payload = { event = "HOUSING_STORAGE_UPDATED" } })
     end,
     OnHousingStorageEntryUpdated = function(self, entryID)
         -- Per-entry reconcile: targeted path (Blizzard's HouseEditorStorageFrame pattern).
@@ -1683,11 +1698,17 @@ HDG.Modules:Declare({
             R:ReconcileEntry(entryID)
             return
         end
-        HDG.Store:Dispatch({ type = HDG.Constants.ACTIONS.CATALOG_REFRESH_QUEUED })
+        HDG.Store:Dispatch({ type = HDG.Constants.ACTIONS.CATALOG_REFRESH_QUEUED,
+                             payload = { event = "HOUSING_STORAGE_ENTRY_UPDATED" } })
     end,
-    OnHousingCatalogChange = function(self)
+    OnHousingCatalogCategoryChange = function(self)
         -- Rare hotfix events. Same queuing semantics.
-        HDG.Store:Dispatch({ type = HDG.Constants.ACTIONS.CATALOG_REFRESH_QUEUED })
+        HDG.Store:Dispatch({ type = HDG.Constants.ACTIONS.CATALOG_REFRESH_QUEUED,
+                             payload = { event = "HOUSING_CATALOG_CATEGORY_UPDATED" } })
+    end,
+    OnHousingCatalogSubcategoryChange = function(self)
+        HDG.Store:Dispatch({ type = HDG.Constants.ACTIONS.CATALOG_REFRESH_QUEUED,
+                             payload = { event = "HOUSING_CATALOG_SUBCATEGORY_UPDATED" } })
     end,
     onEnable = function(self)
         local A = HDG.Constants.ACTIONS
@@ -1721,7 +1742,7 @@ HDG.Modules:Declare({
                 -- captures in-editor changes via ReconcileEntry (targeted; avoids 1673-entry storm).
                 if HDG.Store:GetState().account.ui.mainWindowShown then
                     if HDG.Store:GetState().session.catalog.status == "loading" then
-                        R:ReconcileFull("refresh-queued")
+                        R:ReconcileFull("refresh-queued:" .. action.payload.event)
                     else
                         R:_OnViewChange(HDG.Store:GetState().account.ui.view)
                     end

@@ -157,7 +157,7 @@ function ConfigController:Wire(rootFrame)
     -- ===== Danger: Collection cache reset (single-click, no confirm) =========
     HDG.UI.OnClick(rootFrame, "configPanel.collectionResetBtn", function()
         HDG.Store:Dispatch({ type = HDG.Constants.ACTIONS.COLLECTION_RESET })
-        HDG.HousingCatalogObserver:ReconcileFull()
+        HDG.HousingCatalogObserver:ReconcileFull("collection-cache-reset")
         HDG.Log:Info("catalog_refreshed", "Collection cache reset; rescanning...")
     end)
 

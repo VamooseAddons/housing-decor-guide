@@ -482,7 +482,7 @@ function AcquisitionController:_wireWaypointButton(rootFrame)
         local state  = HDG.Store:GetState()  -- exception(false-positive): top-level controller method (not a row factory)
         local vendor = HDG.Selectors:Call("acq.selectedVendor", state, {})
         if not (vendor and vendor.mapID and vendor.x and vendor.y) then
-            HDG.Log:Warn("error", "No coordinates available for this vendor.")
+            HDG.Log:Warn("waypoints_user", "No coordinates available for this vendor.")
             return
         end
         HDG.Waypoints:Set(vendor.mapID, vendor.x, vendor.y, vendor.name, vendor.factionRaw)
@@ -673,7 +673,7 @@ function AcquisitionController:Wire(rootFrame)
         if not item then return end
         if state.account.activeShoppingListId == "" then
             HDG.Log:Warn("shopping",
-                "No active shopping list -- open the Shopping tab to create one")
+                "No active shopping list -- open the Shopping tab to create one (item cart)")
             return
         end
         HDG.Store:Dispatch({
@@ -711,7 +711,7 @@ function AcquisitionController:Wire(rootFrame)
         if not item then return end
         if state.account.activeShoppingListId == "" then
             HDG.Log:Warn("shopping",
-                "No active shopping list -- open the Shopping tab to create one")
+                "No active shopping list -- open the Shopping tab to create one (vendor cart)")
             return
         end
         HDG.Store:Dispatch({

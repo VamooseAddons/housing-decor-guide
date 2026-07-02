@@ -106,6 +106,7 @@ HDG.Locale:Register("zhTW", {
     DECOR_HINT_RIGHT = "收藏或取消收藏此物品。",
     DECOR_ITEM_ID_LABEL = "物品ID:",
     DECOR_LOADING = "掃描目錄中...",
+    DECOR_LOADING_RETRY = "載入可能失敗 -- 切換檢視以重試。",
     DECOR_NOTE_PLACEHOLDER = "新增個人備注...",
     DECOR_PREVIEW_PLACEHOLDER = "點擊物品以預覽",
     DECOR_PROFESSION_LABEL = "專業:",

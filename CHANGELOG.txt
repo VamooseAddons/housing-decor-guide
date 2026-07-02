@@ -1,3 +1,11 @@
+## [3.12.2] - 2026-07-02 (July 2026)
+
+### Fixed
+- Hard Reset (Settings > Hard Reset, or /hdgr hardreset) actually resets now. Previously the wipe was immediately undone by the addon's own save queue re-linking the old data before /reload could write the empty file -- the button showed "HDG has been hard-reset" while nothing was reset. It now clears settings, profiles, and per-character data in place and the reset survives the reload.
+- "No coordinates available for this vendor" no longer sticks on the status rail until another message replaces it -- it now clears after a few seconds like other notices.
+- A catalog scan that gets stuck on "Scanning catalog..." can now be retried by simply switching views -- changing to any catalog tab re-kicks the scan (matching how Blizzard's own catalog re-searches every time it is shown). The loading panel now includes a hint line so you know the gesture exists. Healthy scans finish in under two seconds, faster than a user switches tabs, so normal loads are unaffected.
+- Decor reagent bag markers no longer appear on empty bag slots in Bagnon when viewing another character's bags or the guild bank. The marker was resolving "what item is in this slot?" against your current character's live bags instead of what the slot actually displays, so an empty slot could inherit the marker from whatever you happened to be carrying at the same bag position.
+
 ## [3.12.1] - 2026-06-30 (June 2026)
 
 ### Fixed

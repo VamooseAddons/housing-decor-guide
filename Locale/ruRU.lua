@@ -106,6 +106,7 @@ HDG.Locale:Register("ruRU", {
     DECOR_HINT_RIGHT = "Добавить или убрать предмет из избранного.",
     DECOR_ITEM_ID_LABEL = "itemID:",
     DECOR_LOADING = "Сканирование каталога...",
+    DECOR_LOADING_RETRY = "Загрузка могла не удаться -- переключите вкладку, чтобы повторить.",
     DECOR_NOTE_PLACEHOLDER = "Добавить личную заметку...",
     DECOR_PREVIEW_PLACEHOLDER = "Нажмите на предмет для предпросмотра",
     DECOR_PROFESSION_LABEL = "Профессия:",

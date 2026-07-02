@@ -106,6 +106,7 @@ HDG.Locale:Register("frFR", {
     DECOR_HINT_RIGHT = "Ajouter ou retirer l'objet de vos favoris.",
     DECOR_ITEM_ID_LABEL = "objetID :",
     DECOR_LOADING = "Analyse du catalogue...",
+    DECOR_LOADING_RETRY = "Le chargement a peut-être échoué -- changez de vue pour réessayer.",
     DECOR_NOTE_PLACEHOLDER = "Ajouter une note personnelle...",
     DECOR_PREVIEW_PLACEHOLDER = "Cliquez sur un objet pour l'aperçu",
     DECOR_PROFESSION_LABEL = "Métier :",

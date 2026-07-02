@@ -114,7 +114,7 @@ HDG.Modules:Declare({
             -- RequestLoad is the idempotent cold-start trigger (no-op unless idle) --
             -- the same call the Shopping List and House Editor companion use. Marks
             -- fill in via the DECOR_CATALOG_READY subscription once results land.
-            if enabled() then HDG.HousingCatalogObserver:RequestLoad() end
+            if enabled() then HDG.HousingCatalogObserver:RequestLoad("merchant-overlay") end
         end)
         -- Live refresh: flip a marker the instant decor is collected while the
         -- vendor is open. PatchCounts sets row.isOwned synchronously before these

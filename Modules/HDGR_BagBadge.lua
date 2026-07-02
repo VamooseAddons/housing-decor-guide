@@ -80,16 +80,16 @@ end
 -- buttons (character sheet, merchant, etc.) so the badge only lands in bags.
 local function bagItemID(button)
     local info = button.info
-    if type(info) == "table" and info.itemID then
-        return info.itemID   -- exception(boundary): Bagnon/BagBrother item slot caches .info
+    if type(info) == "table" then
+        -- exception(boundary): BagBrother (Bagnon) slot -- .info is refreshed before every
+        -- paint and is authoritative for what the slot DISPLAYS (live, cached alt view,
+        -- guild bank). nil itemID = empty slot; MUST NOT fall through to a live container
+        -- read: its (bag, slot) answers for the wrong universe in cached/guild views.
+        return info.itemID
     end
-    if button.GetBagID then   -- exception(boundary): only bag item buttons expose GetBagID
-        local bag = button:GetBagID()
-        local slot = button.GetID and button:GetID()
-        if bag and slot and C_Container and C_Container.GetContainerItemInfo then
-            local ci = C_Container.GetContainerItemInfo(bag, slot)   -- exception(boundary): Blizzard container read
-            return ci and ci.itemID
-        end
+    if button.GetBagID then   -- exception(boundary): duck-type for Blizzard container item buttons
+        local ci = C_Container.GetContainerItemInfo(button:GetBagID(), button:GetID())   -- exception(boundary): nil = empty slot
+        return ci and ci.itemID
     end
     return nil
 end

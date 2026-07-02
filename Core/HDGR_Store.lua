@@ -1618,8 +1618,21 @@ HDG.Actions:Register{ name = "HARD_RESET",
     persists = true,  combatUnsafe = false,
             invalidates = "*",
     reduce = function(state, payload)
-        _G.HDG_DB = {}
-        state = NewDefaultState()
+        -- In-place account reset. state.account is shared BY REFERENCE (Store.state
+        -- + HDG_DB.account via Flush): rebinding a local here resets nothing, and
+        -- this action's own persists=true Flush re-links the old table right back
+        -- over a bare `HDG_DB = {}` wipe before any /reload can serialize it.
+        local fresh = NewDefaultState().account
+        for k in pairs(state.account) do state.account[k] = nil end
+        for k, v in pairs(fresh) do state.account[k] = v end
+        -- Fresh SV root: drops profiles + characterSpecific too ("wipes ALL HDG
+        -- data"). Seed the active/default profile buckets and the char bucket so
+        -- Config reads stay valid until the /reload the reset UX already requires.
+        local active = _G.HDG_DB_CURRENT_PROFILE or "DEFAULT"  -- exception(boundary): per-char SV, absent on first boot
+        _G.HDG_DB = { account = state.account,
+                      profiles = { [active] = {}, DEFAULT = {} },
+                      characterSpecific = {} }
+        _G.HDG_DB_CURRENT_PROFILE = nil
     end }
 
 HDG.Actions:Register{ name = "COLLECTION_RESET",

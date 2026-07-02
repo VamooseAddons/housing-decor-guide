@@ -51,11 +51,11 @@ end
 
 local function pushFilterToast()
     -- Wire runs post-init; HDG.Log always present.
-    HDG.Log:Debug("filter", buildFilterChain(HDG.Store:GetState()))  -- exception(false-positive): top-level controller method (not a row factory)
+    HDG.Log:Info("filter", buildFilterChain(HDG.Store:GetState()))  -- exception(false-positive): top-level controller method (not a row factory)
 end
 
 local function pushQueueToast(msg)
-    HDG.Log:Debug("queue", msg)
+    HDG.Log:Info("queue", msg)
 end
 
 -- ===== Active-filter run: chip cell kind ====================================

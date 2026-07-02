@@ -52,7 +52,7 @@ function UI.QueueRecipe(recipeID, itemID, displayName, opts)
     -- Each add is atomic (+qty); the toast reports THIS add, not the running queue total.
     -- Batch callers pass opts.silent and emit their own one-line summary instead.
     if not silent then
-        HDG.Log:Debug("queue", "Added " .. (displayName or "recipe") .. " x" .. payload.qty)
+        HDG.Log:Info("queue", "Added " .. (displayName or "recipe") .. " x" .. payload.qty)
     end
 end
 

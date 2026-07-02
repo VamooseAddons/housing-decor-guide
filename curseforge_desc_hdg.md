@@ -12,12 +12,14 @@
 
 ---
 
-## What's New in v3.12.1
+## What's New in v3.12.2
 
-This covers the player-facing changes in 3.12.1.
+This covers the player-facing changes in 3.12.2.
 
-- **Fixed the Decor catalog getting stuck at login.** On some characters the catalog could sit on "Scanning catalog..." and never finish loading until you reloaded the interface. It now recovers a slow first scan on its own.
-- **Fixed inflated raw-material counts for milled and prospected reagents.** Milling and prospecting give a random yield, so there is no exact herb or ore count. The Raw materials view now stops at the pigment or gem you buy or mill, instead of expanding it down to herbs and ore and showing counts like 2900 Yseralline Seed for a single craft.
+- **Fixed Hard Reset not resetting anything.** The reset in Settings (and /hdgr hardreset) reported success but left all data in place. It now clears settings, profiles, and per-character data, and the reset survives the /reload.
+- **A stuck catalog scan can now be retried by switching views.** If "Scanning catalog..." ever hangs, changing to any catalog tab restarts the scan. The loading panel now includes a hint line so you know the option exists. Normal scans finish in under two seconds and are unaffected.
+- **Fixed decor reagent markers on empty bag slots.** When viewing another character's bags or the guild bank in Bagnon, empty slots no longer inherit the marker from items your current character is carrying in the same bag position.
+- **The "No coordinates available for this vendor" notice now clears after a few seconds** instead of staying on the status bar until another message replaces it.
 
 ---
 
@@ -104,7 +106,7 @@ A companion window injects into Blizzard's House Editor so you can **place decor
 ---
 
 **Author:** Vamoose
-**Version:** 3.12.1
+**Version:** 3.12.2
 **Game Version:** 12.0.5+ (Midnight)
 **Source / Issues:** https://github.com/VamooseAddons/housing-decor-guide
 **Discord:** https://discord.gg/RWZaxJaHFP
