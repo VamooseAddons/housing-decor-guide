@@ -87,8 +87,14 @@ local function bagItemID(button)
         -- read: its (bag, slot) answers for the wrong universe in cached/guild views.
         return info.itemID
     end
-    if button.GetBagID then   -- exception(boundary): duck-type for Blizzard container item buttons
-        local ci = C_Container.GetContainerItemInfo(button:GetBagID(), button:GetID())   -- exception(boundary): nil = empty slot
+    if button.GetBagID then
+        -- exception(boundary): GetBagID lives on the BASE ItemButtonMixin (returns
+        -- self.bagID) -- EVERY ItemButton has it, and it returns nil outside real
+        -- container frames (e.g. Adventure Guide Monthly Activities rewards). The
+        -- method's presence is NOT a container duck-type; nil bagID is.
+        local bag = button:GetBagID()
+        if bag == nil then return nil end
+        local ci = C_Container.GetContainerItemInfo(bag, button:GetID())   -- exception(boundary): nil = empty slot
         return ci and ci.itemID
     end
     return nil

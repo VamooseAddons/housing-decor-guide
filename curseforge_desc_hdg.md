@@ -12,14 +12,11 @@
 
 ---
 
-## What's New in v3.12.2
+## What's New in v3.12.3
 
-This covers the player-facing changes in 3.12.2.
+This covers the player-facing changes in 3.12.3.
 
-- **Fixed Hard Reset not resetting anything.** The reset in Settings (and /hdgr hardreset) reported success but left all data in place. It now clears settings, profiles, and per-character data, and the reset survives the /reload.
-- **A stuck catalog scan can now be retried by switching views.** If "Scanning catalog..." ever hangs, changing to any catalog tab restarts the scan. The loading panel now includes a hint line so you know the option exists. Normal scans finish in under two seconds and are unaffected.
-- **Fixed decor reagent markers on empty bag slots.** When viewing another character's bags or the guild bank in Bagnon, empty slots no longer inherit the marker from items your current character is carrying in the same bag position.
-- **The "No coordinates available for this vendor" notice now clears after a few seconds** instead of staying on the status bar until another message replaces it.
+- **Fixed an error when opening the Adventure Guide's Traveler's Log tab.** Introduced in 3.12.2: the bag reagent marker mistook the monthly reward buttons for bag slots and raised a Lua error when the reward track painted. Bag markers are unaffected and keep working as before.
 
 ---
 
@@ -106,7 +103,7 @@ A companion window injects into Blizzard's House Editor so you can **place decor
 ---
 
 **Author:** Vamoose
-**Version:** 3.12.2
+**Version:** 3.12.3
 **Game Version:** 12.0.5+ (Midnight)
 **Source / Issues:** https://github.com/VamooseAddons/housing-decor-guide
 **Discord:** https://discord.gg/RWZaxJaHFP

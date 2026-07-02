@@ -1,3 +1,8 @@
+## [3.12.3] - 2026-07-02 (July 2026)
+
+### Fixed
+- Fixed an error when opening the Adventure Guide's Traveler's Log (Monthly Activities) tab in 3.12.2. The bag reagent marker treated any item button with a GetBagID method as a bag slot, but that method exists on all of Blizzard's item buttons and only returns a bag on real container slots -- reward buttons crashed the lookup.
+
 ## [3.12.2] - 2026-07-02 (July 2026)
 
 ### Fixed
