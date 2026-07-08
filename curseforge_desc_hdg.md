@@ -12,11 +12,17 @@
 
 ---
 
-## What's New in v3.12.3
+## What's New in v3.13.0
 
-This covers the player-facing changes in 3.12.3.
+This covers the player-facing changes in 3.13.0.
 
-- **Fixed an error when opening the Adventure Guide's Traveler's Log tab.** Introduced in 3.12.2: the bag reagent marker mistook the monthly reward buttons for bag slots and raised a Lua error when the reward track painted. Bag markers are unaffected and keep working as before.
+- **Buy decor from vendors without the per-item popup.** With the Shopping List open at a vendor, "Buy All" purchases every gold-priced item on your list in one paced pass and checks each off the list as it lands in decor storage. A single summary confirmation replaces the game's per-item non-refundable prompt.
+- **Right-click a gold-priced decor item at a vendor to pick a quantity.** Dial in how many with three digit wheels, watch the running total against your gold and decor-storage space, and buy them in one go. Off by default; turn it on under Settings > Helpers > Vendors. Items sold for a currency right-click as normal.
+- **Essence of Lumber tracker.** A title-bar icon shows how many Essence of Lumber you hold across your whole warband, with a mouseover listing which characters have them and how many. Because Essence is soulbound, the total tells you where your stock actually sits. The icon greys out when you have none.
+- **Re-importing a shopping list updates it in place.** Importing a collection you already have refreshes that list instead of adding a second copy with the same name. Lists that share a name are numbered so the switcher stays clear.
+- **Move Planner selection is easier to read.** A selected plot now outlines in white instead of a color that could be mistaken for a community plot-letter hue.
+- **Fixed the displayed cost of MOTHER's Titanic Brazier and N'Zoth's Captured Eye** (Chamber of Heart), which the catalog listed with a stale price.
+- **Fixed Lord Candren's vendor pin**, which pointed to the wrong part of Gilneas City.
 
 ---
 
@@ -39,7 +45,7 @@ This covers the player-facing changes in 3.12.3.
 ## Crafting
 
 - **Recipes** -- browse craftable decor across professions and expansions. Filter by **Known / Ready / Unknown** -- "Ready" buckets recipes by how much of the materials you already hold, and "Unknown" finds recipes *nobody on your account* has yet. Queue crafts, preview the result in 3D, and see a materials panel (totals or per-recipe, direct or fully raw, bucketed by source) with an AH cost estimate.
-- **Warehouse** -- track lumber and every reagent (bag / bank / warband bank, separately), how much you need for your queue *and* for all uncollected recipes, and a "Used In" cross-reference so you know what's worth farming. Lumber tracker auto-pops when you harvest lumber.
+- **Warehouse** -- track lumber and every reagent (bag / bank / warband bank, separately), how much you need for your queue *and* for all uncollected recipes, and a "Used In" cross-reference so you know what's worth farming. Lumber tracker auto-pops when you harvest lumber. A title-bar badge tracks your account-wide Essence of Lumber, with a per-character mouseover.
 - **Trainers** -- a profession trainer directory by expansion and faction, each with location, coordinates, and a one-click waypoint, plus a dedicated **Midnight Recipe Sources** table.
 - **Alts** -- an account-wide grid of your best skill in every profession across every expansion, with per-character detail and decor-recipe completeness so you always know which alt to log in.
 
@@ -77,7 +83,7 @@ A companion window injects into Blizzard's House Editor so you can **place decor
 
 ## Tools
 
-- **Shopping** -- a floating, multi-list shopping manager grouped by zone and vendor, with "Waypoint All" and share/import codes.
+- **Shopping** -- a floating, multi-list shopping manager grouped by zone and vendor, with "Waypoint All" and share/import codes. At a vendor, "Buy All" purchases every gold-priced list item in one paced pass, and right-clicking a gold-priced decor item opens a quantity picker.
 - **Zone alerts** -- entering a zone with a decor vendor (selling something you're missing or have listed) can pop a window, ping chat, and play a sound -- each toggle optional.
 - **Your Data** -- collection KPIs, achievement progress (decor, coupons, lumber milestones), and full crafting/farming history.
 - **Config** -- multiple color themes with a live preview, UI scaling, and account profiles.
@@ -103,7 +109,7 @@ A companion window injects into Blizzard's House Editor so you can **place decor
 ---
 
 **Author:** Vamoose
-**Version:** 3.12.3
+**Version:** 3.13.0
 **Game Version:** 12.0.5+ (Midnight)
 **Source / Issues:** https://github.com/VamooseAddons/housing-decor-guide
 **Discord:** https://discord.gg/RWZaxJaHFP

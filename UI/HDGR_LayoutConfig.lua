@@ -344,6 +344,17 @@ HDG.LayoutConfig.widgets["chromePanel.version"] = {
     height   = 14, order = 90,
 }
 
+-- Essence of Lumber badge: the item icon with an account-wide count badge and a
+-- cross-character hover. Hover-only (no OnClick); greyed when none owned.
+-- ChromeController paints the count + desaturation; the tooltip recipe renders
+-- the per-alt breakdown. Sits in the lumber cluster (essence is a lumber byproduct).
+HDG.LayoutConfig.widgets["chromePanel.essence"] = {
+    tooltip = { recipe = "EssenceBadge" },
+    kind = "button", ["in"] = "chrome.body",
+    normalTexture = HDG.Constants.ESSENCE_OF_LUMBER_ICON,
+    width = 20, height = 20, size = 20, order = 94,
+}
+
 -- Lumber Tracker toggle: the Find Lumber glyph, just left of the close button.
 -- Click opens/closes the floating Lumber Tracker. LUMBER_WINDOW_TOGGLE auto-flips
 -- when dispatched without `visible`; ChromeController wires the OnClick.
@@ -375,5 +386,5 @@ HDG.LayoutConfig.widgets["chromePanel.close"] = {
     width = 22, height = 22, order = 100,
     close = true,
     size = 22,
-    iconSize = 14,
+    iconSize = 17,
 }

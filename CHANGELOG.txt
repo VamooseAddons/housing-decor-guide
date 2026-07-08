@@ -1,3 +1,19 @@
+## [3.13.0] - 2026-07-08 (July 2026)
+
+### Added
+- Essence of Lumber tracker: an icon in the title bar shows how many Essence of Lumber you hold across your whole warband, with a mouseover listing which characters have them (and how many, and whether any sit in the bank). Because Essence is soulbound and can't be moved between characters, the total tells you at a glance where your stock actually is. The icon greys out when you have none (thanks Pixie).
+- Shopping list "Buy All" at vendors: with the shopping widget open at any vendor that stocks your list items, one click buys everything at the full list quantity. A single summary confirmation replaces the game's per-item non-refundable popup, and purchases are paced so they land directly in decor storage. As each item lands it is checked off the active shopping list, so the list draws down to what's still needed. Only gold-priced decor is bulk-bought for now -- currency-priced list items (community coupons etc.) are skipped with a note and can still be bought individually at the vendor.
+- Right-click a gold-priced decor item at any vendor for a quantity picker: dial in how many with three digit wheels, see the running total against your gold and decor-storage space, and buy them all in one go. Items sold for a currency (community coupons etc.) right-click as normal -- the picker is gold-only for now. Off by default -- enable it under Settings > Helpers > Vendors.
+
+### Changed
+- Shopping list: re-importing a collection you already have now updates that list in place instead of stacking a second copy with the same name. Lists that genuinely share a name are numbered ("Void Collection (2)") so the switcher dropdown is always unambiguous.
+- Shopping list: the "+ New" button moved up to the header next to the list switcher (it was overflowing the bottom button row), and the header summary now reads "N items - N vendors".
+- Move Planner: selecting a plot now outlines it in white instead of source-green or target-gold. The old colors matched two of the community plot-letter hues, so a selected yellow-letter plot could read as a green-letter plot (thanks ReganB). Source/target colors still show on the plot list dots, map labels, and tooltips.
+
+### Fixed
+- MOTHER's Titanic Brazier and N'Zoth's Captured Eye (Chamber of Heart) now show their real vendor cost. Blizzard's catalog lists a stale price for these two, so HDG was showing the wrong number until the merchant was open.
+- Lord Candren's vendor pin now points to his actual spot in Gilneas City (57.3, 55.5); the old coordinates put the marker in the wrong part of the zone.
+
 ## [3.12.3] - 2026-07-02 (July 2026)
 
 ### Fixed

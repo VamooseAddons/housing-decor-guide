@@ -849,6 +849,18 @@ end
 
 function R:_bakeCost(row)
     local GOLD   = HDG.Constants.CURRENCY_GOLD
+    -- Explicit CatalogOverrides `costOverride` wins: Blizzard's catalog sourceText
+    -- lags merchant hotfixes (MOTHER's Chamber of Heart items shipped 100000 in the
+    -- catalog while the vendor charged 10000). Stamp it onto every vendor so the
+    -- vendor list, cost line, and variants all agree. Remove when the catalog is fixed.
+    if row.costOverride then
+        local oe = _entriesFromCostSpec(row.costOverride, GOLD)
+        for _, v in ipairs(row.vendors or {}) do v.costEntries = oe end
+        row.costEntries  = oe
+        row.costLine     = _formatCostLine(oe)
+        row.costVariants = { row.costLine }
+        return
+    end
     local vendor = row.vendors and row.vendors[1]
     local entries = _costFromVendor(vendor, GOLD)
                  or _costFromOverrideSources(row.sources, GOLD)

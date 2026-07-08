@@ -78,6 +78,9 @@ local function NewConfig()
         bagBadge               = true,
         -- merchantDecorOverlay: mark vendor decor with collected/needed icons (Helpers > Vendors).
         merchantDecorOverlay   = true,
+        -- merchantQtyPicker: right-click decor at a vendor -> quantity picker (Helpers > Vendors).
+        -- Ships OFF (opt-in): the picker changes right-click behaviour on every vendor decor row.
+        merchantQtyPicker      = false,
         -- catalogDecorOverlay: red plus on uncollected decor in Blizzard's catalog (Helpers > Catalog).
         catalogDecorOverlay    = true,
         -- autoDepositLumber: on a banker open with Warband Bank access, move all
@@ -646,6 +649,16 @@ local function NewSessionCatalog()
     }
 end
 
+-- Vendor buying (spec HDGR_VENDOR_BUYING_SPEC.md): MERCHANT_SHOW..CLOSED window.
+-- byItemID is the scanned merchant stock; buying carries the paced-queue progress.
+local function NewSessionMerchant()
+    return {
+        open     = false,
+        byItemID = {},    -- [itemID] = { index, price, name, numAvailable }
+        buying   = nil,   -- { total, done } while HDGR_BuyQueue runs; nil otherwise
+    }
+end
+
 -- identity: canonical player tuple. Stamped once by SESSION_IDENTITY_SET.
 -- Stable for the session; selectors read these instead of calling UnitName/etc.
 -- Empty defaults allow strict reads during the brief boot window (per ADR-005).
@@ -674,6 +687,7 @@ local function NewDefaultSession()
         styles         = NewStylesSession(),
         zone           = NewZoneState(),
         catalog        = NewSessionCatalog(),
+        merchant       = NewSessionMerchant(),
         lumber         = NewLumberSession(),
         identity       = NewIdentitySession(),
         daily          = { bestowed = nil, orcQuote = nil },  -- seeded here; EnsureSession no longer needs or-guard
@@ -775,6 +789,7 @@ end
 -- CHARACTER_PROFESSION_UPDATED. Schema for each entry (keyed by charKey =
 -- "Name-Realm"):
 --   { name, realm, class, classFile, hidden, lastSeen,
+--     essenceStock = { bag, bank },   -- Essence of Lumber snapshot (soulbound; no warband)
 --     professions = { [profName] = {
 --         skillLines   = { [expName] = { current, max } },
 --         knownRecipes = { [recipeID] = true },
@@ -960,6 +975,9 @@ local function NewDefaultState()
             lumber               = { config = NewLumberConfig(), sessions = {}, history = { entries = {}, nextID = 0 } },
             -- Recent Activity: persisted per-house edit-session history (HDG parity).
             recentActivity       = NewRecentActivity(),
+            -- Last-known decor storage {owned,max}; overwritten by HOUSE_CAPACITY_CACHED
+            -- on each snapshot, read as the buy-picker fallback. false = never captured.
+            houseCapacityCache   = false,
         },
         session = NewDefaultSession(),
     }
@@ -1153,6 +1171,7 @@ local function EnsureStateShape(state)
     MigrateProjectsToVersions(state)   -- schemaVersion 1->2: flat rooms -> versions[current].rooms
     HDG.StoreFurnishings.EnsureShape(state)   -- furnishings shape + v6->7 migration (domain store file)
     state.account.questCompletions = state.account.questCompletions or {}   -- exception(boundary): SV migration
+    state.account.houseCapacityCache = state.account.houseCapacityCache or false   -- exception(boundary): SV migration -- buy-picker storage fallback added post-3.12
     -- Lumber tracker config + per-char sessions. Config key-by-key from NewLumberConfig
     -- so new defaults flow to existing users (SV migration).
     state.account.lumber          = state.account.lumber          or {}
@@ -2214,6 +2233,36 @@ HDG.Actions:Register{ name = "CHARACTER_PROFESSION_UPDATED",
         end
     end }
 
+-- Essence of Lumber per-character snapshot. Upserts the char record (creating
+-- identity if this alt was never scanned) and replaces the essenceStock split.
+-- Only ever the currently-logged-in char is live; alts stay at their last-login
+-- snapshot (WoW can't read another character's bags). Soulbound -> no warband.
+HDG.Actions:Register{ name = "CHARACTER_ESSENCE_UPDATED",
+    persists = true, combatUnsafe = false,
+            invalidates = function(action) return { HDG.Paths.Join("account.characters", action.payload and action.payload.charKey) } end,
+    reduce = function(state, payload)
+        local key = payload.charKey
+        if key then
+            local chars = state.account.characters
+            chars[key] = chars[key] or {
+                name        = payload.name,
+                realm       = payload.realm,
+                class       = payload.class,
+                classFile   = payload.classFile,
+                hidden      = false,
+                lastSeen    = 0,
+                professions = {},
+            }
+            local c = chars[key]
+            c.name         = payload.name      or c.name
+            c.realm        = payload.realm     or c.realm
+            c.class        = payload.class     or c.class
+            c.classFile    = payload.classFile or c.classFile
+            c.lastSeen     = (_G.time and _G.time()) or c.lastSeen or 0
+            c.essenceStock = { bag = payload.bag or 0, bank = payload.bank or 0 }
+        end
+    end }
+
 HDG.Actions:Register{ name = "CHARACTER_DELETED",
     persists = true, combatUnsafe = false,
             invalidates = function(action) return { HDG.Paths.Join("account.characters", action.payload and action.payload.charKey) } end,
@@ -2315,11 +2364,21 @@ HDG.Actions:Register{ name = "COMPANION_SET_LAUNCHER_POSITION",
     end }
 
 HDG.Actions:Register{ name = "HOUSE_SNAPSHOT_UPDATED",
-    persists = false, combatUnsafe = false, 
+    persists = false, combatUnsafe = false,
     invalidates = { "session.house.snapshot", "session.house.snapshotChangeSeq" },
     reduce = function(state, payload)
         state.session.house.snapshot     = payload.snapshot
         state.session.house.snapshotChangeSeq = state.session.house.snapshotChangeSeq + 1
+    end }
+
+-- Persisted last-known decor storage. Dispatched alongside each snapshot (so it
+-- is overwritten on every load/flush that carries capacity), and read as the
+-- buy-picker fallback when no live snapshot exists this session.
+HDG.Actions:Register{ name = "HOUSE_CAPACITY_CACHED",
+    persists = true, combatUnsafe = false,
+    invalidates = { "account.houseCapacityCache" },
+    reduce = function(state, payload)
+        state.account.houseCapacityCache = { owned = payload.owned, max = payload.max }
     end }
 
 HDG.Actions:Register{ name = "HOUSE_LIST_UPDATED",
@@ -4326,12 +4385,36 @@ HDG.Actions:Register{ name = "CATALOG_FORCE_RELOAD",
     reduce = function() end }
 
 HDG.Actions:Register{ name = "CATALOG_REFRESH_QUEUED",
-    persists = false, combatUnsafe = false, 
+    persists = false, combatUnsafe = false,
     invalidates = { "session.catalog.refreshPending",
                                             "session.catalog.variantsLoaded" },
     reduce = function(state, payload)
         state.session.catalog.refreshPending = true
         state.session.catalog.variantsLoaded = false   -- ownership may have changed; force Dyed filter re-batch
+    end }
+
+-- ===== Vendor buying (spec docs/HDGR_VENDOR_BUYING_SPEC.md) ==================
+-- MerchantObserver builds fresh byItemID tables per dispatch, so the reducer
+-- adopts the payload table by reference (no copy needed).
+HDG.Actions:Register{ name = "MERCHANT_SET_STATE",
+    persists = false, combatUnsafe = false,
+    invalidates = { "session.merchant" },
+    reduce = function(state, payload)
+        local m = state.session.merchant
+        m.open     = payload.open == true
+        m.byItemID = payload.byItemID or {}   -- exception(boundary): two dispatch shapes -- the close dispatch is {open=false} with no byItemID
+        if not m.open then m.buying = nil end -- vendor gone -> any in-flight queue state is moot
+    end }
+
+HDG.Actions:Register{ name = "MERCHANT_BUY_PROGRESS",
+    persists = false, combatUnsafe = false,
+    invalidates = { "session.merchant.buying" },
+    reduce = function(state, payload)
+        if payload.total then
+            state.session.merchant.buying = { total = payload.total, done = payload.done }  -- every _dispatchProgress(total, done) passes both -- strict
+        else
+            state.session.merchant.buying = nil
+        end
     end }
 
 HDG.Actions:Register{ name = "CATALOG_VARIANTS_LOADED",
@@ -4816,6 +4899,20 @@ HDG.Actions:Register{ name = "COLLECTION_STYLE_ITEM_ADDED",
         end
     end }
 
+-- Append " (2)" / " (3)" ... to a list name that already exists, so the
+-- switcher dropdown never shows two indistinguishable entries.
+local function _uniqueShoppingListName(lists, name, exceptID)
+    name = (type(name) == "string" and name ~= "" and name) or "Imported list"
+    local taken = {}
+    for id, list in pairs(lists) do
+        if id ~= exceptID and list.name then taken[list.name] = true end
+    end
+    if not taken[name] then return name end
+    local n = 2
+    while taken[name .. " (" .. n .. ")"] do n = n + 1 end
+    return name .. " (" .. n .. ")"
+end
+
 HDG.Actions:Register{ name = "SHOPPING_LIST_IMPORT",
     persists = true, combatUnsafe = false,
             invalidates = { "account.vendorShoppingLists", "account.activeShoppingListId",
@@ -4827,10 +4924,32 @@ HDG.Actions:Register{ name = "SHOPPING_LIST_IMPORT",
         -- any user-driven action fires).
         local decoded = HDG.ShoppingCodec.Decode(payload.encoded)
         if decoded then
-            state.account.shoppingListSeq = state.account.shoppingListSeq + 1
-            local id = "L" .. tostring(state.account.shoppingListSeq)
-            state.account.vendorShoppingLists[id] = decoded
-            state.account.activeShoppingListId = id
+            local lists = state.account.vendorShoppingLists
+            -- Re-import of the SAME source collection (matched by meta.url) replaces
+            -- that list in place -- keeps its id so it stays active/selected -- rather
+            -- than stacking an indistinguishable duplicate. A genuinely different list
+            -- that happens to share a name is auto-numbered instead.
+            local url = decoded.meta and decoded.meta.url
+            local existingID
+            if url and url ~= "" then
+                for id, list in pairs(lists) do
+                    if list.meta and list.meta.url == url then existingID = id; break end
+                end
+            end
+            if existingID then
+                -- Exclude the list we're replacing from the name-collision check
+                -- (its own old name shouldn't force a "(2)"), but still number if
+                -- the re-import's name now clashes with a DIFFERENT list.
+                decoded.name = _uniqueShoppingListName(lists, decoded.name, existingID)
+                lists[existingID] = decoded
+                state.account.activeShoppingListId = existingID
+            else
+                decoded.name = _uniqueShoppingListName(lists, decoded.name)
+                state.account.shoppingListSeq = state.account.shoppingListSeq + 1
+                local id = "L" .. tostring(state.account.shoppingListSeq)
+                lists[id] = decoded
+                state.account.activeShoppingListId = id
+            end
         end
     end }
 

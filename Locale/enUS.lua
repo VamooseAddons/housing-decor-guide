@@ -382,6 +382,13 @@ HDG.Locale:Register("enUS", {
     SHOP_OPEN_BTN           = "Open",
     SHOP_WAYPOINT_ALL       = "Waypoint All",
     SHOP_NEW_LIST           = "+ New",
+    SHOP_BUY_ALL            = "Buy All",
+    SHOP_BUY_ALL_HINT       = "Buys every list item this vendor stocks, at full list quantity.",
+    SHOP_BUY_ALL_DISABLED   = "Open a vendor that stocks your list.",
+    QTYPICKER_BUY           = "Buy %d",
+    QTYPICKER_HAVE          = "you have %s",
+    QTYPICKER_STORAGE       = "storage %d / %d",
+    CFG_MERCHANT_QTY_PICKER = "Right-click quantity picker at decor vendors",
 
     -- Removalist tab
     REMV_FACTION_PLACEHOLDER = "Faction...",

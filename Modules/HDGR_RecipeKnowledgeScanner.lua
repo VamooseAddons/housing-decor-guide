@@ -115,6 +115,17 @@ function R:Scan()
     })
     HDG.Log:Success("recipes_scanned",
         string.format("Recipe scan complete -- %d decor recipes indexed", count))
+    -- One-shot per session: recipe vendors missing from VendorAugment (generated
+    -- tables out of step). The facade computes (pure); this module logs -- the
+    -- selectors that consume the join skip such vendors silently.
+    if not self._driftChecked then
+        self._driftChecked = true
+        local n, sample = HDG.StaticData.Recipes:VendorAugmentGaps()
+        if n > 0 then
+            HDG.Log:Warn("data_drift", ("%d recipe vendor(s) missing from VendorAugment: %s%s")
+                :format(n, table.concat(sample, ", "), n > 8 and ", ..." or ""))
+        end
+    end
     return count
 end
 
@@ -141,6 +152,7 @@ HDG.Modules:Declare({
     ownsBlizzardNamespaces = { "C_SpellBook.IsSpellKnown" },
     logTags = {
         recipes_scanned = { user = true, level = "success", duration = 3 },
+        data_drift      = { user = false, level = "warn" },
     },
     onEnable = function(self)
         -- Run on DECOR_CATALOG_READY (fires after both cold+warm paths;

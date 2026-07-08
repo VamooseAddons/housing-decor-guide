@@ -81,6 +81,11 @@ HDGR_CatalogOverrides = {
     [246606] = { sources = { { type = 5, name = 'Pascal-K1N6', detail = 'Mechagon' } } },
     -- "Shu'halo Perspective" Painting (Cravitz Lorent in the Murder Row dungeon -- catalog-empty, not a catalog vendor). Sargle's Fortunes tracker: HDGR_DecorWidgets / decor.fortune.*
     [246857] = { sources = { { type = 5, name = 'Cravitz Lorent', detail = 'Murder Row' } } },
+    -- MOTHER (Chamber of Heart): catalog sourceText lags the merchant hotfix --
+    -- catalog ships 100000, vendor charges 10000 (currency 1803; confirmed at
+    -- the merchant 2026-07-07). Remove costOverride when Blizzard fixes the catalog.
+    [247667] = { costOverride = { currencies = { { id = 1803, amount = 10000 } } } }, -- MOTHER's Titanic Brazier
+    [247668] = { costOverride = { currencies = { { id = 1803, amount = 10000 } } } }, -- N'Zoth's Captured Eye
     -- Square Suramar Table
     [247915] = { sources = { { type = 2, name = 'Last Light', detail = 'Stormwind City' }, { type = 5, name = 'Second Chair Pawdo', detail = 'Dornogal', cost = { gold = 1000000 } } } },
     -- Valdrakken Chandelier

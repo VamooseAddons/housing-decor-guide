@@ -193,6 +193,15 @@ LC.widgets["shoppingPanel.entries"] = {
 
 -- ===== Widgets -- action bar =================================================
 
+-- Buy All: leftmost, primary. Enabled only at a vendor stocking the list; label
+-- flips to "Cancel (n/m)" while a buy runs. Both via bindings (Task 3/5 selectors).
+LC.widgets["shoppingPanel.buyAllBtn"] = {
+    tooltip = { recipe = "BuyAll" },
+    kind = "button", ["in"] = "shopping.actionBar",
+    font = "body", text = "locale:SHOP_BUY_ALL", width = "auto", height = 22,
+    order = 5, variant = "primary",
+    binding = { text = "merchant.buyAllLabel", enabled = "merchant.buyAllEnabled" },
+}
 LC.widgets["shoppingPanel.waypointAllBtn"] = {
     tooltip = false,
     kind = "button", ["in"] = "shopping.actionBar",
@@ -231,11 +240,14 @@ LC.widgets["shoppingPanel.deleteListBtn"] = {
     order = 48, variant = "tertiary",
     visible = "shopping.hasMultipleLists",
 }
+-- + New: lives in the header row (left of the list dropdown), NOT the action bar,
+-- so the bar doesn't overflow. Header summary is width="fill", so this button and
+-- the dropdown (order 20) are pushed right together -- + New sits just left of it.
 LC.widgets["shoppingPanel.newListBtn"] = {
     tooltip = false,
-    kind = "button", ["in"] = "shopping.actionBar",
+    kind = "button", ["in"] = "shoppingPanel", slot = "header",
     font = "body", text = "locale:SHOP_NEW_LIST", width = "auto", height = 22,
-    order = 50, variant = "tertiary",
+    order = 18, variant = "tertiary",
 }
 
 -- ===== Satellite window (HDG-ADR-025 step 5) ===============================

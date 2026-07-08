@@ -1805,9 +1805,16 @@ end
 local function buildIconButton(parent, spec)
     local button = _makeSquareButton(parent, spec.size)
     button._ownedArt = true
-    _setButtonAtlases(button, spec.normalAtlas,
-        spec.highlightAtlas or spec.normalAtlas,
-        spec.highlightAtlas or spec.normalAtlas)
+    if spec.normalTexture then
+        -- Content-icon from a fileID (e.g. a game item icon) rather than an
+        -- atlas. Same _ownedArt skip-tint contract as the atlas path so the
+        -- scheme doesn't recolour the icon.
+        button:SetNormalTexture(spec.normalTexture)
+    else
+        _setButtonAtlases(button, spec.normalAtlas,
+            spec.highlightAtlas or spec.normalAtlas,
+            spec.highlightAtlas or spec.normalAtlas)
+    end
     -- Tooltip is wired centrally by the Layout build chokepoint (recipe-only).
     return button
 end
@@ -1985,7 +1992,7 @@ HDG.WidgetTypes:Register("button", {
     build = function(parent, spec)
         if spec.close then
             return buildCloseButton(parent, spec)
-        elseif spec.normalAtlas then
+        elseif spec.normalAtlas or spec.normalTexture then
             return buildIconButton(parent, spec)
         elseif spec.atlas and spec.activeAtlas then
             return buildToggleButton(parent, spec)
@@ -2025,12 +2032,13 @@ HDG.WidgetTypes:Register("button", {
     -- atlas/close) do need a font. The validator (Layout) consults this
     -- predicate instead of peeking at the spec itself; spec section 5.
     requiresFont = function(spec)
-        return not (spec.close == true or spec.atlas ~= nil or spec.normalAtlas ~= nil)
+        return not (spec.close == true or spec.atlas ~= nil or spec.normalAtlas ~= nil or spec.normalTexture ~= nil)
     end,
     specFields = {
         "text", "font", "variant", "textTone",         -- text-button path
         "close", "atlas", "activeAtlas", "rotation",   -- icon paths
         "normalAtlas", "highlightAtlas",               -- explicit content-icon (no suffix convention)
+        "normalTexture",                               -- content-icon from a fileID (item icons)
         "size", "iconSize", "tooltip",                 -- icon sizing + tooltip
         -- Controller-side identifiers. LayoutConfig stamps these on
         -- dynamically-generated button clusters so the matching Controller

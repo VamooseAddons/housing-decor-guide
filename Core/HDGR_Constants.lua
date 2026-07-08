@@ -150,6 +150,14 @@ HDG.Constants = {
         { id = 256963, name = "Thalassian Lumber",   shortName = "Thalassian",  expansion = "Midnight",               achieveID = 62370 },
     },
 
+    -- Essence of Lumber (Midnight): a Soulbound rare byproduct of lumber
+    -- harvesting, spent to requisition extra crafting materials. Tracked by the
+    -- chrome badge + cross-character hover -- NOT a LUMBER_DATA entry (no
+    -- expansion variant, no achievement, no recipe-need math). Soulbound means
+    -- it can never be Warband-banked or pooled between characters.
+    ESSENCE_OF_LUMBER_ITEMID = 269010,
+    ESSENCE_OF_LUMBER_ICON   = 132840,
+
     -- Housing decor currencies. Hand-curated; iconFileIDs captured live.
     -- Expansion string must match a Palette `expansion.<name>` color key.
     HOUSING_DECOR_CURRENCY_DATA = {
@@ -472,6 +480,9 @@ HDG.Constants = {
         CHARACTER_DELETED            = "HDGR_CHARACTER_DELETED",            -- payload: { charKey }
         CHARACTER_HIDDEN             = "HDGR_CHARACTER_HIDDEN",             -- payload: { charKey, hidden }
         CHARACTER_HIDDEN_TOGGLE      = "HDGR_CHARACTER_HIDDEN_TOGGLE",      -- payload: { charKey }
+        -- Per-char Essence of Lumber snapshot (chrome badge + alts hover).
+        -- payload: { charKey, name, realm, class, classFile, bag, bank }
+        CHARACTER_ESSENCE_UPDATED    = "HDGR_CHARACTER_ESSENCE_UPDATED",
 
         -- Pure signal; gated modules (CollectionReconciler, BagObserver) catch up after sleeping.
         MAIN_WINDOW_OPENING          = "HDGR_MAIN_WINDOW_OPENING",
@@ -480,6 +491,7 @@ HDG.Constants = {
 
         -- ===== HouseTab dashboard =====
         HOUSE_SNAPSHOT_UPDATED          = "HDGR_HOUSE_SNAPSHOT_UPDATED",          -- payload: { snapshot = table }
+        HOUSE_CAPACITY_CACHED           = "HDGR_HOUSE_CAPACITY_CACHED",           -- payload: { owned, max } -- persisted last-known decor storage (survives reload for the buy picker)
         HOUSE_LIST_UPDATED              = "HDGR_HOUSE_LIST_UPDATED",              -- payload: { houses = [{houseGUID, neighborhoodName, faction, ...}] }
         HOUSE_LEVEL_UPDATED             = "HDGR_HOUSE_LEVEL_UPDATED",             -- payload: { houseGUID, level, favor, maxLevel, thresholds }
         ACTIVE_NEIGHBORHOOD_UPDATED     = "HDGR_ACTIVE_NEIGHBORHOOD_UPDATED",     -- payload: { neighborhoodGUID = string|nil }
@@ -669,6 +681,11 @@ HDG.Constants = {
         SHOPPING_RESOLVE_VENDORS   = "HDGR_SHOPPING_RESOLVE_VENDORS",   -- payload: { listID, resolutions = {[itemID]=npcID} }
         SHOPPING_WIDGET_TOGGLE     = "HDGR_SHOPPING_WIDGET_TOGGLE",
 
+        -- ===== Vendor buying (spec docs/HDGR_VENDOR_BUYING_SPEC.md) =====
+        -- MerchantObserver dispatches the snapshot; BuyQueue dispatches progress.
+        MERCHANT_SET_STATE         = "HDGR_MERCHANT_SET_STATE",         -- payload: { open, npcID?, byItemID? } (observer snapshot)
+        MERCHANT_BUY_PROGRESS      = "HDGR_MERCHANT_BUY_PROGRESS",      -- payload: { total?, done? }  (empty = clear)
+
         -- ===== Zone Scanner =====
         -- ZONE_CHANGED dispatched by ZoneObserver after debouncing ZONE_CHANGED_NEW_AREA.
         ZONE_CHANGED               = "HDGR_ZONE_CHANGED",               -- payload: { mapID }
@@ -855,6 +872,26 @@ HDG.Constants.CURRENCY_GOLD = -1   -- sentinel; real currency IDs are positive
 
 -- 134400 = INV_Misc_QuestionMark.blp -- canonical "?" placeholder for missing icons.
 HDG.Constants.PLACEHOLDER_ICON = 134400
+
+-- Vendor buy queue pacing (spec HDGR_VENDOR_BUYING_SPEC.md s2.1/s2.2/s6).
+-- Two constraints: the server rejects >~13-15 rapid buys in a burst, AND items
+-- bought faster than storage absorbs them pile up in real bags instead of going
+-- straight to decor storage. Live test 2026-07-05: 3-per-tick (a 3-call burst
+-- inside one tick) left 7 of 10 in bags -- the burst IS the rapid path. So buy
+-- exactly ONE per tick (genuine one-at-a-time = the straight-to-storage path).
+-- Functional throttle, NOT a UI transition (outside the no-C_Timer-in-UI rule).
+HDG.Constants.MERCHANT_BUY_TICK_QTY  = 1     -- fixed-timer fallback: BuyMerchantItem calls per tick
+-- 0 = EVENT-DRIVEN pacing (buy one, wait for the HOUSING_STORAGE_ENTRY_UPDATED
+-- "landed in storage" signal, buy the next -- as fast as the server confirms,
+-- one buy in flight so it never outruns the burst cap or strands items in bags).
+-- >0 = legacy fixed-interval ticker at that many seconds.
+HDG.Constants.MERCHANT_BUY_TICK_SECS    = 0     -- seconds between ticks (0 = event-driven)
+-- Stall WATCHDOG, not a pacer. Pacing is purely landing-driven (one buy in flight);
+-- this only exists so a genuinely DROPPED landed signal can't hang the picker forever.
+-- On fire it STOPS the batch (never advances -- advancing while a buy is still in
+-- flight is what stranded an item in bags). Generous so a merely slow-to-start signal
+-- (first landings lag 2-3s + a ~500ms catalog settle) never trips it.
+HDG.Constants.MERCHANT_BUY_TIMEOUT_SECS = 8
 
 -- Outreach URLs (Config tab About section).
 HDG.Constants.DISCORD_URL = "https://discord.gg/RWZaxJaHFP"

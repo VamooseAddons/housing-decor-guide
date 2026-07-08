@@ -319,6 +319,40 @@ for _, tab in ipairs(HDG.Constants.TABS or {}) do
     })
 end
 
+-- Essence of Lumber tracker (chrome badge + cross-character hover). Sums the
+-- per-char snapshots into an account-wide total -- soulbound means it can't be
+-- pooled, so the whole-warband number is the useful glance. perChar is sorted
+-- count-desc for the hover; the current char is flagged (its snapshot is live,
+-- alts are last-login). Snapshots land via Modules/HDGR_EssenceObserver.lua.
+Selectors:Register("chrome.essenceBadge", {
+    reads = {"account.characters", "session.identity.charKey"},
+    fn = function(state, ctx)
+        local current = state.session.identity.charKey
+        local total, perChar = 0, {}
+        for charKey, c in pairs(state.account.characters) do
+            local stock = c.essenceStock   -- exception(nullable): unset until this char is first scanned
+            local count = stock and (stock.bag + stock.bank) or 0
+            if not c.hidden and count > 0 then
+                total = total + count
+                perChar[#perChar + 1] = {
+                    name      = c.name or charKey,   -- exception(nullable): legacy record may predate name capture
+                    classFile = c.classFile,
+                    count     = count,
+                    bag       = stock.bag,
+                    bank      = stock.bank,
+                    isCurrent = charKey == current,
+                    lastSeen  = c.lastSeen or 0,
+                }
+            end
+        end
+        table.sort(perChar, function(a, b)
+            if a.count ~= b.count then return a.count > b.count end
+            return a.name < b.name
+        end)
+        return { total = total, owned = total > 0, perChar = perChar }
+    end,
+})
+
 -- ============================================================================
 -- Sidebar nav selectors
 -- ============================================================================

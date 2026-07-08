@@ -68,7 +68,7 @@ local SCALE_MAX  = 1.5
 -- Keep in sync with settings registered below. Values pulled from GetDefaultConfig().
 local RESETTABLE_KEYS = {
     "showMinimapButton", "showCompartment", "showProfessionButtons", "tooltipDecorTag",
-    "catalogTooltip", "bagBadge", "merchantDecorOverlay", "catalogDecorOverlay", "autoDepositLumber", "hideInCombat", "waypointProvider", "scale",
+    "catalogTooltip", "bagBadge", "merchantDecorOverlay", "merchantQtyPicker", "catalogDecorOverlay", "autoDepositLumber", "hideInCombat", "waypointProvider", "scale",
     "debug", "mockTSM", "locale", "fontFamily",
     "zoneScannerEnabled", "zoneScannerPopup", "zoneScannerPopupShopping",
     "zoneScannerChat", "zoneScannerSound",
@@ -83,6 +83,7 @@ local SEARCH_TAGS = {
     catalogTooltip         = { "tooltip", "decor", "source", "cost", "catalog", "helper" },
     bagBadge               = { "bag", "badge", "icon", "reagent", "decor", "marker", "helper" },
     merchantDecorOverlay   = { "vendor", "merchant", "decor", "collected", "marker", "helper" },
+    merchantQtyPicker      = { "vendor", "merchant", "buy", "quantity", "picker", "bulk", "purchase" },
     catalogDecorOverlay    = { "catalog", "decor", "uncollected", "marker", "plus", "helper" },
     autoDepositLumber      = { "lumber", "warband", "bank", "deposit", "auto", "helper" },
     hideInCombat           = { "combat", "hide", "auto", "fight", "lockdown" },
@@ -339,6 +340,10 @@ local function _buildHelpersSubcategory(category)
     BindProxyBool(sub, layout, "merchantDecorOverlay", "Mark collected decor at vendors",
         "On a vendor's items, show a check on housing decor you've collected and a plus "
         .. "on decor you still need. Default merchant window only.")
+    BindProxyBool(sub, layout, "merchantQtyPicker", "Right-click quantity picker at decor vendors",
+        "Right-click a housing decor item at a vendor to open a quantity picker: set how "
+        .. "many to buy, see the total against your gold and decor storage, and buy in one go. "
+        .. "Default merchant window only.")
 
     layout:AddInitializer(CreateSettingsListSectionHeaderInitializer("Catalog"))
     BindProxyBool(sub, layout, "catalogDecorOverlay", "Mark uncollected decor in the catalog",

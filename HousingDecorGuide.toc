@@ -2,7 +2,7 @@
 ## Title: Vamoose's Housing Decor Guide
 ## Notes: Track, craft, preview, and acquire housing decorations across all professions
 ## Author: Vamoose
-## Version: 3.12.3
+## Version: 3.13.0
 ## SavedVariables: HDG_DB
 ## SavedVariablesPerCharacter: HDG_DB_CURRENT_PROFILE
 ## IconTexture: Interface\AddOns\HousingDecorGuide\textures\Vamoose_HDG_400_trans
@@ -190,6 +190,7 @@ Modules\HDGR_HouseAggregator.lua
 Modules\HDGR_HouseEditorCompanion.lua
 Modules\HDGR_BagObserver.lua
 Modules\HDGR_LumberObserver.lua
+Modules\HDGR_EssenceObserver.lua
 Modules\HDGR_LumberRadar.lua
 Modules\HDGR_ZoneObserver.lua
 Modules\HDGR_ZoneAlertEngine.lua
@@ -201,6 +202,8 @@ Modules\HDGR_TooltipDecorator.lua
 Modules\HDGR_BagBadge.lua
 Modules\HDGR_CatalogTooltip.lua
 Modules\HDGR_MerchantOverlay.lua
+Modules\HDGR_MerchantObserver.lua
+Modules\HDGR_BuyQueue.lua
 Modules\HDGR_CatalogOverlay.lua
 Modules\HDGR_CatalogIntro.lua
 Modules\HDGR_MinimapButton.lua
@@ -224,6 +227,7 @@ UI\HDGR_Controller_CatalogIntro.lua
 UI\HDGR_Controller_Decor.lua
 UI\HDGR_Controller_Acquisition.lua
 UI\HDGR_AcqMapWidget.lua
+UI\HDGR_QuantityPicker.lua
 UI\HDGR_Controller_Recipes.lua
 UI\HDGR_Controller_Warehouse.lua
 UI\HDGR_Controller_Alts.lua

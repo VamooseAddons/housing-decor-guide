@@ -811,10 +811,20 @@ function HA:DispatchSnapshot()
     _G.C_Timer.After(self.DEBOUNCE_SECONDS, function()
         self._scheduled = false
         local state = HDG.Store:GetState()
+        local snapshot = self:BuildSnapshot(state)
         HDG.Store:Dispatch({
             type    = HDG.Constants.ACTIONS.HOUSE_SNAPSHOT_UPDATED,
-            payload = { snapshot = self:BuildSnapshot(state) },
+            payload = { snapshot = snapshot },
         })
+        -- Mirror decor storage into the persisted cache so the buy picker can show
+        -- it after a reload (overwritten on every capacity-bearing snapshot).
+        local cap = snapshot.capacity
+        if cap and cap.max and cap.max > 0 then   -- max==0 is a cold reading, not a real cap -> don't cache it
+            HDG.Store:Dispatch({
+                type    = HDG.Constants.ACTIONS.HOUSE_CAPACITY_CACHED,
+                payload = { owned = cap.owned, max = cap.max },
+            })
+        end
     end)
 end
 

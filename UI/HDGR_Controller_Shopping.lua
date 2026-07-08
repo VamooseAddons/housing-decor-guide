@@ -481,6 +481,15 @@ end
 -- decorID; HDG exports use decor itemID), so mixed / 3rd-party blobs import clean.
 local function _importShoppingList(value)
     local preview = HDG.ShoppingCodec.Decode(value)
+    -- Same source collection already present? The import replaces it in place
+    -- (dedupe by meta.url) rather than stacking a duplicate -- reflect that in the log.
+    local replaced = false
+    local url = preview and preview.meta and preview.meta.url
+    if url and url ~= "" then
+        for _, list in pairs(HDG.Store:GetState().account.vendorShoppingLists) do
+            if list.meta and list.meta.url == url then replaced = true; break end
+        end
+    end
     HDG.Store:Dispatch({ type = A.SHOPPING_LIST_IMPORT, payload = { encoded = value } })
     if preview then
         local src  = (preview.meta and preview.meta.source) or "unknown"
@@ -489,8 +498,8 @@ local function _importShoppingList(value)
         local trailer = desc ~= "" and (" | " .. desc) or ""
         if date ~= "" then trailer = trailer .. " (" .. date .. ")" end
         HDG.Log:Success("shopping",
-            ("Imported: %d items | Source: %s%s | Created as new list"):format(
-                #preview.items, src, trailer))
+            ("Imported: %d items | Source: %s%s | %s"):format(
+                #preview.items, src, trailer, replaced and "Updated existing list" or "Created as new list"))
         -- Resolve + persist vendor npcIDs on the freshly-imported list (the import
         -- carries the blob's npcIDs verbatim; this fills in the ones it left at 0).
         ShoppingController:_EnrichListVendors(HDG.Store:GetState().account.activeShoppingListId)
@@ -643,6 +652,24 @@ function ShoppingController:Wire(rootFrame)
     -- Waypoint All -- chain a waypoint per vendor in the active list.
     -- Walks the tree projection (already grouped by vendor) so we visit
     -- each vendor once even if it sells multiple list items.
+    -- Buy All: at a stocked vendor, one summary confirm replaces Blizzard's
+    -- per-item non-refundable nag; while a buy runs the same button cancels.
+    HDG.UI.OnClick(rootFrame, "shoppingPanel.buyAllBtn", function()
+        if HDG.BuyQueue:IsRunning() then HDG.BuyQueue:Cancel("cancelled") return end
+        local state = HDG.Store:GetState()  -- exception(false-positive): top-level controller method (not a row factory)
+        local rows  = HDG.Selectors:Call("merchant.purchasableFromList", state, {})
+        local s     = HDG.Selectors:Call("merchant.buyAllSummary", state, {})
+        -- Currency/token-priced list items here can't bulk-buy yet -- say so rather
+        -- than silently buying only the gold ones (or nothing at an all-currency vendor).
+        if s.skippedCount > 0 then
+            HDG.Log:Info("merchant_buy", ("%d item%s here sold for a currency -- skipped (gold only for now)")
+                :format(s.skippedCount, s.skippedCount == 1 and "" or "s"))
+        end
+        if #rows == 0 then return end
+        _G.StaticPopup_Show("HDGR_BUY_ALL_CONFIRM", tostring(s.totalQty),
+            HDG.Format.FormatGold(s.totalCost), rows)
+    end)
+
     HDG.UI.OnClick(rootFrame, "shoppingPanel.waypointAllBtn", function()
         local state = HDG.Store:GetState()  -- exception(false-positive): top-level controller method (not a row factory)
         local rows = HDG.Selectors:Call("shopping.entriesByZone", state, {})
@@ -702,6 +729,19 @@ function ShoppingController:_RegisterPopups()
             })
         end,
     })
+
+    -- Buy All summary confirm. text args: 1 = totalQty, 2 = gold string; data =
+    -- the purchasable rows (passed to the paced BuyQueue on accept).
+    _G.StaticPopupDialogs["HDGR_BUY_ALL_CONFIRM"] = {   -- exception(boundary): StaticPopupDialogs is a Blizzard global
+        text         = "Buy %s item(s) for %s?",
+        button1      = _G.ACCEPT,
+        button2      = _G.CANCEL,
+        timeout      = 0, whileDead = false, hideOnEscape = true,
+        OnAccept     = function(self, data)
+            local ok, why = HDG.BuyQueue:Enqueue(data)
+            if not ok then HDG.Log:Warn("merchant_buy", why) end
+        end,
+    }
 end
 
 function ShoppingController:Refresh(rootFrame, ctx)

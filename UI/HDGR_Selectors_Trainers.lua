@@ -413,10 +413,9 @@ local function _buildMidnightRow(itemID, entry)
             row.npcOrigin           = meta.name
             row.zone                = meta.zone
             row.mapID, row.x, row.y = meta.mapID, meta.x, meta.y
-        else
-            HDG.Log:Warn("data_drift", "trainers midnight: vendor "
-                .. tostring(v.npcID) .. " missing from VendorAugment")
         end
+        -- Missing meta keeps the "--" placeholders; the VendorAugment gap is
+        -- warned once by HDG.StaticData's recipe-index cross-check.
         row.costLine = HDG.Format.FormatVendorCost(v.cost)
     else
         -- Drop / discovery / quest / trainer: flat recipeSource fields.

@@ -24,7 +24,7 @@ HDGR_VendorAugment = {
     [49877] = { name = "Captain Lancy Revshon", zone = "Stormwind City", mapID = 84, x = 67.5, y = 73.0, faction = "A", exp = "Classic" },
     [50304] = { name = "Captain Donald Adams", zone = "Undercity", mapID = 90, x = 56.4, y = 90.0, faction = "H", exp = "Classic" },
     [50305] = { name = "Moon Priestess Lasara", zone = "Bel'ameth", mapID = 2239, x = 46.5, y = 70.6, faction = "N", exp = "Dragonflight" },
-    [50307] = { name = "Lord Candren", zone = "Gilneas City", mapID = 217, x = 56.2, y = 13.4, faction = "A", exp = "Cataclysm" },
+    [50307] = { name = "Lord Candren", zone = "Gilneas City", mapID = 217, x = 57.3, y = 55.5, faction = "A", exp = "Cataclysm" },
     [50309] = { name = "Captain Stonehelm", zone = "Ironforge", mapID = 87, x = 55.5, y = 47.3, faction = "A", exp = "Classic" },
     [50483] = { name = "Brave Tuho", zone = "Thunder Bluff", mapID = 88, x = 45.6, y = 55.2, faction = "H", exp = "Classic" },
     [50488] = { name = "Stone Guard Nargol", zone = "Orgrimmar", mapID = 85, x = 50.4, y = 58.4, faction = "H", exp = "Classic" },

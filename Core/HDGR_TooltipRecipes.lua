@@ -76,6 +76,13 @@ R.Close = {
     anchor = "ANCHOR_BOTTOM",
 }
 
+-- Shopping list Buy All button.
+R.BuyAll = {
+    title  = "locale:SHOP_BUY_ALL",
+    body   = "locale:SHOP_BUY_ALL_HINT",
+    anchor = "ANCHOR_RIGHT",
+}
+
 -- Compartment / minimap buttons -- click hints inline (button-specific, not reusable).
 R.AddonCompartment = {
     title      = "locale:TIP_ADDON_TITLE",
@@ -136,6 +143,30 @@ R.ProjectsDetachCrate  = { title = "locale:TIP_PROJECTS_DETACH_CRATE_TITLE", bod
 R.ProjectsCaptureAll   = { title = "locale:TIP_PROJECTS_CAPTURE_ALL_TITLE",  body = "locale:TIP_PROJECTS_CAPTURE_ALL_BODY" }
 R.LumberToggle         = { title = "locale:TIP_LUMBER_TOGGLE_TITLE",         body = "locale:TIP_LUMBER_TOGGLE_BODY" }
 R.ShoppingToggle       = { title = "locale:TIP_SHOPPING_TOGGLE_TITLE",       body = "locale:TIP_SHOPPING_TOGGLE_BODY" }
+
+-- Essence of Lumber chrome badge: state-aware. Owned -> account-wide total plus
+-- a per-character breakdown (class-coloured, bank-stranded count called out,
+-- alts flagged as last-login). None -> an educational blurb so the greyed glyph
+-- is self-explaining. Computed at hover from the chrome.essenceBadge selector.
+R.EssenceBadge = function()
+    local sel = HDG.Selectors:Call("chrome.essenceBadge", HDG.Store:GetState(), {})
+    local dim = HDG.Theme:ColorCode("text.dim")
+    if not sel.owned then
+        return { title = "Essence of Lumber", anchor = "ANCHOR_LEFT", extraLines = {
+            { text = "None across your characters." },
+            { text = dim .. "From the weekly neighborhood quest, or ~1% while harvesting lumber.|r" },
+        } }
+    end
+    local extraLines = { { text = ("%d total across your characters"):format(sel.total) } }
+    for _, e in ipairs(sel.perChar) do
+        local hex  = HDG.Constants.CLASS_COLORS[e.classFile] or "ffffffff"  -- exception(nullable): classFile absent on a legacy record
+        local name = "|c" .. hex .. e.name .. "|r"
+        if e.bank > 0     then name = name .. dim .. ("  (%d in bank)|r"):format(e.bank) end
+        if not e.isCurrent then name = name .. dim .. "  - last login|r" end
+        extraLines[#extraLines + 1] = { text = name, right = tostring(e.count) }
+    end
+    return { title = "Essence of Lumber", anchor = "ANCHOR_LEFT", extraLines = extraLines }
+end
 R.LumberAutoShow       = { title = "locale:TIP_LUMBER_AUTO_SHOW_TITLE",      body = "locale:TIP_LUMBER_AUTO_SHOW_BODY" }
 R.LumberGoal           = { title = "locale:TIP_LUMBER_GOAL_TITLE",           body = "locale:TIP_LUMBER_GOAL_BODY" }
 R.ZoneMapOpen          = { title = "locale:TIP_ZONE_MAP_TITLE",              body = "locale:TIP_ZONE_MAP_BODY" }
@@ -315,14 +346,26 @@ function R.DecorRow(self)
         end
         local kind = row.sourceType and HDG.Constants.SOURCE_KIND_BY_DONOR[row.sourceType]
         if kind and kind.label then
-            local line = kind.label
-            if row.sourceName and row.sourceName ~= "" then
-                line = line .. ": " .. row.sourceName
-                if row.sourceDetail and row.sourceDetail ~= "" then
-                    line = line .. " (" .. row.sourceDetail .. ")"
+            -- Decor is often sold by MORE than one vendor. List every vendor, the
+            -- way the House Editor / native-catalog tooltip does, instead of only
+            -- the primary one (ReganB 2026-07-05: browser tooltip showed 1 of the
+            -- Nightborne Lantern's 2 vendors). Non-vendor sources keep one line.
+            if kind.key == "VENDOR" and row.vendors and #row.vendors > 0 then
+                for _, v in ipairs(row.vendors) do
+                    local line = kind.label .. ": " .. v.name
+                    if v.zone and v.zone ~= "" then line = line .. " (" .. v.zone .. ")" end
+                    extras[#extras + 1] = { text = line, r = 0.6, g = 0.78, b = 0.95 }
                 end
+            else
+                local line = kind.label
+                if row.sourceName and row.sourceName ~= "" then
+                    line = line .. ": " .. row.sourceName
+                    if row.sourceDetail and row.sourceDetail ~= "" then
+                        line = line .. " (" .. row.sourceDetail .. ")"
+                    end
+                end
+                extras[#extras + 1] = { text = line, r = 0.6, g = 0.78, b = 0.95 }
             end
-            extras[#extras + 1] = { text = line, r = 0.6, g = 0.78, b = 0.95 }
         end
         if row.expansion and row.expansion ~= "" and row.expansion ~= "?" then
             extras[#extras + 1] = { text = "Expansion: " .. row.expansion, r = 0.6, g = 0.6, b = 0.6 }

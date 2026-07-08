@@ -31,13 +31,6 @@ local function _questCompletion(state, qid)
     return rec, HDG.QuestNameResolver:IsComplete(qid) == true
 end
 
--- Log tags used by selectors in this file.
--- data_drift: a VendorDB itemID is missing from AllDecorDB (catalog ahead of
--- static data); surfaced as a warn so data engineers catch it without crashing.
-HDG.Log:RegisterTags({
-    data_drift = { user = false, level = "warn" },
-})
-
 -- ============================================================================
 -- Acquisition browser selectors
 -- ============================================================================
@@ -147,10 +140,9 @@ Selectors:Register("acq.allVendors", {
                         itemCount = 0, recipeCount = count, reps = {},
                         canWaypoint = true,
                     }
-                else
-                    HDG.Log:Warn("data_drift", "acq.allVendors: recipe vendor "
-                        .. tostring(npcID) .. " missing from VendorAugment")
                 end
+                -- Missing from VendorAugment: skipped. The gap is warned once by
+                -- HDG.StaticData's recipe-index cross-check (selectors stay pure).
             end
         end
         -- pairs() yields entries in undefined order -- sort by name then zone
@@ -1836,11 +1828,9 @@ Selectors:Register("acq.selected.items", {
         local out = {}
         for _, itemID in ipairs(vendorEntry.items) do
             local catRow = HDG.HousingCatalogObserver.byItemID[itemID]
-            if not catRow then
-                HDG.Log:Warn("data_drift",
-                    "acq.selected.items: byVendor itemID " .. tostring(itemID)
-                    .. " missing from byItemID index")
-            end
+            -- exception(nullable): byVendor items are added from rows already in
+            -- byItemID within the same atomic sweep commit, so a miss is impossible
+            -- by construction -- silent skip keeps this selector pure.
             if catRow then
             -- Per-item rep/quest data from ItemAugment (sparse).
             local aug      = HDG.StaticData.ItemAugment:Get(itemID)
@@ -1943,11 +1933,10 @@ Selectors:Register("acq.selected.recipes", {
             -- account.recipes is sparse until RecipeKnowledgeScanner runs
             -- (DECOR_CATALOG_READY); absent entry => not-yet-known.
             local rk = state.account.recipes[entry.itemID]
-            if not vrec then
-                -- Should be impossible (the index is built FROM vendors[].npcID), but a
-                -- data-export gap would otherwise crash this memoized selector on FormatVendorCost.
-                HDG.Log:Warn("data_drift", ("acq.selected.recipes: recipe %s lists npc %s with no matching vendor record"):format(tostring(entry.itemID), tostring(npcID)))
-            else
+            -- exception(nullable): impossible by construction (the byNpc index is
+            -- built FROM vendors[].npcID); the skip stays so a data-export gap can't
+            -- crash this memoized selector on FormatVendorCost. Selectors don't log.
+            if vrec then
                 out[#out + 1] = {
                     kind       = "recipe",
                     itemID     = entry.itemID,

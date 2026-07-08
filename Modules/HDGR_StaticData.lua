@@ -166,6 +166,25 @@ local function _ensureRecipeIndexes()
     _cachedSource = db
 end
 
+-- Cross-source gap check: recipe vendors absent from VendorAugment lose
+-- name/zone/coords downstream (acq.allVendors skips them; Trainers Midnight
+-- rows keep "--" placeholders). PURE -- returns (count, sample-of-8); the
+-- caller logs (RecipeKnowledgeScanner post-scan). This facade stays log-free
+-- so partial test fixtures can load it bare, and selectors stay pure by
+-- skipping silently instead of warning per recompute.
+function S.Recipes:VendorAugmentGaps()
+    _ensureRecipeIndexes()
+    local aug = _table("HDGR_VendorAugment")  -- exception(boundary): fails loud if the DB file is missing
+    local missing, n = {}, 0
+    for npcID in pairs(_byNpcCache) do
+        if not aug[npcID] then
+            n = n + 1
+            if n <= 8 then missing[n] = tostring(npcID) end
+        end
+    end
+    return n, missing
+end
+
 function S.Recipes:Get(itemID)
     if not itemID then return nil end
     _ensureRecipeIndexes()

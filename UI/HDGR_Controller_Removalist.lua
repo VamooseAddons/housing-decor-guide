@@ -16,8 +16,12 @@ local A = HDG.Constants.ACTIONS
 -- "Plot N" today. The A/B/C/D letter chip + source/target selection highlight
 -- come in later phases (selection state already reserved in the Store bucket).
 
-local SRC_RGB = { 0.25, 0.85, 0.35 }   -- source = green (matches the map pin)
-local TGT_RGB = { 0.95, 0.75, 0.20 }   -- target = gold  (matches the map pin)
+local SRC_RGB = { 0.25, 0.85, 0.35 }   -- source = green (list dot / tooltip / facing label)
+local TGT_RGB = { 0.95, 0.75, 0.20 }   -- target = gold  (list dot / tooltip / facing label)
+local SEL_RGB = { 1.00, 1.00, 1.00 }   -- selected plot OUTLINE on the map. Neutral on purpose:
+                                       -- green/gold here collided with the community letter hues
+                                       -- (a selected yellow-B plot read as a green-C plot --
+                                       -- ReganB, Discord 2026-07-04). Role color stays off-map.
 
 -- Community "PLOT ORIENTATION KEY" letter colors (AoA reference) -- used for the plot-list
 -- letter swatch and the non-selected map pins, so both mirror the community key.
@@ -192,11 +196,9 @@ local function _drawPlots(canvas, model, bounds, layerW, layerH, eff)
     if canvas._csMark then canvas._csMark:Hide() end   -- shown again below only for the focus plot
     for i = 1, #plots do
         local p = plots[i]
-        local col
-        if     p.plot == model.sourcePlot then col = SRC_RGB
-        elseif p.plot == model.targetPlot then col = TGT_RGB
-        else   col = LETTER_RGB[p.letter] or UNLETTERED_RGB end   -- exception(nullable): plot may be unlettered
         local isSel = (p.plot == model.sourcePlot) or (p.plot == model.targetPlot)
+        local col = isSel and SEL_RGB
+            or LETTER_RGB[p.letter] or UNLETTERED_RGB   -- exception(nullable): plot may be unlettered
 
         -- bounding-rect corners (projected from the real yaw)
         local yaw  = p.yaw

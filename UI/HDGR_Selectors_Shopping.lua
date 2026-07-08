@@ -114,12 +114,8 @@ Selectors:Register("shopping.summaryText", {
             parts[#parts + 1] = string.format("%d vendor%s",
                 s.vendorCount, s.vendorCount == 1 and "" or "s")
         end
-        if s.ahCount > 0 then
-            parts[#parts + 1] = string.format("%d AH", s.ahCount)
-        end
-        if s.wishCount > 0 then
-            parts[#parts + 1] = string.format("%d wish", s.wishCount)
-        end
+        -- AH/wish counts intentionally dropped from the header line to make room
+        -- for the + New button now living beside the list dropdown.
         return table.concat(parts, "  -  ")
     end,
 })
@@ -398,5 +394,79 @@ Selectors:Register("shopping.entriesByZone", {
             _appendZoneSection(rows, zoneName, zones[zoneName], zoneCollapsed, vendorCollapsed)
         end
         return rows
+    end,
+})
+
+-- ===== Vendor buying (spec docs/HDGR_VENDOR_BUYING_SPEC.md s4) ===============
+-- Join key = "itemID stocked at the OPEN merchant", NOT the list entry's stored
+-- npcID, so an equivalent vendor selling the same decor still fulfils the list.
+Selectors:Register("merchant.purchasableFromList", {
+    reads = { "session.merchant" },
+    calls = { "shopping.activeListEntries" },
+    fn = function(state, ctx)
+        local m = state.session.merchant
+        if not m.open then return {} end
+        local out = {}
+        for _, e in ipairs(Selectors:Call("shopping.activeListEntries", state, ctx)) do
+            local stock = m.byItemID[e.itemID]
+            -- Only gold-priced decor is bulk-buyable for now; currency/token items
+            -- are counted as skipped (buyAllSummary) and left for a normal buy.
+            if stock and stock.goldOnly then   -- exception(nullable): vendor doesn't carry this / not gold-only
+                -- Field names ARE the BuyQueue:Enqueue contract ({index, qty, price,
+                -- name}) -- these rows are passed straight to Enqueue on Buy All.
+                -- itemID + npcID identify the source list entry so BuyQueue can
+                -- decrement it as each unit lands (ADJUST_QTY matches on both).
+                out[#out + 1] = { itemID = e.itemID, npcID = e.npcID, name = stock.name,
+                                  qty = e.qty, index = stock.index, price = stock.price,
+                                  lineCost = stock.price * e.qty }
+            end
+        end
+        return out
+    end,
+})
+
+-- Summary for the Buy All confirm. listCoverage counts stocked-vs-total list rows.
+Selectors:Register("merchant.buyAllSummary", {
+    reads = { "session.merchant" },
+    calls = { "merchant.purchasableFromList", "shopping.activeListEntries" },
+    fn = function(state, ctx)
+        local rows    = Selectors:Call("merchant.purchasableFromList", state, ctx)
+        local entries = Selectors:Call("shopping.activeListEntries", state, ctx)
+        local m = state.session.merchant
+        local qty, cost = 0, 0
+        for _, r in ipairs(rows) do qty = qty + r.qty; cost = cost + r.lineCost end
+        -- Skipped = list items this vendor stocks that carry a currency/token cost
+        -- (hasCost, NOT merely non-gold -- a free item isn't "sold for a currency")
+        -- -- surfaced so Buy All isn't silently partial.
+        local skipped = 0
+        for _, e in ipairs(entries) do
+            local stock = m.byItemID[e.itemID]
+            if stock and stock.hasCost then skipped = skipped + 1 end
+        end
+        return { rowCount = #rows, totalQty = qty, totalCost = cost, skippedCount = skipped,
+                 listCoverage = ("%d of %d list items sold here"):format(#rows, #entries) }
+    end,
+})
+
+-- Buy All button: enabled only at an open vendor stocking >=1 list item.
+Selectors:Register("merchant.buyAllEnabled", {
+    reads = { "session.merchant" },
+    calls = { "merchant.purchasableFromList" },
+    fn = function(state, ctx)
+        return state.session.merchant.open
+           and #Selectors:Call("merchant.purchasableFromList", state, ctx) > 0
+    end,
+})
+
+-- Button label: "Cancel (done/total)" while a buy runs, else the localized "Buy All".
+Selectors:Register("merchant.buyAllLabel", {
+    -- account.config.locale: the idle label is localized, and this button lives on
+    -- the shopping SATELLITE window, which RefreshMainWindow doesn't repaint on a
+    -- locale switch -- so declare the dependency to invalidate the label directly.
+    reads = { "session.merchant.buying", "account.config.locale" },
+    fn = function(state, ctx)
+        local b = state.session.merchant.buying
+        if b then return ("Cancel (%d/%d)"):format(b.done, b.total) end
+        return HDG.Locale:Get("SHOP_BUY_ALL")
     end,
 })
