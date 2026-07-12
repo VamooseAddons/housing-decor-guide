@@ -66,6 +66,12 @@ local function _flushQueue()
     })
 end
 
+-- The interior room the player is standing in (nil if not in one). HO owns
+-- C_HousingLayout; the Blueprint tab reads this to save a Room blueprint.
+function HO:GetCurrentRoomGUID()
+    return C_HousingLayout and C_HousingLayout.GetRoomPlayerIsIn and C_HousingLayout.GetRoomPlayerIsIn()  -- exception(boundary): C_HousingLayout Blizzard API; returns nothing outside a room
+end
+
 function HO:Observe(decorGUID)
     if type(decorGUID) ~= "string" then return end
     -- decorID from GUID "Housing-1-<plotID>-<decorID>-<hash>".

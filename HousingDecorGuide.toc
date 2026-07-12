@@ -2,7 +2,7 @@
 ## Title: Vamoose's Housing Decor Guide
 ## Notes: Track, craft, preview, and acquire housing decorations across all professions
 ## Author: Vamoose
-## Version: 3.13.0
+## Version: 3.14.0
 ## SavedVariables: HDG_DB
 ## SavedVariablesPerCharacter: HDG_DB_CURRENT_PROFILE
 ## IconTexture: Interface\AddOns\HousingDecorGuide\textures\Vamoose_HDG_400_trans
@@ -105,6 +105,7 @@ UI\LayoutConfig\HDGR_LayoutConfig_Zone.lua
 UI\LayoutConfig\HDGR_LayoutConfig_Lumber.lua
 UI\LayoutConfig\HDGR_LayoutConfig_Removalist.lua
 UI\LayoutConfig\HDGR_LayoutConfig_Projects.lua
+UI\LayoutConfig\HDGR_LayoutConfig_Blueprints.lua
 UI\LayoutConfig\HDGR_LayoutConfig_Nav.lua
 UI\HDGR_Components.lua
 UI\HDGR_Panels.lua
@@ -136,6 +137,7 @@ UI\HDGR_Selectors_Zone.lua
 UI\HDGR_Selectors_Lumber.lua
 UI\HDGR_Selectors_Removalist.lua
 UI\HDGR_Selectors_Projects.lua
+UI\HDGR_Selectors_Blueprints.lua
 UI\HDGR_Controllers.lua
 UI\HDGR_Controller_Helpers_Mechanics.lua
 UI\HDGR_Controller_Helpers_UI.lua
@@ -170,6 +172,7 @@ Modules\HDGR_MapRenderer.lua
 Modules\HDGR_StaticData.lua
 # Logic ports / resolvers
 Modules\HDGR_HousingCatalogObserver.lua
+Modules\HDGR_BlueprintObserver.lua
 Modules\HDGR_RepObserver.lua
 Modules\HDGR_AchievementObserver.lua
 Modules\HDGR_RecipeKnowledgeScanner.lua
@@ -248,6 +251,7 @@ UI\HDGR_Controller_ProjectsCanvas.lua
 UI\HDGR_ProjectsHelpFlow.lua
 UI\HDGR_Controller_Projects.lua
 UI\HDGR_Controller_Layouts.lua
+UI\HDGR_Controller_Blueprints.lua
 
 # ===== Developer diagnostic commands (the /hdgr dev REPL, out of Init) =====
 Core\HDGR_Debug.lua

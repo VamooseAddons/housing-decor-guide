@@ -2039,20 +2039,29 @@ Selectors:Register("acq.selectedRecipe", {
 })
 
 -- Map drawer: condensed shape for the vendorMap widget.
--- Returns { mapID, x, y, name, zone } or nil. x/y are 0-1 fractions
--- (VendorDB stores percent 0-100, normalized here).
+-- Returns { mapID, x, y, name, zone } or { mapID, name, zone, noPin } or nil.
+-- x/y are 0-1 fractions (VendorDB stores percent 0-100, normalized here).
+-- Un-augmented vendors (12.0.7 additions the augment doesn't cover yet) have
+-- only the catalog's zone STRING -- resolve it to a uiMapID and draw the zone
+-- pinless rather than showing nothing. ZoneNameResolver is a deterministic
+-- static facade (Recipes:RecipeVendorCounts precedent).
 Selectors:Register("acq.selected.mapPoint", {
     calls = {"acq.selectedVendor"},
     fn = function(state, ctx)
         local v = Selectors:Call("acq.selectedVendor", state, ctx)
-        if not v or not v.mapID or v.mapID == 0 then return nil end
-        return {
-            mapID = v.mapID,
-            x     = (v.x or 0) / 100,
-            y     = (v.y or 0) / 100,
-            name  = v.name,
-            zone  = v.zone,
-        }
+        if not v then return nil end  -- exception(nullable): nothing selected
+        if v.mapID and v.mapID ~= 0 then
+            return {
+                mapID = v.mapID,
+                x     = (v.x or 0) / 100,
+                y     = (v.y or 0) / 100,
+                name  = v.name,
+                zone  = v.zone,
+            }
+        end
+        local zoneMapID = HDG.ZoneNameResolver:MapIDForName(v.zone)
+        if not zoneMapID then return nil end  -- exception(nullable): sub-zone strings have no uiMap
+        return { mapID = zoneMapID, name = v.name, zone = v.zone, noPin = true }
     end,
 })
 

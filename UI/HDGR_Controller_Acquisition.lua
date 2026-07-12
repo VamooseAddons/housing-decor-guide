@@ -759,6 +759,12 @@ function AcquisitionController:Refresh(rootFrame, ctx)
     end
     local state = HDG.Store:GetState()  -- exception(false-positive): top-level controller method (not a row factory)
     local acqUI = state.session.ui.acquisition
+    -- Search box reconcile: state is the SSoT (JumpToVendor clears searchQuery
+    -- from another window); never clobber mid-typing.
+    local sb = HDG.UI.W(rootFrame, "acquisitionListPanel.search")
+    if sb and not sb:HasFocus() and sb:GetText() ~= (acqUI.searchQuery or "") then
+        sb:SetText(acqUI.searchQuery or "")
+    end
     if acqUI.viewMode ~= "vendor" then return end
     local vendors = HDG.Selectors:Call("acq.vendors", state, {})
     if #vendors == 0 then return end

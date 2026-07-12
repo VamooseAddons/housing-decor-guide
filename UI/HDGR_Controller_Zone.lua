@@ -81,6 +81,7 @@ local function _hideAllChrome(row)
     if row._zoneVendorChromeBuilt then
         row._zonePinBtn:Hide()
     end
+    if row._nameLinkBtn then row._nameLinkBtn:Hide() end
 end
 
 local function _showItemChrome(row, ed)
@@ -149,6 +150,11 @@ local function _paintZoneVendor(row, ed)
         })
     end)
     _showVendorPin(row, ed)
+    -- Vendor name is a hyperlink: click jumps to Shop by Vendor; the rest of
+    -- the row still toggles collapse (Discord request).
+    HDG.UI:ShowNameLink(row, row._nameFs, HDG.TooltipRecipes.VendorJump, function()
+        HDG.ControllerHelpers.Mechanics.JumpToVendor(ed.npcID, ed.name, nil)
+    end)
 end
 
 -- Item child row: name + collected/cart mini-markers. Compact 320px popup.

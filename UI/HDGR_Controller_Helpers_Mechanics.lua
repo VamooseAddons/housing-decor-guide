@@ -79,6 +79,26 @@ function Mech.SetUITransientView(view, key, value)
     })
 end
 
+-- Cross-window vendor deep-link: open the main window on Acquire > Shop by
+-- Vendor with this vendor selected. Callable from any window (shopping widget /
+-- zone popup vendor rows). Clears the vendor search so the list actually shows
+-- the selection; the search editbox reconciles from state in acquisition
+-- Refresh. npcID is authoritative when set; (name, zone) is the fallback
+-- identity for npcID-less vendors (mirrors acq.selectedVendor).
+function Mech.JumpToVendor(npcID, name, zone)
+    if Mech.GetState().account.ui.mainWindowShown ~= true then
+        Mech.Dispatch(HDG.Constants.ACTIONS.MAIN_WINDOW_TOGGLE)
+    end
+    Mech.SetUIPersistent("view", "acquisition")
+    Mech.SetUITransientView("acquisition", "viewMode", "vendor")
+    Mech.SetUITransientView("acquisition", "searchQuery", "")
+    Mech.SetUITransientView("acquisition", "selectedNpcID", npcID)
+    Mech.SetUITransientView("acquisition", "selectedVendorName", name)
+    Mech.SetUITransientView("acquisition", "selectedVendorZone", zone)
+    Mech.SetUITransientView("acquisition", "selectedItemID", nil)
+    Mech.SetUITransientView("acquisition", "selectedRecipeItemID", nil)
+end
+
 
 -- ===== Cycle helpers ======================================================
 function Mech.CycleConfigValue(key, order, fallback)

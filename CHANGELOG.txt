@@ -1,3 +1,21 @@
+## [3.14.0] - 2026-07-12 (July 2026)
+
+### Added
+- Blueprints tab (House > Blueprints) for the 12.1 Midnight housing update. The tab appears automatically on a 12.1 client -- nothing changes on current retail. Paste any blueprint share code to see exactly what's inside -- rooms, decor, dyes, fixtures -- and what you're missing, checked against whichever of your houses you pick. Pasted codes are kept in your own library across sessions and can be given private names; your saved Blizzard blueprint catalog shows alongside with rename and delete built in.
+- Blueprints: Route to Shopping turns a blueprint's missing items into a shopping list named after the blueprint (re-routing refreshes the same list), ready for the vendor tools and Buy All. Import as Set files the contents into Styles as a furnishing set, and House/Interior blueprints can open in the Architect.
+- Blueprints: budget meters show whether a build fits the target house's room, interior, and exterior budgets -- Room blueprints are measured against the house's remaining headroom, since they add to what's already placed. When an import would be blocked, the tab shows Blizzard's own reason (wrong faction for the neighborhood, locked house type or size, missing rooms or dyes...).
+- Blueprints: Save Blueprint snapshots your current house from inside the tab (Full House, This Room, Interior, or Exterior), Apply to House opens Blizzard's import dialog prefilled with the selected code, and Link in chat drops a clickable blueprint link others can import from. Note that applying a blueprint doesn't save it to your catalog -- use Save Blueprint afterwards to keep a copy.
+- Blueprints: full-house and exterior blueprints color by faction in the list (Alliance blue, Horde red) once inspected, so mixed collections stay readable at a glance.
+- Vendor names in the shopping widget and the zone scanner are now links: hover underlines the name, and clicking it jumps straight to that vendor in Shop by Vendor (opening the main window if needed). Clicking anywhere else on the row still collapses the group (thanks Vector).
+
+### Changed
+- The profession window buttons are now compact icons instead of text buttons: the HDG logo opens the Decor Guide, and a decor-vendor icon toggles the house-decor recipe filter (it glows while the filter is active).
+
+### Fixed
+- Vendors new in 12.0.7 that HDG doesn't have exact coordinates for yet (Zuronar and friends) now show their zone map in the vendor panel instead of an empty box. The map draws without a location pin -- the catalog only tells us the zone, not where in it the vendor stands -- and pins will appear as coordinates get added.
+- The "Decor Guide" and "Filter Decor" buttons on the profession window are visible again. They were rendering underneath the profession window's own frame layer, so only their hover tooltip showed (thanks draculja_aka_hellsreaper).
+- Caydori Brightstar (Monk order hall vendor) now shows the correct map, The Wandering Isle, instead of The Eternal Palace. Her vendor record had the wrong map ID.
+
 ## [3.13.0] - 2026-07-08 (July 2026)
 
 ### Added

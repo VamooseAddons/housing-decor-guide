@@ -21,30 +21,23 @@ local _filterActive = false
 
 -- ===== Button factory ========================================================
 
-local function _createButton(name, parent, width, label)
-    local btn = CreateFrame("Button", name, parent, "BackdropTemplate")
-    btn:SetSize(width, 22)
-    btn:SetBackdrop({
-        bgFile   = "Interface\\Buttons\\WHITE8x8",
-        edgeFile = "Interface\\Buttons\\WHITE8x8",
-        edgeSize = 1,
-    })
-    local c = HDG.Theme:GetColor("semantic.accent")
-    btn:SetBackdropColor(c.r, c.g, c.b, 0.9)
-    btn:SetBackdropBorderColor(c.r, c.g, c.b, 1)
-    btn.text = btn:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    btn.text:SetAllPoints()
-    btn.text:SetText(label)
+local ICON_HDG    = "Interface\\AddOns\\HousingDecorGuide\\textures\\Vamoose_HDG_400_trans"
+local ICON_FILTER = "housing-decor-vendor_32"
+
+local function _createButton(name, parent, frameType, icon, isAtlas)
+    local btn = CreateFrame(frameType, name, parent)
+    btn:SetSize(22, 22)
+    btn:SetFrameStrata("HIGH")  -- ProfessionsFrame chrome renders at HIGH; inherited strata leaves buttons occluded
+    btn:SetFrameLevel(500)
+    btn.icon = btn:CreateTexture(nil, "ARTWORK")
+    btn.icon:SetAllPoints()
+    if isAtlas then btn.icon:SetAtlas(icon) else btn.icon:SetTexture(icon) end
+    btn:SetHighlightTexture("Interface\\Buttons\\ButtonHilight-Square", "ADD")
     return btn
 end
 
 local function _applyFilterState()
-    if not _filterBtn then return end
-    if _filterActive then
-        _filterBtn.text:SetText(HDG.Theme:ColorCode("semantic.warning") .. "Filter Decor|r")
-    else
-        _filterBtn.text:SetText("Filter Decor")
-    end
+    _filterBtn:SetChecked(_filterActive) -- persistent glow while the decor filter is applied
 end
 
 -- ===== Create (called once Blizzard_Professions is loaded) ===================
@@ -56,28 +49,25 @@ local function _createButtons()
     if not parent then return end
 
     -- "Decor Guide" button: opens HDG main window
-    _decorBtn = _createButton("HDGR_ProfessionDecorBtn", parent, 90, "Decor Guide")
+    _decorBtn = _createButton("HDGR_ProfessionDecorBtn", parent, "Button", ICON_HDG, false)
     _decorBtn:SetPoint("TOPRIGHT", parent, "TOPRIGHT", -110, -1)
     _decorBtn:SetScript("OnClick", function()
         HDG.Store:Dispatch({ type = HDG.Constants.ACTIONS.MAIN_WINDOW_TOGGLE })
     end)
     _decorBtn:SetScript("OnEnter", function(self)
-        local c = HDG.Theme:GetColor("semantic.accent")
-        self:SetBackdropColor(c.r * 1.3, c.g * 1.3, c.b * 1.3, 1)
         GameTooltip:SetOwner(self, "ANCHOR_BOTTOMRIGHT")
         GameTooltip:AddLine(HDG.Theme:ColorCode("semantic.warning") .. "Open Decor Guide|r")
         GameTooltip:AddLine("View housing decor for your professions.", 0.7, 0.7, 0.7)
         GameTooltip:Show()
     end)
-    _decorBtn:SetScript("OnLeave", function(self)
-        local c = HDG.Theme:GetColor("semantic.accent")
-        self:SetBackdropColor(c.r, c.g, c.b, 0.9)
-        GameTooltip:Hide()
-    end)
+    _decorBtn:SetScript("OnLeave", function() GameTooltip:Hide() end)
 
-    -- "Filter Decor" button: filters recipe list to House Decor items
-    _filterBtn = _createButton("HDGR_ProfessionFilterBtn", parent, 85, "Filter Decor")
+    -- "Filter Decor" button: filters recipe list to House Decor items.
+    -- CheckButton so the active filter reads as a persistent glow.
+    _filterBtn = _createButton("HDGR_ProfessionFilterBtn", parent, "CheckButton", ICON_FILTER, true)
     _filterBtn:SetPoint("RIGHT", _decorBtn, "LEFT", -4, 0)
+    _filterBtn:SetCheckedTexture("Interface\\Buttons\\CheckButtonHilight")
+    _filterBtn:GetCheckedTexture():SetBlendMode("ADD")
     _filterBtn:SetScript("OnClick", function()
         local CT = _G.C_TradeSkillUI
         if CT and CT.SetRecipeItemNameFilter then                -- exception(boundary): Blizz API
@@ -88,14 +78,10 @@ local function _createButtons()
                 CT.SetRecipeItemNameFilter("House Decor")
                 _filterActive = true
             end
-            _applyFilterState()
         end
+        _applyFilterState() -- outside the guard: CheckButton self-toggles on click, resync to _filterActive
     end)
     _filterBtn:SetScript("OnEnter", function(self)
-        if not _filterActive then
-            local c = HDG.Theme:GetColor("semantic.accent")
-            self:SetBackdropColor(c.r * 1.3, c.g * 1.3, c.b * 1.3, 1)
-        end
         GameTooltip:SetOwner(self, "ANCHOR_BOTTOMRIGHT")
         if _filterActive then
             GameTooltip:AddLine(HDG.Theme:ColorCode("semantic.warning") .. "Clear Filter|r")
@@ -106,14 +92,7 @@ local function _createButtons()
         end
         GameTooltip:Show()
     end)
-    _filterBtn:SetScript("OnLeave", function(self)
-        _applyFilterState()
-        if not _filterActive then
-            local c = HDG.Theme:GetColor("semantic.accent")
-            self:SetBackdropColor(c.r, c.g, c.b, 0.9)
-        end
-        GameTooltip:Hide()
-    end)
+    _filterBtn:SetScript("OnLeave", function() GameTooltip:Hide() end)
 
     -- Per-open hook: reset filter state, re-gate on config.
     parent:HookScript("OnShow", function()

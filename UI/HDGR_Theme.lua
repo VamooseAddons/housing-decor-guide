@@ -665,6 +665,16 @@ HDG.Theme.Skinners = {
         setTextColor(text, HDG.Theme:GetColor("semantic.error"))
     end,
 
+    -- Faction tints: fixed Alliance-blue / Horde-red for full-house / exterior
+    -- blueprint rows. Scheme-independent -- faction is a game-wide semantic, not
+    -- a themed color -- so these hardcode readable values rather than GetColor.
+    TextAlliance = function(text, _scheme)
+        setTextColor(text, { r = 0.30, g = 0.55, b = 1.00, a = 1 })
+    end,
+    TextHorde = function(text, _scheme)
+        setTextColor(text, { r = 0.92, g = 0.26, b = 0.26, a = 1 })
+    end,
+
     -- TextInfo: diag.info for low-key status lines.
     TextInfo = function(text, _scheme)
         setTextColor(text, HDG.Theme:GetColor("diag.info"))
@@ -772,10 +782,12 @@ HDG.Theme.Skinners = {
 
     -- ProgressBarFill: semantic.success at full alpha for progress bars.
     -- AccentBg at 0.085 was too dim against the panel background.
-    ProgressBarFill = function(tex, _scheme)
+    -- state: { variant = "success"|"warning"|"error"|"accent", dim = bool }.
+    -- No state = the historical solid success fill (all existing registrations).
+    ProgressBarFill = function(tex, _scheme, state)
         if not (tex and tex.SetColorTexture) then return end
-        local c = HDG.Theme:GetColor("semantic.success")
-        tex:SetColorTexture(c.r, c.g, c.b, 1)
+        local c = HDG.Theme:GetColor("semantic." .. ((state and state.variant) or "success"))
+        tex:SetColorTexture(c.r, c.g, c.b, (state and state.dim) and 0.35 or 1)
     end,
 
     -- AccentBar: solid accent fill (status banner left bar, selected row bar).

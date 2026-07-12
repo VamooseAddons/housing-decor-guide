@@ -12,17 +12,15 @@
 
 ---
 
-## What's New in v3.13.0
+## What's New in v3.14.0
 
-This covers the player-facing changes in 3.13.0.
+This covers the player-facing changes in 3.14.0.
 
-- **Buy decor from vendors without the per-item popup.** With the Shopping List open at a vendor, "Buy All" purchases every gold-priced item on your list in one paced pass and checks each off the list as it lands in decor storage. A single summary confirmation replaces the game's per-item non-refundable prompt.
-- **Right-click a gold-priced decor item at a vendor to pick a quantity.** Dial in how many with three digit wheels, watch the running total against your gold and decor-storage space, and buy them in one go. Off by default; turn it on under Settings > Helpers > Vendors. Items sold for a currency right-click as normal.
-- **Essence of Lumber tracker.** A title-bar icon shows how many Essence of Lumber you hold across your whole warband, with a mouseover listing which characters have them and how many. Because Essence is soulbound, the total tells you where your stock actually sits. The icon greys out when you have none.
-- **Re-importing a shopping list updates it in place.** Importing a collection you already have refreshes that list instead of adding a second copy with the same name. Lists that share a name are numbered so the switcher stays clear.
-- **Move Planner selection is easier to read.** A selected plot now outlines in white instead of a color that could be mistaken for a community plot-letter hue.
-- **Fixed the displayed cost of MOTHER's Titanic Brazier and N'Zoth's Captured Eye** (Chamber of Heart), which the catalog listed with a stale price.
-- **Fixed Lord Candren's vendor pin**, which pointed to the wrong part of Gilneas City.
+- **Blueprints tab, ready for the 12.1 Midnight housing update.** A new tab under House appears automatically when you play on a 12.1 client (nothing changes on 12.0.7). Paste any blueprint share code to see what is inside -- rooms, decor, dyes, fixtures -- and what you are missing, checked against whichever of your houses you pick. Route the missing items to a shopping list named after the blueprint, file the contents into Styles as a furnishing set, or open House and Interior blueprints in the Architect. Budget meters show whether a build fits the target house, with the game's own reason text when an import would be blocked. Save Blueprint snapshots your current house from inside the tab, Apply to House opens the import dialog prefilled, and Link in chat drops a clickable blueprint link others can import from. Full-house and exterior blueprints color by faction in the list once inspected.
+- **Jump to a vendor from the shopping widget or zone scanner.** Vendor names in both windows are now links: hover underlines the name, and clicking it opens that vendor in Shop by Vendor, with the main window opening if it was closed. Clicking anywhere else on the row still collapses the group.
+- **Vendors new in 12.0.7 now show their zone map.** Vendors the addon does not have exact coordinates for yet (Zuronar and friends) display their zone in the vendor panel instead of an empty box. The map draws without a location pin; pins appear as coordinates get added.
+- **The profession-window buttons are back, as icons.** The "Decor Guide" and "Filter Decor" buttons on profession windows were rendering underneath the window's own frame layer. They are visible again and are now compact icons: the HDG logo opens the guide, and a decor-vendor icon toggles the house-decor recipe filter (it glows while the filter is active).
+- **Fixed Caydori Brightstar's vendor map**, which pointed to The Eternal Palace instead of The Wandering Isle.
 
 ---
 
@@ -73,6 +71,10 @@ Housing crafting runs on lumber, so there's a dedicated **Lumber Tracker** -- a 
 - **Layouts** -- manage every saved layout, load one into the Architect, and **share** it as a compact code (or import someone else's).
 - **Move Planner** -- moving plots? Pick source and target and get the exact rotation (degrees + compass direction) your house and yard will need, with neighborhood maps and door-facing diagrams. *(Rotation key courtesy of Blue, Art of Azeroth.)*
 
+## Blueprints -- inspect and plan builds (WoW 12.1)
+
+On a 12.1 client, a Blueprints tab appears under House. Paste any blueprint share code to inspect its full contents -- rooms, decor, dyes, fixtures -- and what you are missing, measured against whichever of your houses you pick, with room and decor budget meters and the game's own reason text when an import would be blocked. Pasted codes are kept in your own library with private names; your saved blueprint catalog shows alongside with rename and delete. Route missing items to a shopping list, import the contents as a Styles furnishing set, open House and Interior blueprints in the Architect, save a blueprint of your current house (full house, room, interior, or exterior), apply a code to your house through the game's import dialog, or link a blueprint in chat for others to import.
+
 ## House -- your collection at a glance
 
 A personal dashboard: decorator profile with house level, favor, and Collector title progress; collection donuts by source and by expansion; "close to complete" and themed-set progress; House-XP "hot picks"; acquisition velocity and storage capacity; lumber wallet and decor currencies; favorites, recent activity, and your top uncollected-from vendors. **Fully customizable** -- toggle and drag-reorder every widget.
@@ -109,7 +111,7 @@ A companion window injects into Blizzard's House Editor so you can **place decor
 ---
 
 **Author:** Vamoose
-**Version:** 3.13.0
+**Version:** 3.14.0
 **Game Version:** 12.0.5+ (Midnight)
 **Source / Issues:** https://github.com/VamooseAddons/housing-decor-guide
 **Discord:** https://discord.gg/RWZaxJaHFP

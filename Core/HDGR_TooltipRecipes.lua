@@ -169,6 +169,7 @@ R.EssenceBadge = function()
 end
 R.LumberAutoShow       = { title = "locale:TIP_LUMBER_AUTO_SHOW_TITLE",      body = "locale:TIP_LUMBER_AUTO_SHOW_BODY" }
 R.LumberGoal           = { title = "locale:TIP_LUMBER_GOAL_TITLE",           body = "locale:TIP_LUMBER_GOAL_BODY" }
+R.VendorJump           = { title = "locale:TIP_VENDOR_JUMP_TITLE",           body = "locale:TIP_VENDOR_JUMP_BODY",    anchor = "ANCHOR_RIGHT" }
 R.ZoneMapOpen          = { title = "locale:TIP_ZONE_MAP_TITLE",              body = "locale:TIP_ZONE_MAP_BODY" }
 
 -- Layouts tab actions (effect-focused -- what each does, not just the label).
@@ -176,6 +177,20 @@ R.LayoutLoad      = { title = "locale:TIP_LAYOUT_LOAD_TITLE",      body = "local
 R.LayoutShare     = { title = "locale:TIP_LAYOUT_SHARE_TITLE",     body = "locale:TIP_LAYOUT_SHARE_BODY",     anchor = "ANCHOR_TOP" }
 R.LayoutImport    = { title = "locale:TIP_LAYOUT_IMPORT_TITLE",    body = "locale:TIP_LAYOUT_IMPORT_BODY",    anchor = "ANCHOR_BOTTOM" }
 R.LayoutDuplicate = { title = "locale:TIP_LAYOUT_DUPLICATE_TITLE", body = "locale:TIP_LAYOUT_DUPLICATE_BODY", anchor = "ANCHOR_TOP" }
+
+-- Blueprints tab (12.1) -- effect-focused.
+R.BlueprintInspect     = { title = "locale:TIP_BP_INSPECT_TITLE",     body = "locale:TIP_BP_INSPECT_BODY",     anchor = "ANCHOR_TOP" }
+R.BlueprintTargetHouse = { title = "locale:TIP_BP_TARGET_TITLE",      body = "locale:TIP_BP_TARGET_BODY",      anchor = "ANCHOR_BOTTOM" }
+R.BlueprintCopyCode    = { title = "locale:TIP_BP_COPY_TITLE",        body = "locale:TIP_BP_COPY_BODY",        anchor = "ANCHOR_TOP" }
+R.BlueprintRename      = { title = "locale:TIP_BP_RENAME_TITLE",      body = "locale:TIP_BP_RENAME_BODY",      anchor = "ANCHOR_TOP" }
+R.BlueprintMissingOnly = { title = "locale:TIP_BP_MISSING_TITLE",     body = "locale:TIP_BP_MISSING_BODY",     anchor = "ANCHOR_TOP" }
+R.BlueprintRoute       = { title = "locale:TIP_BP_ROUTE_TITLE",       body = "locale:TIP_BP_ROUTE_BODY",       anchor = "ANCHOR_TOP" }
+R.BlueprintImportSet   = { title = "locale:TIP_BP_SET_TITLE",         body = "locale:TIP_BP_SET_BODY",         anchor = "ANCHOR_TOP" }
+R.BlueprintArchitect   = { title = "locale:TIP_BP_ARCHITECT_TITLE",   body = "locale:TIP_BP_ARCHITECT_BODY",   anchor = "ANCHOR_TOP" }
+R.BlueprintSave        = { title = "locale:TIP_BP_SAVE_TITLE",        body = "locale:TIP_BP_SAVE_BODY",        anchor = "ANCHOR_TOP" }
+R.BlueprintLink        = { title = "locale:TIP_BP_LINK_TITLE",        body = "locale:TIP_BP_LINK_BODY",        anchor = "ANCHOR_TOP" }
+R.BlueprintImportHouse = { title = "locale:TIP_BP_IMPORT_HOUSE_TITLE", body = "locale:TIP_BP_IMPORT_HOUSE_BODY", anchor = "ANCHOR_TOP" }
+R.BlueprintDelete      = { title = "locale:TIP_BP_DELETE_TITLE",      body = "locale:TIP_BP_DELETE_BODY",      anchor = "ANCHOR_TOP" }
 
 -- ===== Mogul / Goblin TSM columns ==========================================
 -- Registered unconditionally so Layout:Validate passes regardless of TSM load state.

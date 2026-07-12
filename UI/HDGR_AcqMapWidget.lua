@@ -131,7 +131,9 @@ local function dispatchVendorMap(widget, values)
 
     -- Only place vendor pin when artMapID matches point's mapID (MapRenderer may walk up to
     -- a parent zone; child-map coords would land wrong on the parent art).
-    if artMapID == point.mapID then
+    -- noPin points (zone resolved from the catalog's zone string, no coords)
+    -- draw the map art only -- no pin, no waypoint click.
+    if not point.noPin and artMapID == point.mapID then
         -- Stash current point so click closures (built once, reused) read live coords.
         widget._currentPoint = point
         widget._vendorPin = widget._vendorPin or buildPin(canvas, VENDOR_COLOR, point.name,

@@ -70,7 +70,7 @@ HDGR_VendorAugment = {
     [109306] = { name = "Myria Glenbrook", zone = "Val'sharah", mapID = 641, x = 60.1, y = 84.8, faction = "N", exp = "Legion" },
     [112318] = { name = "Flamesmith Lanying", zone = "The Maelstrom", mapID = 726, x = 30.3, y = 60.7, faction = "N", exp = "Legion" },
     [112323] = { name = "Amurra Thistledew", zone = "The Dreamgrove", mapID = 747, x = 39.8, y = 25.8, faction = "N", exp = "Legion" },
-    [112338] = { name = "Caydori Brightstar", zone = "The Wandering Isle", mapID = 1514, x = 50.4, y = 59.0, faction = "N", exp = "Legion" },
+    [112338] = { name = "Caydori Brightstar", zone = "The Wandering Isle", mapID = 709, x = 50.3, y = 59.1, faction = "N", exp = "Legion" },
     [112392] = { name = "Quartermaster Durnolf", zone = "Skyhold", mapID = 695, x = 55.5, y = 25.9, faction = "N", exp = "Legion" },
     [112401] = { name = "Meridelle Lightspark", zone = "Netherlight Temple", mapID = 702, x = 38.6, y = 23.8, faction = "N", exp = "Legion" },
     [112407] = { name = "Falara Nightsong", zone = "The Fel Hammer", mapID = 1519, x = 57.8, y = 44.2, faction = "N", exp = "Legion" },

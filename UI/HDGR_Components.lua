@@ -724,6 +724,41 @@ function HDG.UI:AtlasButton(parent, atlas, size)
     return btn
 end
 
+-- ===== NameLink: make a row's name FontString act like a hyperlink ==========
+-- Overlay button sized to the painted text; hovering shows an accent underline
+-- (+ the attached tooltip); clicking runs the per-paint onClick. The rest of
+-- the row keeps its own OnClick (e.g. collapse), so the name is a link INSIDE
+-- a still-clickable row. Pooled: call ShowNameLink per paint, hide on reset.
+function HDG.UI:ShowNameLink(row, nameFs, tooltipRecipe, onClick)
+    local btn = row._nameLinkBtn
+    if not btn then
+        btn = CreateFrame("Button", nil, row)
+        btn:SetPoint("TOPLEFT", nameFs, "TOPLEFT", 0, 2)
+        btn:SetPoint("BOTTOMLEFT", nameFs, "BOTTOMLEFT", 0, -3)
+        local ul = btn:CreateTexture(nil, "OVERLAY")
+        ul:SetHeight(1)
+        ul:SetPoint("BOTTOMLEFT", btn, "BOTTOMLEFT", 0, 1)
+        ul:SetPoint("BOTTOMRIGHT", btn, "BOTTOMRIGHT", 0, 1)
+        HDG.Theme:Register(ul, "AccentBar")
+        ul:Hide()
+        btn._ul = ul
+        btn:SetScript("OnEnter", function(self) self._ul:Show() end)
+        btn:SetScript("OnLeave", function(self) self._ul:Hide() end)
+        btn:SetScript("OnClick", function(self) if self._onClick then self._onClick() end end)
+        HDG.TooltipEngine:Attach(btn, tooltipRecipe)
+        row._nameLinkBtn = btn
+    end
+    btn._onClick = onClick
+    -- Width = the painted text, capped to the FontString's region so a long
+    -- name's link never spills over the right-side stats.
+    local w = (nameFs.GetUnboundedStringWidth and nameFs:GetUnboundedStringWidth())  -- exception(boundary): natural width; GetStringWidth lies when truncated
+        or nameFs:GetStringWidth() or 0
+    local cap = nameFs:GetWidth()
+    if cap and cap > 0 and w > cap then w = cap end  -- exception(boundary): frame geometry 0 before first layout
+    btn:SetWidth(math.max(w, 1))
+    btn:Show()
+end
+
 -- Apply chip chrome to pooled/bare Button frames. Idempotent via _chipChromeBuilt.
 function HDG.UI:EnsureChipChrome(chip)
     if chip._chipChromeBuilt then return end

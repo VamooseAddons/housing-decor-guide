@@ -330,6 +330,11 @@ local function _configureVendorRow(row, ed)
         HDG.Store:Dispatch({ type = HDG.Constants.ACTIONS.SHOPPING_TOGGLE_EXPANDED,
             payload = { bucket = "vendors", key = ed.npcID } })
     end)
+    -- Vendor name is a hyperlink: click jumps to Shop by Vendor; the rest of
+    -- the row still toggles collapse (Discord request).
+    HDG.UI:ShowNameLink(row, row._nameFs, HDG.TooltipRecipes.VendorJump, function()
+        HDG.ControllerHelpers.Mechanics.JumpToVendor(ed.npcID, ed.name, ed.zone)
+    end)
 end
 
 local function _configureItemRow(row, ed)
@@ -389,6 +394,7 @@ local function _shoppingRowFactory(template)
             -- Reset shared state (pooled rows).
             row._nameFs:SetText("")
             row._rightFs:SetText("")
+            if row._nameLinkBtn then row._nameLinkBtn:Hide() end
             row._nameFs:ClearAllPoints()
             row._rightFs:ClearAllPoints()
             row:SetScript("OnClick", nil)

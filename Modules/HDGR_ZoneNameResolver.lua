@@ -50,7 +50,42 @@ R.ZONE_MAP_IDS = {
     ["Valdrakken"]                  = 2112,
     -- The War Within
     ["Dornogal"]                    = 2339,
+    -- Midnight (12.0.7 vendor zones)
+    ["Naigtal"]                     = 2600,  -- verified in-game 2026-07-12; NOT 2623 (System=2 variant) or 924 (Legion "Invasion Point: Naigtal")
 }
+
+-- Zone NAME -> uiMapID. Curated table first (disambiguates duals like
+-- Silvermoon), else a lazy one-time C_Map scan index. Catalog zone strings and
+-- GetMapInfo names are both client-locale, so the index matches on any locale
+-- (unlike the enUS-keyed curated table). First-wins on duplicate names, so
+-- old-world maps shadow same-named newer ones -- add a curated entry when a
+-- specific dual matters. Used for un-augmented vendors (e.g. 12.0.7 additions):
+-- the catalog gives only a zone STRING, this recovers a map to draw.
+local SCAN_MAX_UIMAP = 3500   -- 12.x uiMapIDs top out ~2800; headroom for new patches
+
+function R:MapIDForName(zoneName)
+    if not zoneName or zoneName == "" then return nil end  -- exception(nullable): vendors can lack a zone string
+    local curated = self.ZONE_MAP_IDS[zoneName]
+    if curated then return curated end
+    if not self._nameIndex then
+        local ZONE = Enum.UIMapType and Enum.UIMapType.Zone or 3  -- exception(boundary): headless mock lacks Enum.UIMapType
+        local idx, types = {}, {}
+        for id = 1, SCAN_MAX_UIMAP do
+            local info = C_Map.GetMapInfo(id)  -- exception(boundary): uiMapIDs are sparse; gaps return nil
+            if info and info.name and info.name ~= "" then
+                -- A real ZONE map always beats a same-named continent/dungeon/
+                -- orphan map (duplicate names are common; the lowest ID is often
+                -- an old or non-zone variant). Within a type, first-wins.
+                local have = idx[info.name]
+                if not have or (types[info.name] ~= ZONE and info.mapType == ZONE) then
+                    idx[info.name], types[info.name] = id, info.mapType
+                end
+            end
+        end
+        self._nameIndex = idx
+    end
+    return self._nameIndex[zoneName]  -- exception(nullable): sub-zone strings have no uiMap
+end
 
 -- Localize enUS zone name. Falls back to enUS when mapID unknown or GetMapInfo nil.
 function R:Localize(enUSName)

@@ -558,6 +558,27 @@ local function NewRemovalistSessionUI()
     }
 end
 
+-- Blueprints tab (12.1). Server-derived except selection/target pointers; none
+-- of this persists. account.blueprints.labels (EnsureStateShape) is the only
+-- persisted blueprint state. manifests[code] = {status, reasonCode?, requestedAt?, raw?}.
+local function NewBlueprintsSession()
+    return {
+        -- false at mint on ALL builds (keeps golden-state build-independent);
+        -- BlueprintObserver dispatches BLUEPRINT_AVAILABLE_SET(true) at enable on 12.1.
+        available       = false,
+        slots           = { used = 0, max = 0 },   -- from COLLECTION_RECEIVED
+        groups          = {},                      -- HousingBlueprintInfo rows, grouped
+        manifests       = {},                      -- [shareCode] = { status, reasonCode?, requestedAt?, raw? }
+        selectedCode    = nil,
+        targetHouseGUID = nil,                     -- nil = server defaults to current house
+        pendingNow      = 0,                       -- last BLUEPRINT_PENDING_TICK now (elapsed compose)
+    }
+end
+
+local function NewBlueprintsSessionUI()
+    return { missingOnly = false, collapsedGroups = {}, pasteError = false }
+end
+
 local function NewSessionUI()
     return {
         decor        = NewDecorSessionUI(),
@@ -576,6 +597,7 @@ local function NewSessionUI()
         removalist   = NewRemovalistSessionUI(),    -- Removalist plot-move planner
         data         = NewDataSessionUI(),         -- Your Data tab: achievement-group collapse
         catalogIntro = { phase = "hidden" },        -- initial-load overlay: "hidden"|"loading"|"success"
+        blueprints   = NewBlueprintsSessionUI(),    -- Blueprints tab transients (12.1)
     }
 end
 
@@ -697,6 +719,7 @@ local function NewDefaultSession()
         -- hydrate, maintained by the FURN_*/LAYOUT_* reducer cases).
         furn           = { lastSetID = nil, lastRoomID = nil, changeSeq = 0 },
         furnIndex      = { setRooms = {}, roomLayouts = {} },  -- [setID]={[roomID]=true} / [roomID]={[layoutID]=true}
+        blueprints     = NewBlueprintsSession(),  -- Blueprints tab server-derived slice (12.1)
     }
 end
 
@@ -1095,6 +1118,8 @@ local function EnsureSession(state)
     state.session.zone      = state.session.zone      or NewZoneState()
     state.session.catalog   = state.session.catalog   or NewSessionCatalog()
     state.session.lumber    = state.session.lumber    or NewLumberSession()
+    state.session.blueprints    = state.session.blueprints    or NewBlueprintsSession()
+    state.session.ui.blueprints = state.session.ui.blueprints or NewBlueprintsSessionUI()
     -- session.house + session.daily are seeded by NewDefaultSession; EnsureSession
     -- does not need or-guards for them (strict reads from here forward).
 end
@@ -1193,6 +1218,14 @@ local function EnsureStateShape(state)
     -- Recent Activity (HDG parity). boundary: SV migration -- guarantees the
     -- slice for saves created before edit-session history existed.
     state.account.recentActivity = state.account.recentActivity or NewRecentActivity()
+    -- Blueprints (12.1): the pasted-code LIBRARY persists (codes + their type
+    -- tags + player labels, keyed by shareCode). Manifests stay session -- they
+    -- re-fetch from the server on demand.
+    state.account.blueprints = state.account.blueprints or { labels = {} }  -- exception(boundary): SV migration, versioned data
+    state.account.blueprints.labels      = state.account.blueprints.labels      or {}  -- exception(boundary): SV migration
+    state.account.blueprints.pasted      = state.account.blueprints.pasted      or {}  -- exception(boundary): SV migration
+    state.account.blueprints.pastedTypes = state.account.blueprints.pastedTypes or {}  -- exception(boundary): SV migration
+    state.account.blueprints.factions    = state.account.blueprints.factions    or {}  -- exception(boundary): SV migration (shareCode -> "Alliance"|"Horde")
     state.account.recentActivity.houses = state.account.recentActivity.houses or {}
     state.account.ui.houseTab = state.account.ui.houseTab or NewHouseTabAccountUI()
     state.account.ui.houseTab.enabled         = state.account.ui.houseTab.enabled         or {}
@@ -4480,6 +4513,99 @@ HDG.Actions:Register{ name = "PROJECTS_ROOM_CATALOG_UPDATED",
         rc.entries   = payload.entries   or {}  -- exception(boundary): atomic-replace; empty keeps table shape if payload omits
         rc.changeSeq      = rc.changeSeq + 1
     end }
+
+-- ===== Blueprints tab (12.1) ================================================
+-- All server-derived except SET_LABEL/FORGET (the persisted labels slice).
+-- Reduces are STRICT: the observer is the Blizzard boundary and guards there;
+-- payloads here are internally guaranteed.
+
+HDG.Actions:Register{ name = "BLUEPRINT_AVAILABLE_SET", persists = false,
+    invalidates = { "session.blueprints.available" },
+    reduce = function(state, payload) state.session.blueprints.available = payload.available end }
+
+HDG.Actions:Register{ name = "BLUEPRINT_COLLECTION_RECEIVED", persists = false,
+    invalidates = { "session.blueprints.groups", "session.blueprints.slots" },
+    reduce = function(state, payload)
+        state.session.blueprints.groups = payload.groups
+        state.session.blueprints.slots  = payload.slots
+    end }
+
+HDG.Actions:Register{ name = "BLUEPRINT_CONTENTS_REQUESTED", persists = false,
+    invalidates = { "session.blueprints.manifests" },
+    reduce = function(state, payload)
+        state.session.blueprints.manifests[payload.shareCode] = { status = "pending", requestedAt = payload.requestedAt }
+    end }
+
+HDG.Actions:Register{ name = "BLUEPRINT_CONTENTS_RECEIVED", persists = false,
+    invalidates = { "session.blueprints.manifests", "account.blueprints.factions" },
+    reduce = function(state, payload)
+        -- Stale-target guard: the manifest carries its own targetHouseGUID; if a
+        -- target is selected and this response is for a different one, a newer
+        -- request is in flight -- drop it (latest-wins without request tokens).
+        local sb = state.session.blueprints
+        if sb.targetHouseGUID and payload.raw.targetHouseGUID ~= sb.targetHouseGUID then return end
+        sb.manifests[payload.shareCode] = { status = "received", raw = payload.raw }
+        -- Faction (House/Exterior only) is derived at the observer boundary and
+        -- cached persistently, so the list row stays tinted across reloads.
+        if payload.faction then
+            state.account.blueprints.factions[payload.shareCode] = payload.faction
+        end
+    end }
+
+HDG.Actions:Register{ name = "BLUEPRINT_CONTENTS_FAILED", persists = false,
+    invalidates = { "session.blueprints.manifests" },
+    reduce = function(state, payload)
+        state.session.blueprints.manifests[payload.shareCode] =
+            { status = "failed", reasonCode = payload.reasonCode, timedOut = payload.timedOut }
+    end }
+
+HDG.Actions:Register{ name = "BLUEPRINT_PENDING_TICK", persists = false,
+    invalidates = { "session.blueprints.pendingNow" },
+    reduce = function(state, payload) state.session.blueprints.pendingNow = payload.now end }
+
+HDG.Actions:Register{ name = "BLUEPRINT_SELECT", persists = false,
+    invalidates = { "session.blueprints.selectedCode" },
+    reduce = function(state, payload)
+        state.session.blueprints.selectedCode = payload.shareCode
+    end }
+
+HDG.Actions:Register{ name = "BLUEPRINT_PASTE_ADD", persists = true,
+    invalidates = { "account.blueprints.pasted", "account.blueprints.pastedTypes" },
+    reduce = function(state, payload)
+        local ab = state.account.blueprints
+        if payload.blueprintType then ab.pastedTypes[payload.shareCode] = payload.blueprintType end
+        for i = 1, #ab.pasted do if ab.pasted[i] == payload.shareCode then return end end
+        ab.pasted[#ab.pasted + 1] = payload.shareCode
+    end }
+
+HDG.Actions:Register{ name = "BLUEPRINT_SET_TARGET_HOUSE", persists = false,
+    invalidates = { "session.blueprints.targetHouseGUID" },
+    reduce = function(state, payload) state.session.blueprints.targetHouseGUID = payload.houseGUID end }
+
+HDG.Actions:Register{ name = "BLUEPRINT_SET_LABEL", persists = true,
+    invalidates = { "account.blueprints.labels" },
+    reduce = function(state, payload) state.account.blueprints.labels[payload.shareCode] = payload.label end }
+
+-- SAFETY: HDG-state-only. NEVER calls C_HousingBlueprint.DeleteBlueprint --
+-- Blizzard's real blueprint catalog is never touched. The forget `x` renders
+-- ONLY on pasted rows (controller), so there is no HDG path to delete a saved blueprint.
+HDG.Actions:Register{ name = "BLUEPRINT_FORGET", persists = true,
+    invalidates = { "account.blueprints.pasted", "account.blueprints.pastedTypes",
+                    "account.blueprints.labels", "session.blueprints.selectedCode",
+                    "session.blueprints.manifests" },
+    reduce = function(state, payload)
+        local ab, sb, np = state.account.blueprints, state.session.blueprints, {}
+        for i = 1, #ab.pasted do if ab.pasted[i] ~= payload.shareCode then np[#np + 1] = ab.pasted[i] end end
+        ab.pasted = np
+        ab.pastedTypes[payload.shareCode] = nil
+        ab.labels[payload.shareCode] = nil
+        sb.manifests[payload.shareCode] = nil
+        if sb.selectedCode == payload.shareCode then sb.selectedCode = np[1] end  -- exception(nullable): may be no codes left
+    end }
+
+HDG.Actions:Register{ name = "BLUEPRINT_EXPORT_SUCCESS", persists = false,
+    invalidates = { "session.blueprints.selectedCode" },
+    reduce = function(state, payload) state.session.blueprints.selectedCode = payload.shareCode end }
 
 HDG.Actions:Register{ name = "CATALOG_CATEGORY_TREE_UPDATED",
     persists = false, combatUnsafe = false, 

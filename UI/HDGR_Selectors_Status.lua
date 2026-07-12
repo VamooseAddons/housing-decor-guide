@@ -412,14 +412,14 @@ do
         if node.view and (node.kind == "home" or node.kind == "config" or node.kind == "parent") then
             addCall("nav.isActive_" .. node.view)
         end
-        if node.kind == "parent" and node.children then
+        if node.children then   -- any node with children (parent hubs + the House home node)
             for _, child in ipairs(node.children) do
                 if child.activePath then
                     addCall("nav.isLeafActive_" .. node.view .. "_" .. tostring(child.activeValue))
                 elseif child.view then
                     addCall("nav.isActive_" .. child.view)
                 end
-                if child.gatedBy then addCall(child.gatedBy) end   -- gated child (Debug under Tools)
+                if child.gatedBy then addCall(child.gatedBy) end   -- gated child (Debug under Tools; Blueprints under House)
             end
         end
         if node.gatedBy then addCall(node.gatedBy) end   -- e.g. config.debug gates a gated parent row
@@ -469,9 +469,30 @@ local function _navHeaderNode(node)
 end
 
 local function _navHomeNode(node, state, ctx)
-    return { kind = "navNode", tier = "home", isHome = true, icon = node.icon, label = node.label,
-             active = Selectors:Call("nav.isActive_" .. node.view, state, ctx),
-             click = { kind = "view", view = node.view }, key = "home" }
+    local homeActive = Selectors:Call("nav.isActive_" .. node.view, state, ctx)
+    local home = { kind = "navNode", tier = "home", isHome = true, icon = node.icon, label = node.label,
+                   active = homeActive, click = { kind = "view", view = node.view }, key = "home" }
+    -- 12.1: House carries sub-nav (Blueprints) as indented leaves. The accent
+    -- spine stacks House->child when the section (House view OR a child) is active.
+    if node.children and #node.children > 0 then
+        local sectionActive = homeActive
+        for _, child in ipairs(node.children) do
+            if child.view and Selectors:Call("nav.isActive_" .. child.view, state, ctx) then
+                sectionActive = true
+            end
+        end
+        local children = {}
+        for _, child in ipairs(node.children) do
+            local leaf = _navLeafNode(node.view, child, state, ctx)
+            if leaf then   -- nil when gated out (Blueprints on live: blueprints.available=false)
+                leaf.spine = sectionActive or nil
+                children[#children + 1] = leaf
+            end
+        end
+        home.children = children
+        home.spine = sectionActive or nil
+    end
+    return home
 end
 
 local function _navConfigNode(node, state, ctx)

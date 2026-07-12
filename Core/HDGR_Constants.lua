@@ -14,6 +14,12 @@ HDG.Constants = {
     -- v7 = Furnishings model: crates -> sets, version.rooms -> account.rooms +
     --      layout placements (docs/crate-redesign/10-FINAL-MODEL.md).
     SCHEMA_VERSION = 8,
+    -- 12.1 "Midnight" housing-blueprint APIs (C_HousingBlueprint) exist only on
+    -- build >= 120100. Everything blueprint-related gates on this; false on live
+    -- 12.0.7 so the observer/view/controller declare nothing and the nav child hides.
+    IS_121 = (select(4, GetBuildInfo())) >= 120100,  -- exception(boundary): client build read at file load
+    BLUEPRINT_SLOT_MAX = 50,  -- HousingConsts: 50 blueprints per Bnet account
+    BLUEPRINT_REQUEST_TIMEOUT = 30,  -- s; big manifests take 5-10s, and some requests are silently dropped (no event at all)
     -- Catalog row schema version. Bump when the observer row shape changes.
     -- No migration needed -- catalog is fully re-fetched from C_HousingCatalog on every sweep.
     CATALOG_SCHEMA_VERSION = 3,
@@ -744,6 +750,20 @@ HDG.Constants = {
         PROJECTS_PICKER_SET_SOURCE = "HDGR_PROJECTS_PICKER_SET_SOURCE", -- payload: { source } ("all" | "style:<id>" | "shop:<id>")
         PROJECTS_FURN_TOGGLE_COLLAPSE = "HDGR_PROJECTS_FURN_TOGGLE_COLLAPSE", -- payload: { setID } (fold/unfold a set group in the room detail)
 
+        -- ===== Blueprints tab (12.1; C_HousingBlueprint) =====
+        BLUEPRINT_AVAILABLE_SET       = "HDGR_BLUEPRINT_AVAILABLE_SET",       -- payload: { available }
+        BLUEPRINT_COLLECTION_RECEIVED = "HDGR_BLUEPRINT_COLLECTION_RECEIVED", -- payload: { groups, slots }
+        BLUEPRINT_CONTENTS_REQUESTED  = "HDGR_BLUEPRINT_CONTENTS_REQUESTED",  -- payload: { shareCode, requestedAt }
+        BLUEPRINT_CONTENTS_RECEIVED   = "HDGR_BLUEPRINT_CONTENTS_RECEIVED",   -- payload: { shareCode, raw = HousingBlueprintContentInfo }
+        BLUEPRINT_CONTENTS_FAILED     = "HDGR_BLUEPRINT_CONTENTS_FAILED",     -- payload: { shareCode, reasonCode = Enum.HousingResult }
+        BLUEPRINT_PENDING_TICK        = "HDGR_BLUEPRINT_PENDING_TICK",        -- payload: { now } (observer 1s ticker while pending)
+        BLUEPRINT_PASTE_ADD           = "HDGR_BLUEPRINT_PASTE_ADD",           -- payload: { shareCode, blueprintType? } (persisted pasted-library add)
+        BLUEPRINT_SELECT              = "HDGR_BLUEPRINT_SELECT",              -- payload: { shareCode }
+        BLUEPRINT_SET_TARGET_HOUSE    = "HDGR_BLUEPRINT_SET_TARGET_HOUSE",    -- payload: { houseGUID } (session-scoped "Opaque-N")
+        BLUEPRINT_SET_LABEL           = "HDGR_BLUEPRINT_SET_LABEL",           -- payload: { shareCode, label } (persisted)
+        BLUEPRINT_FORGET              = "HDGR_BLUEPRINT_FORGET",              -- payload: { shareCode } (HDG-state-only; never touches Blizzard's catalog)
+        BLUEPRINT_EXPORT_SUCCESS      = "HDGR_BLUEPRINT_EXPORT_SUCCESS",      -- payload: { shareCode }
+
         -- ===== Projects: shipping crates =====
         -- Whole-house manifest snapshot. Controller builds the record; reducer just writes it.
         SHIPPING_CRATE_PACK        = "HDGR_SHIPPING_CRATE_PACK",        -- payload: { shipID, record }
@@ -791,6 +811,29 @@ HDG.Constants = {
         },
     },
 }
+
+-- 12.1-only Blueprints tab: insert into TABS only on a 12.1 client. A TABS
+-- entry generates a chrome-strip button AND makes the view resolvable via
+-- persisted account.ui.view -- neither may exist on live, or a PTR tester's
+-- saved nav state strands them on a dead panel after logging into 12.0.7.
+if HDG.Constants.IS_121 then
+    for i, tab in ipairs(HDG.Constants.TABS) do
+        if tab.view == "removalist" then
+            table.insert(HDG.Constants.TABS, i + 1, { view = "projectsBlueprints", label = "Blueprints" })
+            break
+        end
+    end
+    -- Matching nav child: Blueprints is sub-nav UNDER the House home node (the
+    -- 12.1 headline housing feature). test_nav_tree cross-checks every nav view
+    -- against TABS, so the TABS entry above and this child insert together or not at all.
+    for _, node in ipairs(HDG.Constants.NAV_TREE) do
+        if node.view == "houseTab" then
+            node.children = node.children or {}
+            node.children[#node.children + 1] = { label = "Blueprints", view = "projectsBlueprints", gatedBy = "blueprints.available" }
+            break
+        end
+    end
+end
 
 -- ===== Source-kind master table =====
 -- Canonical source-of-truth for source/gate kinds. Priority-ordered (most-binding first).
