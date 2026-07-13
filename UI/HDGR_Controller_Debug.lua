@@ -285,7 +285,7 @@ local function _wireLayoutDescriber(rootFrame)
     local input = HDG.UI.W(rootFrame, "debugPanel.layoutInput")
     local function run()
         local viewName = input and input.GetText and input:GetText() or ""
-        viewName = viewName:gsub("^%s+", ""):gsub("%s+$", "")
+        viewName = HDG.Format.Trim(viewName)
         if viewName == "" then viewName = "styles" end
         local text = HDG.Layout:DescribeView(viewName)
         local dialog = HDG.UI:CopyDialog()

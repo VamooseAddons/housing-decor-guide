@@ -16,11 +16,7 @@ local reagentInfo, reagentName, expansionShort
 -- English name is the cold-load placeholder. Matches old HDG's GetLocalizedName "prefer WoW API
 -- over hardcoded DB name." Every selector calling this MUST read "session.itemNames.names" so the
 -- async resolve (ITEM_INFO_RESOLVED) re-fires it (sweep resolver-facade contract enforces this).
-local function _localName(itemID, baked)
-    if not itemID then return baked or "?" end
-    local name, resolved = HDG.ItemNameResolver:ResolveName(itemID)
-    return (resolved and name) or baked or name
-end
+local _localName = HDG.Format.LocalItemName  -- hygiene A16
 
 -- ---------- Filter state mirrors ---------------------------------------------
 Selectors:DefinePath("recipes.searchQuery",      "session.ui.recipes.searchQuery")
@@ -858,10 +854,7 @@ Selectors:Register("recipes.craftTheseRows", {
                 craftableState = e.craftableState,
             }
         end
-        table.sort(out, function(a, b)
-            if a.name == b.name then return a.itemID < b.itemID end
-            return a.name < b.name
-        end)
+        table.sort(out, HDG.TableUtils.ByNameThenItemID)
         return out
     end,
 })
@@ -1133,22 +1126,6 @@ Selectors:Register("recipes.selected.profession", {
         return r and r.profession or ""
     end,
 })
-Selectors:Register("recipes.selected.expansion", {
-    calls = {"recipes.selectedRecipe"},
-    fn = function(state, ctx)
-        local r = Selectors:Call("recipes.selectedRecipe", state, ctx)
-        return r and r.expansion or ""
-    end,
-})
-Selectors:Register("recipes.selected.itemIDLabel", {
-    calls = {"recipes.selectedRecipe"},
-    fn = function(state, ctx)
-        local r = Selectors:Call("recipes.selectedRecipe", state, ctx)
-        if not r then return "" end
-        if r.itemID then return "itemID: " .. tostring(r.itemID) end
-        return "recipeID: " .. tostring(r.recipeID)
-    end,
-})
 
 -- ---------- Queue passthrough + aggregates ------------------------------------
 Selectors:DefinePath("recipes.queue", "account.craft.queue")
@@ -1373,10 +1350,7 @@ local function emitByRecipeGroups(queue, groups)
                     need   = need,
                 }
             end
-            table.sort(sorted, function(a, b)
-                if a.name == b.name then return a.itemID < b.itemID end
-                return a.name < b.name
-            end)
+            table.sort(sorted, HDG.TableUtils.ByNameThenItemID)
             for _, r in ipairs(sorted) do
                 local have = counts[r.itemID] or 0  -- exception(boundary): sparse bag map
                 local bag, bank, warband = bo:GetSplitWithVariants(r.itemID)

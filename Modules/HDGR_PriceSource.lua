@@ -200,22 +200,6 @@ function P:RefreshAddonAvailability()
     })
 end
 
--- Bulk: sum total price for a list of {id, qty} pairs.
-function P:CalculateTotalPrice(materials)
-    local total, withPrice, withoutPrice = 0, 0, 0
-    for _, mat in ipairs(materials or {}) do
-        local id = mat.id or mat.itemID
-        local p  = self:GetItemPrice(id)
-        if p then
-            total = total + p * (mat.qty or 1)
-            withPrice = withPrice + 1
-        else
-            withoutPrice = withoutPrice + 1
-        end
-    end
-    return total, withPrice, withoutPrice
-end
-
 -- ===== Direct AH scan state machine ========================================
 -- C_AuctionHouse browse-query pump. All cache writes flow through Store
 -- actions; the module orchestrates the AH events.
@@ -231,23 +215,6 @@ local scan = {
 
 function P:IsAHOpen()
     return _G.AuctionHouseFrame and _G.AuctionHouseFrame:IsShown() and true or false
-end
-
-function P:IsScanInProgress() return scan.active end
-
-function P:GetDirectCacheCount()
-    local cache = HDG.Store:GetState().account.prices.directCache
-    local n = 0
-    for _ in pairs(cache) do n = n + 1 end
-    return n
-end
-
-function P:GetDirectCacheTime()
-    return HDG.Store:GetState().account.prices.directCacheTime
-end
-
-function P:ClearDirectCache()
-    HDG.Store:Dispatch({ type = HDG.Constants.ACTIONS.PRICES_DIRECT_CACHE_CLEARED })
 end
 
 local function processBatch(results)

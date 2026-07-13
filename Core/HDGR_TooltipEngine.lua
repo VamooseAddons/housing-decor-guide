@@ -127,6 +127,41 @@ local function resolveDef(widget, def)
 end
 
 -- Render a resolved def to GameTooltip.
+-- Custom extraLines block appended below the Blizzard body. Per-line shape:
+-- a string wraps; a table carries optional per-channel colors (default white)
+-- and a `right` value switch (AddDoubleLine label|value vs plain AddLine, wrap
+-- default-on). Intentional API contract, not defensive drift.
+local function _renderTooltipExtraLines(tooltip, lines)
+    for _, line in ipairs(lines) do
+        if type(line) == "string" then
+            tooltip:AddLine(_loc(line), 1, 1, 1, true)
+        elseif type(line) == "table" and line.right ~= nil then
+            tooltip:AddDoubleLine(_loc(line.text or ""), _loc(line.right),
+                line.r or 1, line.g or 1, line.b or 1,
+                line.rr or 1, line.rg or 1, line.rb or 1)
+        elseif type(line) == "table" then
+            tooltip:AddLine(_loc(line.text or ""),
+                line.r or 1, line.g or 1, line.b or 1,
+                line.wrap ~= false)  -- exception(optional): tooltip line.wrap absent = default-on per extraLines protocol
+        end
+    end
+end
+
+-- LEGACY textFn shape: whole-def function form is preferred (entire def dynamic,
+-- not just text). Kept for backward-compat; DELETE when no call sites remain.
+local function _renderTooltipLegacyTextFn(tooltip, widget, textFn)
+    local dyn = textFn(widget)   -- strict (ADR-042): internal registered code, fail loud
+    if type(dyn) == "string" then
+        tooltip:AddLine(dyn, 1, 1, 1, true)
+    elseif type(dyn) == "table" then
+        for _, line in ipairs(dyn) do
+            if type(line) == "string" then
+                tooltip:AddLine(line, 1, 1, 1, true)
+            end
+        end
+    end
+end
+
 local function renderTooltip(widget, t)
     local tooltip = _G.GameTooltip                                            -- exception(boundary): Blizzard global
     if not tooltip then return end
@@ -141,54 +176,10 @@ local function renderTooltip(widget, t)
         tooltip:SetHyperlink(t.hyperlink)
     end
 
-    if t.title then
-        tooltip:AddLine(_loc(t.title))
-    end
-    if t.body then
-        tooltip:AddLine(_loc(t.body), 1, 1, 1, true)   -- wrap=true
-    end
-
-    if t.extraLines then
-        for _, line in ipairs(t.extraLines) do
-            if type(line) == "string" then
-                tooltip:AddLine(_loc(line), 1, 1, 1, true)
-            elseif type(line) == "table" then
-                -- Per-line color channels are optional (default white); wrap
-                -- defaults to true; author opts out with wrap = false.
-                -- Intentional API contract, not defensive drift.
-                if line.right ~= nil then
-                    -- One line shape: a `right` value is the only switch. With it,
-                    -- two-column via AddDoubleLine (label | value); without it, a
-                    -- plain AddLine. left colors = r/g/b; right colors = rr/rg/rb.
-                    tooltip:AddDoubleLine(_loc(line.text or ""), _loc(line.right),
-                        line.r or 1, line.g or 1, line.b or 1,
-                        line.rr or 1, line.rg or 1, line.rb or 1)
-                else
-                    tooltip:AddLine(_loc(line.text or ""),
-                        line.r or 1, line.g or 1, line.b or 1,
-                        line.wrap ~= false)  -- exception(optional): tooltip line.wrap absent = default-on per extraLines protocol
-                end
-            end
-        end
-    end
-
-    -- textFn: LEGACY shape. Function-form defs are preferred (entire def is
-    -- dynamic, not just text). Kept for backward-compat; deprecate when
-    -- no remaining call sites use it.
-    if t.textFn then
-        local dyn = t.textFn(widget)   -- strict (ADR-042): internal registered code, fail loud
-        if dyn then
-            if type(dyn) == "string" then
-                tooltip:AddLine(dyn, 1, 1, 1, true)
-            elseif type(dyn) == "table" then
-                for _, line in ipairs(dyn) do
-                    if type(line) == "string" then
-                        tooltip:AddLine(line, 1, 1, 1, true)
-                    end
-                end
-            end
-        end
-    end
+    if t.title then tooltip:AddLine(_loc(t.title)) end
+    if t.body  then tooltip:AddLine(_loc(t.body), 1, 1, 1, true) end   -- wrap=true
+    if t.extraLines then _renderTooltipExtraLines(tooltip, t.extraLines) end
+    if t.textFn     then _renderTooltipLegacyTextFn(tooltip, widget, t.textFn) end
 
     tooltip:Show()
 end
@@ -247,9 +238,3 @@ function TE:Hide()
 end
 
 -- ===== Diagnostics ========================================================
-
--- Reset the hover counter. Useful when measuring before/after for a specific
--- interaction (open a tab, hover N widgets, /run print(HDG.TooltipEngine._enterCount)).
-function TE:ResetDiagnostics()
-    TE._enterCount = 0
-end

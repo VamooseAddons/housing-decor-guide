@@ -168,31 +168,6 @@ Selectors:Register("config.debug", {
     end,
 })
 
--- Zone Scanner config readers. Thin strict-reads; checkboxes bind directly.
-Selectors:Register("config.zoneScannerEnabled", {
-    reads = {"account.config.zoneScannerEnabled"},
-    fn = function(state, ctx)
-        return state.account.config.zoneScannerEnabled == true
-    end,
-})
-Selectors:Register("config.zoneScannerPopup", {
-    reads = {"account.config.zoneScannerPopup"},
-    fn = function(state, ctx)
-        return state.account.config.zoneScannerPopup == true
-    end,
-})
-Selectors:Register("config.zoneScannerChat", {
-    reads = {"account.config.zoneScannerChat"},
-    fn = function(state, ctx)
-        return state.account.config.zoneScannerChat == true
-    end,
-})
-Selectors:Register("config.zoneScannerSound", {
-    reads = {"account.config.zoneScannerSound"},
-    fn = function(state, ctx)
-        return state.account.config.zoneScannerSound == true
-    end,
-})
 
 Selectors:Register("config.theme", {
     reads = {"account.config.scheme"},
@@ -271,30 +246,7 @@ Selectors:Register("config.themeMenuItems", {
     end,
 })
 
--- Bare locale value for dropdown binding.current. Empty string -> enUS fallback.
-Selectors:Register("config.locale", {
-    reads = {"account.config.locale"},
-    fn    = function(state)
-        local v = state.account.config.locale
-        return (v ~= nil and v ~= "") and v or "enUS"
-    end,
-})
 
--- Locale menu items. Future locales register via HDG.Locale:Register("xxXX", {...}).
-Selectors:Register("config.localeMenuItems", {
-    reads = {},
-    fn = function(state, ctx)
-        local out = {}
-        local names = {}
-        for loc in pairs(HDG.Locale._tables) do names[#names + 1] = loc end
-        table.sort(names)
-        for _, loc in ipairs(names) do
-            out[#out + 1] = { value = loc, text = loc }
-        end
-        if #out == 0 then out[#out + 1] = { value = "enUS", text = "enUS" } end
-        return out
-    end,
-})
 
 -- ============================================================================
 -- Chrome (tab strip) selectors
@@ -308,16 +260,6 @@ Selectors:Register("chrome.activeTab", {
         return HDG.LayoutConfig.window.defaultView or "decor"
     end,
 })
-
-for _, tab in ipairs(HDG.Constants.TABS or {}) do
-    local captured = tab.view
-    Selectors:Register("chrome.isTabActive_" .. captured, {
-        calls = {"chrome.activeTab"},
-        fn = function(state, ctx)
-            return Selectors:Call("chrome.activeTab", state, ctx) == captured
-        end,
-    })
-end
 
 -- Essence of Lumber tracker (chrome badge + cross-character hover). Sums the
 -- per-char snapshots into an account-wide total -- soulbound means it can't be

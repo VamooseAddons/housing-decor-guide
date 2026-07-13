@@ -1,3 +1,20 @@
+## [3.14.1] - 2026-07-13 (July 2026)
+
+### Changed
+- Blueprints: a UX review pass over the whole tab. The action buttons grey out until a blueprint is selected, and an empty tab now says what to do ("Paste a share code, or pick a blueprint from your catalog") instead of showing a blank panel. The fit verdict is a proper badge (green when a build fits, red with the game's reason when it doesn't). The house picker now always names the house the numbers were computed against, even before you touch it. Content group headers turn amber when they contain missing items, so scrolling the group bars alone shows where the gaps are. The guidance line moved above the action buttons and a small "Rename:" caption marks the rename box.
+- Blueprints: the missing count shown in the verdict and item tally now counts only items that can actually be acquired (decor and dyes) -- locked rooms, fixtures, and house types no longer inflate the number that Route to Shopping promises.
+- Blueprints: Route to Shopping now opens the shopping widget on the routed list, so the result is visible instead of just a status message. Saving a blueprint shows the name you typed immediately instead of flashing the share code while the catalog refreshes.
+- Blueprints: renaming an Automatic Save backup now says backups can't be renamed instead of silently reverting; the remove "x" on every row explains itself on hover (delete from catalog vs forget a pasted code); and the Apply to House tooltip notes that each apply stores an Automatic Save backup that uses a blueprint slot.
+- Blueprints: Route to Shopping is styled as the tab's primary action, and clicking a blueprint that's still loading no longer restarts its request timer (which quietly postponed the "still waiting" notice and the timeout).
+- Blueprints: the budget meters use the game's own icons (rooms / interior decor / exterior decor, same as the Import dialog) with the full budget name on hover; owned items show a checkmark instead of the word "have"; and the Rename box no longer ghosts its placeholder text under a blueprint's actual name.
+- Buttons disabled by the addon (like the Blueprints action row with nothing selected, or Buy All with an empty list) now visibly fade instead of just ignoring clicks.
+- The Blueprints tab's guidance line now reminds you to Save Blueprint after applying if you want the build in your catalog (applying alone doesn't save it).
+
+### Fixed
+- Automatic Save backups no longer count toward your blueprint slot total, so the count matches the game's own dashboard (it was over-reporting by the number of backups you had).
+- Corrected the map and coordinates for several decor vendors whose records pointed at older versions of the NPC, so Show on Map could land on the wrong spot: First Arcanist Thalyssra, Moon Priestess Lasara, Lifecaller Tzadrak, Ta'sam, and Celestine of the Harvest.
+- Zuronar's second weekly rotation zone (Val) now resolves to its map as well, so the vendor's zone shows whichever week it is in.
+
 ## [3.14.0] - 2026-07-12 (July 2026)
 
 ### Added

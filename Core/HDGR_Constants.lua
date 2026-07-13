@@ -1,7 +1,6 @@
 HDG = HDG or {}
 HDG.Constants = {
     ADDON_NAME = "HousingDecorGuide",
-    DB_NAME = "HDG_DB",
     -- HDG->HDGR migration schema. Bumps force the migration to RE-RUN (its steps
     -- are idempotent + self-repairing): v2 = per-char professions skillLevels->skillLines
     -- + name/realm parse; v3 = craft/lumber history ordered oldest-first (newest renders
@@ -18,6 +17,11 @@ HDG.Constants = {
     -- build >= 120100. Everything blueprint-related gates on this; false on live
     -- 12.0.7 so the observer/view/controller declare nothing and the nav child hides.
     IS_121 = (select(4, GetBuildInfo())) >= 120100,  -- exception(boundary): client build read at file load
+    -- Standard icon crop (trims the baked border off square item icons).
+    -- Consumed via SetTexCoord(unpack(HDG.Constants.ICON_CROP)) (hygiene A6).
+    ICON_CROP = { 0.08, 0.92, 0.08, 0.92 },
+    -- Generic bullet/blip dot glyph (tone varies per site; the atlas never does).
+    BULLET_DOT_ATLAS = "PlayerPartyBlip",
     BLUEPRINT_SLOT_MAX = 50,  -- HousingConsts: 50 blueprints per Bnet account
     BLUEPRINT_REQUEST_TIMEOUT = 30,  -- s; big manifests take 5-10s, and some requests are silently dropped (no event at all)
     -- Catalog row schema version. Bump when the observer row shape changes.
@@ -237,8 +241,6 @@ HDG.Constants = {
         { id = 62378, threshold = 10000 }, -- A Few Coupons More
     },
 
-    -- LUMBER_TYPES is an O(1) keyed-by-itemID view built lazily by selectors that need per-ID lookup.
-
     -- Recipe knowledge state -- 4-state enum returned by decor.craftableState.
     -- String values are the wire-format; codebase preference is the constant form.
     RECIPE_STATE = {
@@ -251,18 +253,6 @@ HDG.Constants = {
     -- Closed taxonomy of text-color states. SSoT for collection, recipe-knowledge, and severity states.
     -- Keys match RECIPE_STATE so the same value flows into Theme lookup.
     -- Theme:GetTextStateColor / :GetTextStateColorToken consume these.
-    TEXT_STATE = {
-        Collected        = "collected",
-        Uncollected      = "uncollected",
-        KnownByCharacter = "known_self",
-        KnownByAlt       = "known_alt",
-        UnknownOnAccount = "recipe_exists",
-        NotARecipe       = "not_a_recipe",
-        Success          = "success",
-        Warning          = "warning",
-        Error            = "error",
-        ErrorDeep        = "error_deep",
-    },
 
     -- Atlas per recipe-state for the craft star. Shape AND color both carry the state (colorblind-safe).
     -- All three atlases are line-art over transparent -- SetVertexColor paints cleanly.
@@ -518,7 +508,7 @@ HDG.Constants = {
         -- ===== HouseEditor companion =====
         -- Taint-safe standalone window; parents to HouseEditorFrame for visibility cascade.
         COMPANION_TOGGLE             = "HDGR_COMPANION_TOGGLE",
-        COMPANION_SET_MODE           = "HDGR_COMPANION_SET_MODE",           -- payload: { mode = "styles"|"shopping"|"snapshots"|"themes"|"collections"|"recent" }
+        COMPANION_SET_MODE           = "HDGR_COMPANION_SET_MODE",           -- payload: { mode = "styles"|"rooms"|"snapshots"|"themes"|"collections"|"recent" }
         COMPANION_SELECT_ITEM        = "HDGR_COMPANION_SELECT_ITEM",        -- payload: { itemID = number|string }
         COMPANION_SET_POSITION       = "HDGR_COMPANION_SET_POSITION",       -- payload: { x, y } -- persists window placement
         COMPANION_TOGGLE_COST        = "HDGR_COMPANION_TOGGLE_COST",        -- flips the cost-badge visibility
@@ -543,7 +533,6 @@ HDG.Constants = {
         MOGUL_SET_SUPPLY_SMOOTH      = "HDGR_MOGUL_SET_SUPPLY_SMOOTH",     -- payload: { pct = number }
         MOGUL_SET_SUPPLY_CAP         = "HDGR_MOGUL_SET_SUPPLY_CAP",        -- payload: { n = number }
         -- Frugal mode: bias planner toward low-lumber crafts.
-        MOGUL_SET_FRUGAL             = "HDGR_MOGUL_SET_FRUGAL",            -- payload: { on = bool }
         MOGUL_TOGGLE_FRUGAL          = "HDGR_MOGUL_TOGGLE_FRUGAL",
         -- ===== Goblin sub-view =====
         GOBLIN_SET_PROFESSION        = "HDGR_GOBLIN_SET_PROFESSION",
@@ -587,7 +576,6 @@ HDG.Constants = {
         -- ===== Cross-feature observer dispatches =====
         -- Bulk payload avoids per-item dispatch spam in debug mode.
         ITEM_INFO_RESOLVED         = "HDGR_ITEM_INFO_RESOLVED",         -- payload: { itemIDs = { [n] = itemID }, count = n }
-        QUEST_INFO_RESOLVED        = "HDGR_QUEST_INFO_RESOLVED",        -- payload: { questIDs, titles = { [questID]=title }, count }
         QUEST_STATUS_RESOLVED      = "HDGR_QUEST_STATUS_RESOLVED",      -- payload: { questID = N }
         -- First character to record a completion wins; stored account-wide.
         QUEST_COMPLETION_RECORDED  = "HDGR_QUEST_COMPLETION_RECORDED",  -- payload: { completions = { [questID]={name,class} } }
@@ -609,17 +597,10 @@ HDG.Constants = {
         STYLES_SET_VIEW              = "HDGR_STYLES_SET_VIEW",              -- payload: { view = "landing"|"detail"|"curator"|"smartset"|"import" }
         STYLES_INVALIDATE_CACHE      = "HDGR_STYLES_INVALIDATE_CACHE",
         STYLES_LANDING_SET_FILTER    = "HDGR_STYLES_LANDING_SET_FILTER",    -- payload: { filter = "all"|"style"|"smartset"|"shopping"|"snapshot"|"concept"|"collection" }
-        STYLES_LANDING_SET_SEARCH    = "HDGR_STYLES_LANDING_SET_SEARCH",    -- payload: { text = string }
         STYLES_LANDING_TOGGLE_SECTION = "HDGR_STYLES_LANDING_TOGGLE_SECTION", -- payload: { type = string }
         STYLES_SELECT_COLLECTION     = "HDGR_STYLES_SELECT_COLLECTION",     -- payload: { collectionID = string }
         STYLES_DETAIL_SELECT_ITEM    = "HDGR_STYLES_DETAIL_SELECT_ITEM",    -- payload: { itemID = number }
         STYLES_DETAIL_SET_SEARCH     = "HDGR_STYLES_DETAIL_SET_SEARCH",     -- payload: { text = string }
-        STYLES_DETAIL_SET_VIEWMODE       = "HDGR_STYLES_DETAIL_SET_VIEWMODE",       -- payload: { mode = "list"|"cards"|"split" }
-        STYLES_DETAIL_SET_FILTER         = "HDGR_STYLES_DETAIL_SET_FILTER",         -- payload: { source = "all"|"vendor"|"recipe"|... }
-        STYLES_DETAIL_SET_SUBCAT         = "HDGR_STYLES_DETAIL_SET_SUBCAT",         -- payload: { subcat = "all"|<subcategoryID> }
-        STYLES_INVALIDATE_STYLE          = "HDGR_STYLES_INVALIDATE_STYLE",          -- payload: { collectionID = string }
-        STYLES_CACHE_BUILDING_STARTED    = "HDGR_STYLES_CACHE_BUILDING_STARTED",    -- payload: { collectionID = string? }
-        STYLES_CACHE_BUILDING_FINISHED   = "HDGR_STYLES_CACHE_BUILDING_FINISHED",   -- payload: { collectionID = string?, durationMs = number? }
         STYLES_CURATOR_SET_SOURCE    = "HDGR_STYLES_CURATOR_SET_SOURCE",    -- payload: { mode = "unassigned"|"all"|"style:<id>" }
         STYLES_CURATOR_SET_SEARCH    = "HDGR_STYLES_CURATOR_SET_SEARCH",    -- payload: { text = string } -- card-grid name filter
         STYLES_CURATOR_SET_CATEGORY  = "HDGR_STYLES_CURATOR_SET_CATEGORY",  -- payload: { categoryID = number|nil }

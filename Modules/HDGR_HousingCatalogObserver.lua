@@ -1317,11 +1317,6 @@ function R:GetDecorIDByItemID(itemID)
     return row and row.decorID
 end
 
--- Full decorID -> itemID map (StyleSerializer batch-convert).
-function R:GetItemIDByDecorIDMap()
-    return R.byDecorID  -- [decorID] = row; callers need .itemID field
-end
-
 -- Full itemID -> decorID map (StyleSerializer export, useDecorID=true). Built on demand.
 function R:GetDecorIDByItemIDMap()
     local out = {}
@@ -1350,11 +1345,6 @@ end
 function R:GetVendorsForItem(itemID)
     local row = R:GetRow(itemID)
     return row and row.vendors
-end
-
-function R:GetFactionGateForItem(itemID)
-    local row = R:GetRow(itemID)
-    return row and row.factionGate
 end
 
 function R:GetCategoryForItem(itemID)

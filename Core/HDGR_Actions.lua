@@ -5,8 +5,9 @@
 -- combatUnsafe flags) -- declared where the domain lives. Boot merges these
 -- into the action meta (Init.BuildActionMeta) with a duplicate-source error,
 -- and Store:_RawDispatch is a pure registry lookup: resolve invalidation
--- from the entry, run its reduce, notify. ALL 258 actions are registered
--- blocks; the old 240-branch elseif chain is gone.
+-- from the entry, run its reduce, notify. EVERY action in Constants.ACTIONS
+-- is a registered block (Actions:Register reducers + a handful of signal-only
+-- registrations via Resolver:Register); the old giant elseif chain is gone.
 --
 -- The closed taxonomy survives: Register validates the name against
 -- Constants.ACTIONS, so a typo'd registration is a load-time error exactly

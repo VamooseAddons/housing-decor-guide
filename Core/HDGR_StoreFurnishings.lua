@@ -72,83 +72,75 @@ function SF.ScrubFossilPlacements(state)
     if (acct.schemaVersion or 1) == 7 then acct.schemaVersion = 8 end
 end
 
-local function MigrateToFurnishings(state)
-    local acct = state.account
-    if (acct.schemaVersion or 1) >= 7 then return end   -- v7 fossils handled shape-based by ScrubFossilPlacements at hydrate
-    local p = acct.projects
+local function _sortedKeys(t)
+    local ks = {}
+    for k in pairs(t or {}) do ks[#ks + 1] = k end
+    table.sort(ks)
+    return ks
+end
 
-    local function sortedKeys(t)
-        local ks = {}
-        for k in pairs(t or {}) do ks[#ks + 1] = k end
-        table.sort(ks)
-        return ks
-    end
-    local function mintRoom(rec)
-        acct.roomSeq = acct.roomSeq + 1
-        local id = "room:" .. acct.roomSeq
-        acct.rooms[id] = {
-            id = id, name = rec.name, shape = rec.shape,
-            furnishingSetIDs = {},   -- v8: lineage lives on placements, not rooms
-            createdAt = rec.createdAt or 0,
-        }
-        return id
-    end
-    local function mintSet(name, decor, isLocal, ownerRoom, createdAt)
-        acct.furnishingSetSeq = acct.furnishingSetSeq + 1
-        local id = "set:" .. acct.furnishingSetSeq
-        local items = {}
-        for i, d in ipairs(decor or {}) do items[i] = { id = d.id, count = d.count or 1 } end
-        acct.furnishingSets[id] = {
-            id = id, name = name, items = items,
-            isLocal = isLocal or nil, ownerRoom = ownerRoom,
-            createdAt = createdAt or 0,
-        }
-        return id
-    end
-    -- Order-insensitive decor equality (crates dedupe by itemID by construction).
-    local function decorEqual(a, b)
-        local m = {}
-        for _, d in ipairs(a or {}) do m[d.id] = d.count or 1 end
-        for _, d in ipairs(b or {}) do
-            if m[d.id] ~= (d.count or 1) then return false end
-            m[d.id] = nil
-        end
-        return next(m) == nil
-    end
-    local function placementFor(legacyID, rec, roomID)
-        local parsed = HDG.Projects.IDs.parsePath(legacyID)
-        local cell   = rec.cell or {}   -- exception(boundary): pre-cell SV rooms (v1-era)
-        return {
-            floor    = (parsed and parsed.floor) or 1,
-            x        = cell.x or 0,
-            y        = cell.y or 0,
-            rotation = cell.rotation or 0,
-            -- v8: every placement is slot-keyed and self-describing.
-            shape      = rec.shape,
-            capturedID = legacyID,
-            roomID     = roomID,
-        }
-    end
+local function _mintRoom(acct, rec)
+    acct.roomSeq = acct.roomSeq + 1
+    local id = "room:" .. acct.roomSeq
+    acct.rooms[id] = {
+        id = id, name = rec.name, shape = rec.shape,
+        furnishingSetIDs = {},   -- v8: lineage lives on placements, not rooms
+        createdAt = rec.createdAt or 0,
+    }
+    return id
+end
 
-    acct.rooms            = acct.rooms            or {}
-    acct.roomSeq          = acct.roomSeq          or 0
-    acct.furnishingSets   = acct.furnishingSets   or {}
-    acct.furnishingSetSeq = acct.furnishingSetSeq or 0
-    p.layouts             = p.layouts             or {}
+local function _mintSet(acct, name, decor, isLocal, ownerRoom, createdAt)
+    acct.furnishingSetSeq = acct.furnishingSetSeq + 1
+    local id = "set:" .. acct.furnishingSetSeq
+    local items = {}
+    for i, d in ipairs(decor or {}) do items[i] = { id = d.id, count = d.count or 1 } end
+    acct.furnishingSets[id] = {
+        id = id, name = name, items = items,
+        isLocal = isLocal or nil, ownerRoom = ownerRoom,
+        createdAt = createdAt or 0,
+    }
+    return id
+end
 
-    -- Crates indexed (versionID -> legacy roomID -> crate) + orphans.
+-- Order-insensitive decor equality (crates dedupe by itemID by construction).
+local function _decorEqual(a, b)
+    local m = {}
+    for _, d in ipairs(a or {}) do m[d.id] = d.count or 1 end
+    for _, d in ipairs(b or {}) do
+        if m[d.id] ~= (d.count or 1) then return false end
+        m[d.id] = nil
+    end
+    return next(m) == nil
+end
+
+local function _placementFor(legacyID, rec, roomID)
+    local parsed = HDG.Projects.IDs.parsePath(legacyID)
+    local cell   = rec.cell or {}   -- exception(boundary): pre-cell SV rooms (v1-era)
+    return {
+        floor    = (parsed and parsed.floor) or 1,
+        x        = cell.x or 0,
+        y        = cell.y or 0,
+        rotation = cell.rotation or 0,
+        shape      = rec.shape,   -- v8: every placement is slot-keyed and self-describing
+        capturedID = legacyID,
+        roomID     = roomID,
+    }
+end
+
+-- Phase: index crates (versionID -> legacy roomID -> crate) + orphans. A crate
+-- whose version record is GONE (partial v1->v2 migration, hand-edited SV) would
+-- fall through the version sweep and be purged silently -- route it to the
+-- orphan path instead (release-18 audit #1). Duplicate parent keeps both (#10).
+local function _indexCrates(acct, p)
     local cratesByVid, orphanCrates = {}, {}
-    for _, cid in ipairs(sortedKeys(acct.collections)) do
+    for _, cid in ipairs(_sortedKeys(acct.collections)) do
         local coll = acct.collections[cid]
         if coll.type == "crate" then
-            -- A crate whose version record is GONE (partial v1->v2 migration,
-            -- hand-edited SV) would fall through the version sweep and be
-            -- purged silently -- route it to the orphan path instead (its
-            -- decor becomes a library set; release-18 audit #1).
             if coll.parent and coll.versionID and (p.versions or {})[coll.versionID] then
                 cratesByVid[coll.versionID] = cratesByVid[coll.versionID] or {}
                 if cratesByVid[coll.versionID][coll.parent] then
-                    orphanCrates[#orphanCrates + 1] = coll   -- duplicate parent: keep both (audit #10)
+                    orphanCrates[#orphanCrates + 1] = coll
                 else
                     cratesByVid[coll.versionID][coll.parent] = coll
                 end
@@ -157,19 +149,57 @@ local function MigrateToFurnishings(state)
             end
         end
     end
+    return cratesByVid, orphanCrates
+end
 
-    -- Live versions are canonical for room identity (10-FINAL-MODEL §Migration).
+-- Phase: Live versions are canonical for room identity (10-FINAL-MODEL Migration).
+local function _computeLiveVids(p)
     local liveVids = {}
-    for _, houseID in ipairs(sortedKeys(p.houses)) do
+    for _, houseID in ipairs(_sortedKeys(p.houses)) do
         local h = p.houses[houseID]
         if h.currentVersionID then liveVids[h.currentVersionID] = true end
     end
+    return liveVids
+end
+
+-- Phase: orphan crates -> unequipped LIBRARY sets named from provenance.
+local function _migrateOrphanCrates(acct, orphanCrates)
+    for _, crate in ipairs(orphanCrates) do
+        local name = crate.name
+        if not name or name == "" or name == "Crate" or name == "New crate" then
+            name = crate.lastKnownRoomName or "Saved Furnishings"
+        end
+        _mintSet(acct, name, crate.decor, false, nil, crate.createdAt)
+    end
+end
+
+-- Phase: retire crate records (styles etc. untouched) + the version container.
+local function _retireCrateRecords(acct, p)
+    for cid, coll in pairs(acct.collections) do
+        if coll.type == "crate" then acct.collections[cid] = nil end
+    end
+    p.versions = nil
+end
+
+local function MigrateToFurnishings(state)
+    local acct = state.account
+    if (acct.schemaVersion or 1) >= 7 then return end   -- v7 fossils handled shape-based by ScrubFossilPlacements at hydrate
+    local p = acct.projects
+
+    acct.rooms            = acct.rooms            or {}
+    acct.roomSeq          = acct.roomSeq          or 0
+    acct.furnishingSets   = acct.furnishingSets   or {}
+    acct.furnishingSetSeq = acct.furnishingSetSeq or 0
+    p.layouts             = p.layouts             or {}
+
+    local cratesByVid, orphanCrates = _indexCrates(acct, p)
+    local liveVids = _computeLiveVids(p)
 
     local roomByLegacy      = {}   -- legacyID -> canonical persistent roomID (legacy IDs embed houseID -> globally unique)
     local liveDecorByLegacy = {}   -- legacyID -> the Live crate's decor (what-if dedup evidence)
 
     local function attachLocalSet(roomID, crate)
-        local sid = mintSet(crate.name or "Crate", crate.decor, true, roomID, crate.createdAt)
+        local sid = _mintSet(acct, crate.name or "Crate", crate.decor, true, roomID, crate.createdAt)
         table.insert(acct.rooms[roomID].furnishingSetIDs, sid)
     end
 
@@ -179,13 +209,13 @@ local function MigrateToFurnishings(state)
         local layout = { houseID = v.houseID, name = v.name, createdAt = v.createdAt,
                          basedOn = v.basedOn, placements = {}, slotSeq = 0 }
         local crates = cratesByVid[vid] or {}
-        for _, legacyID in ipairs(sortedKeys(v.rooms)) do
+        for _, legacyID in ipairs(_sortedKeys(v.rooms)) do
             local rec, crate = v.rooms[legacyID], crates[legacyID]
             local roomID
             if isLive or not roomByLegacy[legacyID] then
                 -- Canonical mint (Live first; what-if rooms with no Live
                 -- counterpart -- e.g. what-if-only designs -- mint normally).
-                roomID = mintRoom(rec)
+                roomID = _mintRoom(acct, rec)
                 roomByLegacy[legacyID] = roomID
                 if crate then
                     attachLocalSet(roomID, crate)
@@ -193,9 +223,9 @@ local function MigrateToFurnishings(state)
                 end
             else
                 local canonical = roomByLegacy[legacyID]
-                if crate and not decorEqual(crate.decor, liveDecorByLegacy[legacyID]) then
+                if crate and not _decorEqual(crate.decor, liveDecorByLegacy[legacyID]) then
                     -- Furnishings differ from Live -> room VARIANT carrying its own local set.
-                    roomID = mintRoom(rec)
+                    roomID = _mintRoom(acct, rec)
                     acct.rooms[roomID].name =
                         ((rec.name and rec.name ~= "" and rec.name) or "Design") .. " (What-if variant)"
                     attachLocalSet(roomID, crate)
@@ -205,30 +235,18 @@ local function MigrateToFurnishings(state)
             end
             -- v8: slot-keyed; the room rides as a TAG.
             layout.slotSeq = layout.slotSeq + 1
-            layout.placements["slot:" .. layout.slotSeq] = placementFor(legacyID, rec, roomID)
+            layout.placements["slot:" .. layout.slotSeq] = _placementFor(legacyID, rec, roomID)
         end
         p.layouts[vid] = layout
     end
 
     -- Live versions first (canonical identity), then the rest.
-    local allVids = sortedKeys(p.versions)
+    local allVids = _sortedKeys(p.versions)
     for _, vid in ipairs(allVids) do if liveVids[vid] then migrateVersion(vid) end end
     for _, vid in ipairs(allVids) do if not liveVids[vid] then migrateVersion(vid) end end
 
-    -- Orphans -> unequipped LIBRARY sets named from provenance.
-    for _, crate in ipairs(orphanCrates) do
-        local name = crate.name
-        if not name or name == "" or name == "Crate" or name == "New crate" then
-            name = crate.lastKnownRoomName or "Saved Furnishings"
-        end
-        mintSet(name, crate.decor, false, nil, crate.createdAt)
-    end
-
-    -- Retire crate records (styles etc. untouched) + the version container.
-    for cid, coll in pairs(acct.collections) do
-        if coll.type == "crate" then acct.collections[cid] = nil end
-    end
-    p.versions = nil
+    _migrateOrphanCrates(acct, orphanCrates)
+    _retireCrateRecords(acct, p)
 
     acct.schemaVersion = 8   -- v8: slot-keyed placements; assignment is a tag
 end

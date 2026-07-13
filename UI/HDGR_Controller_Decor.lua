@@ -619,37 +619,10 @@ end
 -- Note editbox: per-keystroke dispatch. Race guard: _lastBoundItemID tracks which item
 -- is displayed; OnTextChanged skips when displayed item doesn't match selection.
 function DecorController:_wireNoteBox(rootFrame)
-    local noteBox = HDG.UI.W(rootFrame, "decorDetailPanel.note")
-    if noteBox and noteBox.SetScript then
-        noteBox._lastBoundItemID = nil
-        if not noteBox._setTextHooked then
-            hooksecurefunc(noteBox, "SetText", function(self)
-                -- HDG.Store + session.ui.decor are guaranteed post-init.
-                self._lastBoundItemID = HDG.Store:GetState().session.ui.decor.selectedItemID  -- exception(false-positive): top-level controller read
-            end)
-            noteBox._setTextHooked = true
-        end
-        noteBox:SetScript("OnTextChanged", function(self, userInput)
-            if not userInput then return end
-            local id = HDG.Store:GetState().session.ui.decor.selectedItemID  -- exception(false-positive): top-level controller read
-            if not id then return end
-            if self._lastBoundItemID ~= nil and self._lastBoundItemID ~= id then   -- item switch in progress
-                return
-            end
-            local text = (self.GetText and self:GetText()) or ""
-            if text == "" then
-                HDG.Store:Dispatch({
-                    type = HDG.Constants.ACTIONS.NOTE_CLEAR,
-                    payload = { itemID = id },
-                })
-            else
-                HDG.Store:Dispatch({
-                    type = HDG.Constants.ACTIONS.NOTE_SET,
-                    payload = { itemID = id, text = text },
-                })
-            end
-        end)
-    end
+    HDG.ControllerHelpers.Mechanics.WireNoteBox(
+        HDG.UI.W(rootFrame, "decorDetailPanel.note"),
+        function() return HDG.Store:GetState().session.ui.decor.selectedItemID end,  -- exception(false-positive): top-level controller read
+        "itemID", "NOTE_CLEAR", "NOTE_SET")
 end
 
 -- Wishlist: adds selected item (npcID nil) to shopping list (surfaces in Wishlist section).

@@ -295,16 +295,9 @@ function WarehouseController:Wire(rootFrame)
     end)
 
     -- Materials search: filters the All Materials scrollbox.
-    local matSearch = HDG.UI.W(rootFrame, "warehouseMaterialsPanel.search")
-    if matSearch and matSearch.SetScript then
-        matSearch:SetScript("OnTextChanged", function(self, userInput)
-            if not userInput then return end
-            HDG.Store:Dispatch({
-                type    = A.RECIPES_SET_WH_MAT_SEARCH,
-                payload = { query = self:GetText() or "" },
-            })
-        end)
-    end
+    HDG.UI.WireTextChanged(HDG.UI.W(rootFrame, "warehouseMaterialsPanel.search"), function(text)
+        HDG.Store:Dispatch({ type = A.RECIPES_SET_WH_MAT_SEARCH, payload = { query = text } })
+    end)
 end
 
 function WarehouseController:Refresh(rootFrame, ctx)

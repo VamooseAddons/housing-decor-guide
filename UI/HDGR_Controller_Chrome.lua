@@ -21,11 +21,8 @@ local function _paintEssence(rootFrame, state)
         -- with a circular mask (HouseTab CircleMaskScalable precedent) so it
         -- sits as a token in the glyph cluster.
         local tex = btn:GetNormalTexture()
-        tex:SetTexCoord(0.08, 0.92, 0.08, 0.92)
-        local mask = btn:CreateMaskTexture()
-        mask:SetAllPoints(tex)
-        mask:SetAtlas("CircleMaskScalable")
-        tex:AddMaskTexture(mask)
+        tex:SetTexCoord(unpack(HDG.Constants.ICON_CROP))
+        HDG.UI.CircleMask(tex)
         local badge = HDG.UI:Label(btn, "", "caption", "RIGHT", { role = "Text" })
         badge:SetPoint("BOTTOMRIGHT", btn, "BOTTOMRIGHT", 2, -1)
         btn._essenceBadge = badge
@@ -54,8 +51,8 @@ function ChromeController:Wire(rootFrame)
 end
 
 function ChromeController:Refresh(rootFrame, ctx)
-    -- Tab active state flows through bindings (chrome.isTabActive_*).
-    -- The essence badge is imperative (count + desaturation).
+    -- The essence badge is imperative (count + desaturation). Tab/view
+    -- navigation state lives in NavController (sidebar), not here.
     _paintEssence(rootFrame, ctx.state)
 end
 

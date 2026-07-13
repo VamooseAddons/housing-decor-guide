@@ -9,11 +9,7 @@ local Selectors = HDG.Selectors
 
 -- Locale-correct display name: resolver (catalog/live API) wins; baked English is the fallback.
 -- Callers MUST read "session.itemNames.names" so the async resolve re-fires them.
-local function _localName(itemID, baked)
-    if not itemID then return baked or "?" end
-    local name, resolved = HDG.ItemNameResolver:ResolveName(itemID)
-    return (resolved and name) or baked or name
-end
+local _localName = HDG.Format.LocalItemName  -- hygiene A16
 
 -- Mogul tab grows to 950px when Goblin sub-view is active AND TSM is the effective
 -- price source. source preference + prices tick so Config changes trigger resize.
@@ -641,28 +637,6 @@ end
 
 -- Knowledge + queue tri-state pill active selectors, auctions toggle.
 do
-    local function activeKnow(target)
-        return function(state)
-            return state.session.ui.mogul.goblin.knowledge == target
-        end
-    end
-    local function activeQueue(target)
-        return function(state)
-            return state.session.ui.mogul.goblin.queue == target
-        end
-    end
-    Selectors:Register("goblin.knowActive_all",
-        { reads = {"session.ui.mogul.goblin.knowledge"}, fn = activeKnow("all")   })
-    Selectors:Register("goblin.knowActive_known",
-        { reads = {"session.ui.mogul.goblin.knowledge"}, fn = activeKnow("known") })
-    Selectors:Register("goblin.knowActive_alt",
-        { reads = {"session.ui.mogul.goblin.knowledge"}, fn = activeKnow("alt")   })
-    Selectors:Register("goblin.queueActive_all",
-        { reads = {"session.ui.mogul.goblin.queue"}, fn = activeQueue("all")  })
-    Selectors:Register("goblin.queueActive_only",
-        { reads = {"session.ui.mogul.goblin.queue"}, fn = activeQueue("only") })
-    Selectors:Register("goblin.queueActive_hide",
-        { reads = {"session.ui.mogul.goblin.queue"}, fn = activeQueue("hide") })
     Selectors:Register("goblin.auctionsActive", {
         reads = {"session.ui.mogul.goblin.auctionsOnly"},
         fn = function(state)

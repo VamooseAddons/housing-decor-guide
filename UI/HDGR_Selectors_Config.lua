@@ -131,13 +131,3 @@ Selectors:Register("config.creditsRows", {
     end,
 })
 
--- ===== Owned auctions stats ================================================
-Selectors:Register("config.ownedAuctionsLabel", {
-    reads = {"account.prices.ownedAuctions"},
-    fn = function(state)
-        local count = 0
-        for _ in pairs(state.account.prices.ownedAuctions) do count = count + 1 end
-        if count == 0 then return "Listings: none" end
-        return string.format("Listings: %d items", count)
-    end,
-})

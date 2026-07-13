@@ -26,10 +26,6 @@ local R = HDG.RecipeKnowledgeScanner
 -- topFilter='crafted'. Keyed by spellID -> profession.
 R._spellIDToProfession = R._spellIDToProfession or {}
 
-function R:GetSpellIDToProfession()
-    return self._spellIDToProfession
-end
-
 -- currentCharKey excluded from altKnown so self's knownRecipes don't OR in.
 
 -- Reset altKnown + build spellID -> itemID reverse lookup. Single pass per computeAltKnown.

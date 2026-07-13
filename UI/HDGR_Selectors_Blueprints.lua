@@ -41,7 +41,10 @@ end
 
 -- The inspector envelope: manifest -> rendered groups with acquisition joins.
 -- nil when nothing is selected; a groupless envelope while pending/failed.
--- missingCount counts ENTRIES with numMissing>0 (filter-independent).
+-- missingCount counts ACQUIRABLE entries (Decor=3/Dye=4) with numMissing>0 --
+-- fixtures/rooms/house types can't be routed or bought, so the number the
+-- verdict shows matches what Route to Shopping actually adds (UX review #5).
+-- Per-group header counts still cover every type.
 Selectors:Register("blueprints.inspector", {
     reads = { "session.blueprints.selectedCode", "session.blueprints.manifests",
               "session.ui.blueprints.missingOnly", "session.ui.blueprints.collapsedGroups",
@@ -59,7 +62,7 @@ Selectors:Register("blueprints.inspector", {
         for _, g in ipairs(m.raw.contentGroups) do
             local items = {}
             for _, e in ipairs(g.entries) do
-                if e.numMissing > 0 then missing = missing + 1 end
+                if e.numMissing > 0 and (g.contentType == 3 or g.contentType == 4) then missing = missing + 1 end
                 if not ui.missingOnly or e.numMissing > 0 then
                     local itemID, srcKind, srcName = _resolveAcq(e)
                     items[#items + 1] = {
@@ -313,10 +316,21 @@ Selectors:Register("blueprints.selectedIsArchitectable", {
 })
 
 
--- Current picker value (dropdown `current` binding).
+-- Current picker value (dropdown `current` binding). Until the player picks a
+-- house explicitly, fall back to the TARGET the server actually computed the
+-- selected manifest against (a no-target request defaults to the current
+-- house) -- so the dropdown always names the house the numbers are for
+-- (UX review #7). Display-only: dispatching a back-fill would re-trigger the
+-- target-change re-fetch and loop.
 Selectors:Register("blueprints.targetHouse", {
-    reads = { "session.blueprints.targetHouseGUID" },
-    fn = function(state) return state.session.blueprints.targetHouseGUID end,
+    reads = { "session.blueprints.targetHouseGUID", "session.blueprints.selectedCode",
+              "session.blueprints.manifests" },
+    fn = function(state)
+        local sb = state.session.blueprints
+        if sb.targetHouseGUID then return sb.targetHouseGUID end
+        local m = sb.selectedCode and sb.manifests[sb.selectedCode]
+        return m and m.raw and m.raw.targetHouseGUID or nil  -- exception(nullable): no manifest / pre-target
+    end,
 })
 
 -- ===== Failure + pending copy (player-facing text is selector-composed) ======
@@ -342,9 +356,10 @@ Selectors:Register("blueprints.failureText", {
     end,
 })
 
--- Count-up pending copy (design: copy-only, no timeout logic; big manifests
--- take 5-10s). Escalates at 15s to point at Check code. Pure: elapsed composes
--- from the tick-dispatched pendingNow, never GetTime().
+-- Count-up pending copy (big manifests take 5-10s). Escalates at 15s; the
+-- observer's ticker sweep flips a dead request to a timedOut failure at
+-- BLUEPRINT_REQUEST_TIMEOUT. Pure: elapsed composes from the tick-dispatched
+-- pendingNow, never GetTime().
 local BP_PENDING_ESCALATE_S = 15
 
 Selectors:Register("blueprints.pendingText", {
@@ -356,7 +371,8 @@ Selectors:Register("blueprints.pendingText", {
         if not m or m.status ~= "pending" then return nil end  -- exception(nullable): not pending
         local elapsed = math.max(0, math.floor(sb.pendingNow - (m.requestedAt or sb.pendingNow)))  -- exception(optional): first render may precede the first tick
         if elapsed >= BP_PENDING_ESCALATE_S then
-            return ("Still waiting (%ds) -- codes that can't be read may never get a reply. Use Check code to retry."):format(elapsed)
+            return ("Still waiting (%ds) -- some codes never get a reply; this gives up at %ds."):format(
+                elapsed, HDG.Constants.BLUEPRINT_REQUEST_TIMEOUT)
         end
         return ("Waiting for the server... (%ds)"):format(elapsed)
     end,
@@ -404,11 +420,20 @@ local function _meterFrac(m)
     return (p > 1) and 1 or p
 end
 
+-- Blizzard's own budget icons (Blizzard_HousingBlueprintContentSummary.xml,
+-- ptr): rooms / interior decor / exterior decor. Icon + numbers, like the
+-- Import dialog; the bar tooltips carry the full budget names.
+local METER_ICON = {
+    room     = "house-room-limit-icon",
+    interior = "house-decor-budget-icon",
+    exterior = "house-decor-exteriorbudget-icon",
+}
+
 local function _meterText(m)
     -- No caption: the bar color carries the state (teal fits / amber at-limit /
     -- red over), and any blocking reason is spelled out in the fit-verdict line.
     if not m then return "" end
-    return m.name .. "  " .. m.label
+    return "|A:" .. METER_ICON[m.key] .. ":14:14|a  " .. m.label
 end
 
 Selectors:Register("blueprints.meterFracRoom", {
@@ -452,11 +477,26 @@ Selectors:Register("blueprints.fitVerdict", {
     end,
 })
 
--- Selected share code verbatim (the copyable read-only editbox).
-Selectors:Register("blueprints.codeText", {
+-- Selection gates: the action row enables only with a selection, and the
+-- blank-state hint shows only without one (UX review #1).
+Selectors:Register("blueprints.hasSelection", {
     reads = { "session.blueprints.selectedCode" },
-    fn = function(state) return state.session.blueprints.selectedCode or "" end,  -- exception(nullable): empty pre-selection
+    fn = function(state) return state.session.blueprints.selectedCode ~= nil end,
 })
+Selectors:Register("blueprints.blankDetail", {
+    reads = { "session.blueprints.selectedCode" },
+    fn = function(state) return state.session.blueprints.selectedCode == nil end,
+})
+-- Verdict band shows only when there is a verdict to show (card chrome on an
+-- empty string reads as a stray stripe).
+Selectors:Register("blueprints.hasVerdict", {
+    calls = { "blueprints.fitVerdict" },
+    fn = function(state, ctx)
+        local v = Selectors:Call("blueprints.fitVerdict", state, ctx)
+        return v ~= nil and v ~= ""
+    end,
+})
+
 
 -- Pending/failure/paste-error line under the header (one label; nil states
 -- compose to ""). Paste errors outrank the manifest states -- the player just

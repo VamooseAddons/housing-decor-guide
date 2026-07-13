@@ -21,26 +21,13 @@ local function _activeRooms(state)
 end
 
 -- ===== keyed mark/sweep pools ==============================================
-local function _beginPass(host, pool)
-    local p = host[pool]
-    if p then for _, f in pairs(p) do f._used = false end end
-end
-local function _endPass(host, pool)
-    local p = host[pool]
-    if p then for _, f in pairs(p) do if not f._used then f:Hide() end end end
-end
-local function _acquire(host, pool, key, factory)
-    host[pool] = host[pool] or {}
-    local f = host[pool][key]
-    if not f then f = factory(host); host[pool][key] = f end
-    f._used = true
-    return f
-end
+local _beginPass = HDG.UI.BeginPoolPass   -- hygiene A8: shared keyed mark/sweep pool
+local _endPass   = HDG.UI.EndPoolPass
+local _acquire   = HDG.UI.AcquirePooled
 
 -- ===== frame factories (built once, reused) ================================
 local function _tileFactory(host)
     local tile = CreateFrame("Button", nil, host, "BackdropTemplate")
-    tile:RegisterForClicks("LeftButtonUp", "RightButtonUp")
     local icon = tile:CreateTexture(nil, "ARTWORK")   -- shape art; CENTERED + sized per-render to the
     icon:SetPoint("CENTER", tile, "CENTER")            -- CANONICAL footprint so SetRotation maps a non-square
     icon:SetAlpha(0.9)                                 -- shape (hallway) into the rotated frame without stretch
@@ -51,15 +38,13 @@ local function _tileFactory(host)
     label:SetJustifyH("CENTER")
     label:SetWordWrap(true)   -- wraps within the tile width (set per-render) -> never overflows onto neighbours
     tile._label = label
-    tile:SetScript("OnClick", function(self, button)
-        if button == "RightButton" then
-            C:_OnRoomMenu(self)   -- E6: move/rotate/remove (every room in the active version is editable)
-            return
-        end
+    HDG.UI.WireLeftRightClick(tile, function(self)
         HDG.Store:Dispatch({
             type = HDG.Constants.ACTIONS.UI_SET_TRANSIENT,
             payload = { view = "projects", key = "selectedRoomID", value = self._roomID },
         })
+    end, function(self)
+        C:_OnRoomMenu(self)   -- E6: move/rotate/remove (every room in the active version is editable)
     end)
     -- E4-drag: reposition via StartMoving -> snap to cell on stop.
     -- Every room is repositionable. Overlaps allowed on drop (E5 flags them).

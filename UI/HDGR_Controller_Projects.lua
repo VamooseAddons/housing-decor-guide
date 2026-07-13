@@ -35,13 +35,13 @@ local function _branchWhatIf(houseID, basedOn)
     for _, v in ipairs(tabs) do if not v.isCurrent then n = n + 1 end end
     HDG.Store:Dispatch({ type = A.PROJECTS_CREATE_VERSION, payload = {
         houseID = houseID,   -- versionID minted reducer-side from the counter
-        name = "What-if " .. (n + 1), basedOn = basedOn, createdAt = (time and time()) or 0 } })  -- exception(boundary): time()
+        name = "What-if " .. (n + 1), basedOn = basedOn, createdAt = HDG.ControllerHelpers.Mechanics.Now()} })  -- exception(boundary): time()
     HDG.Log:Success("projects_save", "What-if " .. (n + 1) .. " created (copy of current)")
 end
 local function _deleteWhatIf(houseID, versionID)
     if not (houseID and versionID) then return end
     HDG.Store:Dispatch({ type = A.PROJECTS_DELETE_VERSION,
-        payload = { houseID = houseID, versionID = versionID, ts = (time and time()) or 0 } })  -- exception(boundary): time()
+        payload = { houseID = houseID, versionID = versionID, ts = HDG.ControllerHelpers.Mechanics.Now()} })  -- exception(boundary): time()
     HDG.Log:Info("projects_action", "Design version deleted")
 end
 -- Build + show the version menu: a radio per version (switch on pick), then New / Delete.
@@ -138,7 +138,7 @@ local function _startNewDesign()
     for _, v in ipairs(tabs) do if not v.isCurrent then n = n + 1 end end
     HDG.Store:Dispatch({ type = A.PROJECTS_CREATE_VERSION, payload = {
         houseID = houseID,   -- versionID minted reducer-side from the counter
-        name = "Design " .. (n + 1), basedOn = nil, createdAt = (time and time()) or 0 } })  -- exception(boundary): time()
+        name = "Design " .. (n + 1), basedOn = nil, createdAt = HDG.ControllerHelpers.Mechanics.Now()} })  -- exception(boundary): time()
     _setView("projectsArchitect")
     HDG.Log:Success("projects_save", "New design started for " .. (houseName or "your house"))
 end
@@ -587,7 +587,7 @@ end
 local function _paintFurnHeader(row, ed)
     HDG.UI.applyFontRole(row._nameFs, "caption")
     -- Library groups fold on click; the marker telegraphs it.
-    local marker = ed.isLocal and "" or (ed.collapsed and "+ " or "- ")
+    local marker = ed.isLocal and "" or HDG.UI.CollapsePrefix(ed.collapsed)
     row._nameFs:SetText(marker .. ed.name .. "  (" .. ed.count .. ")")
     row._nameFs:ClearAllPoints()
     row._nameFs:SetPoint("LEFT", row, "LEFT", 8, 0)
@@ -665,12 +665,7 @@ HDG.Rows:Register("projectsFurnRow", {
 -- ===== Assign row ("which room?" offer for an unassigned slot) ==============
 local function _layoutAssignRow(row)
     HDG.UI:EnsureRowChrome(row)
-    row._metaFs = HDG.UI.RowText(row, "caption", "TextDim", "RIGHT")
-    row._metaFs:SetPoint("RIGHT", row, "RIGHT", -8, 0)
-    local name = HDG.UI.RowText(row, "body", "Text", "LEFT")
-    name:SetPoint("LEFT", row, "LEFT", 8, 0)
-    name:SetPoint("RIGHT", row._metaFs, "LEFT", -8, 0)
-    row._nameFs = name
+    HDG.UI.LayoutNameMetaRow(row, { leftInset = 8, gap = 8 })  -- hygiene A10
 end
 
 local function _paintAssignRow(row, ed)
@@ -715,7 +710,7 @@ local function _ensureLocalSet(roomID)
     end
     HDG.Store:Dispatch({ type = A.FURN_SET_CREATE, payload = {
         name = ((room.name and room.name ~= "" and room.name) or "Design") .. " furnishings",
-        isLocal = true, ownerRoom = roomID, ts = (time and time()) or 0 } })  -- exception(boundary): time()
+        isLocal = true, ownerRoom = roomID, ts = HDG.ControllerHelpers.Mechanics.Now()} })  -- exception(boundary): time()
     local sid = HDG.Store:GetState().session.furn.lastSetID  -- exception(false-positive): top-level controller read
     HDG.Store:Dispatch({ type = A.FURN_ROOM_EQUIP, payload = { roomID = roomID, setID = sid } })
     return sid
@@ -746,7 +741,7 @@ local function _forkSelectedSpot()
     local srcID = rec and rec.roomID
     if not (srcID and lid) then return nil end
     HDG.Store:Dispatch({ type = A.FURN_ROOM_DUPLICATE,
-        payload = { roomID = srcID, ts = (time and time()) or 0 } })  -- exception(boundary): time()
+        payload = { roomID = srcID, ts = HDG.ControllerHelpers.Mechanics.Now()} })  -- exception(boundary): time()
     local copyID = HDG.Store:GetState().session.furn.lastRoomID  -- exception(false-positive): top-level controller read
     if not copyID then return nil end
     HDG.Store:Dispatch({ type = A.LAYOUT_ASSIGN,
@@ -802,15 +797,12 @@ HDG.CardGrid:RegisterCellKind("projectsPickerCard", {
         -- Planned-count badge (absent at 0).
         HDG.CardGrid:PaintMemberBadge(cell, ed.plannedCount > 0 and ed.plannedCount or nil)
         if cell.label then cell.label:Hide() end   -- name lives in the hover info line
-        cell:RegisterForClicks("LeftButtonUp", "RightButtonUp")
         local itemID = ed.itemID
         cell._hdgrItemID = itemID   -- resetFunc unpins the preview if reclaimed mid-hover
-        cell:SetScript("OnClick", function(_, btn)
-            if btn == "RightButton" then
-                _pickerCardAdjust(itemID, A.FURN_SET_ITEM_REMOVE, _G.IsShiftKeyDown and _G.IsShiftKeyDown() or nil)  -- exception(boundary): IsShiftKeyDown absent in headless harness
-            else
-                _pickerCardAdjust(itemID, A.FURN_SET_ITEM_ADD)
-            end
+        HDG.UI.WireLeftRightClick(cell, function()
+            _pickerCardAdjust(itemID, A.FURN_SET_ITEM_ADD)
+        end, function()
+            _pickerCardAdjust(itemID, A.FURN_SET_ITEM_REMOVE, _G.IsShiftKeyDown and _G.IsShiftKeyDown() or nil)  -- exception(boundary): IsShiftKeyDown absent in headless harness
         end)
         cell:SetScript("OnEnter", function(self_)
             if self_.hoverBg then self_.hoverBg:Show() end
@@ -1113,7 +1105,7 @@ function PC:Wire(rootFrame)
         onAccept   = function(value)
             if not (value and value ~= "") then return end
             HDG.Store:Dispatch({ type = A.FURN_SET_CREATE, payload = {
-                name = value, items = {}, ts = (time and time()) or 0 } })  -- exception(boundary): time absent in headless harness
+                name = value, items = {}, ts = HDG.ControllerHelpers.Mechanics.Now()} })  -- exception(boundary): time absent in headless harness
             local sid = HDG.Store:GetState().session.furn.lastSetID  -- exception(false-positive): top-level handler read
             _dispatchTransient("landingSetID", sid)
             HDG.Log:Success("projects_save", ("Set \"%s\" created -- pick its pieces"):format(value))
@@ -1157,7 +1149,7 @@ function PC:Wire(rootFrame)
         onAccept   = function(value)
             if not (value and value ~= "") then return end
             HDG.Store:Dispatch({ type = A.FURN_ROOM_CREATE,
-                payload = { name = value, ts = (time and time()) or 0 } })  -- exception(boundary): time absent in headless harness
+                payload = { name = value, ts = HDG.ControllerHelpers.Mechanics.Now()} })  -- exception(boundary): time absent in headless harness
             HDG.Log:Success("projects_save",
                 ("Design \"%s\" created -- it takes a shape when you assign it"):format(value))
         end,
@@ -1211,7 +1203,7 @@ function PC:Wire(rootFrame)
             if not (data and data.roomID) then return end
             HDG.Store:Dispatch({ type = A.FURN_ROOM_DUPLICATE, payload = {
                 roomID = data.roomID, name = (value ~= "" and value) or nil,
-                ts = (time and time()) or 0 } })  -- exception(boundary): time absent in headless harness
+                ts = HDG.ControllerHelpers.Mechanics.Now()} })  -- exception(boundary): time absent in headless harness
             HDG.Log:Success("projects_save", "Design duplicated -- find it in My Designs (unplaced)")
         end,
     })
@@ -1225,7 +1217,7 @@ function PC:Wire(rootFrame)
             HDG.Store:Dispatch({ type = A.FURN_ROOM_CREATE, payload = {
                 name = name, shape = data.shape,
                 layoutID = data.layoutID, slotKey = data.slotKey,
-                ts = (time and time()) or 0 } })  -- exception(boundary): time absent in headless harness
+                ts = HDG.ControllerHelpers.Mechanics.Now()} })  -- exception(boundary): time absent in headless harness
             -- v8: the slot key is stable -- the selection already points at it.
             HDG.Log:Success("projects_save",
                 ("Design \"%s\" created and assigned"):format(tostring(name or "Design")))

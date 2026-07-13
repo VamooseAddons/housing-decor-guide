@@ -309,30 +309,6 @@ function PC:GetRecipeShortage(recipeID, qty, bagCounts)
     }
 end
 
--- GetAllKnownDecorRecipes: ProfessionsDB joined with account.recipes knowledge.
--- Returns: { { recipeID, itemID, name, profession, expansion, icon, isKnown } }
-function PC:GetAllKnownDecorRecipes(accountRecipes)
-    local db = HDG.StaticData.Professions:GetAll()
-    if type(db) ~= "table" then return {} end
-    accountRecipes = accountRecipes or {}
-    local out = {}
-    for recipeID, r in pairs(db) do
-        if r.itemID then
-            local known = accountRecipes[r.itemID]
-            out[#out + 1] = {
-                recipeID   = recipeID,
-                itemID     = r.itemID,
-                name       = r.name or ("recipe " .. recipeID),
-                profession = r.profession or "",
-                expansion  = r.expansion or "",
-                icon       = r.icon,
-                isKnown    = (known and (known.selfKnown or known.altKnown)) and true or false,
-            }
-        end
-    end
-    return out
-end
-
 -- ===== Module registration ===================================================
 HDG.Modules:Declare({
     name = "PowerCrafter",

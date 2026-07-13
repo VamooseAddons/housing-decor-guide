@@ -71,7 +71,7 @@ local function _layoutAchieveHeader(row, ed, cc)
     HDG.UI.applyFontRole(row._labelFs, "subheading")
     row._labelFs:ClearAllPoints()
     row._labelFs:SetPoint("LEFT", row, "LEFT", 16, 0)
-    local glyph = ed.collapsed and "+ " or "- "
+    local glyph = HDG.UI.CollapsePrefix(ed.collapsed)
     row._labelFs:SetText(cc.dim .. glyph .. (ed.label or "") .. "|r")
     local done       = ed.totalCount > 0 and ed.earnedCount == ed.totalCount
     local countColor = done and cc.success or cc.dim

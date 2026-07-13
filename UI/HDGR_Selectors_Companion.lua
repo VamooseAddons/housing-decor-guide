@@ -184,6 +184,134 @@ end
 -- Sidebar rows for the current mode.
 -- ============================================================================
 
+-- Walk a room's effective furnishing items (across its equipped sets). A set
+-- can be deleted out from under the room while the ID lingers (nullable).
+-- Shared by the sidebar room-count and the grid room-card builders.
+local function _forEachRoomEffectiveItem(state, room, fn)
+    for _, sid in ipairs(room.furnishingSetIDs) do
+        local set = state.account.furnishingSets[sid]
+        if set then   -- exception(nullable): set deleted out from under the room
+            for _, it in ipairs(set.items) do fn(it) end
+        end
+    end
+end
+
+local function _alphaByDisplayName(a, b)
+    return tostring(a.displayName):lower() < tostring(b.displayName):lower()
+end
+
+-- Recent-mode sidebar = persisted edit-session history. Raw session rows; time
+-- labels formatted at paint (time() is impure, can't live in a selector).
+local function _sidebarRecentRows(state, selected)
+    local sessions = HDG.Selectors:Call("companion.recentSessions", state, {})
+    local out = {}
+    for i, s in ipairs(sessions) do
+        out[#out + 1] = {
+            id              = s.id,
+            isRecentSession = true,
+            startedAt       = s.startedAt,
+            endedAt         = s.endedAt,
+            eventCount      = s.eventCount,
+            isActive        = s.isActive,
+            isSelected      = (selected == s.id) or (selected == nil and i == 1),
+        }
+    end
+    return out
+end
+
+-- One row per persistent Furnishings room; count = effective decor total across
+-- its equipped sets + own pieces. Blueprint tile from the live room catalog.
+local function _sidebarRoomRows(state, needle, selected)
+    local cat = state.session.house.roomCatalog.byShapeID
+    local out = {}
+    for rid, room in pairs(state.account.rooms) do
+        local name = (room.name and room.name ~= "" and room.name)
+            or (room.shape and HDG.Projects.ShapeAtlas.GetLabel(room.shape)) or "Room"
+        if not needle or name:lower():find(needle, 1, true) then
+            local n = 0
+            _forEachRoomEffectiveItem(state, room, function(it) n = n + (it.count or 1) end)
+            local e = room.shape and cat[room.shape]   -- exception(nullable): shapeless rooms have no tile
+            out[#out + 1] = {
+                id          = rid,
+                type        = "room",
+                displayName = name,
+                count       = n,
+                iconAtlas   = (e and e.iconAtlas)
+                    or (room.shape and HDG.Projects.ShapeAtlas.GetAtlas(room.shape)) or nil,
+                isSelected  = selected == rid,
+            }
+        end
+    end
+    table.sort(out, function(a, b)
+        local an, bn = tostring(a.displayName):lower(), tostring(b.displayName):lower()
+        if an ~= bn then return an < bn end
+        return a.id < b.id
+    end)
+    return out
+end
+
+-- Collections mode: special (resolver-based) collections pinned to the top in a
+-- fixed order, a divider, the rest alphabetically, then the placement-cost
+-- sub-section (one catalog walk for all four owned counts).
+local function _sidebarCollectionsMode(matches, selected)
+    local specials, rest = {}, {}
+    for _, m in ipairs(matches) do
+        if SPECIAL_COLLECTION_ORDER[m.id] then specials[#specials + 1] = m
+        else rest[#rest + 1] = m end
+    end
+    table.sort(specials, function(a, b)
+        return SPECIAL_COLLECTION_ORDER[a.id] < SPECIAL_COLLECTION_ORDER[b.id]
+    end)
+    table.sort(rest, _alphaByDisplayName)
+    local out = {}
+    for _, m in ipairs(specials) do out[#out + 1] = m end
+    if #specials > 0 and #rest > 0 then
+        out[#out + 1] = { isDivider = true, id = "specials" }
+    end
+    for _, m in ipairs(rest) do out[#out + 1] = m end
+
+    out[#out + 1] = { isHeader = true, displayName = "By Placement Cost" }
+    local counts = _bucketCounts()
+    for _, b in ipairs(PLACEMENT_COST_BUCKETS) do
+        out[#out + 1] = {
+            id          = b.id,
+            type        = "placementcost",
+            displayName = b.text,
+            count       = counts[b.id],
+            isSelected  = selected == b.id,
+        }
+    end
+    return out
+end
+
+-- Membership modes (themes / collections / other): name-filtered defs. count
+-- only for explicit membership defs (.items); rule-based concepts leave it nil.
+local function _sidebarCollectionRows(state, mode, needle, selected)
+    local typeSet = MODE_TO_TYPES[mode] or {}
+    local matches = {}
+    for _, entry in ipairs(iterAllCollectionsForCompanion(state)) do
+        if typeSet[entry.type] then
+            local def  = entry.def
+            local name = (def and (def.displayName or def.name)) or entry.id
+            if not needle or tostring(name):lower():find(needle, 1, true) then
+                matches[#matches + 1] = {
+                    id          = entry.id,
+                    type        = entry.type,
+                    tier        = def and def.tier,
+                    displayName = name,
+                    subtitle    = def and def.description or nil,
+                    count       = (def and type(def.items) == "table") and #def.items or nil,
+                    isSelected  = selected == entry.id,
+                }
+            end
+        end
+    end
+    if mode == "themes"      then return _sectionByTier(matches) end          -- Room Concepts / Themed / Faction
+    if mode == "collections" then return _sidebarCollectionsMode(matches, selected) end
+    table.sort(matches, _alphaByDisplayName)
+    return matches
+end
+
 Selectors:Register("companion.sidebarRows", {
     reads = {
         "session.ui.companion.mode",
@@ -204,129 +332,9 @@ Selectors:Register("companion.sidebarRows", {
         local search   = state.session.ui.companion.search:lower()
         local selected = state.session.ui.companion.selectedItemID
         local needle   = search ~= "" and search or nil
-        local out = {}
-
-        if mode == "recent" then
-            -- Recent mode sidebar = persisted edit-session history. Raw session rows;
-            -- time labels formatted at paint (time() is impure, can't live in a selector).
-            local sessions = HDG.Selectors:Call("companion.recentSessions", state, {})
-            for i, s in ipairs(sessions) do
-                out[#out + 1] = {
-                    id              = s.id,
-                    isRecentSession = true,
-                    startedAt       = s.startedAt,
-                    endedAt         = s.endedAt,
-                    eventCount      = s.eventCount,
-                    isActive        = s.isActive,
-                    isSelected      = (selected == s.id) or (selected == nil and i == 1),
-                }
-            end
-            return out
-        end
-
-        if mode == "rooms" then
-            -- One row per persistent Furnishings room; count = effective decor
-            -- total across its equipped sets + own pieces. Blueprint tile from
-            -- the live room catalog (ShapeAtlas glyph pre-snapshot).
-            local cat = state.session.house.roomCatalog.byShapeID
-            for rid, room in pairs(state.account.rooms) do
-                local name = (room.name and room.name ~= "" and room.name)
-                    or (room.shape and HDG.Projects.ShapeAtlas.GetLabel(room.shape)) or "Room"
-                if not needle or name:lower():find(needle, 1, true) then
-                    local n = 0
-                    for _, sid in ipairs(room.furnishingSetIDs) do
-                        local set = state.account.furnishingSets[sid]
-                        if set then   -- exception(nullable): set deleted out from under the room
-                            for _, it in ipairs(set.items) do n = n + (it.count or 1) end
-                        end
-                    end
-                    local e = room.shape and cat[room.shape]   -- exception(nullable): shapeless rooms have no tile
-                    out[#out + 1] = {
-                        id          = rid,
-                        type        = "room",
-                        displayName = name,
-                        count       = n,
-                        iconAtlas   = (e and e.iconAtlas)
-                            or (room.shape and HDG.Projects.ShapeAtlas.GetAtlas(room.shape)) or nil,
-                        isSelected  = selected == rid,
-                    }
-                end
-            end
-            table.sort(out, function(a, b)
-                local an, bn = tostring(a.displayName):lower(), tostring(b.displayName):lower()
-                if an ~= bn then return an < bn end
-                return a.id < b.id
-            end)
-            return out
-        end
-
-        -- Collections for this mode, name-filtered. count available only for explicit
-        -- membership defs (.items); rule-based concepts/collections leave count nil.
-        local typeSet = MODE_TO_TYPES[mode] or {}
-        local matches = {}
-        for _, entry in ipairs(iterAllCollectionsForCompanion(state)) do
-            if typeSet[entry.type] then
-                local def  = entry.def
-                local name = (def and (def.displayName or def.name)) or entry.id
-                if not needle or tostring(name):lower():find(needle, 1, true) then
-                    matches[#matches + 1] = {
-                        id          = entry.id,
-                        type        = entry.type,
-                        tier        = def and def.tier,
-                        displayName = name,
-                        subtitle    = def and def.description or nil,
-                        count       = (def and type(def.items) == "table") and #def.items or nil,
-                        isSelected  = selected == entry.id,
-                    }
-                end
-            end
-        end
-
-        if mode == "themes" then
-            -- Grouped into Room Concepts / Themed / Faction sections.
-            return _sectionByTier(matches)
-        end
-
-        local function _alpha(a, b)
-            return tostring(a.displayName):lower() < tostring(b.displayName):lower()
-        end
-
-        if mode == "collections" then
-            -- Special (resolver-based) collections pinned to the top in a fixed order,
-            -- a divider, then the rest alphabetically.
-            local specials, rest = {}, {}
-            for _, m in ipairs(matches) do
-                if SPECIAL_COLLECTION_ORDER[m.id] then specials[#specials + 1] = m
-                else rest[#rest + 1] = m end
-            end
-            table.sort(specials, function(a, b)
-                return SPECIAL_COLLECTION_ORDER[a.id] < SPECIAL_COLLECTION_ORDER[b.id]
-            end)
-            table.sort(rest, _alpha)
-            for _, m in ipairs(specials) do out[#out + 1] = m end
-            if #specials > 0 and #rest > 0 then
-                out[#out + 1] = { isDivider = true, id = "specials" }
-            end
-            for _, m in ipairs(rest) do out[#out + 1] = m end
-
-            -- Cost-bucket sub-section inside Collections. One catalog walk for all four owned counts.
-            out[#out + 1] = { isHeader = true, displayName = "By Placement Cost" }
-            local counts = _bucketCounts()
-            for _, b in ipairs(PLACEMENT_COST_BUCKETS) do
-                out[#out + 1] = {
-                    id          = b.id,
-                    type        = "placementcost",
-                    displayName = b.text,
-                    count       = counts[b.id],
-                    isSelected  = selected == b.id,
-                }
-            end
-            return out
-        end
-
-        table.sort(matches, _alpha)
-        for _, m in ipairs(matches) do out[#out + 1] = m end
-        return out
+        if mode == "recent" then return _sidebarRecentRows(state, selected) end
+        if mode == "rooms"  then return _sidebarRoomRows(state, needle, selected) end
+        return _sidebarCollectionRows(state, mode, needle, selected)
     end,
 })
 
@@ -404,6 +412,97 @@ local function _stampShowCost(out, showCost)
     return out
 end
 
+-- Recent-mode grid: per-item placed/removed event groups of the selected
+-- session (selectedItemID = sessionID; defaults to newest). Cells carry the
+-- placement payload so recent items can be re-placed on click.
+local function _gridRecentItems(state, needle)
+    local out = {}
+    local ra    = state.account.recentActivity
+    local house = ra.lastHouseKey and ra.houses[ra.lastHouseKey]
+    if not house then return out end
+    local sid = state.session.ui.companion.selectedItemID
+    if type(sid) ~= "number" or not house.sessions[sid] then
+        sid = house.sessionOrder[1]
+    end
+    local session = sid and house.sessions[sid]
+    if not session then return out end
+
+    local groups = {}
+    for _, ev in pairs(session.events) do groups[#groups + 1] = ev end
+    table.sort(groups, function(a, b) return (a.lastTs or 0) > (b.lastTs or 0) end)
+
+    for _, ev in ipairs(groups) do
+        local row  = HDG.HousingCatalogObserver:GetRow(ev.itemID)
+        local name = (row and row.name) or ("Item " .. tostring(ev.itemID))
+        if not needle or name:lower():find(needle, 1, true) then
+            local iconTex, iconAtl = HDG.Format.CoerceIconPair(
+                row and row.iconTexture, row and row.iconAtlas)
+            out[#out + 1] = {
+                itemID         = ev.itemID,
+                name           = name,
+                iconTexture    = iconTex,
+                iconAtlas      = iconAtl,
+                isOwned        = row and row.isOwned == true,
+                placedCount    = ev.placed,
+                removedCount   = ev.removed,
+                -- exception(boundary): row nil for unswept items -> entryID nil -> click no-ops
+                entryID        = row and row.entryID,
+                ownedQty       = row and row.quantity,
+                numPlaced      = row and row.numPlaced,
+                allowIndoors   = row and row.isAllowedIndoors,
+                allowOutdoors  = row and row.isAllowedOutdoors,
+                placementCost  = row and row.placementCost,
+                isUniqueTrophy = row and row.isUniqueTrophy == true,
+            }
+        end
+    end
+    return out
+end
+
+-- Rooms-mode grid: selected room's EFFECTIVE furnishings (equipped sets + own
+-- pieces) as placement cards -- place straight from your plan.
+local function _gridRoomItems(state, room, needle, ioFilter)
+    local out, seen = {}, {}
+    _forEachRoomEffectiveItem(state, room, function(it)
+        if not seen[it.id] then
+            seen[it.id] = true
+            local row = HDG.HousingCatalogObserver:GetRow(it.id)
+            _emitDecorCells(out, it.id, row, needle, ioFilter)
+        end
+    end)
+    return out
+end
+
+-- Cost-bucket grid: walk the catalog for owned decor in [lo,hi]. IterateRows
+-- reads the observer's baked cache (freshness via sweepGeneration).
+local function _gridBucketItems(bucket, needle, ioFilter)
+    local out = {}
+    HDG.HousingCatalogObserver:IterateRows(function(itemID, row)
+        local cost = row.placementCost or 0  -- exception(boundary): catalog struct field sparse
+        if cost >= bucket.lo and cost <= bucket.hi
+           and HDG.HousingCatalogObserver:IsOwned(row) then
+            _emitDecorCells(out, itemID, row, needle, ioFilter)
+        end
+    end)
+    table.sort(out, function(a, b)
+        return tostring(a.name):lower() < tostring(b.name):lower()
+    end)
+    return out
+end
+
+-- Membership/rule-based grid: resolved through StyleResolve.ItemsFor so
+-- smartsets, concepts, and name-pattern Useful Collections all populate.
+local function _gridCollectionItems(state, needle, ioFilter)
+    local out = {}
+    local itemIDs = HDG.StyleResolve.ItemsFor(
+        state.session.ui.companion.selectedItemID, state)
+    for _, itemID in ipairs(itemIDs) do
+        local row = HDG.HousingCatalogObserver:GetRow(itemID)
+        _emitDecorCells(out, itemID, row, needle, ioFilter)
+    end
+    return out
+end
+
 -- Observer is primary source for name/icon/isOwned + placement payload.
 -- Cost-bucket mode walks the whole catalog via IterateRows (tied to sweepGeneration).
 Selectors:Register("companion.gridItems", {
@@ -428,102 +527,17 @@ Selectors:Register("companion.gridItems", {
         local ioFilter = state.session.ui.companion.ioFilter
         local showCost = state.session.ui.companion.showCost
 
-        local out = {}
-
+        local out
         if mode == "recent" then
-            -- Per-item placed/removed event groups of the selected session
-            -- (selectedItemID = sessionID; defaults to newest). Cells carry
-            -- the placement payload so recent items can be re-placed on click.
-            local ra    = state.account.recentActivity
-            local house = ra.lastHouseKey and ra.houses[ra.lastHouseKey]
-            if not house then return out end
-            local sid = state.session.ui.companion.selectedItemID
-            if type(sid) ~= "number" or not house.sessions[sid] then
-                sid = house.sessionOrder[1]
-            end
-            local session = sid and house.sessions[sid]
-            if not session then return out end
-
-            local groups = {}
-            for _, ev in pairs(session.events) do groups[#groups + 1] = ev end
-            table.sort(groups, function(a, b) return (a.lastTs or 0) > (b.lastTs or 0) end)
-
-            for _, ev in ipairs(groups) do
-                local row  = HDG.HousingCatalogObserver:GetRow(ev.itemID)
-                local name = (row and row.name) or ("Item " .. tostring(ev.itemID))
-                if not needle or name:lower():find(needle, 1, true) then
-                    local iconTex, iconAtl = HDG.Format.CoerceIconPair(
-                        row and row.iconTexture, row and row.iconAtlas)
-                    out[#out + 1] = {
-                        itemID         = ev.itemID,
-                        name           = name,
-                        iconTexture    = iconTex,
-                        iconAtlas      = iconAtl,
-                        isOwned        = row and row.isOwned == true,
-                        placedCount    = ev.placed,
-                        removedCount   = ev.removed,
-                        -- exception(boundary): row nil for unswept items -> entryID nil -> click no-ops
-                        entryID        = row and row.entryID,
-                        ownedQty       = row and row.quantity,
-                        numPlaced      = row and row.numPlaced,
-                        allowIndoors   = row and row.isAllowedIndoors,
-                        allowOutdoors  = row and row.isAllowedOutdoors,
-                        placementCost  = row and row.placementCost,
-                        isUniqueTrophy = row and row.isUniqueTrophy == true,
-                    }
-                end
-            end
-            return _stampShowCost(out, showCost)
-        end
-
-        if mode == "rooms" then
-            -- Selected room's EFFECTIVE furnishings (equipped sets + own
-            -- pieces) as placement cards -- place straight from your plan.
+            out = _gridRecentItems(state, needle)
+        elseif mode == "rooms" then
             local room = state.account.rooms[state.session.ui.companion.selectedItemID or ""]   -- exception(nullable): nothing selected yet
-            if room then
-                local seen = {}
-                for _, sid in ipairs(room.furnishingSetIDs) do
-                    local set = state.account.furnishingSets[sid]
-                    if set then   -- exception(nullable): set deleted out from under the room
-                        for _, it in ipairs(set.items) do
-                            if not seen[it.id] then
-                                seen[it.id] = true
-                                local row = HDG.HousingCatalogObserver:GetRow(it.id)
-                                _emitDecorCells(out, it.id, row, needle, ioFilter)
-                            end
-                        end
-                    end
-                end
-            end
-            return _stampShowCost(out, showCost)
-        end
-
-        -- Cost bucket: walk the catalog for owned decor in [lo,hi].
-        -- IterateRows reads the observer's baked cache (freshness via sweepGeneration).
-        -- Checked before collection resolution since a bucket id resolves to no collection.
-        local bucket = PLACEMENT_COST_BUCKET_BY_ID[
-            state.session.ui.companion.selectedItemID]
-        if bucket then
-            HDG.HousingCatalogObserver:IterateRows(function(itemID, row)
-                local cost = row.placementCost or 0  -- exception(boundary): catalog struct field sparse
-                if cost >= bucket.lo and cost <= bucket.hi
-                   and HDG.HousingCatalogObserver:IsOwned(row) then
-                    _emitDecorCells(out, itemID, row, needle, ioFilter)
-                end
-            end)
-            table.sort(out, function(a, b)
-                return tostring(a.name):lower() < tostring(b.name):lower()
-            end)
-            return _stampShowCost(out, showCost)
-        end
-
-        -- Membership/rule-based modes: resolved through StyleResolve.ItemsFor so
-        -- smartsets, concepts, and name-pattern Useful Collections all populate.
-        local itemIDs = HDG.StyleResolve.ItemsFor(
-            state.session.ui.companion.selectedItemID, state)
-        for _, itemID in ipairs(itemIDs) do
-            local row = HDG.HousingCatalogObserver:GetRow(itemID)
-            _emitDecorCells(out, itemID, row, needle, ioFilter)
+            out = room and _gridRoomItems(state, room, needle, ioFilter) or {}
+        else
+            -- Bucket checked before collection resolution: a bucket id resolves to no collection.
+            local bucket = PLACEMENT_COST_BUCKET_BY_ID[state.session.ui.companion.selectedItemID]
+            out = bucket and _gridBucketItems(bucket, needle, ioFilter)
+                          or _gridCollectionItems(state, needle, ioFilter)
         end
         return _stampShowCost(out, showCost)
     end,

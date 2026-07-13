@@ -77,10 +77,7 @@ local function _buildDonut(parent, size, holeSize)
     frame.hole:SetSize(holeSize, holeSize)
     frame.hole:SetPoint("CENTER", frame, "CENTER")
     HDG.UI._TintTexture(frame.hole, HDG.Theme:GetColor("surface.panel"))
-    local mask = frame:CreateMaskTexture()
-    mask:SetAllPoints(frame.hole)
-    mask:SetAtlas("CircleMaskScalable")
-    frame.hole:AddMaskTexture(mask)
+    HDG.UI.CircleMask(frame.hole)
     return frame
 end
 
@@ -317,7 +314,7 @@ local function _renderTrophyShelf(parent, items, _collected, _total)
 
         local tex = b:CreateTexture(nil, "ARTWORK")
         tex:SetAllPoints()
-        tex:SetTexCoord(0.08, 0.92, 0.08, 0.92)   -- standard icon crop
+        tex:SetTexCoord(unpack(HDG.Constants.ICON_CROP))
         if item.iconID then tex:SetTexture(item.iconID) end
         b._itemID = item.itemID
         HDG.TooltipEngine:Attach(b, _itemTooltipDef)
@@ -507,11 +504,18 @@ local function _renderStyleAffinity(cell, ed)
 end
 
 -- Shared donut+legend renderer factory. paletteToken/labelFor/centerMain/centerSub closures.
-local function _renderDonutCard(cell, ed, paletteToken, labelFor, centerMain, centerSub)
-    local d = ed.data
+-- Card title: the top-left subheading every HouseTab card starts with
+-- (hygiene A3 -- this exact block appeared 16x in this file).
+local function _cardTitle(cell, ed)
     local title = HDG.UI.RowText(cell, "subheading", "Text")
     title:SetPoint("TOPLEFT", cell, "TOPLEFT", 8, -6)
     title:SetText(ed.title)
+    return title
+end
+
+local function _renderDonutCard(cell, ed, paletteToken, labelFor, centerMain, centerSub)
+    local d = ed.data
+    _cardTitle(cell, ed)
 
     -- Donut: 40% of cell width, 50% inner hole (room for 13-entry legend).
     local cellH      = cell:GetHeight()
@@ -607,9 +611,7 @@ end
 -- closeCards: top-3 subcategories with progress bars + "N to go" tail.
 local function _renderCloseCards(cell, ed)
     local d = ed.data
-    local title = HDG.UI.RowText(cell, "subheading", "Text")
-    title:SetPoint("TOPLEFT", cell, "TOPLEFT", 8, -6)
-    title:SetText(ed.title)
+    _cardTitle(cell, ed)
 
     for i, b in ipairs(d.rows) do
         local y = -28 - (i - 1) * 32
@@ -629,9 +631,7 @@ end
 -- hotPicks: top-5 list with iconID + name + XP value.
 local function _renderHotPicks(cell, ed)
     local d = ed.data
-    local title = HDG.UI.RowText(cell, "subheading", "Text")
-    title:SetPoint("TOPLEFT", cell, "TOPLEFT", 8, -6)
-    title:SetText(ed.title)
+    _cardTitle(cell, ed)
 
     for i, item in ipairs(d.items) do
         local y = -28 - (i - 1) * 22
@@ -668,9 +668,7 @@ end
 -- velocity: centered label. String composition happens in the renderer (not the selector).
 local function _renderVelocity(cell, ed)
     local d = ed.data
-    local title = HDG.UI.RowText(cell, "subheading", "Text")
-    title:SetPoint("TOPLEFT", cell, "TOPLEFT", 8, -6)
-    title:SetText(ed.title)
+    _cardTitle(cell, ed)
 
     local fs = HDG.UI.RowText(cell, "body", "Text", "CENTER")
     fs:SetPoint("LEFT",  cell, "LEFT",   8, 0)   -- span the cell width so the long
@@ -711,9 +709,7 @@ end
 -- capacity: 10-segment bar (fill colour tracks how full you are) + label.
 local function _renderCapacity(cell, ed)
     local d = ed.data
-    local title = HDG.UI.RowText(cell, "subheading", "Text")
-    title:SetPoint("TOPLEFT", cell, "TOPLEFT", 8, -6)
-    title:SetText(ed.title)
+    _cardTitle(cell, ed)
 
     -- Whole fill is one pct-driven colour (green -> amber -> red as you near the cap).
     local col = _capacityColor(d.pct)
@@ -732,9 +728,7 @@ end
 
 -- featured: 4 icon tiles in a horizontal row.
 local function _renderFeatured(cell, ed)
-    local title = HDG.UI.RowText(cell, "subheading", "Text")
-    title:SetPoint("TOPLEFT", cell, "TOPLEFT", 8, -6)
-    title:SetText(ed.title)
+    _cardTitle(cell, ed)
 
     local d = ed.data
     local tileSize = 56
@@ -746,7 +740,7 @@ local function _renderFeatured(cell, ed)
         btn:SetPoint("TOPLEFT", cell, "TOPLEFT", x, -28)
 
         local tex = btn:CreateTexture(nil, "ARTWORK")
-        tex:SetAllPoints(); tex:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+        tex:SetAllPoints(); tex:SetTexCoord(unpack(HDG.Constants.ICON_CROP))
         if item.iconID then tex:SetTexture(item.iconID) end
 
         btn._itemID = item.itemID
@@ -763,9 +757,7 @@ end
 
 -- multiHouse: 1-3 stacked cards. Each: faction-tinted 2px stripe + name + level + favor bar.
 local function _renderMultiHouse(cell, ed)
-    local title = HDG.UI.RowText(cell, "subheading", "Text")
-    title:SetPoint("TOPLEFT", cell, "TOPLEFT", 8, -6)
-    title:SetText(ed.title)
+    _cardTitle(cell, ed)
 
     local d = ed.data
     if #d.houses == 0 then
@@ -840,9 +832,7 @@ end
 -- normal text, uncollected are dim. Empty state when no favorites.
 local function _renderFavorites(cell, ed)
     local d = ed.data
-    local title = HDG.UI.RowText(cell, "subheading", "Text")
-    title:SetPoint("TOPLEFT", cell, "TOPLEFT", 8, -6)
-    title:SetText(ed.title)
+    _cardTitle(cell, ed)
 
     local items = d.items
     if #items == 0 then
@@ -871,9 +861,7 @@ end
 -- themedSets: top 4 buckets; name + segment bar + N/M label.
 local function _renderThemedSets(cell, ed)
     local d = ed.data
-    local title = HDG.UI.RowText(cell, "subheading", "Text")
-    title:SetPoint("TOPLEFT", cell, "TOPLEFT", 8, -6)
-    title:SetText(ed.title)
+    _cardTitle(cell, ed)
 
     local sets = d.sets
     if #sets == 0 then
@@ -907,9 +895,7 @@ end
 -- topVendors: top 3 vendors by uncollected count; name + zone + count.
 local function _renderTopVendors(cell, ed)
     local d = ed.data
-    local title = HDG.UI.RowText(cell, "subheading", "Text")
-    title:SetPoint("TOPLEFT", cell, "TOPLEFT", 8, -6)
-    title:SetText(ed.title)
+    _cardTitle(cell, ed)
 
     local rows = d.rows
     if #rows == 0 then
@@ -944,9 +930,7 @@ end
 -- recentActivity: last 5 learned entries; icon + name (pre-joined by selector into ed.data).
 local function _renderRecentActivity(cell, ed)
     local d = ed.data
-    local title = HDG.UI.RowText(cell, "subheading", "Text")
-    title:SetPoint("TOPLEFT", cell, "TOPLEFT", 8, -6)
-    title:SetText(ed.title)
+    _cardTitle(cell, ed)
 
     local entries = d.entries
     if #entries == 0 then
@@ -1082,9 +1066,7 @@ end
 -- ritualSites / abyssAnglers / decorDuels.
 local function _renderEventCard(cell, ed)
     local d = ed.data
-    local title = HDG.UI.RowText(cell, "subheading", "Text")
-    title:SetPoint("TOPLEFT", cell, "TOPLEFT", 8, -6)
-    title:SetText(ed.title)
+    _cardTitle(cell, ed)
 
     if d.total == 0 then
         local empty = HDG.UI.RowText(cell, "small", "TextDim")
@@ -1139,9 +1121,7 @@ end
 
 local function _renderNextRewards(cell, ed)
     local d = ed.data
-    local title = HDG.UI.RowText(cell, "subheading", "Text")
-    title:SetPoint("TOPLEFT", cell, "TOPLEFT", 8, -6)
-    title:SetText(ed.title)
+    _cardTitle(cell, ed)
 
     if not d then
         local fs = HDG.UI.RowText(cell, "small", "TextDim")
@@ -1216,9 +1196,7 @@ end
 -- craftableNow: big number + "decor items now" + "+N almost craftable".
 local function _renderCraftableNow(cell, ed)
     local d = ed.data
-    local title = HDG.UI.RowText(cell, "subheading", "Text")
-    title:SetPoint("TOPLEFT", cell, "TOPLEFT", 8, -6)
-    title:SetText(ed.title)
+    _cardTitle(cell, ed)
 
     local n = d.canCraftNow  -- recipes.almostCraftable stamps canCraftNow (0-default fallback)
     local big = HDG.UI.RowText(cell, "heading", n > 0 and "TextStatus" or "TextDim")
@@ -1239,9 +1217,7 @@ end
 -- goblinTopLumber: top-5 rows; name colored by expansion + gold-per-lumber chip.
 local function _renderGoblinTopLumber(cell, ed)
     local d = ed.data
-    local title = HDG.UI.RowText(cell, "subheading", "Text")
-    title:SetPoint("TOPLEFT", cell, "TOPLEFT", 8, -6)
-    title:SetText(ed.title)
+    _cardTitle(cell, ed)
 
     local items = d.items
     if #items == 0 then
@@ -1286,9 +1262,7 @@ end
 -- records: stat-line widget. Each stat is a labelled value row.
 local function _renderRecords(cell, ed)
     local d = ed.data
-    local title = HDG.UI.RowText(cell, "subheading", "Text")
-    title:SetPoint("TOPLEFT", cell, "TOPLEFT", 8, -6)
-    title:SetText(ed.title)
+    _cardTitle(cell, ed)
 
     local lines = {}
     local function fmt(n) return (_G.BreakUpLargeNumbers and _G.BreakUpLargeNumbers(n)) or tostring(n) end

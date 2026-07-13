@@ -92,10 +92,7 @@ end
 -- each one with valid coords.
 local function _ensureZonePin(row)
     if row._shoppingZonePinBuilt then return end
-    local pin = HDG.UI:AtlasButton(row, "Waypoint-MapPin-ChatIcon", 14)
-    pin:SetPoint("RIGHT", row, "RIGHT", -4, 0)
-    pin:Hide()
-    row._zonePinBtn = pin
+    row._zonePinBtn = HDG.UI.RowPinButton(row)
     row._shoppingZonePinBuilt = true
 end
 

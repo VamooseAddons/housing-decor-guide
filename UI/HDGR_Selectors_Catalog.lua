@@ -76,10 +76,6 @@ Selectors:Register("catalog.intro.isLoading", {
     reads = { "session.ui.catalogIntro.phase" },
     fn = function(state) return state.session.ui.catalogIntro.phase == "loading" end,
 })
-Selectors:Register("catalog.intro.isSuccess", {
-    reads = { "session.ui.catalogIntro.phase" },
-    fn = function(state) return state.session.ui.catalogIntro.phase == "success" end,
-})
 Selectors:Register("catalog.intro.headline", {
     reads = { "session.ui.catalogIntro.phase" },
     fn = function(state)

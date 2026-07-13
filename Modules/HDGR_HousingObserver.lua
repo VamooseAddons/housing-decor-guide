@@ -407,11 +407,12 @@ end
 function HO:CurrentHouseID() return _currentHouseID() end
 
 function HO:IsCapturing() return _capture and _capture.active or false end
-function HO:IsSweeping()  return _activeSweep ~= nil end
+
+-- Cancel an in-flight "capture all floors" sweep. Flag AND drop: in-flight
+-- C_Timer closures check cancelled/nil; leaving _activeSweep set wedges
+-- CaptureAllFloors ("already in progress") until reload (review 17 #5). Called
+-- from OnEnteringWorld -- a hearth/reload mid-sweep must not wedge the next one.
 function HO:CancelSweep()
-    -- Flag AND drop: in-flight C_Timer closures check cancelled/nil; leaving
-    -- _activeSweep set wedges CaptureAllFloors ("already in progress") until
-    -- reload (review 17 #5).
     if _activeSweep then _activeSweep.cancelled = true; _activeSweep = nil end
 end
 
@@ -526,30 +527,17 @@ local function _existingRoomIDsForFloor(floorID)
     return out
 end
 
--- Finalize a captured floor by REPLACING the live layout. Every existing room deleted
--- (crates fall to orphan bay); captured rooms added with fresh deterministic IDs +
--- grid-packed cells. No fingerprint-merge (matching identical shapes was ambiguous).
-function HO:_FinalizeCapture(snapshot, houseID)
-    if not (snapshot and houseID) then return end
-    local floor   = snapshot.floor or 1
-    local floorID = HDG.Projects.IDs.makeFloorID(houseID, floor)
-    if not floorID then return end
-
-    -- Drop the live pin refs (restriction flags + diagnostics no longer persisted -- Phase 4).
-    for _, room in pairs(snapshot.rooms) do
-        room._roomPin = nil
-    end
-
-    -- DETERMINISTIC room IDs (floor + capture-order) so crates stay attached on recapture.
-    -- Old rooms not reproduced -> orphaned crates (recoverable via orphan UI).
+-- Build fresh room records from the snapshot with DETERMINISTIC IDs (floor +
+-- capture-order) so crates stay attached on recapture; old rooms not reproduced
+-- fall to orphaned crates. Multi-floor rooms (stairwell/tall/garden) are
+-- enumerated once PER spanned floor section, so the all-floors sweep would re-add
+-- them on every higher floor -- skip a shape already committed lower and instead
+-- widen the base room's observed span (only the sweep dedups; passive single-
+-- floor capture doesn't). Mark this floor's MF shapes seen AFTER committing so
+-- two same-shape base rooms HERE don't skip each other. LIMIT: two same-shape
+-- MF rooms across overlapping floors collapse into one (shape is the only signal).
+local function _buildCapturedRooms(snapshot, floor, floorID)
     local IDs, Cap, rooms = HDG.Projects.IDs, HDG.Projects.Capture, {}
-    -- Multi-floor rooms (stairwell/tall/garden) are enumerated once PER spanned floor
-    -- section, each with its own GUID -- so the all-floors sweep would re-add them on
-    -- every higher floor. Skip a multi-floor SHAPE already committed on a lower floor
-    -- (no position/connectivity API to link the sections) and instead widen the base
-    -- room's observed span. Only the sweep dedups; passive single-floor capture doesn't.
-    -- LIMIT: two same-shape multi-floor rooms stacked across overlapping floors collapse
-    -- into one (shape is the only signal) -- rare, and unsolvable without positions.
     local Atlas   = HDG.Projects.ShapeAtlas
     local seenLow = _activeSweep and _activeSweep.seenLowerMF
     local mfSpan  = _activeSweep and _activeSweep.mfSpan
@@ -568,20 +556,28 @@ function HO:_FinalizeCapture(snapshot, houseID)
             end
         end
     end
-    -- Mark this floor's multi-floor shapes seen AFTER committing, so two same-shape base
-    -- rooms on THIS floor don't skip each other -- only higher floors dedup against them.
     if seenLow then
         for _, r in pairs(snapshot.rooms) do
             if Atlas.GetFloors(r.shape) > 1 then seenLow[r.shape] = true end
         end
     end
+    return rooms
+end
+
+-- Existing rooms on this floor not reproduced by the capture -> deleted (their
+-- crates fall to the orphan bay, recoverable via the orphan UI).
+local function _computeDeletedRoomIDs(rooms, floorID)
     local deleteRoomIDs = {}
     for _, oldID in ipairs(_existingRoomIDsForFloor(floorID)) do
         if not rooms[oldID] then deleteRoomIDs[#deleteRoomIDs + 1] = oldID end
     end
-    -- AutoLayout grid-packs each room's cell (no positional API -> a tidy deterministic
-    -- starting canvas: rows by capture order, entry at bottom-centre, never overlapping).
-    -- Baked into stored cells so rooms render spread; E4-drag re-positions to match reality.
+    return deleteRoomIDs
+end
+
+-- AutoLayout grid-packs each room's cell (no positional API -> a tidy
+-- deterministic canvas: rows by capture order, entry at bottom-centre, never
+-- overlapping). Baked into stored cells; E4-drag re-positions to match reality.
+local function _packRoomCells(rooms)
     local packed = HDG.Projects.AutoLayout.compute({ rooms = rooms }).layout
     for roomID, placed in pairs(packed) do
         local rec = rooms[roomID]
@@ -589,27 +585,31 @@ function HO:_FinalizeCapture(snapshot, houseID)
             rec.cell = { x = placed.cell.x, y = placed.cell.y, rotation = placed.rotation or 0, locked = false }
         end
     end
+end
 
-    -- Persist ONLY the SSoT fields. doorCardinals fed AutoLayout.InferRotation above
-    -- (a capture-time input) -- not stored; doors/occupancy all derive from cell + shape.
+-- Persist ONLY the SSoT fields. doorCardinals fed AutoLayout.InferRotation (a
+-- capture-time input) -- not stored; doors/occupancy derive from cell + shape.
+local function _stripToSSoTFields(rooms)
     for id, rec in pairs(rooms) do
         rooms[id] = {
             shape  = rec.shape, name = rec.name, cell = rec.cell,
             isBase = rec.isBase, captureIndex = rec.captureIndex,
         }
     end
+end
 
-    -- House identity for display. boundary: C_Housing.GetCurrentHouseInfo() ->
-    -- { houseName, plotID, neighborhoodName, houseGUID, ownerName }. houseGUID is
-    -- process-scoped (opaque handle) so we KEY by faction; we only LABEL by name.
+-- House identity for display + the capture-commit dispatch. boundary:
+-- C_Housing.GetCurrentHouseInfo() -> { houseName, plotID, neighborhoodName,
+-- houseGUID, ownerName }; houseGUID is process-scoped (opaque handle) so we KEY
+-- by faction and only LABEL by name.
+local function _dispatchCaptureCommit(houseID, rooms, deleteRoomIDs)
     local info = (C_Housing and C_Housing.GetCurrentHouseInfo and C_Housing.GetCurrentHouseInfo()) or nil  -- exception(boundary): C_Housing is a Blizzard API namespace; returns nil in headless tests
-
     HDG.Store:Dispatch({
         type    = HDG.Constants.ACTIONS.PROJECTS_CAPTURE_COMMIT,
         payload = {
             houseID = houseID,
             rooms = rooms, deleteRoomIDs = deleteRoomIDs,
-            lastCapturedAt = (time and time() or 0),  -- exception(boundary): GetTime/time absent in headless harness  -- conns feeds AutoLayout above, not persisted
+            lastCapturedAt = (time and time() or 0),  -- exception(boundary): GetTime/time absent in headless harness
             houseName        = info and info.houseName,
             plotID           = info and info.plotID,
             neighborhoodName = info and info.neighborhoodName,
@@ -617,40 +617,65 @@ function HO:_FinalizeCapture(snapshot, houseID)
     })
 end
 
+-- Finalize a captured floor by REPLACING the live layout. Every existing room deleted
+-- (crates fall to orphan bay); captured rooms added with fresh deterministic IDs +
+-- grid-packed cells. No fingerprint-merge (matching identical shapes was ambiguous).
+function HO:_FinalizeCapture(snapshot, houseID)
+    if not (snapshot and houseID) then return end
+    local floor   = snapshot.floor or 1
+    local floorID = HDG.Projects.IDs.makeFloorID(houseID, floor)
+    if not floorID then return end
+
+    -- Drop the live pin refs (restriction flags + diagnostics no longer persisted -- Phase 4).
+    for _, room in pairs(snapshot.rooms) do room._roomPin = nil end
+
+    local rooms         = _buildCapturedRooms(snapshot, floor, floorID)
+    local deleteRoomIDs = _computeDeletedRoomIDs(rooms, floorID)
+    _packRoomCells(rooms)
+    _stripToSSoTFields(rooms)
+    _dispatchCaptureCommit(houseID, rooms, deleteRoomIDs)
+end
+
+-- The placement KEY whose room carries this captured lineage, or nil. v8: every
+-- committed placement carries capturedID (tagged or not), so the match is direct
+-- -- no room.legacyID fallback. (Distinct from _existingRoomIDsForFloor, which
+-- filters capturedIDs by floor; this reverse-looks-up a key by exact ID.)
+local function _findPlacementKeyByCapture(layout, capturedID)
+    if not capturedID then return nil end
+    for k, pl in pairs(layout.placements) do
+        if pl.capturedID == capturedID then return k end
+    end
+    return nil
+end
+
+-- Stamp one observed vertical span onto its base placement's `floors` field so
+-- FloorMap projects it to exactly the floors it occupies. The ShapeAtlas default
+-- (tall_room=2, garden=3, ...) is only the uncaptured fallback; a stairwell can
+-- legitimately run 1->3.
+local function _applyObservedSpan(layout, lid, shape, s)
+    local span = s.maxFloor - s.baseFloor + 1
+    if span <= 1 or span == HDG.Projects.ShapeAtlas.GetFloors(shape) then return end
+    local capturedID = HDG.Projects.IDs.makeRoomID(s.floorID, tostring(s.captureIndex))
+    local key = _findPlacementKeyByCapture(layout, capturedID)
+    if not key then return end
+    HDG.Store:Dispatch({
+        type    = HDG.Constants.ACTIONS.LAYOUT_MOVE,
+        payload = { layoutID = lid, key = key, floors = span },
+    })
+end
+
 -- After an all-floors sweep: each multi-floor room was committed once (its base section)
--- and _FinalizeCapture tracked how high the same shape re-appeared. Stamp that observed
--- span onto the base PLACEMENT's `floors` field so FloorMap projects it to exactly the
--- floors it occupies -- the ShapeAtlas default (tall_room=2, garden=3, ...) is only the
--- fallback when uncaptured, and a stairwell can legitimately run 1->3.
+-- and _FinalizeCapture tracked how high the same shape re-appeared. Stamp those observed
+-- spans onto the base placements before teardown.
 function HO:_ApplyMultiFloorSpans()
     if not (_activeSweep and _activeSweep.mfSpan) then return end
-    local IDs, Atlas = HDG.Projects.IDs, HDG.Projects.ShapeAtlas
-    local state  = HDG.Store:GetState()
-    local p      = state.account.projects
+    local p      = HDG.Store:GetState().account.projects
     local house  = _activeSweep.houseID and p.houses[_activeSweep.houseID]
     local lid    = house and house.currentVersionID
     local layout = lid and p.layouts[lid]
     if not layout then return end
     for shape, s in pairs(_activeSweep.mfSpan) do
-        local span = s.maxFloor - s.baseFloor + 1
-        if span > 1 and span ~= Atlas.GetFloors(shape) then
-            local capturedID = IDs.makeRoomID(s.floorID, tostring(s.captureIndex))
-            -- Resolve the placement ApplyCapture wrote for this captured room.
-            -- v8: every committed placement carries capturedID (tagged or not),
-            -- so the lineage match is direct -- no room.legacyID fallback.
-            local key
-            if capturedID then
-                for k, pl in pairs(layout.placements) do
-                    if pl.capturedID == capturedID then key = k break end
-                end
-            end
-            if key then
-                HDG.Store:Dispatch({
-                    type    = HDG.Constants.ACTIONS.LAYOUT_MOVE,
-                    payload = { layoutID = lid, key = key, floors = span },
-                })
-            end
-        end
+        _applyObservedSpan(layout, lid, shape, s)
     end
 end
 

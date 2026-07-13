@@ -86,7 +86,7 @@ LC.widgets["houseTabPanel.blankIcon"] = {
     tooltip = false,
     kind = "atlas", ["in"] = "houseTabPanel",
     visible = "house.isBlank",
-    atlas = "PlayerPartyBlip", tone = "text.dim",
+    atlas = HDG.Constants.BULLET_DOT_ATLAS, tone = "text.dim",
     width = 24, height = 24, order = 5,
 }
 LC.widgets["houseTabPanel.blankLabel"] = {

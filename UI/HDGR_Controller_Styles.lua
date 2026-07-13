@@ -537,7 +537,7 @@ local function _onRenameClick(targetID, displayName)
             maxLetters = 64,
             data       = targetID,
             onAccept   = function(value, data)
-                local name = value and value:gsub("^%s+", ""):gsub("%s+$", "") or ""
+                local name = HDG.Format.Trim(value)
                 if name == "" then return end
                 HDG.Store:Dispatch({
                     type    = HDG.Constants.ACTIONS.STYLES_RENAME_STYLE,
@@ -880,12 +880,7 @@ HDG.Rows:Register("stylesCuratorRecentRow", {
 
 -- ===== Row factory: stylesCuratorMembershipRow ==============================
 -- One line per collection the hovered item belongs to.
-local function _layoutCuratorMembershipRow(row)
-    local label = HDG.UI.RowText(row, "caption", "Text", "LEFT")
-    label:SetPoint("LEFT",  row, "LEFT",  6, 0)
-    label:SetPoint("RIGHT", row, "RIGHT", -6, 0)
-    row._labelFs = label
-end
+local _layoutCuratorMembershipRow = _layoutCuratorRecentRow  -- hygiene A17: byte-identical layout
 
 local function _paintCuratorMembershipRow(row, ed)
     -- Placeholder ("(unassigned)") dims; real memberships use Text.
@@ -1279,7 +1274,8 @@ function StylesController:Wire(rootFrame)
         end)
     end
 
-    -- Search box: dispatches STYLES_LANDING_SET_SEARCH. Section headers always render.
+    -- Search box: generic WireSearchBox writes session.ui.styles.search via
+    -- UI_SET_TRANSIENT. Section headers always render.
     HDG.UI.WireSearchBox(rootFrame, "stylesPanel.landingSearch", "styles", "search")
 
     -- Back button: consolidated single handler, always dispatches view=landing.
@@ -1300,31 +1296,16 @@ function StylesController:Wire(rootFrame)
     -- ===== Detail surface =====
     -- Dedicated action STYLES_DETAIL_SET_SEARCH: generic WireSearchBox writes
     -- session.ui.<tab>.<key> which doesn't reach the nested detail.search slot.
-    local detailSearch = HDG.UI.W(rootFrame, "stylesPanel.detailSearch")
-    if detailSearch and detailSearch.SetScript then
-        detailSearch:SetScript("OnTextChanged", function(self_, userInput)
-            if not userInput then return end
-            local text = (self_.GetText and self_:GetText()) or ""
-            HDG.Store:Dispatch({
-                type    = HDG.Constants.ACTIONS.STYLES_DETAIL_SET_SEARCH,
-                payload = { text = text },
-            })
-        end)
-    end
+    HDG.UI.WireTextChanged(HDG.UI.W(rootFrame, "stylesPanel.detailSearch"), function(text)
+        HDG.Store:Dispatch({ type = HDG.Constants.ACTIONS.STYLES_DETAIL_SET_SEARCH, payload = { text = text } })
+    end)
 
     -- ===== Curator surface =====
     -- Source-mode picker self-wires via kind="dropdown".
     -- Card-grid search: dedicated action (nested curator.searchQuery slot, like detail).
-    local curatorSearch = HDG.UI.W(rootFrame, "stylesPanel.curatorSearch")
-    if curatorSearch and curatorSearch.SetScript then
-        curatorSearch:SetScript("OnTextChanged", function(self_, userInput)
-            if not userInput then return end
-            HDG.Store:Dispatch({
-                type    = HDG.Constants.ACTIONS.STYLES_CURATOR_SET_SEARCH,
-                payload = { text = (self_.GetText and self_:GetText()) or "" },
-            })
-        end)
-    end
+    HDG.UI.WireTextChanged(HDG.UI.W(rootFrame, "stylesPanel.curatorSearch"), function(text)
+        HDG.Store:Dispatch({ type = HDG.Constants.ACTIONS.STYLES_CURATOR_SET_SEARCH, payload = { text = text } })
+    end)
 
     -- Move / Copy: reducer guards reject missing target/items. Move removes from the
     -- source style; Copy (payload.copy) keeps the items in their source.
@@ -1353,7 +1334,7 @@ function StylesController:Wire(rootFrame)
             input      = true,
             maxLetters = 64,
             onAccept   = function(value)
-                local name = value and value:gsub("^%s+", ""):gsub("%s+$", "") or ""
+                local name = HDG.Format.Trim(value)
                 if name == "" then return end
                 HDG.Store:Dispatch({
                     type    = HDG.Constants.ACTIONS.STYLES_CREATE_STYLE,
@@ -1427,11 +1408,7 @@ function StylesController:Wire(rootFrame)
 
     -- Name/description editboxes: dispatch STYLES_SMARTSET_SET_FIELD.
     local function wireField(widgetId, fieldName)
-        local widget = HDG.UI.W(rootFrame, widgetId)
-        if not (widget and widget.SetScript) then return end
-        widget:SetScript("OnTextChanged", function(self_, userInput)
-            if not userInput then return end
-            local text = (self_.GetText and self_:GetText()) or ""
+        HDG.UI.WireTextChanged(HDG.UI.W(rootFrame, widgetId), function(text)
             HDG.Store:Dispatch({
                 type    = HDG.Constants.ACTIONS.STYLES_SMARTSET_SET_FIELD,
                 payload = { field = fieldName, value = text },
@@ -1453,7 +1430,7 @@ function StylesController:Wire(rootFrame)
             HDG.Log:Warn("styles_action", "Save Placed Decor: nothing placed (or catalog not ready)")
             return
         end
-        local ts = (time and time()) or 0   -- exception(boundary): wall clock
+        local ts = HDG.ControllerHelpers.Mechanics.Now()
         HDG.Store:Dispatch({ type = HDG.Constants.ACTIONS.STYLES_SNAPSHOT_PLACED,
             payload = { items = items, takenAt = ts,
                         displayName = "Placed Decor - " .. ((date and date("%b %d %H:%M", ts)) or tostring(ts)) } })  -- exception(boundary): date()
@@ -1505,18 +1482,11 @@ function StylesController:Wire(rootFrame)
 
     -- URL editbox: captures the text and auto-parses it (no separate Parse step).
     -- userInput guard skips the binding's own SetText echo, so no feedback loop.
-    local urlBox = HDG.UI.W(rootFrame, "stylesPanel.importUrlEdit")
-    if urlBox and urlBox.SetScript then
-        urlBox:SetScript("OnTextChanged", function(self_, userInput)
-            if not userInput then return end
-            local text = (self_.GetText and self_:GetText()) or ""
-            HDG.Store:Dispatch({
-                type    = HDG.Constants.ACTIONS.STYLES_IMPORT_SET_URL,
-                payload = { text = text },
-            })
-            HDG.Store:Dispatch({ type = HDG.Constants.ACTIONS.STYLES_IMPORT_PARSE })
-        end)
-    end
+    HDG.UI.WireTextChanged(HDG.UI.W(rootFrame, "stylesPanel.importUrlEdit"), function(text)
+        HDG.Store:Dispatch({ type = HDG.Constants.ACTIONS.STYLES_IMPORT_SET_URL, payload = { text = text } })
+        HDG.Store:Dispatch({ type = HDG.Constants.ACTIONS.STYLES_IMPORT_PARSE })
+    end)
+
 
     -- Title editbox: player can rename the parsed build before importing.
     -- userInput guard skips the binding's own SetText echo (parser-seeded value).

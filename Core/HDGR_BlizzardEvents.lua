@@ -285,6 +285,48 @@ function BE:OnInitialize()
     ensureFrame()
 end
 
+-- Resolve the { order, defs } module bundle: caller's bundle, else pull from
+-- HDG.Modules, else empty. Always returns both fields as tables so callers can
+-- strict-read modules.defs[name] (no `modules.defs and` cascade).
+local function _resolveModules(modules)
+    if not modules and HDG.Modules then
+        local order = HDG.Modules:GetOrder() or {}
+        local defs  = {}
+        for _, name in ipairs(order) do defs[name] = HDG.Modules:Get(name) end
+        return { order = order, defs = defs }
+    end
+    modules = modules or { order = {}, defs = {} }
+    modules.order = modules.order or {}
+    modules.defs  = modules.defs  or {}
+    return modules
+end
+
+-- Validate + install one module's declarative blizzardEvents subscriptions.
+-- Validation failures are batched into `errors` and raised fatally by the caller.
+local function _subscribeModuleEvents(def, errors)
+    for event, spec in pairs(def.blizzardEvents) do
+        local ok, subOrErr = pcall(validateSub, def.name, event, spec)  -- exception(fire-forget): errors batched into errors[] and raised as fatal after the loop
+        if ok then
+            addSubscription(def, event, subOrErr)
+        else
+            errors[#errors + 1] = tostring(subOrErr)
+        end
+    end
+end
+
+-- Walk modules in topo order, installing each one's subscriptions. Returns the
+-- batched validation errors (empty on success).
+local function _installModuleSubscriptions(modules)
+    local errors = {}
+    for _, modName in ipairs(modules.order) do
+        local def = modules.defs[modName]   -- strict: _resolveModules guarantees defs is populated
+        if def and def.blizzardEvents then
+            _subscribeModuleEvents(def, errors)
+        end
+    end
+    return errors
+end
+
 -- Boot: called after Modules:Topo() but before Modules:Phase1() so declarative subscriptions
 -- are live before any onInitialize fires. Accepts { order, defs } so the engine doesn't reach
 -- into HDG.Modules directly. Falls back to HDG.Modules when called without arguments.
@@ -292,30 +334,8 @@ function BE:Boot(modules)
     if self._booted then return end
     self._booted = true
 
-    if not modules and HDG.Modules then
-        local order = HDG.Modules:GetOrder() or {}
-        local defs  = {}
-        for _, name in ipairs(order) do defs[name] = HDG.Modules:Get(name) end
-        modules = { order = order, defs = defs }
-    end
-    modules = modules or { order = {}, defs = {} }
-
-    local errors = {}
-    for _, modName in ipairs(modules.order or {}) do
-        local def = modules.defs and modules.defs[modName]
-        local events = def and def.blizzardEvents
-        if events then
-            for event, spec in pairs(events) do
-                local ok, subOrErr = pcall(validateSub, def.name, event, spec)  -- exception(fire-forget): errors batched into errors[] and raised as fatal after loop (line ~365)
-                if ok then
-                    addSubscription(def, event, subOrErr)
-                else
-                    errors[#errors + 1] = tostring(subOrErr)
-                end
-            end
-        end
-    end
-
+    modules = _resolveModules(modules)
+    local errors = _installModuleSubscriptions(modules)
     if #errors > 0 then
         error("HDG.BlizzardEvents:Boot validation failures:\n  " ..
             table.concat(errors, "\n  "), 2)
@@ -338,8 +358,4 @@ function BE:_Reset()
     self._hookInstalled = {}
     self._registeredEvents = {}
     self._booted = false
-end
-
-function BE:_GetSubscribers(event)
-    return self._subscribers[event]
 end

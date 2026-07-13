@@ -331,11 +331,7 @@ local function _trainersRowFactory(_template)
             _resetRowFields(row)
             local handler = _CONFIGURE_BY_KIND[ed.kind]
             if handler then
-                local cc = {
-                    accent  = HDG.Theme:ColorCode("semantic.accent"),
-                    dim     = HDG.Theme:ColorCode("text.dim"),
-                    success = HDG.Theme:ColorCode("semantic.success"),
-                }
+                local cc = HDG.UI.SemanticCC()
                 handler(row, ed, cc)
             end
             row:SetHeight(28)

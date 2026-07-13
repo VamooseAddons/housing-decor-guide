@@ -85,12 +85,7 @@ function HDG:CreateMainWindow()
     -- everything; the WindowFrameBorder Skinner shows + paints it when the active
     -- scheme declares chrome.windowBorder, and hides it on every other scheme.
     -- EnableMouse(false) so the full-cover overlay never intercepts content clicks.
-    local border = CreateFrame("Frame", nil, frame)
-    border:SetAllPoints(frame)
-    border:SetFrameLevel(frame:GetFrameLevel() + 50)
-    border:EnableMouse(false)
-    frame._hdgrBorder = border
-    HDG.Theme:Register(border, "WindowFrameBorder")
+    HDG.UI.AttachWindowFrameBorder(frame)
 
     -- Apply initial scale from account.config.scale (default 1.0). The
     -- account.config.scale subscriber below picks up runtime changes; this

@@ -63,11 +63,7 @@ end
 
 local function _ensureVendorChrome(row)
     if row._zoneVendorChromeBuilt then return end
-    -- Pin button at RIGHT -4 (waypoint atlas).
-    local pin = HDG.UI:AtlasButton(row, "Waypoint-MapPin-ChatIcon", 14)
-    pin:SetPoint("RIGHT", row, "RIGHT", -4, 0)
-    pin:Hide()
-    row._zonePinBtn = pin
+    row._zonePinBtn = HDG.UI.RowPinButton(row)
     row._zoneVendorChromeBuilt = true
 end
 
@@ -220,13 +216,8 @@ function ZoneController:Wire(rootFrame)
     -- zonePanel widgets are absent (standalone lumber/shopping windows).
     local sb = HDG.UI.W(rootFrame, "zonePanel.searchBox")
     if not sb then return end
-    sb:SetScript("OnTextChanged", function(self, userInput)
-        if not userInput then return end
-        local text = (self.GetText and self:GetText()) or ""
-        HDG.Store:Dispatch({
-            type    = A.ZONE_SET_SEARCH,
-            payload = { text = text },
-        })
+    HDG.UI.WireTextChanged(sb, function(text)
+        HDG.Store:Dispatch({ type = A.ZONE_SET_SEARCH, payload = { text = text } })
     end)
 
     -- Show-collected toggle: flips session.ui.zoneScanner.showCollected.

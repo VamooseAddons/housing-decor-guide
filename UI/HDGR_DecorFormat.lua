@@ -95,8 +95,8 @@ end
 
 -- ===== F:Collection(row) =====================================================
 -- "Collected (8 [chest]) (1 placed)" / "Not Collected" with theme colors.
--- Reads row.quantity (stored) + row.numPlaced + row.isOwned.
--- TODO: switch to row.stored / row.placed when the field-rename sweep lands.
+-- Reads row.quantity (stored) + row.numPlaced + row.isOwned (the stable
+-- catalog field names).
 function F:Collection(row)
     local successCC = HDG.Theme:ColorCode("semantic.success")
     local warningCC = HDG.Theme:ColorCode("semantic.warning")

@@ -229,8 +229,3 @@ function Parsers:Format(name, payload)
     if not fn then return nil, "No formatter registered for " .. tostring(name) end
     return fn(payload)
 end
-
--- Register a formatter from outside the module.
-function Parsers:RegisterFormatter(name, fn)
-    self._formatters[name] = fn
-end

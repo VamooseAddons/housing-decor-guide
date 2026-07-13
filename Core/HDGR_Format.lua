@@ -186,3 +186,18 @@ function F.LogLine(entry)
     end
     return logColorCode(entry.level) .. "[" .. (entry.tag or "?") .. "] " .. body .. "|r"
 end
+
+-- Trim surrounding whitespace (hygiene review A5 -- 7 hand-rolled copies).
+function F.Trim(s)
+    return (s or ""):gsub("^%s+", ""):gsub("%s+$", "")
+end
+
+-- Resolve an item's LOCALIZED name with a baked-English fallback: resolved
+-- live name wins, else the baked DB name, else the placeholder the resolver
+-- returned (hygiene A16 -- shared by Mogul/Recipes selectors). Callers declare
+-- reads on session.resolvers.itemNames-adjacent ticks as usual.
+function F.LocalItemName(itemID, baked)
+    if not itemID then return baked or "?" end
+    local name, resolved = HDG.ItemNameResolver:ResolveName(itemID)
+    return (resolved and name) or baked or name
+end

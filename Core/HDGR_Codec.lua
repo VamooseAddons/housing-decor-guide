@@ -59,3 +59,21 @@ function M.AsciiOnly(str)
     cleaned = (cleaned:gsub("%s+$", ""))
     return cleaned
 end
+
+-- ===== Share-code envelope (hygiene review A'3) ==============================
+-- The "MAGIC:VER:base64(body)" wrap/unwrap every HDG line-format codec shares
+-- (Crate / Layout / Shopping). Unwrap returns the decoded body, or nil for a
+-- non-string, wrong magic/version, or empty payload -- exactly the prologue
+-- each codec used to hand-roll. (DecorDumpCodec is NOT this format by design.)
+function M.WrapEnvelope(magic, ver, body)
+    return magic .. ":" .. ver .. ":" .. M.b64encode(body)
+end
+
+function M.UnwrapEnvelope(encoded, magic, ver)
+    if type(encoded) ~= "string" or #encoded == 0 then return nil end
+    local prefix, v, payload = encoded:match("^(%w+):(%d+):(.+)$")
+    if prefix ~= magic or v ~= ver then return nil end
+    local decoded = M.b64decode(payload)
+    if not decoded or #decoded == 0 then return nil end
+    return decoded
+end

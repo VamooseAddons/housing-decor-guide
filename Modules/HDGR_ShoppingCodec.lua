@@ -75,7 +75,7 @@ function C.Encode(listRecord)
         end
     end
 
-    return MAGIC_PREFIX .. ":" .. FORMAT_VERSION .. ":" .. b64encode(table.concat(lines, "\n"))
+    return HDG.Codec.WrapEnvelope(MAGIC_PREFIX, FORMAT_VERSION, table.concat(lines, "\n"))
 end
 
 -- ===== Decode ===============================================================
@@ -105,13 +105,9 @@ local function parseItemLine(line)
 end
 
 function C.Decode(encoded)
-    if type(encoded) ~= "string" or #encoded == 0 then return nil end
     -- Accept HDGVL:1:... only. Format version gates future migrations.
-    local prefix, ver, payload = encoded:match("^(HDGVL):(%d+):(.+)$")
-    if prefix ~= MAGIC_PREFIX or ver ~= FORMAT_VERSION then return nil end
-
-    local decoded = b64decode(payload)
-    if not decoded or #decoded == 0 then return nil end
+    local decoded = HDG.Codec.UnwrapEnvelope(encoded, MAGIC_PREFIX, FORMAT_VERSION)
+    if not decoded then return nil end
 
     local items = {}
     local meta  = {}

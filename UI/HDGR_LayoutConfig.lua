@@ -277,15 +277,15 @@ HDG.LayoutConfig.widgets["catalogIntroPanel.dotsLeftSpacer"] = {
 }
 HDG.LayoutConfig.widgets["catalogIntroPanel.dot1"] = {
     tooltip = false, kind = "atlas", ["in"] = "catalogIntro.dotsRow",
-    atlas = "PlayerPartyBlip", tone = "semantic.accent", width = 12, height = 12, order = 10,
+    atlas = HDG.Constants.BULLET_DOT_ATLAS, tone = "semantic.accent", width = 12, height = 12, order = 10,
 }
 HDG.LayoutConfig.widgets["catalogIntroPanel.dot2"] = {
     tooltip = false, kind = "atlas", ["in"] = "catalogIntro.dotsRow",
-    atlas = "PlayerPartyBlip", tone = "semantic.accent", width = 12, height = 12, order = 12,
+    atlas = HDG.Constants.BULLET_DOT_ATLAS, tone = "semantic.accent", width = 12, height = 12, order = 12,
 }
 HDG.LayoutConfig.widgets["catalogIntroPanel.dot3"] = {
     tooltip = false, kind = "atlas", ["in"] = "catalogIntro.dotsRow",
-    atlas = "PlayerPartyBlip", tone = "semantic.accent", width = 12, height = 12, order = 14,
+    atlas = HDG.Constants.BULLET_DOT_ATLAS, tone = "semantic.accent", width = 12, height = 12, order = 14,
 }
 HDG.LayoutConfig.widgets["catalogIntroPanel.dotsRightSpacer"] = {
     tooltip = false, kind = "spacer", ["in"] = "catalogIntro.dotsRow", width = "fill", height = 14, order = 20,

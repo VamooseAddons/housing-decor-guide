@@ -100,12 +100,7 @@ function W:_CreateOne(name, win)
     -- Decorative window-frame overlay (Housing Decor Guide theme only) -- same
     -- pattern as the main window: a child frame above content; WindowFrameBorder
     -- shows + stamps chrome.windowBorder when the scheme declares it, else hides.
-    local border = CreateFrame("Frame", nil, frame)
-    border:SetAllPoints(frame)
-    border:SetFrameLevel(frame:GetFrameLevel() + 50)
-    border:EnableMouse(false)
-    frame._hdgrBorder = border
-    HDG.Theme:Register(border, "WindowFrameBorder")
+    HDG.UI.AttachWindowFrameBorder(frame)
 
     -- Interest set: shown + position binding + all widget read-closures.
     -- Reconciler short-circuits when invalidation doesn't intersect.
@@ -244,4 +239,3 @@ end
 
 -- Test helpers.
 function W:_GetFrame(name) return self._frames[name] end
-function W:_GetWindow(name) return HDG.LayoutConfig.windows[name] end

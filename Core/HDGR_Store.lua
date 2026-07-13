@@ -16,12 +16,10 @@ HDG = HDG or {}
 
 -- ===== State constructors =====================================================
 
-local function DeepCopy(value)
-    if type(value) ~= "table" then return value end
-    local out = {}
-    for k, v in pairs(value) do out[k] = DeepCopy(v) end
-    return out
-end
+-- Canonical deep copy lives in HDG.TableUtils (cycle-aware, metatable-
+-- preserving); the private clone this file carried was a strict subset
+-- (hygiene review A'2). TOC loads TableUtils first.
+local DeepCopy = HDG.TableUtils.DeepCopy
 
 local function NewConfig()
     return {
@@ -869,6 +867,44 @@ local function _nextVersionID(p)
     return "version:" .. p.versionSeq
 end
 
+-- Placements for a new what-if layout: copy the source's (tags ride as roomID;
+-- rooms are shared by reference, never copied), or seed a from-scratch design
+-- with just the centre-canvas Entry anchor. Returns placements, slotSeq. (D1)
+local function _copyOrSeedLayoutPlacements(srcLayout)
+    if srcLayout then
+        local placements = {}
+        for key, pl in pairs(srcLayout.placements) do
+            placements[key] = { floor = pl.floor, x = pl.x, y = pl.y,
+                                rotation = pl.rotation, shape = pl.shape, floors = pl.floors,
+                                roomID = pl.roomID,   -- v8: tags copy; rooms shared by reference
+                                capturedID = pl.capturedID, capturedName = pl.capturedName }
+        end
+        return placements, srcLayout.slotSeq or 0
+    end
+    -- From-scratch: exactly one Entry (the anchor; palette never offers it),
+    -- centre-canvas so building starts from the door.
+    return { ["slot:1"] = { floor = 1, x = 10, y = 10, rotation = 0, shape = "entry" } }, 1
+end
+
+-- Reverse index of roomID TAG -> layouts it appears in. _reindex adds every
+-- tag in `placements` to layout `lid` (+1 per copy); _deindex (version delete)
+-- drops them. Keyed by TAG, not placement key (review 17: the key form was a
+-- silent no-op against account.rooms). (D1)
+local function _reindexRoomLayouts(idx, placements, lid)
+    for _, pl in pairs(placements) do
+        if pl.roomID then
+            idx.roomLayouts[pl.roomID] = idx.roomLayouts[pl.roomID] or {}
+            idx.roomLayouts[pl.roomID][lid] = (idx.roomLayouts[pl.roomID][lid] or 0) + 1
+        end
+    end
+end
+
+local function _deindexRoomLayouts(idx, placements, lid)
+    for _, pl in pairs(placements) do
+        if pl.roomID and idx.roomLayouts[pl.roomID] then idx.roomLayouts[pl.roomID][lid] = nil end
+    end
+end
+
 -- Resolve (lazily minting on first sight) a house's CURRENT version; returns its
 -- versionID. The capture path + the 1->2 migration both funnel reality into the
 -- current version. Mints house.currentVersionID/activeVersionID + the version record
@@ -923,6 +959,25 @@ end
 -- Append a placed/removed event to the active session for houseKey, lazily
 -- opening a session if none is active (a placement/removal before an explicit
 -- RECENT_SESSION_START). Aggregates by itemID. `kind` is "placed" or "removed".
+-- Open a fresh RecentActivity session for `house`, sealing the previous one and
+-- evicting past the cap. An active session that recorded NO events is reused so
+-- opening/closing the editor without placing anything doesn't spam empty
+-- sessions. Sibling of _recentAppend ("open a session" vs "append an event"). (D3)
+local function _openNewRecentSession(house)
+    local newestID = house.sessionOrder[1]
+    local newest   = newestID and house.sessions[newestID]
+    if newest and not newest.endedAt and (newest.eventCount or 0) == 0 then return end  -- reuse the empty active one
+    if newest and not newest.endedAt then newest.endedAt = time() end
+    local sid = time()
+    if house.sessions[sid] then sid = sid + 1 end  -- collision-safe within one second
+    house.sessions[sid] = { sessionID = sid, startedAt = sid, endedAt = nil,
+                            eventCount = 0, events = {}, actions = {} }
+    table.insert(house.sessionOrder, 1, sid)
+    while #house.sessionOrder > RECENT_SESSION_CAP do
+        house.sessions[table.remove(house.sessionOrder)] = nil
+    end
+end
+
 local function _recentAppend(state, houseKey, itemID, kind)
     if not (houseKey and itemID) then return end
     local ra = state.account.recentActivity
@@ -1366,13 +1421,23 @@ end
 -- call so Logger / Combat / Persistence layers fire at the right edges
 -- without the reducer caring.
 
+-- Shared reducer micro-idioms (hygiene review A'1): the boolean flip and the
+-- sparse-set membership flip that ~25 toggle reducers hand-rolled inline.
+local function _toggleBool(t, field)
+    t[field] = not (t[field] == true)
+end
+local function _toggleSetMember(set, key)
+    set[key] = not (set[key] == true) and true or nil
+end
+
 -- Multi-select filter-set toggle: value=="all" clears the set (-> "All"); else
--- flip membership. Shared by the 5 ACQ_TOGGLE_* cases (empty set = all).
+-- flip membership. Shared by the ACQ_TOGGLE_* cases and RECIPES_TOGGLE_EXPANSION
+-- (empty set = all).
 local function _acqToggleFilter(set, value)
     if value == "all" then
-        for k in pairs(set) do set[k] = nil end
+        wipe(set)
     else
-        set[value] = not (set[value] == true) and true or nil
+        _toggleSetMember(set, value)
     end
 end
 
@@ -1637,7 +1702,7 @@ HDG.Actions:Register{ name = "MAIN_WINDOW_TOGGLE",
     persists = true,  combatUnsafe = false,
             invalidates = { "account.ui.mainWindowShown" },
     reduce = function(state, payload)
-        state.account.ui.mainWindowShown = not (state.account.ui.mainWindowShown == true)
+        _toggleBool(state.account.ui, "mainWindowShown")
     end }
 
 HDG.Actions:Register{ name = "NAV_TOGGLE_GROUP",
@@ -1731,7 +1796,7 @@ HDG.Actions:Register{ name = "ACQ_TOGGLE_ADVANCED_FILTERS",
     invalidates = { "session.ui.acquisition.advancedFiltersOpen" },
     reduce = function(state, payload)
         local a = state.session.ui.acquisition
-        a.advancedFiltersOpen = not (a.advancedFiltersOpen == true)
+        _toggleBool(a, "advancedFiltersOpen")
     end }
 
 HDG.Actions:Register{ name = "ACQ_SET_PRESET",
@@ -1876,7 +1941,7 @@ HDG.Actions:Register{ name = "LOG_TOGGLE_AUTOSCROLL",
     invalidates = { "session.log.tabFilter" },
     reduce = function(state, payload)
         local f = state.session.log.tabFilter
-        f.autoScroll = not (f.autoScroll == true)
+        _toggleBool(f, "autoScroll")
     end }
 
 HDG.Actions:Register{ name = "COLLECTION_BULK_LOAD",
@@ -2330,7 +2395,7 @@ HDG.Actions:Register{ name = "CHARACTER_HIDDEN_TOGGLE",
             end,
     reduce = function(state, payload)
         local c = state.account.characters[payload.charKey]
-        if c then c.hidden = not (c.hidden == true) end
+        if c then _toggleBool(c, "hidden") end
     end }
 
 HDG.Actions:Register{ name = "COMPANION_TOGGLE",
@@ -2527,7 +2592,7 @@ HDG.Actions:Register{ name = "HOUSETAB_TOGGLE_WIDGET",
     reduce = function(state, payload)
         local id = payload.widgetID
         local ht = state.account.ui.houseTab
-        ht.enabled[id] = not (ht.enabled[id] == true) and true or nil
+        _toggleSetMember(ht.enabled, id)
     end }
 
 HDG.Actions:Register{ name = "HOUSETAB_SET_ORDER",
@@ -2632,7 +2697,7 @@ HDG.Actions:Register{ name = "TRAINERS_TOGGLE_PROFESSION",
         local p = payload.profession
         if p then
             local expanded = state.session.ui.trainers.expandedProfessions
-            expanded[p] = not (expanded[p] == true) and true or nil
+            _toggleSetMember(expanded, p)
         end
     end }
 
@@ -2715,18 +2780,12 @@ HDG.Actions:Register{ name = "MOGUL_SET_SUPPLY_CAP",
         si.capN = payload.n
     end }
 
-HDG.Actions:Register{ name = "MOGUL_SET_FRUGAL",
-    persists = false, combatUnsafe = false, 
-    invalidates = { "session.ui.mogul.frugal" },
-    reduce = function(state, payload)
-        state.session.ui.mogul.frugal = payload.on == true
-    end }
 
 HDG.Actions:Register{ name = "MOGUL_TOGGLE_FRUGAL",
     persists = false, combatUnsafe = false, 
     invalidates = { "session.ui.mogul.frugal" },
     reduce = function(state, payload)
-        state.session.ui.mogul.frugal = not (state.session.ui.mogul.frugal == true)
+        _toggleBool(state.session.ui.mogul, "frugal")
     end }
 
 HDG.Actions:Register{ name = "GOBLIN_SET_PROFESSION",
@@ -2771,7 +2830,7 @@ HDG.Actions:Register{ name = "GOBLIN_TOGGLE_AUCTIONS",
     invalidates = { "session.ui.mogul.goblin.auctionsOnly" },
     reduce = function(state, payload)
         local g = state.session.ui.mogul.goblin
-        g.auctionsOnly = not (g.auctionsOnly == true)
+        _toggleBool(g, "auctionsOnly")
     end }
 
 HDG.Actions:Register{ name = "GOBLIN_TOGGLE_HAVE_LUMBER",
@@ -2779,7 +2838,7 @@ HDG.Actions:Register{ name = "GOBLIN_TOGGLE_HAVE_LUMBER",
     invalidates = { "session.ui.mogul.goblin.haveLumber" },
     reduce = function(state, payload)
         local g = state.session.ui.mogul.goblin
-        g.haveLumber = not (g.haveLumber == true)
+        _toggleBool(g, "haveLumber")
     end }
 
 HDG.Actions:Register{ name = "GOBLIN_TOGGLE_ROW_EXPAND",
@@ -2907,14 +2966,14 @@ HDG.Actions:Register{ name = "RECIPES_TOGGLE_PROFESSION",
             byChar[charKey] = set
         end
         if payload.profession == "all" then
-            for k in pairs(set) do set[k] = nil end
+            wipe(set)
         elseif payload.profession == "mine" then
-            for k in pairs(set) do set[k] = nil end
+            wipe(set)
             if char and type(char.professions) == "table" then
                 for profName in pairs(char.professions) do set[profName] = true end
             end
         else
-            set[payload.profession] = not (set[payload.profession] == true) and true or nil
+            _toggleSetMember(set, payload.profession)
         end
     end }
 
@@ -2925,12 +2984,7 @@ HDG.Actions:Register{ name = "RECIPES_TOGGLE_EXPANSION",
         -- Multi-select set toggle (persisted in account.ui). payload.expansion
         -- == "all" clears the set (master "All Expansions" toggle -> show every
         -- expansion); otherwise flip that expansion's membership. Empty = all.
-        local set = state.account.ui.recipes.expansionFilter
-        if payload.expansion == "all" then
-            for k in pairs(set) do set[k] = nil end
-        else
-            set[payload.expansion] = not (set[payload.expansion] == true) and true or nil
-        end
+        _acqToggleFilter(state.account.ui.recipes.expansionFilter, payload.expansion)
     end }
 
 HDG.Actions:Register{ name = "RECIPES_SET_LIST_FILTER",
@@ -3093,12 +3147,6 @@ HDG.Actions:Register{ name = "STYLES_LANDING_SET_FILTER",
         state.session.ui.styles.landing.filter = payload.filter
     end }
 
-HDG.Actions:Register{ name = "STYLES_LANDING_SET_SEARCH",
-    persists = false, combatUnsafe = false, noisy = true,
-    invalidates = { "session.ui.styles.landing.search" },
-    reduce = function(state, payload)
-        state.session.ui.styles.landing.search = payload.text
-    end }
 
 HDG.Actions:Register{ name = "STYLES_LANDING_TOGGLE_SECTION",
     persists = false, combatUnsafe = false, 
@@ -3107,7 +3155,7 @@ HDG.Actions:Register{ name = "STYLES_LANDING_TOGGLE_SECTION",
         local t = payload.type
         if t then
             local expanded = state.session.ui.styles.landing.expandedSections
-            expanded[t] = not (expanded[t] == true) and true or nil
+            _toggleSetMember(expanded, t)
         end
     end }
 
@@ -3125,40 +3173,10 @@ HDG.Actions:Register{ name = "STYLES_DETAIL_SELECT_ITEM",
         state.session.ui.styles.detail.selectedItemID = payload.itemID
     end }
 
-HDG.Actions:Register{ name = "STYLES_DETAIL_SET_VIEWMODE",
-    persists = false, combatUnsafe = false, 
-    invalidates = { "session.ui.styles.detail.viewMode" },
-    reduce = function(state, payload)
-        state.session.ui.styles.detail.viewMode = payload.mode
-    end }
 
-HDG.Actions:Register{ name = "STYLES_DETAIL_SET_FILTER",
-    persists = false, combatUnsafe = false, 
-    invalidates = { "session.ui.styles.detail.sourceFilter" },
-    reduce = function(state, payload)
-        state.session.ui.styles.detail.sourceFilter = payload.source
-    end }
 
-HDG.Actions:Register{ name = "STYLES_DETAIL_SET_SUBCAT",
-    persists = false, combatUnsafe = false, 
-    invalidates = { "session.ui.styles.detail.subcatFilter" },
-    reduce = function(state, payload)
-        state.session.ui.styles.detail.subcatFilter = payload.subcat
-    end }
 
-HDG.Actions:Register{ name = "STYLES_CACHE_BUILDING_STARTED",
-    persists = false, combatUnsafe = false, 
-    invalidates = { "session.styles.changeSeq" },
-    reduce = function(state, payload)
-        -- Notification-only (retained for closed-taxonomy check).
-    end }
 
-HDG.Actions:Register{ name = "STYLES_CACHE_BUILDING_FINISHED",
-    persists = false, combatUnsafe = false, 
-    invalidates = { "session.styles.changeSeq" },
-    reduce = function(state, payload)
-        -- Notification-only (retained for closed-taxonomy check).
-    end }
 
 HDG.Actions:Register{ name = "STYLES_DETAIL_SET_SEARCH",
     persists = false, combatUnsafe = false, noisy = true,
@@ -3579,27 +3597,12 @@ HDG.Actions:Register{ name = "RECENT_SESSION_START",
         -- closing the editor without placing anything doesn't spam empty
         -- "Now (0)" sessions).
         local key = payload.houseKey
-        if key then
-            local ra = state.account.recentActivity
-            ra.lastHouseKey = key
-            local house = ra.houses[key]
-            if not house then house = { sessionOrder = {}, sessions = {} }; ra.houses[key] = house end
-            local newestID = house.sessionOrder[1]
-            local newest   = newestID and house.sessions[newestID]
-            local reuseEmpty = newest and not newest.endedAt and (newest.eventCount or 0) == 0
-            if not reuseEmpty then
-                if newest and not newest.endedAt then newest.endedAt = time() end
-                local sid = time()
-                if house.sessions[sid] then sid = sid + 1 end
-                house.sessions[sid] = { sessionID = sid, startedAt = sid, endedAt = nil,
-                                        eventCount = 0, events = {}, actions = {} }
-                table.insert(house.sessionOrder, 1, sid)
-                while #house.sessionOrder > RECENT_SESSION_CAP do
-                    local dropID = table.remove(house.sessionOrder)
-                    house.sessions[dropID] = nil
-                end
-            end
-        end
+        if not key then return end
+        local ra = state.account.recentActivity
+        ra.lastHouseKey = key
+        local house = ra.houses[key]
+        if not house then house = { sessionOrder = {}, sessions = {} }; ra.houses[key] = house end
+        _openNewRecentSession(house)
     end }
 
 HDG.Actions:Register{ name = "RECENT_DECOR_PLACED",
@@ -3931,7 +3934,7 @@ HDG.Actions:Register{ name = "ZONE_TOGGLE_VENDOR",
         local npcID = payload.npcID
         if type(npcID) == "number" then
             local exp = state.session.ui.zoneScanner.expanded
-            exp[npcID] = not (exp[npcID] == true) and true or nil
+            _toggleSetMember(exp, npcID)
         end
     end }
 
@@ -4083,7 +4086,7 @@ HDG.Actions:Register{ name = "LUMBER_WINDOW_TOGGLE",
         if payload and payload.visible ~= nil then
             c.windowVisible = payload.visible and true or false
         else
-            c.windowVisible = not (c.windowVisible == true)
+            _toggleBool(c, "windowVisible")
         end
     end }
 
@@ -4102,7 +4105,7 @@ HDG.Actions:Register{ name = "LUMBER_RADAR_COLLAPSE_TOGGLE",
             invalidates = { "account.lumber.config.radarCollapsed" },
     reduce = function(state, payload)
         local c = state.account.lumber.config
-        c.radarCollapsed = not (c.radarCollapsed == true)
+        _toggleBool(c, "radarCollapsed")
     end }
 
 HDG.Actions:Register{ name = "LUMBER_AUTOSHOW_TOGGLE",
@@ -4110,7 +4113,7 @@ HDG.Actions:Register{ name = "LUMBER_AUTOSHOW_TOGGLE",
             invalidates = { "account.lumber.config.autoShowOnHarvest" },
     reduce = function(state, payload)
         local c = state.account.lumber.config
-        c.autoShowOnHarvest = not (c.autoShowOnHarvest == true)
+        _toggleBool(c, "autoShowOnHarvest")
     end }
 
 HDG.Actions:Register{ name = "LUMBER_LIST_COLLAPSE_TOGGLE",
@@ -4118,7 +4121,7 @@ HDG.Actions:Register{ name = "LUMBER_LIST_COLLAPSE_TOGGLE",
             invalidates = { "account.lumber.config.listCollapsed" },
     reduce = function(state, payload)
         local c = state.account.lumber.config
-        c.listCollapsed = not (c.listCollapsed == true)
+        _toggleBool(c, "listCollapsed")
     end }
 
 HDG.Actions:Register{ name = "LUMBER_GOAL_TOGGLE",
@@ -4260,10 +4263,10 @@ HDG.Actions:Register{ name = "SHOPPING_TOGGLE_EXPANDED",
         -- + key. (Replaces the controller's read-clone-flip-write _patchExpanded.)
         local e = state.session.ui.shoppingList.expanded
         if payload.bucket == "wishList" or payload.bucket == "ahList" then
-            e[payload.bucket] = not (e[payload.bucket] == true)
+            _toggleBool(e, payload.bucket)
         elseif payload.bucket and payload.key ~= nil then
             local b = e[payload.bucket]
-            b[payload.key] = not (b[payload.key] == true) and true or nil
+            _toggleSetMember(b, payload.key)
         end
     end }
 
@@ -4352,6 +4355,25 @@ HDG.Actions:Register{ name = "SHOPPING_ITEM_ADJUST_QTY",
         end
     end }
 
+-- Resolve one npcID-less wishlist entry to `npc`: merge into an existing
+-- (itemID, npcID) vendor row if one exists (coalesce, mirroring ITEM_ADD) and
+-- drop the entry, else stamp the npcID onto it. Caller walks high->low so the
+-- removed index stays valid.
+local function _resolveVendorForEntry(list, i, entry, npc)
+    local mergeInto
+    for _, other in ipairs(list.items) do
+        if other ~= entry and other.itemID == entry.itemID and other.npcID == npc then
+            mergeInto = other; break
+        end
+    end
+    if mergeInto then
+        mergeInto.qty = (mergeInto.qty or 1) + (entry.qty or 1)
+        table.remove(list.items, i)
+    else
+        entry.npcID = npc
+    end
+end
+
 HDG.Actions:Register{ name = "SHOPPING_RESOLVE_VENDORS",
     persists = true, combatUnsafe = false,
             invalidates = { "account.vendorShoppingLists" },
@@ -4361,25 +4383,13 @@ HDG.Actions:Register{ name = "SHOPPING_RESOLVE_VENDORS",
         -- Walk high->low: a resolved row that collides with an existing (itemID, npcID)
         -- vendor row merges its qty in and is removed (coalesce, mirroring ITEM_ADD).
         local list = state.account.vendorShoppingLists[payload.listID]
-        if list then
-            local res = payload.resolutions
-            for i = #list.items, 1, -1 do
-                local entry = list.items[i]
-                local npc = res[entry.itemID]   -- resolved vendor for this itemID, or nil
-                if (not entry.npcID) and npc then
-                    local mergeInto
-                    for _, other in ipairs(list.items) do
-                        if other ~= entry and other.itemID == entry.itemID and other.npcID == npc then
-                            mergeInto = other; break
-                        end
-                    end
-                    if mergeInto then
-                        mergeInto.qty = (mergeInto.qty or 1) + (entry.qty or 1)
-                        table.remove(list.items, i)
-                    else
-                        entry.npcID = npc
-                    end
-                end
+        if not list then return end
+        local res = payload.resolutions
+        for i = #list.items, 1, -1 do
+            local entry = list.items[i]
+            local npc = res[entry.itemID]   -- resolved vendor for this itemID, or nil
+            if (not entry.npcID) and npc then
+                _resolveVendorForEntry(list, i, entry, npc)
             end
         end
 
@@ -4604,8 +4614,16 @@ HDG.Actions:Register{ name = "BLUEPRINT_FORGET", persists = true,
     end }
 
 HDG.Actions:Register{ name = "BLUEPRINT_EXPORT_SUCCESS", persists = false,
-    invalidates = { "session.blueprints.selectedCode" },
-    reduce = function(state, payload) state.session.blueprints.selectedCode = payload.shareCode end }
+    invalidates = { "session.blueprints.selectedCode", "account.blueprints.labels" },
+    reduce = function(state, payload)
+        state.session.blueprints.selectedCode = payload.shareCode
+        -- Optimistic label: show the typed name immediately; the catalog name
+        -- (which wins display precedence) replaces it when the collection
+        -- round-trip returns. Nil-guarded: replayed/legacy events carry no label.
+        if payload.label then  -- exception(optional): label only on live exports
+            state.account.blueprints.labels[payload.shareCode] = payload.label
+        end
+    end }
 
 HDG.Actions:Register{ name = "CATALOG_CATEGORY_TREE_UPDATED",
     persists = false, combatUnsafe = false, 
@@ -4649,50 +4667,21 @@ HDG.Actions:Register{ name = "PROJECTS_CREATE_VERSION",
             invalidates = "*",
     reduce = function(state, payload)
         -- v7: branch a what-if LAYOUT. Placements copy; ROOMS ARE SHARED BY
-        -- REFERENCE (10-FINAL-MODEL: vary a room in a what-if by placing a
-        -- room VARIANT, never per-layout copies). layoutID minted from the
-        -- shared versionSeq counter.
-        if payload.houseID then
-            local p     = state.account.projects
-            local house = p.houses[payload.houseID]
-            if house then
-                local lid = _nextVersionID(p)
-                local srcLayout  = payload.basedOn and p.layouts[payload.basedOn]   -- exception(nullable): from-scratch designs have no basis
-                local placements, slotSeq = {}, 0
-                if srcLayout then
-                    for key, pl in pairs(srcLayout.placements) do
-                        placements[key] = { floor = pl.floor, x = pl.x, y = pl.y,
-                                            rotation = pl.rotation, shape = pl.shape, floors = pl.floors,
-                                            roomID = pl.roomID,   -- v8: tags copy; rooms shared by reference
-                                            capturedID = pl.capturedID, capturedName = pl.capturedName }
-                    end
-                    slotSeq = srcLayout.slotSeq or 0
-                else
-                    -- From-scratch design: every layout needs exactly one Entry
-                    -- (the anchor; the palette never offers it) -- seed it
-                    -- centre-canvas so building starts from the door.
-                    slotSeq = 1
-                    placements["slot:1"] = { floor = 1, x = 10, y = 10, rotation = 0, shape = "entry" }
-                end
-                p.layouts[lid] = {
-                    houseID   = payload.houseID, name = payload.name or "What-if",  -- exception(boundary): CREATE_VERSION payload may omit name
-                    createdAt = payload.createdAt, basedOn = payload.basedOn,
-                    placements = placements, slotSeq = slotSeq,
-                }
-                house.activeVersionID = lid
-                -- Reverse index: v8 placements are slot-keyed -- the design
-                -- rides as the roomID TAG. Count every copied tag into the
-                -- new layout (review 17 #1: keying by placement KEY matched
-                -- account.rooms never, so branching silently skipped this).
-                local idx = state.session.furnIndex
-                for _, pl in pairs(placements) do
-                    if pl.roomID then
-                        idx.roomLayouts[pl.roomID] = idx.roomLayouts[pl.roomID] or {}
-                        idx.roomLayouts[pl.roomID][lid] = (idx.roomLayouts[pl.roomID][lid] or 0) + 1
-                    end
-                end
-            end
-        end
+        -- REFERENCE (vary a room via a room VARIANT, never per-layout copies).
+        if not payload.houseID then return end
+        local p     = state.account.projects
+        local house = p.houses[payload.houseID]
+        if not house then return end  -- exception(nullable): stale UI houseID
+        local lid       = _nextVersionID(p)
+        local srcLayout = payload.basedOn and p.layouts[payload.basedOn]  -- exception(nullable): from-scratch designs have no basis
+        local placements, slotSeq = _copyOrSeedLayoutPlacements(srcLayout)
+        p.layouts[lid] = {
+            houseID   = payload.houseID, name = payload.name or "What-if",  -- exception(boundary): CREATE_VERSION payload may omit name
+            createdAt = payload.createdAt, basedOn = payload.basedOn,
+            placements = placements, slotSeq = slotSeq,
+        }
+        house.activeVersionID = lid
+        _reindexRoomLayouts(state.session.furnIndex, placements, lid)
     end }
 
 HDG.Actions:Register{ name = "PROJECTS_DELETE_VERSION",
@@ -4707,11 +4696,7 @@ HDG.Actions:Register{ name = "PROJECTS_DELETE_VERSION",
             local house = p.houses[payload.houseID]
             local lid   = payload.versionID
             if house and lid ~= house.currentVersionID and p.layouts[lid] then
-                local idx = state.session.furnIndex
-                -- v8: tags, not keys (review 17 #2 -- the key form was a no-op GC).
-                for _, pl in pairs(p.layouts[lid].placements) do
-                    if pl.roomID and idx.roomLayouts[pl.roomID] then idx.roomLayouts[pl.roomID][lid] = nil end
-                end
+                _deindexRoomLayouts(state.session.furnIndex, p.layouts[lid].placements, lid)
                 p.layouts[lid] = nil
                 if house.activeVersionID == lid then
                     house.activeVersionID = house.currentVersionID
@@ -4881,22 +4866,13 @@ HDG.Actions:Register{ name = "UI_FILTER_RESET",
             r.listFilter          = "all"
             r.filters             = NewRecipesFilters()
             -- expansionFilter is account-wide: clear in-place -> all expansions.
-            local exp = state.account.ui.recipes.expansionFilter
-            for k in pairs(exp) do exp[k] = nil end
+            wipe(state.account.ui.recipes.expansionFilter)
             -- professions are per-character: drop this char's entry so it reverts to
             -- the pristine default (= this character's professions).
             state.account.ui.recipes.professionFilterByChar[state.session.identity.charKey] = nil
         end
     end }
 
-HDG.Actions:Register{ name = "STYLES_INVALIDATE_STYLE",
-    persists = false, combatUnsafe = false, 
-    invalidates = { "session.styles.changeSeq" },
-    reduce = function(state, payload)
-        -- Bump global changeSeq; per-collection invalidation can layer later
-        -- when the engine port surfaces per-collection cache slots.
-        state.session.styles.changeSeq = state.session.styles.changeSeq + 1
-    end }
 
 HDG.Actions:Register{ name = "STYLES_CURATOR_MOVE",
     persists = false, combatUnsafe = false, 
@@ -5093,6 +5069,21 @@ HDG.Actions:Register{ name = "UI_SET_VIEW",
 -- branch). UNDO pops the top entry; UNDO_AT pops payload.ord. The old
 -- chain's early `return`s skipped notify; block returns no-op-notify
 -- instead (benign: no state change, identical repaint).
+-- Remove the first occurrence of `value` from array `list` (no-op if absent).
+local function _listRemoveValue(list, value)
+    for i, v in ipairs(list) do
+        if v == value then table.remove(list, i); return end
+    end
+end
+
+-- Append `value` to array `list` only if not already present.
+local function _listAddUnique(list, value)
+    for _, v in ipairs(list) do
+        if v == value then return end
+    end
+    list[#list + 1] = value
+end
+
 local function _curatorUndoAt(state, ord)
         -- Reverse a single move from the stack.
         -- UNDO     -> pops the topmost entry ("Undo last move" button).
@@ -5115,24 +5106,11 @@ local function _curatorUndoAt(state, ord)
         local target = entry.to and collections[entry.to]
         local source = entry.from and collections[entry.from]
         if target and target.items then
-            for _, itemID in ipairs(entry.items or {}) do
-                for i, id in ipairs(target.items) do
-                    if id == itemID then
-                        table.remove(target.items, i)
-                        break
-                    end
-                end
-            end
+            for _, itemID in ipairs(entry.items or {}) do _listRemoveValue(target.items, itemID) end
         end
         if source then
             source.items = source.items or {}
-            for _, itemID in ipairs(entry.items or {}) do
-                local exists = false
-                for _, id in ipairs(source.items) do
-                    if id == itemID then exists = true; break end
-                end
-                if not exists then source.items[#source.items + 1] = itemID end
-            end
+            for _, itemID in ipairs(entry.items or {}) do _listAddUnique(source.items, itemID) end
         end
 
     -- ===== 14.4 Smart Set Builder ===========================================
@@ -5171,12 +5149,6 @@ HDG.Resolver:Register{ name = "bag", facade = "BagObserver",
         { name = "BAG_INVENTORY_UPDATED",
           bump = function(cur, payload) return payload.tick or (cur + 1) end },
     } }
-
--- Quest titles. HDG.QuestNameResolver drains QUEST_DATA_LOAD_RESULT batches
--- into its module table; name-display selectors re-pull on the tick.
-HDG.Resolver:Register{ name = "questNames",
-    facade = { module = "QuestNameResolver" },
-    actions = { { name = "QUEST_INFO_RESOLVED" } } }
 
 -- Quest completion. QuestNameResolver:IsComplete reads live quest APIs;
 -- bumped on QUEST_TURNED_IN so [QUST] checkmarks repaint live. Method-scoped:

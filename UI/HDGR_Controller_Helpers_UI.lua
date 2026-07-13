@@ -57,12 +57,18 @@ function UI.QueueRecipe(recipeID, itemID, displayName, opts)
 end
 
 -- Standard search editbox wiring: userInput guard prevents dispatch on programmatic SetText.
-function UI.WireSearchBox(rootFrame, widgetId, tabName, stateKey)
-    local searchBox = UI.W(rootFrame, widgetId)
-    if not (searchBox and searchBox.SetScript) then return end
-    searchBox:SetScript("OnTextChanged", function(self, userInput)
+-- The userInput-guarded OnTextChanged shell every search box shares
+-- (hygiene A1). fn receives the current text; programmatic SetText never fires.
+function UI.WireTextChanged(widget, fn)
+    if not (widget and widget.SetScript) then return end  -- exception(boundary): widget may be absent in this window
+    widget:SetScript("OnTextChanged", function(self, userInput)
         if not userInput then return end
-        local text = (self.GetText and self:GetText()) or ""
+        fn((self.GetText and self:GetText()) or "")
+    end)
+end
+
+function UI.WireSearchBox(rootFrame, widgetId, tabName, stateKey)
+    UI.WireTextChanged(UI.W(rootFrame, widgetId), function(text)
         HDG.ControllerHelpers.Mechanics.SetUITransientView(tabName, stateKey, text)
     end)
 end
@@ -353,7 +359,7 @@ function UI.MakeCellIcon(parent, size)
     local s = size or 18
     local icon = parent:CreateTexture(nil, "ARTWORK")
     icon:SetSize(s, s)
-    icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+    icon:SetTexCoord(unpack(HDG.Constants.ICON_CROP))
     return icon
 end
 
@@ -393,4 +399,46 @@ end
 function UI.ItemName(itemID)
     local n = HDG.ItemNameResolver:ResolveName(itemID)
     return (n and n ~= "") and n or ("item " .. tostring(itemID))
+end
+
+-- Full-cover theme border overlay for top-level windows (hygiene A24 --
+-- MainFrame + Window shared this verbatim). Mouse-transparent; the
+-- WindowFrameBorder skinner shows/hides it per scheme.
+function UI.AttachWindowFrameBorder(frame)
+    local border = CreateFrame("Frame", nil, frame)
+    border:SetAllPoints(frame)
+    border:SetFrameLevel(frame:GetFrameLevel() + 50)
+    border:EnableMouse(false)
+    frame._hdgrBorder = border
+    HDG.Theme:Register(border, "WindowFrameBorder")
+    return border
+end
+
+-- Waypoint-pin AtlasButton at a row's right edge, hidden until shown by the
+-- painter (hygiene A12 -- Zone + Shopping shared this verbatim).
+function UI.RowPinButton(row)
+    local pin = HDG.UI:AtlasButton(row, "Waypoint-MapPin-ChatIcon", 14)
+    pin:SetPoint("RIGHT", row, "RIGHT", -4, 0)
+    pin:Hide()
+    return pin
+end
+
+-- ===== Keyed mark/sweep frame pools (hygiene A8) =============================
+-- BeginPoolPass marks everything unused; AcquirePooled revives-or-creates by
+-- key; EndPoolPass hides whatever the render didn't touch. Shared by the
+-- Layouts thumbnails and the Projects canvas (byte-identical copies before).
+function UI.BeginPoolPass(host, pool)
+    local p = host[pool]
+    if p then for _, f in pairs(p) do f._used = false end end
+end
+function UI.EndPoolPass(host, pool)
+    local p = host[pool]
+    if p then for _, f in pairs(p) do if not f._used then f:Hide() end end end
+end
+function UI.AcquirePooled(host, pool, key, factory)
+    host[pool] = host[pool] or {}
+    local f = host[pool][key]
+    if not f then f = factory(host); host[pool][key] = f end
+    f._used = true
+    return f
 end

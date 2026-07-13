@@ -137,7 +137,7 @@ LC.widgets["acquisitionListPanel.blankVendorIcon"] = {
     tooltip = false,
     kind = "atlas", ["in"] = "acq.listBody",
     visible = "acq.blankVendor",
-    atlas = "PlayerPartyBlip", tone = "text.dim",
+    atlas = HDG.Constants.BULLET_DOT_ATLAS, tone = "text.dim",
     width = 24, height = 24, order = 25,
 }
 LC.widgets["acquisitionListPanel.blankVendor"] = {
@@ -153,7 +153,7 @@ LC.widgets["acquisitionListPanel.blankItemIcon"] = {
     tooltip = false,
     kind = "atlas", ["in"] = "acq.listBody",
     visible = "acq.blankItem",
-    atlas = "PlayerPartyBlip", tone = "text.dim",
+    atlas = HDG.Constants.BULLET_DOT_ATLAS, tone = "text.dim",
     width = 24, height = 24, order = 26,
 }
 LC.widgets["acquisitionListPanel.blankItem"] = {

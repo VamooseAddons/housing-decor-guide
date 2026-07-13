@@ -46,16 +46,13 @@ function C.Encode(version)
             room.floors or 0,   -- per-room span override; 0 = shape default
         }, ",")
     end
-    return MAGIC .. ":" .. VER .. ":" .. b64encode(table.concat(lines, "\n"))
+    return HDG.Codec.WrapEnvelope(MAGIC, VER, table.concat(lines, "\n"))
 end
 
 -- ===== Decode ===============================================================
 function C.Decode(encoded)
-    if type(encoded) ~= "string" or #encoded == 0 then return nil end
-    local prefix, ver, payload = encoded:match("^(HDGRLAYOUT):(%d+):(.+)$")
-    if prefix ~= MAGIC or ver ~= VER then return nil end
-    local decoded = b64decode(payload)
-    if not decoded or #decoded == 0 then return nil end
+    local decoded = HDG.Codec.UnwrapEnvelope(encoded, MAGIC, VER)
+    if not decoded then return nil end
 
     local name, numFloors, rooms, first = "Imported layout", nil, {}, true
     for line in decoded:gmatch("[^\n]+") do

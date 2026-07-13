@@ -317,7 +317,7 @@ local function _setPerf(on)
 end
 
 function P:Command(msg)
-    local arg = (msg or ""):lower():gsub("^%s+", ""):gsub("%s+$", "")
+    local arg = HDG.Format.Trim((msg or ""):lower())
     if arg == "on" then
         _setPerf(true)
         _print("perf ON")

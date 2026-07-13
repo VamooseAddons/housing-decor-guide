@@ -33,13 +33,9 @@ HDG.Migration = M
 -- Helpers
 -- ---------------------------------------------------------------------------
 
-local function DeepCopy(orig)
-    -- exception(boundary): SV migration -- orig may be any vintage, any type
-    if type(orig) ~= "table" then return orig end
-    local copy = {}
-    for k, v in pairs(orig) do copy[k] = DeepCopy(v) end
-    return copy
-end
+-- Canonical deep copy from HDG.TableUtils (hygiene review A'2); handles any
+-- vintage/type -- non-tables pass through, cycles are safe.
+local DeepCopy = HDG.TableUtils.DeepCopy
 
 -- Returns true when raw DB looks like an old-HDG schema (pre-HDG).
 -- We match THREE independent signals so the detection is robust:

@@ -11,12 +11,7 @@ local ConfigController = HDG.ConfigController
 
 local HARD_RESET_CONFIRM_WINDOW = 5   -- seconds armed before auto-revert
 
-local function dispatch(actionType, payload)
-    HDG.Store:Dispatch({
-        type    = HDG.Constants.ACTIONS[actionType],
-        payload = payload,
-    })
-end
+local dispatch = HDG.ControllerHelpers.Mechanics.DispatchNamed  -- hygiene A13
 
 -- Hard reset: first click arms a 5s window; second click fires HARD_RESET.
 -- 0.5s OnUpdate auto-reverts on lapse.

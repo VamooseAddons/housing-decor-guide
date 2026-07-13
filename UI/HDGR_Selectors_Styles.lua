@@ -361,19 +361,6 @@ Selectors:Register("styles.landing.rows", {
     end,
 })
 
--- Backward-compat alias (header rows only; consumers that haven't migrated).
-Selectors:Register("styles.landing.sectionRows", {
-    calls = { "styles.landing.rows" },
-    fn = function(state, ctx)
-        local rows = Selectors:Call("styles.landing.rows", state, ctx)
-        -- Filter to header rows only for any consumer that hasn't migrated.
-        local out = {}
-        for _, r in ipairs(rows or {}) do
-            if r.kind == "header" then out[#out + 1] = r end
-        end
-        return out
-    end,
-})
 
 -- ===== Export surface =======================================================
 -- styles.export.sourceRows: grouped source list for the Export sub-view. Header
@@ -670,36 +657,7 @@ Selectors:Register("styles.detail.collection", {
     end,
 })
 
--- Detail header: "<displayName> -- N items"; "(Read-only)" for pre-authored collections.
-Selectors:Register("styles.detail.headerLabel", {
-    calls = { "styles.detail.collection" },
-    fn = function(state, ctx)
-        local coll = Selectors:Call("styles.detail.collection", state, ctx)
-        if not coll then return "" end
-        local name  = coll.displayName or coll.name or "Untitled"
-        local items = coll.items
-        local n     = items and #items or 0
-        local label
-        if n > 0 then
-            label = string.format("%s -- %d item%s", name, n, n == 1 and "" or "s")
-        else
-            label = name
-        end
-        if coll.isReadOnly then
-            label = label .. "  (Read-only)"
-        end
-        return label
-    end,
-})
 
--- Read-only flag passthrough for Edit/Delete button visibility.
-Selectors:Register("styles.detail.isReadOnly", {
-    calls = { "styles.detail.collection" },
-    fn = function(state, ctx)
-        local coll = Selectors:Call("styles.detail.collection", state, ctx)
-        return coll and coll.isReadOnly == true or false
-    end,
-})
 
 -- Description / subtitle from the collection record. Empty string when absent.
 Selectors:Register("styles.detail.descriptionLabel", {
@@ -821,145 +779,11 @@ Selectors:Register("styles.detail.items", {
     end,
 })
 
--- "N items" / "N matching" tail for the detail header right side.
-Selectors:Register("styles.detail.countLabel", {
-    calls = { "styles.detail.items" },
-    fn = function(state, ctx)
-        local items = Selectors:Call("styles.detail.items", state, ctx)
-        local n = #items
-        return string.format("%d %s", n, n == 1 and "item" or "items")
-    end,
-})
 
--- ===== Detail surface: split list+cards view + filter chips ==================
--- List-mode rows: same data as styles.detail.items with a `rowMode` marker.
--- Future: distinct per-mode arrays.
-Selectors:Register("styles.detail.listRows", {
-    calls = { "styles.detail.items" },
-    reads = { "session.ui.styles.detail.viewMode" },
-    fn = function(state, ctx)
-        if state.session.ui.styles.detail.viewMode == "cards" then return {} end
-        local items = Selectors:Call("styles.detail.items", state, ctx)
-        local out = {}
-        for i, item in ipairs(items) do
-            out[i] = {
-                itemID      = item.itemID,
-                name        = item.name,
-                isSelected  = item.isSelected,
-                isOwned     = item.isOwned,
-                band        = item.band,
-                rowMode     = "detail",   -- row factory discriminator
-            }
-        end
-        return out
-    end,
-})
 
--- Card-mode rows: aliases detail.items; future could split for richer card payload.
-Selectors:Register("styles.detail.cardRows", {
-    calls = { "styles.detail.items" },
-    reads = { "session.ui.styles.detail.viewMode" },
-    fn = function(state, ctx)
-        if state.session.ui.styles.detail.viewMode == "list" then return {} end
-        return Selectors:Call("styles.detail.items", state, ctx)
-    end,
-})
 
--- Source filter chips: distinct sourceTypes from the collection's items.
--- Each chip { key, label, isActive, count }.
-Selectors:Register("styles.detail.sourceFilters", {
-    calls = { "styles.detail.items" },
-    reads = {
-        "session.ui.styles.detail.sourceFilter",
-        "session.resolvers.catalog.tick",
-    },
-    fn = function(state, ctx)
-        local items = Selectors:Call("styles.detail.items", state, ctx)
-        local active = state.session.ui.styles.detail.sourceFilter
-        -- row.primarySourceCode (baked at BuildRow with REP-first binding priority).
-        -- Same bucketing as the House donut and every other "what bucket" surface.
-        local counts = {}
-        for _, item in ipairs(items) do
-            local catRow = HDG.HousingCatalogObserver:GetRow(item.itemID)
-            local code   = (catRow and catRow.primarySourceCode) or 0
-            counts[code] = (counts[code] or 0) + 1
-        end
-        local out = { { key = "all", label = "All", isActive = (active == "all"), count = #items } }
-        local keys = {}
-        for k in pairs(counts) do keys[#keys + 1] = k end
-        table.sort(keys)
-        for _, k in ipairs(keys) do
-            local sourceTypeKey = tostring(k)
-            local kind = HDG.Constants.SOURCE_KIND_BY_DONOR[k]
-            out[#out + 1] = {
-                key      = sourceTypeKey,
-                label    = (kind and kind.label) or sourceTypeKey,
-                isActive = (active == sourceTypeKey),
-                count    = counts[k] or 0,  -- exception(boundary): sparse count map
-            }
-        end
-        return out
-    end,
-})
 
--- Subcategory chips: distinct subcategoryIDs from the collection's items.
-Selectors:Register("styles.detail.subcategoryRows", {
-    calls = { "styles.detail.items" },
-    reads = {
-        "session.ui.styles.detail.subcatFilter",
-        "session.resolvers.catalog.tick",
-    },
-    fn = function(state, ctx)
-        local items   = Selectors:Call("styles.detail.items", state, ctx)
-        local active  = state.session.ui.styles.detail.subcatFilter
-        local counts  = {}
-        for _, item in ipairs(items) do
-            local row     = HDG.HousingCatalogObserver:GetRow(item.itemID)
-            local subName = row and row.subcategoryName or "Other"
-            counts[subName] = (counts[subName] or 0) + 1
-        end
-        local out = { { key = "all", label = "All", isActive = (active == "all"), count = #items } }
-        local names = {}
-        for k in pairs(counts) do names[#names + 1] = k end
-        table.sort(names)
-        for _, name in ipairs(names) do
-            out[#out + 1] = {
-                key      = name,
-                label    = name,
-                isActive = (active == name),
-                count    = counts[name],
-            }
-        end
-        return out
-    end,
-})
 
--- Selected-item panel data. Returns rich detail for the hovered/selected itemID, or nil.
-Selectors:Register("styles.detail.selectedItemPanelData", {
-    reads = {
-        "session.ui.styles.detail.selectedItemID",
-        "session.resolvers.catalog.tick",
-    },
-    fn = function(state)
-        local itemID  = state.session.ui.styles.detail.selectedItemID
-        if not itemID then return nil end
-        local row     = HDG.HousingCatalogObserver:GetRow(itemID)
-        local iconTex, iconAtl = HDG.Format.CoerceIconPair(
-            row and row.iconTexture, row and row.iconAtlas)
-        return {
-            itemID       = itemID,
-            decorID      = row and row.decorID,
-            name         = (row and row.name) or ("Item " .. tostring(itemID)),
-            isOwned      = row and row.isOwned == true,
-            iconTexture  = iconTex,
-            iconAtlas    = iconAtl,
-            categoryName = row and row.categoryName,
-            subcatName   = row and row.subcategoryName,
-            expansion    = row and row.expansion,
-            sourceType   = row and row.sourceType,
-        }
-    end,
-})
 
 -- ===== Curator =============================================================
 -- Reverse index: itemID -> [styleCollectionID, ...].
@@ -1039,13 +863,6 @@ Selectors:Register("styles.curator.hasTargets", {
     end,
 })
 
--- Empty-state predicate: true when no user style collections exist.
-Selectors:Register("styles.curator.targetsEmpty", {
-    calls = { "styles.curator.hasTargets" },
-    fn = function(state, ctx)
-        return not Selectors:Call("styles.curator.hasTargets", state, ctx)
-    end,
-})
 
 -- Copy is valid from ANY source (add membership to target, keep in source).
 -- Requires a selection + a chosen FILE-INTO target.
@@ -1105,6 +922,64 @@ Selectors:Register("styles.curator.copyButtonLabel", {
     end,
 })
 
+-- Raw source itemIDs for the curator center grid by mode: all / unassigned
+-- (no style membership) / style:<id> (that style's items). Observer rows are
+-- released by construction -- no liveSet filter needed.
+local function _curatorSourceIDs(state, mode, memberships)
+    local sourceIDs = {}
+    if mode == "all" then
+        if HDG.HousingCatalogObserver:IsReady() then
+            HDG.HousingCatalogObserver:IterateRows(function(itemID)
+                sourceIDs[#sourceIDs + 1] = itemID
+            end)
+        end
+    elseif mode == "unassigned" then
+        if HDG.HousingCatalogObserver:IsReady() then
+            HDG.HousingCatalogObserver:IterateRows(function(itemID)
+                if not memberships[itemID] then sourceIDs[#sourceIDs + 1] = itemID end
+            end)
+        end
+    elseif type(mode) == "string" and mode:sub(1, 6) == "style:" then
+        local coll = state.account.collections[mode]
+        if coll and coll.items then
+            for _, itemID in ipairs(coll.items) do sourceIDs[#sourceIDs + 1] = itemID end
+        end
+    end
+    return sourceIDs
+end
+
+-- User style-membership count for a curator tile's TOPLEFT badge, excluding the
+-- current source style (viewing style:X shouldn't count X itself).
+local function _curatorMemberCount(rawMemberships, mode)
+    if not rawMemberships then return 0 end
+    local sourceStyle = (mode:sub(1, 6) == "style:") and mode or nil
+    local n = 0
+    for _, sid in ipairs(rawMemberships) do
+        if sid ~= sourceStyle then n = n + 1 end
+    end
+    return n
+end
+
+-- One curator source tile. Rich-tooltip fields (numStored/numPlaced/indoor/
+-- outdoor) mirror acqVendorItemTile; the selector reads sweepGeneration so they
+-- stay reactive.
+local function _curatorSourceTile(itemID, row, name, iconTex, iconAtl, isSelected, catID, subID, memberCount)
+    return {
+        itemID            = itemID,
+        name              = name,
+        iconTexture       = iconTex,
+        iconAtlas         = iconAtl,
+        isSelected        = isSelected,
+        categoryID        = catID,
+        subcategoryID     = subID,
+        memberCount       = memberCount,
+        numStored         = (row and row.quantity)  or 0,
+        numPlaced         = (row and row.numPlaced) or 0,
+        isAllowedIndoors  = row and row.isAllowedIndoors,
+        isAllowedOutdoors = row and row.isAllowedOutdoors,
+    }
+end
+
 -- Source items: center grid content by sourceMode (unassigned / all / style:<id>).
 -- Observer rows are released by construction; no extra liveDecorIDs gate needed.
 -- Category nav filters by categoryID / subcategoryID (nil = All).
@@ -1122,94 +997,38 @@ Selectors:Register("styles.curator.sourceItems", {
     },
     calls = { "styles.curator.itemMemberships" },
     fn = function(state, ctx)
-        local mode     = state.session.ui.styles.curator.sourceMode or "unassigned"
-        local catFilt  = state.session.ui.styles.curator.focusedCategoryID   -- nil = All
-        local selected = state.session.ui.styles.curator.selectedItems
+        local cur      = state.session.ui.styles.curator
+        local mode     = cur.sourceMode or "unassigned"
+        local catFilt  = cur.focusedCategoryID     -- nil = All
+        local subFilt  = cur.focusedSubcategoryID  -- nil = All
+        local selected = cur.selectedItems
+        local query    = cur.searchQuery:lower()
         -- Reverse index from itemMemberships; drives unassigned source + memberCount badge.
         local memberships = Selectors:Call("styles.curator.itemMemberships", state, ctx)
 
-        -- Observer rows are released by construction; no liveSet filter needed.
-        local sourceIDs = {}
-        if mode == "all" then
-            if HDG.HousingCatalogObserver:IsReady() then
-                HDG.HousingCatalogObserver:IterateRows(function(itemID)
-                    sourceIDs[#sourceIDs + 1] = itemID
-                end)
-            end
-        elseif mode == "unassigned" then
-            if HDG.HousingCatalogObserver:IsReady() then
-                HDG.HousingCatalogObserver:IterateRows(function(itemID)
-                    if not memberships[itemID] then
-                        sourceIDs[#sourceIDs + 1] = itemID
-                    end
-                end)
-            end
-        elseif type(mode) == "string" and mode:sub(1, 6) == "style:" then
-            local coll = state.account.collections[mode]
-            if coll and coll.items then
-                for _, itemID in ipairs(coll.items) do
-                    sourceIDs[#sourceIDs + 1] = itemID
-                end
-            end
-        end
-
         -- Curator shows only owned (collected) decor (matches old HDG's editor gate).
-        -- Style-membership (unassigned/all/style) and ownership are orthogonal axes;
-        -- this applies the ownership axis to every mode.
-        local ownedSourceIDs = {}
-        for _, itemID in ipairs(sourceIDs) do
-            if HDG.HousingCatalogObserver:IsOwned(itemID) then
-                ownedSourceIDs[#ownedSourceIDs + 1] = itemID
-            end
+        -- Ownership is orthogonal to style-membership; apply it to every mode.
+        local ownedIDs = {}
+        for _, itemID in ipairs(_curatorSourceIDs(state, mode, memberships)) do
+            if HDG.HousingCatalogObserver:IsOwned(itemID) then ownedIDs[#ownedIDs + 1] = itemID end
         end
-        sourceIDs = ownedSourceIDs
 
-        -- Filter by numeric categoryID / subcategoryID (nil categoryName rows would
-        -- never match a string-keyed filter; 0 = synthetic "Uncategorized" bucket).
-        local subFilt = state.session.ui.styles.curator.focusedSubcategoryID   -- nil = All
-        -- Case-insensitive substring filter on the (sync, localized) catalog name.
-        local query = state.session.ui.styles.curator.searchQuery:lower()
+        -- Filter by numeric categoryID / subcategoryID (0 = synthetic "Uncategorized")
+        -- + case-insensitive substring on the (sync, localized) catalog name.
         local out = {}
-        for _, itemID in ipairs(sourceIDs) do
-            local row    = HDG.HousingCatalogObserver:GetRow(itemID)
-            local name   = (row and row.name) or ("Item " .. tostring(itemID))
-            local catID  = (row and row.categoryID)    or 0
-            local subID  = (row and row.subcategoryID) or 0
-            local catOk = (catFilt == nil) or (catFilt == catID)
-            local subOk = (subFilt == nil) or (subFilt == subID)
+        for _, itemID in ipairs(ownedIDs) do
+            local row   = HDG.HousingCatalogObserver:GetRow(itemID)
+            local name  = (row and row.name) or ("Item " .. tostring(itemID))
+            local catID = (row and row.categoryID)    or 0
+            local subID = (row and row.subcategoryID) or 0
+            local catOk  = (catFilt == nil) or (catFilt == catID)
+            local subOk  = (subFilt == nil) or (subFilt == subID)
             local nameOk = (query == "") or (name:lower():find(query, 1, true) ~= nil)
             if catOk and subOk and nameOk then
-                local iconTex, iconAtl = HDG.Format.CoerceIconPair(
-                    row and row.iconTexture, row and row.iconAtlas)
-                -- memberCount: user style memberships, excluding the current source style.
-                -- Drives the TOPLEFT badge on curator tiles.
-                local rawMemberships = memberships[itemID]
-                local memberCount = 0
-                if rawMemberships then
-                    local sourceStyle = (mode:sub(1, 6) == "style:") and mode or nil
-                    for _, sid in ipairs(rawMemberships) do
-                        if sid ~= sourceStyle then
-                            memberCount = memberCount + 1
-                        end
-                    end
-                end
-                out[#out + 1] = {
-                    itemID          = itemID,
-                    name            = name,
-                    iconTexture     = iconTex,
-                    iconAtlas       = iconAtl,
-                    isSelected      = selected[itemID] == true,
-                    categoryID      = catID,
-                    subcategoryID   = subID,
-                    memberCount     = memberCount,
-                    -- Rich-tooltip fields (mirror acqVendorItemTile): live storage /
-                    -- placed counts + indoor/outdoor off the catalog row. Selector
-                    -- already reads sweepGeneration, so these stay reactive.
-                    numStored         = (row and row.quantity)  or 0,
-                    numPlaced         = (row and row.numPlaced) or 0,
-                    isAllowedIndoors  = row and row.isAllowedIndoors,
-                    isAllowedOutdoors = row and row.isAllowedOutdoors,
-                }
+                local iconTex, iconAtl = HDG.Format.CoerceIconPair(row and row.iconTexture, row and row.iconAtlas)
+                local memberCount = _curatorMemberCount(memberships[itemID], mode)
+                out[#out + 1] = _curatorSourceTile(itemID, row, name, iconTex, iconAtl,
+                    selected[itemID] == true, catID, subID, memberCount)
             end
         end
         table.sort(out, function(a, b)
@@ -1332,13 +1151,6 @@ Selectors:Register("styles.curator.unassignedCountLabel", {
     end,
 })
 
--- True when unassigned > 0: drives error-color on the curator footer label.
-Selectors:Register("styles.curator.unassignedIsWarning", {
-    calls = { "styles.curator.unassignedCount" },
-    fn = function(state, ctx)
-        return Selectors:Call("styles.curator.unassignedCount", state, ctx) > 0
-    end,
-})
 
 -- Undo rows: recentUndo LIFO -> "Moved/Copied N items to <Style>". Most-recent first.
 Selectors:Register("styles.curator.recentUndoRows", {

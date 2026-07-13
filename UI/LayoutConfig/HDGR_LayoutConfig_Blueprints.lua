@@ -124,6 +124,11 @@ LC.widgets["blueprintsDetailPanel.linkBtn"] = {
     tooltip = { recipe = "BlueprintLink" }, kind = "button", ["in"] = "blueprintsDetailPanel.codeRow",
     font = "small", text = "locale:BP_LINK", width = 46, height = 20, order = 7,
 }
+LC.widgets["blueprintsDetailPanel.renameLabel"] = {
+    tooltip = false, kind = "label", ["in"] = "blueprintsDetailPanel.codeRow",
+    text = "locale:BP_RENAME_LABEL", font = "small", role = "TextDim",
+    width = "auto", height = 14, order = 9,
+}
 LC.widgets["blueprintsDetailPanel.nameBox"] = {
     tooltip = { recipe = "BlueprintRename" }, kind = "editbox", ["in"] = "blueprintsDetailPanel.codeRow",
     font = "small", height = 20, width = "fill", order = 10, multiline = false,
@@ -135,9 +140,16 @@ LC.widgets["blueprintsDetailPanel.status"] = {
     tooltip = false, kind = "label", ["in"] = "blueprintsDetailPanel",
     binding = "blueprints.statusLine", font = "caption", height = 14, width = "fill", order = 6,
 }
+-- Fit verdict as a card badge (mockup pill): accent bar + washed fill; the
+-- label's text role tones success/blocked in Refresh. Hidden with no verdict.
+LC.sections["blueprintsDetailPanel.verdictBand"] = {
+    ["in"] = "blueprintsDetailPanel", layout = "horizontal", chrome = "card",
+    padding = { top = 2, right = "sm", bottom = 2, left = "sm" },
+    height = 22, order = 8, visible = "blueprints.hasVerdict",
+}
 LC.widgets["blueprintsDetailPanel.verdict"] = {
-    tooltip = false, kind = "label", ["in"] = "blueprintsDetailPanel",
-    binding = "blueprints.fitVerdict", font = "body", height = 16, width = "fill", order = 8,
+    tooltip = false, kind = "label", ["in"] = "blueprintsDetailPanel.verdictBand",
+    binding = "blueprints.fitVerdict", font = "body", height = 16, width = "fill", order = 5,
 }
 
 -- Budget meters: three text+bar pairs on one row.
@@ -152,7 +164,7 @@ LC.widgets["blueprintsDetailPanel.meterRoomText"] = {
     binding = "blueprints.meterTextRoom", font = "caption", height = 14, width = "fill", order = 5,
 }
 LC.widgets["blueprintsDetailPanel.meterRoomBar"] = {
-    tooltip = false, kind = "progressbar", ["in"] = "blueprintsDetailPanel.meterRoomCol",
+    tooltip = { recipe = "BlueprintMeterRoom" }, kind = "progressbar", ["in"] = "blueprintsDetailPanel.meterRoomCol",
     binding = { progress = "blueprints.meterFracRoom" }, width = "fill", height = 8, order = 10,
 }
 LC.sections["blueprintsDetailPanel.meterIntCol"] = {
@@ -163,7 +175,7 @@ LC.widgets["blueprintsDetailPanel.meterIntText"] = {
     binding = "blueprints.meterTextInterior", font = "caption", height = 14, width = "fill", order = 5,
 }
 LC.widgets["blueprintsDetailPanel.meterIntBar"] = {
-    tooltip = false, kind = "progressbar", ["in"] = "blueprintsDetailPanel.meterIntCol",
+    tooltip = { recipe = "BlueprintMeterInterior" }, kind = "progressbar", ["in"] = "blueprintsDetailPanel.meterIntCol",
     binding = { progress = "blueprints.meterFracInterior" }, width = "fill", height = 8, order = 10,
 }
 LC.sections["blueprintsDetailPanel.meterExtCol"] = {
@@ -174,7 +186,7 @@ LC.widgets["blueprintsDetailPanel.meterExtText"] = {
     binding = "blueprints.meterTextExterior", font = "caption", height = 14, width = "fill", order = 5,
 }
 LC.widgets["blueprintsDetailPanel.meterExtBar"] = {
-    tooltip = false, kind = "progressbar", ["in"] = "blueprintsDetailPanel.meterExtCol",
+    tooltip = { recipe = "BlueprintMeterExterior" }, kind = "progressbar", ["in"] = "blueprintsDetailPanel.meterExtCol",
     binding = { progress = "blueprints.meterFracExterior" }, width = "fill", height = 8, order = 10,
 }
 
@@ -201,6 +213,20 @@ LC.widgets["blueprintsDetailPanel.counts"] = {
     binding = "blueprints.itemCountText", font = "caption", height = 14, width = "auto", order = 20,
 }
 
+-- Blank state: first open / nothing selected (UX review #1; Acquisition idiom).
+LC.widgets["blueprintsDetailPanel.blankIcon"] = {
+    tooltip = false, kind = "atlas", ["in"] = "blueprintsDetailPanel",
+    visible = "blueprints.blankDetail",
+    atlas = "housing-map-plot-player-house", tone = "text.dim",
+    width = 26, height = 26, order = 17,
+}
+LC.widgets["blueprintsDetailPanel.blank"] = {
+    tooltip = false, kind = "label", ["in"] = "blueprintsDetailPanel",
+    visible = "blueprints.blankDetail", role = "TextDim",
+    text = "locale:BP_BLANK", font = "body", justifyH = "CENTER",
+    width = "fill", height = 22, order = 18,
+}
+
 -- Content groups (collapsible headers + item rows, flat projection).
 LC.widgets["blueprintsDetailPanel.content"] = {
     tooltip = false, kind = "scrollbox", ["in"] = "blueprintsDetailPanel",
@@ -208,17 +234,21 @@ LC.widgets["blueprintsDetailPanel.content"] = {
     spacing = 1, width = "fill", height = "fill", order = 20,
 }
 
--- Action row: Route (primary) | Import as Set | Open in Architect | Export ... Check code.
+-- Action row: Route to Shopping | Import as Set | Architect (House/Interior) | Apply to House.
+-- All enable only with a selection -- ungated they looked clickable over a blank panel.
 LC.sections["blueprintsDetailPanel.actions"] = {
     ["in"] = "blueprintsDetailPanel", layout = "horizontal", height = 22, gap = "sm", order = 30,
 }
 LC.widgets["blueprintsDetailPanel.routeBtn"] = {
     tooltip = { recipe = "BlueprintRoute" }, kind = "button", ["in"] = "blueprintsDetailPanel.actions",
     font = "body", text = "locale:BP_ROUTE_SHOPPING", width = 120, height = 22, order = 5,
+    variant = "primary",   -- the tab's primary CTA (design fact 10; mockup .primary)
+    binding = { enabled = "blueprints.hasSelection" },
 }
 LC.widgets["blueprintsDetailPanel.setBtn"] = {
     tooltip = { recipe = "BlueprintImportSet" }, kind = "button", ["in"] = "blueprintsDetailPanel.actions",
     font = "body", text = "locale:BP_IMPORT_SET", width = 100, height = 22, order = 10,
+    binding = { enabled = "blueprints.hasSelection" },
 }
 LC.widgets["blueprintsDetailPanel.architectBtn"] = {
     tooltip = { recipe = "BlueprintArchitect" }, kind = "button", ["in"] = "blueprintsDetailPanel.actions",
@@ -228,14 +258,16 @@ LC.widgets["blueprintsDetailPanel.architectBtn"] = {
 LC.widgets["blueprintsDetailPanel.importBtn"] = {
     tooltip = { recipe = "BlueprintImportHouse" }, kind = "button", ["in"] = "blueprintsDetailPanel.actions",
     font = "body", text = "locale:BP_IMPORT_HOUSE", width = 108, height = 22, order = 22,
+    binding = { enabled = "blueprints.hasSelection" },
 }
 LC.widgets["blueprintsDetailPanel.actionsSpacer"] = {
     tooltip = false, kind = "spacer", ["in"] = "blueprintsDetailPanel.actions",
     width = "fill", height = 14, order = 25,
 }
 
--- Guidance strip: the tab is a library; importing happens in-game.
+-- Guidance strip: ABOVE the action row so the save-after-apply reminder is
+-- read before the buttons get clicked (UX review #11).
 LC.widgets["blueprintsDetailPanel.guidance"] = {
     tooltip = false, kind = "label", ["in"] = "blueprintsDetailPanel",
-    text = "locale:BP_GUIDANCE", font = "caption", height = 26, width = "fill", order = 35,
+    text = "locale:BP_GUIDANCE", font = "caption", height = 32, width = "fill", order = 28,
 }

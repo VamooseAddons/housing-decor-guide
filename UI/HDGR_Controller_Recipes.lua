@@ -699,16 +699,9 @@ function RecipesController:Wire(rootFrame)
 
     -- Search editbox: every keystroke dispatches RECIPES_SET_SEARCH.
     local searchBox = HDG.UI.W(rootFrame, "recipesListPanel.search")
-    if searchBox and searchBox.SetScript then
-        searchBox:SetScript("OnTextChanged", function(self, userInput)
-            if not userInput then return end
-            local text = self:GetText() or ""
-            HDG.Store:Dispatch({
-                type    = HDG.Constants.ACTIONS.RECIPES_SET_SEARCH,
-                payload = { query = text },
-            })
-        end)
-    end
+    HDG.UI.WireTextChanged(searchBox, function(text)
+        HDG.Store:Dispatch({ type = HDG.Constants.ACTIONS.RECIPES_SET_SEARCH, payload = { query = text } })
+    end)
 
     HDG.UI.OnClick(rootFrame, "recipesListPanel.resetFilters", function()
         HDG.Store:Dispatch({

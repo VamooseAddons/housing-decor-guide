@@ -337,17 +337,6 @@ Selectors:Register("projects.planDiff", {
         return { rows = rows, added = added, missing = missing }
     end,
 })
-Selectors:Register("projects.planDiffSummary", {
-    calls = { "projects.planDiff" },
-    fn = function(state, ctx)
-        local d = Selectors:Call("projects.planDiff", state, ctx)
-        if d.added == 0 and d.missing == 0 then return "vs house: plan matches" end
-        local parts = {}
-        if d.added   > 0 then parts[#parts + 1] = "+" .. d.added .. " to build" end
-        if d.missing > 0 then parts[#parts + 1] = "-" .. d.missing .. " to remove" end
-        return "vs house: " .. table.concat(parts, ", ")
-    end,
-})
 
 -- Room shopping list: BUILD rows (design wants more) first, then REMOVE rows.
 -- Empty in Stock mode (active == current version).
@@ -623,6 +612,86 @@ end
 
 -- Canvas render model: rooms (cell + selection + status), door orbs, lower-floor backdrop,
 -- and bbox for auto-fit tiling. One layout path (active version IS the design).
+-- Canvas card for a placed (real) room. Assigned rooms label by NAME (shape is
+-- readable from the outline); slots fall back to shape label + badge at paint.
+-- Furnishing status belongs to the TAGGED room (room.roomID), not the slot key.
+local function _placedRoomCard(roomID, placed, meta, cell, room, canon, statusMap, selectedRoomID, A)
+    return {
+        roomID = roomID, shape = meta.shape,
+        name = (room and not room.unassigned and room.name and room.name ~= "" and room.name) or nil,
+        unassigned = (room and room.unassigned) or nil,
+        x = cell.x, y = cell.y, w = placed.w, d = placed.d, rotation = placed.rotation or 0,
+        canonW = canon[1], canonD = canon[2],   -- unrotated footprint -> icon rotates without stretch
+        atlas = A.GetAtlas(meta.shape), circle = A.IsCircle(meta.shape),
+        isSelected = (roomID == selectedRoomID),
+        status = (room and room.roomID and statusMap[room.roomID]) or "unconfigured",
+    }
+end
+
+-- Door orbs from a placed room's SHAPE door slots (every door can connect in a
+-- manual layout). Single-door rooms (stairwell / garden circle) float one door
+-- to the CLOSEST ground neighbour in world-space (no RotateCardinal); stairwells
+-- render that same door on every floor.
+local function _emitPlacedDoorOrbs(orbs, roomID, meta, cell, placed, canon, roomsByID, A)
+    local rmask = A.RotateMask(A.GetMask(meta.shape), placed.rotation or 0, canon[1], canon[2])
+    if meta.shape == "staircase" or meta.shape == "staircase_mirror" or A.IsCircle(meta.shape) then
+        local card   = HDG.Projects.FloorMap.FloatingDoorCardinal(roomsByID, roomID)
+        local mx, my = _doorMid(card, cell.x, cell.y, placed.w, placed.d, rmask)
+        orbs[#orbs + 1] = { roomID = roomID, cardinal = card, midX = mx, midY = my }
+    else
+        for _, card in ipairs(A.GetDoors(meta.shape)) do
+            local rc = A.RotateCardinal(card, placed.rotation or 0)
+            local mx, my = _doorMid(rc, cell.x, cell.y, placed.w, placed.d, rmask)
+            orbs[#orbs + 1] = { roomID = roomID, cardinal = rc, midX = mx, midY = my }
+        end
+    end
+end
+
+-- Dimmed, non-interactive ghost card for a multi-floor room (garden / stairwell
+-- / tall) projected up from a lower floor so its occupancy reads on floors above.
+local function _projectedRoomCard(pr, rc, canon, rot, A)
+    return {
+        roomID = "proj:" .. pr.roomID, shape = pr.shape, name = A.GetLabel(pr.shape),
+        x = pr.cell.x, y = pr.cell.y, w = rc[1], d = rc[2], rotation = rot,
+        canonW = canon[1], canonD = canon[2],
+        atlas = A.GetAtlas(pr.shape), circle = A.IsCircle(pr.shape),
+        isSelected = false, status = "unconfigured", projected = true,
+    }
+end
+
+-- Projected-ghost door orbs. Stairwells inherit their single ground-floor door
+-- on every floor; tall multi-door rooms project ALL doors so rooms can connect
+-- on any side upstairs. Gardens (circle) are door-less (ground-only) -> skipped.
+local function _emitProjectedDoorOrbs(orbs, pr, rc, rot, canon, roomsByID, A)
+    if pr.shape == "staircase" or pr.shape == "staircase_mirror" then
+        local rmask  = A.RotateMask(A.GetMask(pr.shape), rot, canon[1], canon[2])
+        local card   = HDG.Projects.FloorMap.FloatingDoorCardinal(roomsByID, pr.roomID)
+        local mx, my = _doorMid(card, pr.cell.x, pr.cell.y, rc[1], rc[2], rmask)
+        orbs[#orbs + 1] = { roomID = "proj:" .. pr.roomID, cardinal = card, midX = mx, midY = my }
+    elseif not A.IsCircle(pr.shape) then
+        local rmask = A.RotateMask(A.GetMask(pr.shape), rot, canon[1], canon[2])
+        for _, door in ipairs(A.GetDoors(pr.shape)) do
+            local rcard  = A.RotateCardinal(door, rot)
+            local mx, my = _doorMid(rcard, pr.cell.x, pr.cell.y, rc[1], rc[2], rmask)
+            orbs[#orbs + 1] = { roomID = "proj:" .. pr.roomID, cardinal = rcard, midX = mx, midY = my }
+        end
+    end
+end
+
+-- Connection by PLACEMENT: two opposite-facing doors sharing an edge midpoint
+-- are placed against each other -> connected (glowing orb). Purely spatial.
+local function _markOrbConnections(orbs)
+    local doorMap, OPP = {}, { N = "S", S = "N", E = "W", W = "E" }
+    for _, o in ipairs(orbs) do
+        local k = o.midX .. "," .. o.midY
+        doorMap[k] = doorMap[k] or {}
+        doorMap[k][o.cardinal] = true
+    end
+    for _, o in ipairs(orbs) do
+        o.connected = doorMap[o.midX .. "," .. o.midY][OPP[o.cardinal]] == true
+    end
+end
+
 Selectors:Register("projects.canvasModel", {
     memoized = true,
     reads = { "account.projects.houses", "account.projects.layouts", "account.rooms",
@@ -630,99 +699,34 @@ Selectors:Register("projects.canvasModel", {
               "session.ui.projects.selectedRoomID" },
     calls = { "projects.planLayout" },
     fn = function(state, ctx)
-        local nav          = state.session.ui.projects
-        local cur          = Selectors:Call("projects.planLayout", state, ctx)
-        local roomsByID    = _activeRooms(state)
-        local statusMap    = _roomStatusMap(state)
+        local nav       = state.session.ui.projects
+        local cur       = Selectors:Call("projects.planLayout", state, ctx)
+        local roomsByID = _activeRooms(state)
+        local statusMap = _roomStatusMap(state)
         local rooms, orbs = {}, {}
         local bb = { minX = nil, maxX = nil, minY = nil, maxY = nil }
         local A = HDG.Projects.ShapeAtlas
+
         for roomID, placed in pairs(cur.layout) do
             local meta, cell = cur.rooms[roomID] or {}, placed.cell
-            local room = roomsByID[roomID]
+            local room  = roomsByID[roomID]
             local canon = A.GetCells(meta.shape)
-            rooms[#rooms + 1] = {
-                roomID = roomID, shape = meta.shape,
-                -- 2.3: assigned rooms label by NAME (shape readable from the
-                -- outline); slots fall back to the shape label + badge at paint.
-                name = (room and not room.unassigned and room.name and room.name ~= "" and room.name) or nil,
-                unassigned = (room and room.unassigned) or nil,
-                x = cell.x, y = cell.y, w = placed.w, d = placed.d, rotation = placed.rotation or 0,
-                canonW = canon[1], canonD = canon[2],   -- unrotated footprint -> icon rotates without stretch
-                atlas = A.GetAtlas(meta.shape), circle = A.IsCircle(meta.shape),
-                isSelected = (roomID == nav.selectedRoomID),
-                -- v8: the canvas key is a slot key; furnishing status belongs
-                -- to the TAGGED room (room.roomID), not the key.
-                status = (room and room.roomID and statusMap[room.roomID]) or "unconfigured",
-            }
+            rooms[#rooms + 1] = _placedRoomCard(roomID, placed, meta, cell, room, canon, statusMap, nav.selectedRoomID, A)
             _extendFootprint(bb, cell.x, cell.y, placed.w, placed.d)
-            -- Door orbs from SHAPE door slots (not the captured "occupied" subset);
-            -- every door can connect in a manual layout. (Real rooms only -- projected
-            -- upper-floor ghosts are added later without orbs.)
-            do
-                local rmask = A.RotateMask(A.GetMask(meta.shape), placed.rotation or 0, canon[1], canon[2])
-                if meta.shape == "staircase" or meta.shape == "staircase_mirror" or A.IsCircle(meta.shape) then
-                    -- Single-door room (stairwell / garden): one door floating to the
-                    -- CLOSEST ground-floor neighbour on any cardinal. World-space (no
-                    -- RotateCardinal); stairwells render this SAME door on every floor.
-                    local card   = HDG.Projects.FloorMap.FloatingDoorCardinal(roomsByID, roomID)
-                    local mx, my = _doorMid(card, cell.x, cell.y, placed.w, placed.d, rmask)
-                    orbs[#orbs + 1] = { roomID = roomID, cardinal = card, midX = mx, midY = my }
-                else
-                    for _, card in ipairs(A.GetDoors(meta.shape)) do
-                        local rc = A.RotateCardinal(card, placed.rotation or 0)
-                        local mx, my = _doorMid(rc, cell.x, cell.y, placed.w, placed.d, rmask)
-                        orbs[#orbs + 1] = { roomID = roomID, cardinal = rc, midX = mx, midY = my }
-                    end
-                end
-            end
+            _emitPlacedDoorOrbs(orbs, roomID, meta, cell, placed, canon, roomsByID, A)
         end
-        -- Project multi-floor rooms (gardens / stairwells / tall) from lower floors as
-        -- dimmed, non-interactive ghosts so their occupancy reads on the floors above.
-        -- Gardens stay door-less (ground-only); STAIRWELLS inherit their ground-floor
-        -- door on every floor, so the projected ghost gets the same world-cardinal orb
-        -- (it connects to a room placed on that side upstairs). SSoT: same FloorMap.
+
+        -- Project multi-floor rooms from lower floors as ghosts (SSoT: same FloorMap).
         for _, pr in ipairs(HDG.Projects.FloorMap.ProjectedRooms(roomsByID, nav.selectedFloor)) do
             local canon = A.GetCells(pr.shape)
             local rot   = pr.cell.rotation or 0
             local rc    = A.RotateCells(canon, rot)
-            rooms[#rooms + 1] = {
-                roomID = "proj:" .. pr.roomID, shape = pr.shape, name = A.GetLabel(pr.shape),
-                x = pr.cell.x, y = pr.cell.y, w = rc[1], d = rc[2], rotation = rot,
-                canonW = canon[1], canonD = canon[2],
-                atlas = A.GetAtlas(pr.shape), circle = A.IsCircle(pr.shape),
-                isSelected = false, status = "unconfigured", projected = true,
-            }
+            rooms[#rooms + 1] = _projectedRoomCard(pr, rc, canon, rot, A)
             _extendFootprint(bb, pr.cell.x, pr.cell.y, rc[1], rc[2])
-            if pr.shape == "staircase" or pr.shape == "staircase_mirror" then
-                -- Single floating door inherited from the ground-floor connection.
-                local rmask  = A.RotateMask(A.GetMask(pr.shape), rot, canon[1], canon[2])
-                local card   = HDG.Projects.FloorMap.FloatingDoorCardinal(roomsByID, pr.roomID)
-                local mx, my = _doorMid(card, pr.cell.x, pr.cell.y, rc[1], rc[2], rmask)
-                orbs[#orbs + 1] = { roomID = "proj:" .. pr.roomID, cardinal = card, midX = mx, midY = my }
-            elseif not A.IsCircle(pr.shape) then
-                -- Multi-door multi-floor room (tall_room "Stairwell Room (Empty)"):
-                -- project ALL its doors on the upper floor so rooms can connect on any
-                -- side there. (Gardens are circle -> skipped: their door is ground-only.)
-                local rmask = A.RotateMask(A.GetMask(pr.shape), rot, canon[1], canon[2])
-                for _, door in ipairs(A.GetDoors(pr.shape)) do
-                    local rcard  = A.RotateCardinal(door, rot)
-                    local mx, my = _doorMid(rcard, pr.cell.x, pr.cell.y, rc[1], rc[2], rmask)
-                    orbs[#orbs + 1] = { roomID = "proj:" .. pr.roomID, cardinal = rcard, midX = mx, midY = my }
-                end
-            end
+            _emitProjectedDoorOrbs(orbs, pr, rc, rot, canon, roomsByID, A)
         end
-        -- Connection by PLACEMENT: two opposite-facing doors at the same edge midpoint
-        -- are placed against each other -> connected (glowing orb). Purely spatial.
-        local doorMap, OPP = {}, { N = "S", S = "N", E = "W", W = "E" }
-        for _, o in ipairs(orbs) do
-            local k = o.midX .. "," .. o.midY
-            doorMap[k] = doorMap[k] or {}
-            doorMap[k][o.cardinal] = true
-        end
-        for _, o in ipairs(orbs) do
-            o.connected = doorMap[o.midX .. "," .. o.midY][OPP[o.cardinal]] == true
-        end
+
+        _markOrbConnections(orbs)
 
         local backdrop = _lowerFloorBackdrop(state, nav.selectedFloor, bb)
         local empty = (#rooms == 0)
@@ -920,12 +924,47 @@ Selectors:Register("projects.slotOfferHasRows", {
     end,
 })
 
+-- Library sets sort alpha (unnamed sink to ""), ties broken by set id.
+local function _sortBySetNameThenID(a, b)
+    if (a.name or "") ~= (b.name or "") then return (a.name or "") < (b.name or "") end
+    return a.id < b.id
+end
+
+-- Split a room's furnishing sets into the sorted library list + its own local
+-- set. A set can be deleted out from under the room while the ID lingers.
+local function _partitionFurnishingSets(state, room, roomID)
+    local lib, localSet = {}, nil
+    for _, sid in ipairs(room.furnishingSetIDs) do
+        local set = state.account.furnishingSets[sid]
+        if set and set.isLocal and set.ownerRoom == roomID then localSet = set
+        elseif set then lib[#lib + 1] = set end   -- exception(nullable): set deleted out from under the room
+    end
+    table.sort(lib, _sortBySetNameThenID)
+    return lib, localSet
+end
+
+-- Header + item rows for one set. Library groups fold (click the header); the
+-- room's own pieces never do. Name/icon stamped in (ADR-003b async re-render).
+local function _emitFurnishingRows(rows, set, isLocal, folded, R)
+    local collapsed = (not isLocal) and folded[set.id] == true
+    local total = 0
+    for _, it in ipairs(set.items) do total = total + (it.count or 1) end
+    rows[#rows + 1] = { kind = "setHeader", setID = set.id, isLocal = isLocal,
+                        name = isLocal and "This room's pieces" or (set.name or "Set"),
+                        count = total, collapsed = collapsed }
+    if collapsed then return end
+    for _, it in ipairs(set.items) do
+        rows[#rows + 1] = { kind = "item", setID = set.id, isLocal = isLocal,
+                            decorID = it.id, count = it.count or 1,
+                            name = R:ResolveName(it.id), icon = R:ResolveIcon(it.id) }
+    end
+end
+
 -- Effective furnishings for the selected ASSIGNED room, grouped by set with
 -- per-item provenance. Row kinds:
 --   setHeader { setID, name, isLocal, count }  (Unequip paints on library sets)
 --   item      { setID, isLocal, decorID, count, name, icon }  (steppers on local only)
--- Library sets first (alpha), the room's own pieces last. Name/icon stamped
--- into the envelope (ADR-003b: paint-time resolve breaks the async re-render).
+-- Library sets first (alpha), the room's own pieces last.
 Selectors:Register("projects.roomFurnishingsRows", {
     memoized = true,
     reads = { "account.rooms", "account.furnishingSets", "session.ui.projects.furnCollapsed",
@@ -934,34 +973,10 @@ Selectors:Register("projects.roomFurnishingsRows", {
         local roomID, room = _selectedRoom(state)
         if not room then return {} end
         local R, folded = HDG.ItemNameResolver, state.session.ui.projects.furnCollapsed
-        local lib, localSet = {}, nil
-        for _, sid in ipairs(room.furnishingSetIDs) do
-            local set = state.account.furnishingSets[sid]
-            if set and set.isLocal and set.ownerRoom == roomID then localSet = set
-            elseif set then lib[#lib + 1] = set end   -- exception(nullable): set deleted out from under the room
-        end
-        table.sort(lib, function(a2, b2)
-            if (a2.name or "") ~= (b2.name or "") then return (a2.name or "") < (b2.name or "") end
-            return a2.id < b2.id
-        end)
+        local lib, localSet = _partitionFurnishingSets(state, room, roomID)
         local rows = {}
-        local function emit(set, isLocal)
-            -- Library groups fold (click the header); the room's own pieces never do.
-            local collapsed = (not isLocal) and folded[set.id] == true
-            local total = 0
-            for _, it in ipairs(set.items) do total = total + (it.count or 1) end
-            rows[#rows + 1] = { kind = "setHeader", setID = set.id, isLocal = isLocal,
-                                name = isLocal and "This room's pieces" or (set.name or "Set"),
-                                count = total, collapsed = collapsed }
-            if collapsed then return end
-            for _, it in ipairs(set.items) do
-                rows[#rows + 1] = { kind = "item", setID = set.id, isLocal = isLocal,
-                                    decorID = it.id, count = it.count or 1,
-                                    name = R:ResolveName(it.id), icon = R:ResolveIcon(it.id) }
-            end
-        end
-        for _, set in ipairs(lib) do emit(set, false) end
-        if localSet then emit(localSet, true) end
+        for _, set in ipairs(lib) do _emitFurnishingRows(rows, set, false, folded, R) end
+        if localSet then _emitFurnishingRows(rows, localSet, true, folded, R) end
         return rows
     end,
 })
@@ -1292,11 +1307,6 @@ Selectors:Register("projects.pickerRail", {
     end,
 })
 
--- Picker open when a target crate is set.
-Selectors:Register("projects.pickerOpen", {
-    reads = { "session.ui.projects.pickerCrateID" },
-    fn = function(state) return state.session.ui.projects.pickerCrateID ~= nil end,
-})
 -- modelPreview binds itemID to this (hovered/selected picker item).
 Selectors:Register("projects.pickerSelectedItemID", {
     reads = { "session.ui.projects.pickerSelectedItemID" },

@@ -140,6 +140,22 @@ end
 -- surfaced via override sources; the catalog observer indexes BOTH into byVendor
 -- and stamps each entry's resolved npcID -- so we match by ID, no name matching.
 -- cbi is BuildSnapshot's per-itemID index: [itemID] = { row, owned }.
+-- Add one vendor item to the event-card snapshot once (dedup via `seen`),
+-- stamping owned/icon/name from the collected-by-item map (cbi).
+local function _accumulateEventItem(out, seen, itemID, cbi)
+    if seen[itemID] then return end
+    seen[itemID] = true
+    local c     = cbi[itemID]
+    local owned = (c and c.owned) == true
+    local row   = c and c.row
+    out.items[#out.items + 1] = {
+        itemID = itemID, owned = owned,
+        iconID = row and row.iconTexture,
+        name   = row and row.name,
+    }
+    if owned then out.collected = out.collected + 1 end
+end
+
 local function _eventCardSnapshot(npcID, cbi)
     local out = { items = {}, collected = 0, total = 0, pct = 0 }
     if not npcID then return out end
@@ -147,18 +163,7 @@ local function _eventCardSnapshot(npcID, cbi)
     for _, ven in pairs(HDG.HousingCatalogObserver.byVendor) do
         if ven.npcID == npcID then
             for _, itemID in ipairs(ven.items) do
-                if not seen[itemID] then
-                    seen[itemID] = true
-                    local c     = cbi[itemID]
-                    local owned = (c and c.owned) == true
-                    local row   = c and c.row
-                    out.items[#out.items + 1] = {
-                        itemID = itemID, owned = owned,
-                        iconID = row and row.iconTexture,
-                        name   = row and row.name,
-                    }
-                    if owned then out.collected = out.collected + 1 end
-                end
+                _accumulateEventItem(out, seen, itemID, cbi)
             end
         end
     end

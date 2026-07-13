@@ -205,16 +205,6 @@ Selectors:Register("acq.isViewMode_item_decor", {
     end,
 })
 
--- Item-view preview slot. Was visible whenever an item was selected; now
--- gated to item-view only so vendor-view's map drawer owns that pixel real
--- estate. acq.hasSelectedItem registered further down (line ~1022).
-Selectors:Register("acq.itemPreviewVisible", {
-    calls = {"acq.isViewMode_item", "acq.hasSelectedItem"},
-    fn = function(state, ctx)
-        if not Selectors:Call("acq.isViewMode_item", state, ctx) then return false end
-        return Selectors:Call("acq.hasSelectedItem", state, ctx) and true or false
-    end,
-})
 
 -- List panel title flips with viewMode -- "Vendors" or "Search for Decor".
 Selectors:Register("acq.listTitle", {
@@ -366,10 +356,7 @@ Selectors:Register("acq.allItems", {
                 achievementID = row.achievementID,
             }
         end)
-        table.sort(items, function(a, b)
-            if a.name == b.name then return a.itemID < b.itemID end
-            return (a.name or "") < (b.name or "")
-        end)
+        table.sort(items, HDG.TableUtils.ByNameThenItemID)
         return items
     end,
 })
@@ -621,6 +608,26 @@ local function _passesVendorAxes(item, hasRep, hasZone, hasFaction, repSet, zone
     return true
 end
 
+-- First REP source tag carrying a live faction + requirement code, or nil.
+-- Shared by the row-list chip-dim stamp, the by-vendor item list, and the
+-- detail source line. row nil / no sourceTags pre-bake -> nil.
+local function _findRepSourceTag(row)
+    if not (row and row.sourceTags) then return nil end  -- exception(boundary): GetRow nil + sourceTags absent pre-bake
+    for _, t in ipairs(row.sourceTags) do
+        if t.kind == "REP" and t.factionID and t.requiredCode then return t end
+    end
+    return nil
+end
+
+-- repMet chip-dim signal from a catalog row's REP gate (live RepObserver
+-- progress, gated by rep.tick in the caller's reads). nil when no rep gate.
+local function _repMetForRow(row)
+    local t = _findRepSourceTag(row)
+    if not t then return nil end
+    local prog = HDG.RepObserver:GetProgress(t.factionID, t.requiredCode)
+    return (prog and prog.met) == true
+end
+
 -- Chip-dim stamps (questDone / achEarned / repMet) on a shallow-copied row.
 -- questDone is account-wide (any alt's recorded completion) OR the current
 -- char's live flag (via _questCompletion -- shared with the detail source
@@ -636,16 +643,7 @@ local function _stampChipDim(stamped, item, state)
         stamped.achEarned = HDG.AchievementObserver:IsEarned(item.achievementID) == true
     end
     if item.requiresRep then
-        local catRow = HDG.HousingCatalogObserver:GetRow(item.itemID)
-        if catRow and catRow.sourceTags then  -- exception(boundary): GetRow nil + sourceTags absent pre-bake
-            for _, t in ipairs(catRow.sourceTags) do
-                if t.kind == "REP" and t.factionID and t.requiredCode then
-                    local prog = HDG.RepObserver:GetProgress(t.factionID, t.requiredCode)
-                    stamped.repMet = (prog and prog.met) == true
-                    break
-                end
-            end
-        end
+        stamped.repMet = _repMetForRow(HDG.HousingCatalogObserver:GetRow(item.itemID))
     end
 end
 
@@ -1665,6 +1663,41 @@ end
 --                       (DROP, VENDOR, PROMO, etc.)
 -- The strip line (if any chip-only tags exist) lands at the bottom so
 -- gated text-bearing entries stay legible at the top of the widget.
+-- [ACH] chip wrapped in a custom hdgrach: hyperlink (payload = itemID; click +
+-- hover handlers read achievementID / name off the same row). Earned -> append
+-- a live checkmark (AchievementObserver, gated by achievementStatus.tick).
+local function _buildAchSourceLine(id, prefix, chip, t, row)
+    local line = string.format("%s%s  |cffffff00|Hhdgrach:%d|h[%s]|h|r", prefix, chip, id, t.text)
+    if row.achievementID and HDG.AchievementObserver:IsEarned(row.achievementID) then
+        line = line .. "  |A:common-icon-checkmark:14:14|a"
+    end
+    return line
+end
+
+-- Static "<chip>  <requirement>" plus any LIVE suffix:
+--   REP   -> "ready/not-ready <standing> (X/Y)" via RepObserver (rep.tick).
+--   QUEST -> checkmark + completing character (class-colored) on completion.
+--            Account-wide (account.questCompletions, first char wins) so alts
+--            see ticks; bare-tick fallback for an un-persisted current-char one.
+local function _buildGateSourceLine(state, prefix, chip, t, row)
+    local line = prefix .. chip .. "  " .. t.text
+    if t.kind == "REP" and t.factionID then
+        local suffix = HDG.Format.ComposeRepProgressSuffix(
+            HDG.RepObserver:GetProgress(t.factionID, t.requiredCode))
+        if suffix then line = line .. "  " .. suffix end
+    end
+    if t.kind == "QUEST" and row.questID then
+        local rec, live = _questCompletion(state, row.questID)
+        if rec then
+            line = line .. "  |A:common-icon-checkmark:14:14|a "
+                .. HDG.Format.ClassColorName(rec.name, rec.class)
+        elseif live then
+            line = line .. "  |A:common-icon-checkmark:14:14|a"
+        end
+    end
+    return line
+end
+
 Selectors:Register("acq.selectedItem.sourceLine", {
     -- session.resolvers.rep.tick: RepObserver bumps it on rep change so the REP gate's
     -- LIVE progress suffix (composed below) re-reads. Static gate text is baked.
@@ -1679,57 +1712,15 @@ Selectors:Register("acq.selectedItem.sourceLine", {
         for _, t in ipairs(row.sourceTags) do
             local chip   = _chipText(t.kind)
             local prefix = t.factionPrefix and (t.factionPrefix .. " ") or ""
-            if t.text then
-                if t.kind == "ACH" then
-                    -- [ACH] chip wrapped in custom hdgrach: hyperlink.
-                    -- Payload is the itemID; click + hover handlers read
-                    -- achievementID / name off the same row.
-                    local line = string.format(
-                        "%s%s  |cffffff00|Hhdgrach:%d|h[%s]|h|r",
-                        prefix, chip, id, t.text)
-                    -- Earned checkmark: live AchievementObserver:IsEarned, gated
-                    -- by session.resolvers.achievementStatus.tick in this selector's reads
-                    -- (earned state is dynamic per-character; same shape as QUEST).
-                    if row.achievementID
-                       and HDG.AchievementObserver:IsEarned(row.achievementID) then
-                        line = line .. "  |A:common-icon-checkmark:14:14|a"
-                    end
-                    lines[#lines+1] = line
-                else
-                    local line = prefix .. chip .. "  " .. t.text
-                    -- REP: append LIVE progress ("ready/not-ready <standing> (X/Y)")
-                    -- onto the static "Honored with X" requirement. Read through
-                    -- HDG.RepObserver (owns the rep namespaces); gated by
-                    -- session.resolvers.rep.tick in this selector's reads.
-                    if t.kind == "REP" and t.factionID then
-                        local suffix = HDG.Format.ComposeRepProgressSuffix(
-                            HDG.RepObserver:GetProgress(t.factionID, t.requiredCode))
-                        if suffix then line = line .. "  " .. suffix end
-                    end
-                    -- QUEST: on a completed quest, append a checkmark + the
-                    -- completing character (class-colored). Recorded account-wide
-                    -- (account.questCompletions, first char wins) so alts see ticks
-                    -- for quests another character finished -- IsQuestFlaggedCompleted
-                    -- is per-character. Falls back to a bare tick for a current-char
-                    -- completion the recorder hasn't persisted yet. row.questID is a
-                    -- number OR an {ids} variant set.
-                    if t.kind == "QUEST" and row.questID then
-                        local rec, live = _questCompletion(state, row.questID)
-                        if rec then
-                            line = line .. "  |A:common-icon-checkmark:14:14|a "
-                                .. HDG.Format.ClassColorName(rec.name, rec.class)
-                        elseif live then
-                            line = line .. "  |A:common-icon-checkmark:14:14|a"
-                        end
-                    end
-                    lines[#lines+1] = line
-                end
+            if t.text and t.kind == "ACH" then
+                lines[#lines+1] = _buildAchSourceLine(id, prefix, chip, t, row)
+            elseif t.text then
+                lines[#lines+1] = _buildGateSourceLine(state, prefix, chip, t, row)
             elseif t.kind ~= "VENDOR" then
-                -- VENDOR chip suppressed in the detail panel -- this panel is
-                -- item-view-only (acq.isViewMode_item) and the "Available from
-                -- (N)" vendor list right below already names every vendor, so
-                -- [VEND] is pure redundancy here. (Row-list chips keep it; they
-                -- render via UI.GateChips, not this selector.)
+                -- VENDOR chip suppressed in the detail panel -- item-view-only,
+                -- and the "Available from (N)" vendor list below already names
+                -- every vendor, so [VEND] is pure redundancy here. (Row-list
+                -- chips keep it -- they render via UI.GateChips, not this selector.)
                 strip[#strip+1] = prefix .. chip
             end
         end
@@ -1794,6 +1785,60 @@ Selectors:Register("acq.selected.wowheadUrl", {
 -- acq.runSummary.text, items tile/list bindings). Cache invalidates on
 -- selectedNpcID change + collection ownership + live-set + catalog
 -- updates via the calls-chain reads closure.
+-- One by-vendor item row: catalog facts + gate-met chip-dim stamps
+-- (questDone/achEarned account-wide; repMet live via the REP sourceTag). Cost
+-- is text-only (catalog sourceText; VendorDB retired). Rep name from
+-- ItemAugment, supplemented by the catalog factionGate when the augment is
+-- silent. exception(boundary): IsComplete/IsEarned/GetProgress gated by the
+-- questStatus/achievementStatus/rep ticks in the selector's reads.
+local function _buildSelectedVendorItem(state, itemID, catRow, isColl)
+    local aug       = HDG.StaticData.ItemAugment:Get(itemID)
+    local factionID = aug and aug.factionID or 0
+    local minRep    = aug and aug.minRep    or 0
+    local repName   = aug and aug.factionName or ""
+    local gate = catRow.factionGate
+    if gate and gate.factionName and gate.factionName ~= "" and repName == "" then
+        repName = gate.factionName
+    end
+    local iconTex, iconAtl = HDG.Format.CoerceIconPair(catRow.iconTexture, catRow.iconAtlas)
+    local firstVendor = catRow.vendors and catRow.vendors[1]  -- exception(nullable): vendors absent on drop-only rows
+    local costText = (firstVendor and firstVendor.cost) or ""
+
+    local questDone, achEarned = nil, nil
+    if catRow.questID then
+        questDone = _recordedCompletion(state, catRow.questID) ~= nil
+            or HDG.QuestNameResolver:IsComplete(catRow.questID) == true
+    end
+    if catRow.achievementID then
+        achEarned = HDG.AchievementObserver:IsEarned(catRow.achievementID) == true
+    end
+
+    return {
+        questDone         = questDone,
+        achEarned         = achEarned,
+        repMet            = _repMetForRow(catRow),
+        kind              = "item",
+        itemID            = itemID,
+        name              = catRow.name or "Unknown",
+        isCollected       = isColl and isColl(itemID) or false,
+        numStored         = catRow.quantity or 0,
+        numPlaced         = 0,  -- placement count not in catalog
+        costText          = costText,  -- text only; integer unavailable
+        costLine          = catRow.costLine,  -- baked cost line (icons); single-option fallback for costLineVariant
+        costVariants      = catRow.costVariants,  -- per-payment-option lines (listRows expands)
+        factionID         = factionID,
+        minRep            = minRep,
+        repName           = repName,
+        currCost          = nil,  -- DEFERRED: CostAugment (no integer cost yet)
+        questID           = 0,    -- default; real questIDs flow from ItemAugment sources
+        achieveID         = 0,    -- DEFERRED: CostAugment
+        iconTexture       = iconTex,
+        iconAtlas         = iconAtl,
+        isAllowedIndoors  = catRow.isAllowedIndoors,
+        isAllowedOutdoors = catRow.isAllowedOutdoors,
+    }
+end
+
 Selectors:Register("acq.selected.items", {
     memoized = true,
     calls = {"decor.isCollected"},
@@ -1832,67 +1877,8 @@ Selectors:Register("acq.selected.items", {
             -- byItemID within the same atomic sweep commit, so a miss is impossible
             -- by construction -- silent skip keeps this selector pure.
             if catRow then
-            -- Per-item rep/quest data from ItemAugment (sparse).
-            local aug      = HDG.StaticData.ItemAugment:Get(itemID)
-            local factionID = aug and aug.factionID or 0
-            local minRep    = aug and aug.minRep    or 0
-            local repName   = aug and aug.factionName or ""
-            -- factionGate from catalog sourceText (may supplement aug).
-            local gate = catRow.factionGate
-            if gate and gate.factionName and gate.factionName ~= "" and repName == "" then
-                repName = gate.factionName
+                out[#out + 1] = _buildSelectedVendorItem(state, itemID, catRow, isColl)
             end
-            local iconTex, iconAtl = HDG.Format.CoerceIconPair(
-                catRow.iconTexture, catRow.iconAtlas)
-            -- Cost: catalog sourceText text only (integer unavailable;
-            -- VendorDB retired). Expose as costText string.
-            local firstVendor = catRow.vendors and catRow.vendors[1]
-            local costText = (firstVendor and firstVendor.cost) or ""
-            -- Gate-met chip-dim stamps (same as acq.items): questDone/achEarned account-
-            -- wide, repMet live from the REP sourceTag. GateChips fades the chip when false.
-            -- exception(boundary): IsComplete/IsEarned/GetProgress gated by the ticks in reads above.
-            local questDone, achEarned, repMet = nil, nil, nil
-            if catRow.questID then
-                questDone = _recordedCompletion(state, catRow.questID) ~= nil
-                    or HDG.QuestNameResolver:IsComplete(catRow.questID) == true
-            end
-            if catRow.achievementID then
-                achEarned = HDG.AchievementObserver:IsEarned(catRow.achievementID) == true
-            end
-            if catRow.sourceTags then   -- exception(boundary): sourceTags absent pre-bake / on drop-only rows
-                for _, t in ipairs(catRow.sourceTags) do
-                    if t.kind == "REP" and t.factionID and t.requiredCode then
-                        local prog = HDG.RepObserver:GetProgress(t.factionID, t.requiredCode)
-                        repMet = (prog and prog.met) == true
-                        break
-                    end
-                end
-            end
-            out[#out + 1] = {
-                questDone         = questDone,
-                achEarned         = achEarned,
-                repMet            = repMet,
-                kind              = "item",
-                itemID            = itemID,
-                name              = catRow.name or "Unknown",
-                isCollected       = isColl and isColl(itemID) or false,
-                numStored         = catRow.quantity or 0,
-                numPlaced         = 0,  -- placement count not in catalog
-                costText          = costText,  -- text only; integer unavailable
-                costLine          = catRow.costLine,  -- baked cost line (icons); single-option fallback for costLineVariant
-                costVariants      = catRow.costVariants,  -- per-payment-option lines (listRows expands)
-                factionID         = factionID,
-                minRep            = minRep,
-                repName           = repName,
-                currCost          = nil,  -- DEFERRED: CostAugment (no integer cost yet)
-                questID           = 0,    -- default; real questIDs flow from ItemAugment sources
-                achieveID         = 0,    -- DEFERRED: CostAugment
-                iconTexture       = iconTex,
-                iconAtlas         = iconAtl,
-                isAllowedIndoors  = catRow.isAllowedIndoors,
-                isAllowedOutdoors = catRow.isAllowedOutdoors,
-            }
-            end -- catRow
         end
         table.sort(out, function(a, b)
             if a.isCollected ~= b.isCollected then

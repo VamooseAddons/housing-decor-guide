@@ -8,12 +8,7 @@ HDG.MogulController = HDG.MogulController or {}
 
 local MogulController = HDG.MogulController
 
-local function dispatch(actionType, payload)
-    HDG.Store:Dispatch({
-        type    = HDG.Constants.ACTIONS[actionType],
-        payload = payload,
-    })
-end
+local dispatch = HDG.ControllerHelpers.Mechanics.DispatchNamed  -- hygiene A13
 
 -- ===== Wire sub-groups ==================================================
 
@@ -52,13 +47,9 @@ function MogulController:_wireGoblinControls(rootFrame)
         HDG.UI.OnClick(rootFrame, "mogulPanel.goblinExp_" .. e.short,
             function() dispatch("GOBLIN_SET_EXPANSION", { expansion = captured }) end)
     end
-    local searchBox = HDG.UI.W(rootFrame, "mogulPanel.goblinSearch")
-    if searchBox and searchBox.SetScript then  -- exception(boundary): widget may be absent
-        searchBox:SetScript("OnTextChanged", function(self, userInput)
-            if not userInput then return end
-            dispatch("GOBLIN_SET_SEARCH", { query = (self.GetText and self:GetText()) or "" })
-        end)
-    end
+    HDG.UI.WireTextChanged(HDG.UI.W(rootFrame, "mogulPanel.goblinSearch"), function(text)
+        dispatch("GOBLIN_SET_SEARCH", { query = text })
+    end)
     HDG.UI.OnClick(rootFrame, "mogulPanel.goblinAuctions",
         function() dispatch("GOBLIN_TOGGLE_AUCTIONS", {}) end)
     HDG.UI.OnClick(rootFrame, "mogulPanel.goblinHaveLumber",
@@ -673,7 +664,7 @@ local function _layoutGoblinRow(row)
         local icon = row:CreateTexture(nil, "OVERLAY")
         icon:SetSize(14, 14)
         icon:SetPoint("LEFT", row, "LEFT", 4, 0)
-        icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+        icon:SetTexCoord(unpack(HDG.Constants.ICON_CROP))
         row._iconTex = icon
     end
     -- One-time click hook; Configure stamps _currentItemID + _recipeID + _name per paint.

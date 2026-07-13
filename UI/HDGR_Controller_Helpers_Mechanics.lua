@@ -14,34 +14,9 @@ function Mech.GetState()
     return HDG.Store:GetState()  -- exception(false-positive): top-level controller method (not a row factory)
 end
 
--- Merged read-only UI view: union of account.ui + session.ui.
--- Writes go through SetUIPersistent / SetUITransient / SetUITransientView (bucket-aware at call site).
--- Typical callers prefer Mech.GetUIView(view) for per-view scratch state.
-function Mech.GetUI()
-    local s = Mech.GetState()
-    local merged = {}
-    for k, v in pairs(s.account.ui) do merged[k] = v end
-    for k, v in pairs(s.session.ui) do merged[k] = v end
-    return merged
-end
-
 -- Per-view scratch state at state.session.ui[view][key].
 function Mech.GetUIView(view)
     return Mech.GetState().session.ui[view] or {}
-end
-
-function Mech.GetSelectedSet()
-    local s = Mech.GetState()
-    local selectedSetID = s.account.ui.selectedSetID
-    local set = selectedSetID and s.account.sets[selectedSetID] or nil
-    if not set or set.deletedAt then return nil, nil, s end
-    return selectedSetID, set, s
-end
-
--- Player map ID. Returns nil in test environments without C_Map.
-function Mech.GetCurrentMapID()
-    local C_MapAPI = _G and _G.C_Map
-    return C_MapAPI and C_MapAPI.GetBestMapForUnit and C_MapAPI.GetBestMapForUnit("player") or nil  -- exception(boundary): C_Map nil off-map / no zone
 end
 
 function Mech.GetConfigValue(key, fallback)
@@ -51,6 +26,17 @@ function Mech.GetConfigValue(key, fallback)
 end
 
 -- ===== Dispatch wrappers + domain actions =================================
+-- Wall-clock seconds for stamps (createdAt / lastCapturedAt). One annotated
+-- boundary instead of 13 hand-rolled copies (hygiene review A2).
+function Mech.Now()
+    return (time and time()) or 0  -- exception(boundary): time() is a Lua/WoW global
+end
+
+-- Dispatch by ACTION NAME (resolves through the closed taxonomy).
+function Mech.DispatchNamed(actionType, payload)
+    HDG.Store:Dispatch({ type = HDG.Constants.ACTIONS[actionType], payload = payload })
+end
+
 function Mech.Dispatch(actionType, payload)
     HDG.Store:Dispatch({ type = actionType, payload = payload })
 end
@@ -85,13 +71,10 @@ end
 -- the selection; the search editbox reconciles from state in acquisition
 -- Refresh. npcID is authoritative when set; (name, zone) is the fallback
 -- identity for npcID-less vendors (mirrors acq.selectedVendor).
-function Mech.JumpToVendor(npcID, name, zone)
-    if Mech.GetState().account.ui.mainWindowShown ~= true then
-        Mech.Dispatch(HDG.Constants.ACTIONS.MAIN_WINDOW_TOGGLE)
-    end
-    Mech.SetUIPersistent("view", "acquisition")
-    Mech.SetUITransientView("acquisition", "viewMode", "vendor")
-    Mech.SetUITransientView("acquisition", "searchQuery", "")
+-- Select a vendor in the acquisition view: the five-transient sequence every
+-- selection path shares (row click, auto-select, cross-window jump). npcID is
+-- authoritative; (name, zone) is the npcID-less fallback identity (hygiene A23).
+function Mech.SelectVendor(npcID, name, zone)
     Mech.SetUITransientView("acquisition", "selectedNpcID", npcID)
     Mech.SetUITransientView("acquisition", "selectedVendorName", name)
     Mech.SetUITransientView("acquisition", "selectedVendorZone", zone)
@@ -99,27 +82,62 @@ function Mech.JumpToVendor(npcID, name, zone)
     Mech.SetUITransientView("acquisition", "selectedRecipeItemID", nil)
 end
 
-
--- ===== Cycle helpers ======================================================
-function Mech.CycleConfigValue(key, order, fallback)
-    local current = Mech.GetConfigValue(key, fallback)
-    local nextIndex = 1
-    for index, value in ipairs(order) do
-        if value == current then nextIndex = index + 1; break end
+function Mech.JumpToVendor(npcID, name, zone)
+    if Mech.GetState().account.ui.mainWindowShown ~= true then
+        Mech.Dispatch(HDG.Constants.ACTIONS.MAIN_WINDOW_TOGGLE)
     end
-    if nextIndex > #order then nextIndex = 1 end
-    local nextValue = order[nextIndex]
-    Mech.Dispatch(HDG.Constants.ACTIONS.CONFIG_SET, { key = key, value = nextValue })
-    return nextValue
+    Mech.SetUIPersistent("view", "acquisition")
+    Mech.SetUITransientView("acquisition", "viewMode", "vendor")
+    Mech.SetUITransientView("acquisition", "searchQuery", "")
+    Mech.SelectVendor(npcID, name, zone)
 end
 
--- Same shape for transient UI keys. Reads session.ui; writes via SetUITransient.
-function Mech.CycleUIValue(key, order)
-    local current = HDG.Store:GetState().session.ui[key]  -- exception(false-positive): top-level controller read
-    local nextIndex = 1
-    for index, value in ipairs(order) do
-        if value == current then nextIndex = index + 1; break end
+
+-- Race-guarded note editbox (hygiene A4 -- Decor item notes + Acquisition
+-- vendor notes shared this control flow verbatim). The binding-driven SetText
+-- lands a frame AFTER the selected id flips, so a hooksecurefunc stamps which
+-- id's note the box is DISPLAYING; OnTextChanged skips when the displayed id
+-- no longer matches the selection (else a fast selection switch writes one
+-- entity's note onto another). getSelectedID returns the current id;
+-- clearAction/setAction are ACTION NAMES; idField keys the payload.
+function Mech.WireNoteBox(noteBox, getSelectedID, idField, clearAction, setAction)
+    if not (noteBox and noteBox.SetScript) then return end  -- exception(boundary): widget may be absent in this window
+    noteBox._lastBoundNoteID = nil
+    if not noteBox._setTextHooked then
+        hooksecurefunc(noteBox, "SetText", function(self)
+            self._lastBoundNoteID = getSelectedID()
+        end)
+        noteBox._setTextHooked = true
     end
-    if nextIndex > #order then nextIndex = 1 end
-    Mech.SetUITransient(key, order[nextIndex])
+    noteBox:SetScript("OnTextChanged", function(self, userInput)
+        if not userInput then return end
+        local id = getSelectedID()
+        if not id then return end
+        if self._lastBoundNoteID ~= nil and self._lastBoundNoteID ~= id then return end  -- selection switch in progress
+        local text = (self.GetText and self:GetText()) or ""
+        if text == "" then
+            Mech.DispatchNamed(clearAction, { [idField] = id })
+        else
+            Mech.DispatchNamed(setAction, { [idField] = id, text = text })
+        end
+    end)
+end
+
+-- Resolve a Projects target house then invoke onPick(houseID, houseName): the
+-- only owned house goes straight through; 2+ show a titled chooser menu (the
+-- Alliance/Horde picker) anchored on `owner`. Returns false without calling
+-- onPick when there are no houses -- the caller surfaces its own "visit a house
+-- first" message (each uses a different channel). Shared by the Layouts importer
+-- and the Blueprints "Open in Architect" flow (hygiene A19).
+function Mech.PromptHouseTarget(owner, title, onPick)
+    local houses = HDG.Selectors:Call("projects.houseMenuItems", Mech.GetState(), {})
+    if #houses == 0 then return false end
+    if #houses == 1 then onPick(houses[1].value, houses[1].text); return true end
+    local menu = { { isTitle = true, text = title } }
+    for _, h in ipairs(houses) do
+        local hid, hname = h.value, h.text
+        menu[#menu + 1] = { text = h.text, callback = function() onPick(hid, hname) end }
+    end
+    HDG.UI.ShowMenu(owner, menu)
+    return true
 end

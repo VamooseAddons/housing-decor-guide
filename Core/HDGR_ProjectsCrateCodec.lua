@@ -35,7 +35,7 @@ function C.Encode(crate)
             lines[#lines + 1] = d.id .. "," .. cnt
         end
     end
-    return MAGIC .. ":" .. VER .. ":" .. b64encode(table.concat(lines, "\n"))
+    return HDG.Codec.WrapEnvelope(MAGIC, VER, table.concat(lines, "\n"))
 end
 
 -- ===== Decode ===============================================================
@@ -47,11 +47,8 @@ local function parseDecorLine(line)
 end
 
 function C.Decode(encoded)
-    if type(encoded) ~= "string" or #encoded == 0 then return nil end
-    local prefix, ver, payload = encoded:match("^(HDGRCRATE):(%d+):(.+)$")
-    if prefix ~= MAGIC or ver ~= VER then return nil end
-    local decoded = b64decode(payload)
-    if not decoded or #decoded == 0 then return nil end
+    local decoded = HDG.Codec.UnwrapEnvelope(encoded, MAGIC, VER)
+    if not decoded then return nil end
 
     local name, decor, first = "Imported crate", {}, true
     for line in decoded:gmatch("[^\n]+") do

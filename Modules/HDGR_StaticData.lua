@@ -258,11 +258,6 @@ end
 ---@class HDG.StaticData.Professions
 S.Professions = S.Professions or {}
 
-function S.Professions:GetRecipe(recipeID)
-    if not recipeID then return nil end
-    return _table("HDGR_ProfessionsDB")[recipeID]
-end
-
 function S.Professions:GetAll()
     return _table("HDGR_ProfessionsDB")
 end
@@ -284,12 +279,6 @@ local function _ensureItemToRecipe()
     for recipeID, recipe in pairs(db) do
         if recipe.itemID then _itemToRecipeCache[recipe.itemID] = recipeID end
     end
-end
-
-function S.Professions:GetByItemID(itemID)
-    if not itemID then return nil end
-    _ensureItemToRecipe()
-    return _itemToRecipeCache[itemID]
 end
 
 -- Quality-variant groups: tiered reagents have separate itemIDs per quality

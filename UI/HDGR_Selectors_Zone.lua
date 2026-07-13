@@ -13,12 +13,6 @@ local Selectors = HDG.Selectors
 
 -- ===== Atomic reads ========================================================
 
-Selectors:Register("zone.currentMapID", {
-    reads = { "session.zone.currentMapID" },
-    fn = function(state, ctx)
-        return state.session.zone.currentMapID
-    end,
-})
 
 Selectors:Register("zone.search", {
     reads = { "session.ui.zoneScanner.searchQuery" },
@@ -34,12 +28,6 @@ Selectors:Register("zone.showCollected", {
     end,
 })
 
-Selectors:Register("zone.expanded", {
-    reads = { "session.ui.zoneScanner.expanded" },
-    fn = function(state, ctx)
-        return state.session.ui.zoneScanner.expanded
-    end,
-})
 
 Selectors:Register("zone.popupShown", {
     reads = { "account.ui.zonePopupShown" },
@@ -246,16 +234,6 @@ Selectors:Register("zone.windowRows", {
     end,
 })
 
--- Current zone name from the first vendor (all vendors in a mapID share the label).
--- Empty string when the zone has no known vendors.
-Selectors:Register("zone.currentZoneName", {
-    calls = { "zone.vendorsInZone" },
-    fn = function(state, ctx)
-        local vendors = Selectors:Call("zone.vendorsInZone", state, ctx)
-        if vendors[1] then return vendors[1].zone end
-        return ""
-    end,
-})
 
 -- ===== Summary text + alert predicates =====================================
 

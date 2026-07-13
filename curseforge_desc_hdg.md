@@ -12,15 +12,15 @@
 
 ---
 
-## What's New in v3.14.0
+## What's New in v3.14.1
 
-This covers the player-facing changes in 3.14.0.
+This covers the player-facing changes in 3.14.1.
 
-- **Blueprints tab, ready for the 12.1 Midnight housing update.** A new tab under House appears automatically when you play on a 12.1 client (nothing changes on 12.0.7). Paste any blueprint share code to see what is inside -- rooms, decor, dyes, fixtures -- and what you are missing, checked against whichever of your houses you pick. Route the missing items to a shopping list named after the blueprint, file the contents into Styles as a furnishing set, or open House and Interior blueprints in the Architect. Budget meters show whether a build fits the target house, with the game's own reason text when an import would be blocked. Save Blueprint snapshots your current house from inside the tab, Apply to House opens the import dialog prefilled, and Link in chat drops a clickable blueprint link others can import from. Full-house and exterior blueprints color by faction in the list once inspected.
-- **Jump to a vendor from the shopping widget or zone scanner.** Vendor names in both windows are now links: hover underlines the name, and clicking it opens that vendor in Shop by Vendor, with the main window opening if it was closed. Clicking anywhere else on the row still collapses the group.
-- **Vendors new in 12.0.7 now show their zone map.** Vendors the addon does not have exact coordinates for yet (Zuronar and friends) display their zone in the vendor panel instead of an empty box. The map draws without a location pin; pins appear as coordinates get added.
-- **The profession-window buttons are back, as icons.** The "Decor Guide" and "Filter Decor" buttons on profession windows were rendering underneath the window's own frame layer. They are visible again and are now compact icons: the HDG logo opens the guide, and a decor-vendor icon toggles the house-decor recipe filter (it glows while the filter is active).
-- **Fixed Caydori Brightstar's vendor map**, which pointed to The Eternal Palace instead of The Wandering Isle.
+- **Several changes across the Blueprints tab.** Action buttons stay greyed out until a blueprint is selected, and an empty tab explains what to do instead of showing a blank panel. The "fits this house" result is a badge that turns green when a build fits and red with the game's reason when it does not. Content group headers turn amber when they hold missing items, so the group bars alone show where the gaps are. The budget meters use the game's own room, interior, and exterior icons, owned items show a checkmark, and Route to Shopping opens the shopping widget on the routed list so the result is visible.
+- **The blueprint slot count matches the game.** Automatic Save backups no longer count toward your blueprint total, so the number follows Blizzard's own dashboard (11 of 50 where it used to read 20 of 50).
+- **The Blueprints tab works on the 12.1 PTR.** The tab is built for the Midnight 12.1 housing update. If you want to use it now, install Housing Decor Guide to your PTR game folder from CurseForge. On current retail (12.0.7) the tab stays hidden and nothing else changes.
+- **Corrected several vendor maps.** A handful of decor vendors pointed at older versions of their NPC, so Show on Map could open the wrong place. First Arcanist Thalyssra, Moon Priestess Lasara, Lifecaller Tzadrak, Ta'sam, and Celestine of the Harvest now resolve to the right map and coordinates.
+- **Zuronar's second rotation zone (Val) shows its map**, alongside Naigtal, so the vendor's zone appears whichever week it is in.
 
 ---
 
@@ -111,7 +111,7 @@ A companion window injects into Blizzard's House Editor so you can **place decor
 ---
 
 **Author:** Vamoose
-**Version:** 3.14.0
+**Version:** 3.14.1
 **Game Version:** 12.0.5+ (Midnight)
 **Source / Issues:** https://github.com/VamooseAddons/housing-decor-guide
 **Discord:** https://discord.gg/RWZaxJaHFP

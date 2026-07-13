@@ -299,7 +299,7 @@ LC.widgets["decorLoadingPanel.retryHint"] = {
 LC.widgets["decorErrorPanel.icon"] = {
     tooltip = false,
     kind = "atlas", ["in"] = "decorErrorPanel",
-    atlas = "PlayerPartyBlip", tone = "semantic.warning",
+    atlas = HDG.Constants.BULLET_DOT_ATLAS, tone = "semantic.warning",
     width = 24, height = 24, order = 5,
 }
 LC.widgets["decorErrorPanel.headline"] = {
@@ -323,7 +323,7 @@ LC.widgets["decorErrorPanel.sub"] = {
 LC.widgets["decorBlankPanel.icon"] = {
     tooltip = false,
     kind = "atlas", ["in"] = "decorBlankPanel",
-    atlas = "PlayerPartyBlip", tone = "text.dim",
+    atlas = HDG.Constants.BULLET_DOT_ATLAS, tone = "text.dim",
     width = 24, height = 24, order = 5,
 }
 LC.widgets["decorBlankPanel.label"] = {

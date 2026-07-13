@@ -28,6 +28,51 @@ local function _sourceLine(label, rec)
     return label .. ": " .. rec.source .. z
 end
 
+-- Gate lines: achievement / quest / reputation / promo / shop / drop-or-
+-- treasure-or-event. `add(text, r, g, b)` appends one colored body line.
+local function _appendCatalogGateLines(add, row)
+    if row.achievement then add("Achievement: " .. row.achievement, GATE_R, GATE_G, GATE_B) end
+    if row.quest       then add("Quest: " .. row.quest, GATE_R, GATE_G, GATE_B) end
+    if row.factionGate then
+        local fg = row.factionGate
+        local s  = (fg.standing and fg.standing ~= "") and (" (" .. fg.standing .. ")") or ""
+        add("Reputation: " .. fg.factionName .. s, GATE_R, GATE_G, GATE_B)
+    end
+    if row.promo then add("Promotion", GATE_R, GATE_G, GATE_B) end
+    if row.shop  then add("In-Game Shop", GATE_R, GATE_G, GATE_B) end
+    local drop = _sourceLine("Drop", row.drop) or _sourceLine("Treasure", row.treasure) or _sourceLine("Event", row.event)
+    if drop then add(drop, GATE_R, GATE_G, GATE_B) end
+end
+
+-- Vendor lines: list every vendor once (catalog + override can list one 2-3x).
+-- "world vendor" names sort last so the named vendor leads.
+local function _appendCatalogVendorLines(add, vendors)
+    local named, world, seen = {}, {}, {}
+    for _, v in ipairs(vendors) do
+        local label = "Vendor: " .. v.name .. ((v.zone and v.zone ~= "") and (" in " .. v.zone) or "")
+        if not seen[label] then
+            seen[label] = true
+            if v.name:lower():find("world vendor", 1, true) then
+                world[#world + 1] = label
+            else
+                named[#named + 1] = label
+            end
+        end
+    end
+    for _, l in ipairs(named) do add(l, VENDOR_R, VENDOR_G, VENDOR_B) end
+    for _, l in ipairs(world) do add(l, VENDOR_R, VENDOR_G, VENDOR_B) end
+end
+
+-- Cost line (last), summing every payment option.
+local function _appendCatalogCostLine(add, row)
+    if not (row.costEntries and #row.costEntries > 0) then return end   -- exception(nullable): item has no vendor cost
+    local parts = {}
+    for _, ce in ipairs(row.costEntries) do
+        parts[#parts + 1] = HDG.Format.FormatCurrency(ce.amount, ce.currencyID)
+    end
+    add("Cost: " .. table.concat(parts, "  +  "), COST_R, COST_G, COST_B)
+end
+
 local function _onTooltipCreated(_, entry, tooltip)
     if not HDG.Store:GetConfig("catalogTooltip") then return end   -- Helpers toggle: user disabled the sourcing tooltip
     local vid = entry.entryVariantID   -- exception(boundary): Blizzard cell mixin field; nil on non-decor entries
@@ -46,46 +91,11 @@ local function _onTooltipCreated(_, entry, tooltip)
     local body = {}   -- { {text, r, g, b}, ... }
     local function add(text, r, g, b) body[#body + 1] = { text = text, r = r, g = g, b = b } end
 
-    if row.achievement then add("Achievement: " .. row.achievement, GATE_R, GATE_G, GATE_B) end
-    if row.quest       then add("Quest: " .. row.quest, GATE_R, GATE_G, GATE_B) end
-    if row.factionGate then
-        local fg = row.factionGate
-        local s  = (fg.standing and fg.standing ~= "") and (" (" .. fg.standing .. ")") or ""
-        add("Reputation: " .. fg.factionName .. s, GATE_R, GATE_G, GATE_B)
+    _appendCatalogGateLines(add, row)
+    if row.vendors and #row.vendors > 0 then   -- exception(nullable): item has no vendor source
+        _appendCatalogVendorLines(add, row.vendors)
     end
-    if row.promo then add("Promotion", GATE_R, GATE_G, GATE_B) end
-    if row.shop  then add("In-Game Shop", GATE_R, GATE_G, GATE_B) end
-    local drop = _sourceLine("Drop", row.drop) or _sourceLine("Treasure", row.treasure) or _sourceLine("Event", row.event)
-    if drop then add(drop, GATE_R, GATE_G, GATE_B) end
-
-    -- Vendors: list every one. Names containing "world vendor" sort last so the
-    -- named vendor leads.
-    local vendors = row.vendors
-    if vendors and #vendors > 0 then   -- exception(nullable): item has no vendor source
-        local named, world, seen = {}, {}, {}
-        for _, v in ipairs(vendors) do
-            local label = "Vendor: " .. v.name .. ((v.zone and v.zone ~= "") and (" in " .. v.zone) or "")
-            if not seen[label] then   -- catalog + override can list one vendor 2-3x; show once
-                seen[label] = true
-                if v.name:lower():find("world vendor", 1, true) then
-                    world[#world + 1] = label
-                else
-                    named[#named + 1] = label
-                end
-            end
-        end
-        for _, l in ipairs(named) do add(l, VENDOR_R, VENDOR_G, VENDOR_B) end
-        for _, l in ipairs(world) do add(l, VENDOR_R, VENDOR_G, VENDOR_B) end
-    end
-
-    -- Cost on the last line.
-    if row.costEntries and #row.costEntries > 0 then   -- exception(nullable): item has no vendor cost
-        local parts = {}
-        for _, ce in ipairs(row.costEntries) do
-            parts[#parts + 1] = HDG.Format.FormatCurrency(ce.amount, ce.currencyID)
-        end
-        add("Cost: " .. table.concat(parts, "  +  "), COST_R, COST_G, COST_B)
-    end
+    _appendCatalogCostLine(add, row)
 
     if #body == 0 then return end   -- nothing HDG can add -> leave Blizzard's tooltip untouched
     tooltip:AddLine("Housing Decor Guide - Decor sourcing:", HEAD_R, HEAD_G, HEAD_B)

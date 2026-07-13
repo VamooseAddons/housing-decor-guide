@@ -1167,17 +1167,4 @@ Selectors:Register("decor.storedCount", {
     end,
 })
 
--- Composite sidebar label: "Owned: 4547/7500   3895 stored". Stored half hidden when 0.
-Selectors:Register("decor.ownedSidebarLabel", {
-    calls = {"decor.ownedCount", "decor.storedCount", "decor.allItems"},
-    fn = function(state, ctx)
-        local owned  = Selectors:Call("decor.ownedCount",  state, ctx)
-        local stored = Selectors:Call("decor.storedCount", state, ctx)
-        local total  = #(Selectors:Call("decor.allItems",   state, ctx))
-        if total == 0 then return "" end
-        local out = string.format("Owned: %d/%d", owned, total)
-        if stored > 0 then out = out .. string.format("   %d stored", stored) end
-        return out
-    end,
-})
 

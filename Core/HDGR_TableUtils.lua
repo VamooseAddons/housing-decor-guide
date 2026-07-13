@@ -136,15 +136,6 @@ end
 
 -- ===== Shallow merge ======================================================
 
--- Single-level merge. base ⊕ override (override wins) returning a NEW table.
--- Faster than DeepMerge when single-level is all you need.
-function TU.Merge(base, override)
-    local result = {}
-    if base then for k, v in pairs(base) do result[k] = v end end
-    if override then for k, v in pairs(override) do result[k] = v end end
-    return result
-end
-
 -- ===== Predicates / lookups ===============================================
 
 function TU.IsArray(t) return isArray(t) end
@@ -176,4 +167,11 @@ function TU.Values(t)
     if type(t) ~= "table" then return out end
     for _, v in pairs(t) do out[#out + 1] = v end
     return out
+end
+
+-- Sort comparator: name ascending, itemID as the tiebreak (hygiene A22 --
+-- the row-sort every item list shares). Nil-tolerant on name.
+function TU.ByNameThenItemID(a, b)
+    if a.name == b.name then return a.itemID < b.itemID end
+    return (a.name or "") < (b.name or "")
 end

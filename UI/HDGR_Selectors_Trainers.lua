@@ -25,10 +25,6 @@ Selectors:Register("trainers.searchQuery", {
     fn    = function(state) return state.session.ui.trainers.searchQuery end,
 })
 
-Selectors:Register("trainers.expandedProfessions", {
-    reads = {"session.ui.trainers.expandedProfessions"},
-    fn    = function(state) return state.session.ui.trainers.expandedProfessions end,
-})
 
 Selectors:Register("trainers.midnightExpanded", {
     reads = {"session.ui.trainers.midnightExpanded"},

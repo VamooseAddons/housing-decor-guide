@@ -235,7 +235,7 @@ function HDG.Theme:ColorCode(path)
         math.floor(c.b * 255 + 0.5))
 end
 
--- Text-state -> theme-token map. Keys mirror HDG.Constants.TEXT_STATE values
+-- Text-state -> theme-token map (the addon's single text-state source).
 -- (collection, recipe knowledge, semantic severity) for direct lookup.
 local TEXT_STATE_COLOR_TOKENS = {
     -- text.collected / text.uncollected: separate tokens so schemes can tune
@@ -253,10 +253,6 @@ local TEXT_STATE_COLOR_TOKENS = {
     error         = "semantic.error",
     error_deep    = "semantic.error_deep",
 }
-
-function HDG.Theme:GetTextStateColor(state)
-    return self:GetColor(TEXT_STATE_COLOR_TOKENS[state])
-end
 
 function HDG.Theme:GetTextStateColorToken(state)
     return self:ColorCode(TEXT_STATE_COLOR_TOKENS[state])
@@ -381,6 +377,60 @@ function HDG.Theme:_applyChromeBg(frame, key, chromeKey, sublevel)
     end
     if tex then tex:Hide() end   -- teardown: solid scheme, no chrome artwork
     return false
+end
+
+-- NavRow paint helpers (file-scope: NavRow lives inside the Skinners literal).
+-- Accent spine shows on the active parent + every child in the open group.
+local function _paintNavAccentBar(chrome, show)
+    if not chrome.accentBar then return end
+    if show then
+        local accent = HDG.Theme:GetColor("semantic.accent")
+        chrome.accentBar:SetVertexColor(accent.r, accent.g, accent.b, 1)
+        chrome.accentBar:Show()
+    else
+        chrome.accentBar:Hide()
+    end
+end
+
+-- Highlight fill colour for a nav row, or nil (transparent -- panel_soft shows
+-- through). home + active hub/parent/config -> panel_header; active leaf -> selected.
+local function _navRowFill(tier, active)
+    if tier == "home" then
+        return HDG.Theme:GetColor("surface.panel_header")
+    elseif active and (tier == "hub" or tier == "parent" or tier == "config") then
+        return HDG.Theme:GetColor("surface.panel_header")
+    elseif active and tier == "leaf" then
+        return HDG.Theme:GetColor("surface.selected")
+    end
+    return nil
+end
+
+-- Paint (or clear) the nav row's highlight fill. Highlighted rows get watercolor
+-- paper + a vertical gloss for depth; cleared rows hide both.
+local function _paintNavRowFill(frame, chrome, fill)
+    if not chrome.selectedBg then return end
+    if not fill then
+        chrome.selectedBg:Hide()
+        if frame._navGloss then frame._navGloss:Hide() end
+        return
+    end
+    if not frame._navFillTextured and chrome.selectedBg.SetTexture then
+        chrome.selectedBg:SetTexture("Interface\\AddOns\\HousingDecorGuide\\textures\\watercolor")
+        frame._navFillTextured = true
+    end
+    chrome.selectedBg:SetVertexColor(fill.r, fill.g, fill.b, fill.a)
+    chrome.selectedBg:Show()
+    local gloss = frame._navGloss
+    if not gloss and frame.CreateTexture then
+        gloss = frame:CreateTexture(nil, "BACKGROUND", nil, 2)
+        gloss:SetAllPoints()
+        gloss:SetTexture("Interface\\Buttons\\WHITE8x8")
+        if gloss.SetGradient and _G.CreateColor then
+            gloss:SetGradient("VERTICAL", _G.CreateColor(1, 1, 1, 0), _G.CreateColor(1, 1, 1, 0.10))
+        end
+        frame._navGloss = gloss
+    end
+    if gloss then gloss:Show() end
 end
 
 -- Skinners: per-widgetType paint functions. New kinds go here; callers never call
@@ -1111,52 +1161,8 @@ HDG.Theme.Skinners = {
         local tier   = state and state.tier
         local active = state and state.active and true or false
         local spine  = state and state.spine  and true or false
-        -- Accent spine: the active parent + every child in the open group show
-        -- the bar; flush rows stack it into one continuous parent->child spine.
-        if chrome.accentBar then
-            if active or spine then
-                local accent = HDG.Theme:GetColor("semantic.accent")
-                chrome.accentBar:SetVertexColor(accent.r, accent.g, accent.b, 1)
-                chrome.accentBar:Show()
-            else
-                chrome.accentBar:Hide()
-            end
-        end
-        -- Tier fill: home + active hub/parent/config -> panel_header;
-        -- active leaf -> surface.selected; else transparent (panel_soft shows through).
-        if chrome.selectedBg then
-            local fill
-            if tier == "home" then
-                fill = HDG.Theme:GetColor("surface.panel_header")
-            elseif active and (tier == "hub" or tier == "parent" or tier == "config") then
-                fill = HDG.Theme:GetColor("surface.panel_header")
-            elseif active and tier == "leaf" then
-                fill = HDG.Theme:GetColor("surface.selected")
-            end
-            if fill then
-                -- Watercolor paper + gloss on highlighted fill (depth on active/home; flat elsewhere).
-                if not frame._navFillTextured and chrome.selectedBg.SetTexture then
-                    chrome.selectedBg:SetTexture("Interface\\AddOns\\HousingDecorGuide\\textures\\watercolor")
-                    frame._navFillTextured = true
-                end
-                chrome.selectedBg:SetVertexColor(fill.r, fill.g, fill.b, fill.a)
-                chrome.selectedBg:Show()
-                local gloss = frame._navGloss
-                if not gloss and frame.CreateTexture then
-                    gloss = frame:CreateTexture(nil, "BACKGROUND", nil, 2)
-                    gloss:SetAllPoints()
-                    gloss:SetTexture("Interface\\Buttons\\WHITE8x8")
-                    if gloss.SetGradient and _G.CreateColor then
-                        gloss:SetGradient("VERTICAL", _G.CreateColor(1, 1, 1, 0), _G.CreateColor(1, 1, 1, 0.10))
-                    end
-                    frame._navGloss = gloss
-                end
-                if gloss then gloss:Show() end
-            else
-                chrome.selectedBg:Hide()
-                if frame._navGloss then frame._navGloss:Hide() end
-            end
-        end
+        _paintNavAccentBar(chrome, active or spine)
+        _paintNavRowFill(frame, chrome, _navRowFill(tier, active))
         -- Mouseover: tint hover texture to surface.hover (defaults to solid white).
         if chrome.hover then
             local h = HDG.Theme:GetColor("surface.hover")
@@ -1219,21 +1225,6 @@ function HDG.Theme:Apply(widget, widgetType, env)
     if not skin then return false end
     skin(widget, resolveScheme(self, env), self.states and self.states[widget])
     return true
-end
-
--- RegisterKind: resolve kind's `skin` field and forward to Theme:Register.
--- Errors loudly for unknown kinds or missing skin (strict variant of Register).
-function HDG.Theme:RegisterKind(widget, kindName, state, env)
-    local kindDef = HDG.WidgetTypes:Get(kindName)  -- loud-error on unknown
-    if not kindDef.skin then
-        error(("HDG.Theme:RegisterKind: kind %q has no `skin` declaration"):format(kindName), 2)
-    end
-    -- Runtime check so the error points at the live caller (not registration time).
-    if not (self.Skinners and self.Skinners[kindDef.skin]) then
-        error(("HDG.Theme:RegisterKind: kind %q declares skin %q but no Skinner is registered"):format(
-            kindName, tostring(kindDef.skin)), 2)
-    end
-    return self:Register(widget, kindDef.skin, state, env)
 end
 
 function HDG.Theme:ApplyAll(env)

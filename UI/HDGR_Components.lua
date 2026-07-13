@@ -186,7 +186,14 @@ local function dispatchButton(widget, values)
             _applyBoundString(widget, values.text, "SetText")
         end
     end
-    _applyBoundBool(widget, values.enabled, "SetEnabled")
+    if values.enabled ~= nil then
+        _applyBoundBool(widget, values.enabled, "SetEnabled")
+        -- Hand-built button chrome has no native disabled paint (no
+        -- DisabledFontObject / state texture swap) -- SetEnabled alone blocked
+        -- clicks while the button still LOOKED live (PTR 2026-07-13). Fade the
+        -- whole widget so disabled reads at a glance.
+        if widget.SetAlpha then widget:SetAlpha(values.enabled and 1 or 0.45) end
+    end
     _applyBoundBool(widget, values.active,  "SetActive")
 end
 
@@ -266,11 +273,6 @@ function HDG.UI:Frame(parent)
     return CreateFrame("Frame", nil, parent, "BackdropTemplate")
 end
 
-HDG.WidgetTypes:Register("frame", {
-    build = function(parent, _spec) return HDG.UI:Frame(parent) end,
-    skin  = "Frame",
-    specFields = {},                   -- container; nothing kind-specific
-})
 
 -- ===== Spacer: invisible flex Frame =====
 
@@ -722,6 +724,15 @@ function HDG.UI:AtlasButton(parent, atlas, size)
     btn:SetScript("OnEnter", function() tex:SetAlpha(1) end)
     btn:SetScript("OnLeave", function() tex:SetAlpha(0.7) end)
     return btn
+end
+
+-- Clip a square texture to a clean disc (CircleMaskScalable), hygiene A9.
+function HDG.UI.CircleMask(tex)
+    local mask = tex:GetParent():CreateMaskTexture()
+    mask:SetAllPoints(tex)
+    mask:SetAtlas("CircleMaskScalable")
+    tex:AddMaskTexture(mask)
+    return mask
 end
 
 -- ===== NameLink: make a row's name FontString act like a hyperlink ==========
@@ -1938,30 +1949,6 @@ local function buildSlotButton(parent, spec)
     return btn
 end
 
-HDG.WidgetTypes:Register("slotButton", {
-    build    = buildSlotButton,
-    -- Theme paints via the SlotButton skinner above. dispatch carries
-    -- text + tone + muted + textTone + active so bindings can recolor /
-    -- toggle a slot at runtime. active flips chrome to accent + match
-    -- text -- mirrors the button kind's `active` semantics so toggle
-    -- groups (sub-tabs, mode chips) can use the same binding shape.
-    dispatch = { fields = { "text", "tone", "muted", "textTone", "active" },
-                 push = function(widget, values)
-        _applyBoundString(widget, values.text, "SetText")
-        -- Theme state update -- only fire if at least one paint field
-        -- changed (avoids unnecessary Skinner re-paint on text-only updates).
-        if values.tone == nil and values.muted == nil
-           and values.textTone == nil and values.active == nil then return end
-        local update = {}
-        if values.tone     ~= nil then update.tone     = values.tone     end
-        if values.muted    ~= nil then update.muted    = values.muted    end
-        if values.textTone ~= nil then update.textTone = values.textTone end
-        if values.active   ~= nil then update.active   = values.active and true or false end
-        HDG.Theme:SetState(widget, update)
-    end },
-    specFields = { "binding", "width", "height", "text", "font",
-                   "tone", "muted", "textTone" },
-})
 
 -- navItem retired; sidebar nav is a TreeList (navNode + NavRow skinner).
 -- NavRegion (Theme) is kept -- paints the nav panel background (panel_soft).
@@ -2463,7 +2450,7 @@ function HDG.UI:ScrollBox(parent, opts)
     -- decor.items today. Replaces the Store-round-trip-per-click highlight:
     -- the data provider no longer needs to be invalidated to repaint the
     -- selected row, so the items selector can drop `selectedItemID` from its
-    -- reads. See TODO 'SelectionBehaviorMixin migration' for the broader plan.
+    -- reads. (The SelectionBehaviorMixin migration is complete addon-wide.)
     if opts.selection and _G.ScrollUtil and _G.ScrollUtil.AddSelectionBehavior then
         local selOpts = type(opts.selection) == "table" and opts.selection or {}
         local Flags   = _G.SelectionBehaviorFlags or {}
@@ -3057,7 +3044,7 @@ function HDG.UI:RegisterInputDialog(key, spec)
             eb:SetFocus()
         end,
         OnAccept = function(self, data)
-            local value = (editBoxOf(self):GetText() or ""):gsub("^%s+", ""):gsub("%s+$", "")
+            local value = HDG.Format.Trim(editBoxOf(self):GetText())
             if onAccept then onAccept(value, data) end
         end,
         EditBoxOnEnterPressed = function(self)
@@ -3069,101 +3056,11 @@ function HDG.UI:RegisterInputDialog(key, spec)
     }
 end
 
--- ===== CopyDialog: shared multi-line "Ctrl+C to copy" popup =================
---
--- WoW's StaticPopup edit field is single-line, so any time we need the user
--- to copy multi-line text (waypoint lists, source paste, exports, etc) we
--- pop this dialog instead. Lazy-singleton: first call builds the frame and
--- caches it on HDG.UI; subsequent calls just populate + show.
---
--- Usage:
---     HDG.UI:CopyDialog():Show("Copy coordinates", text)
-
-function HDG.UI:CopyDialog()
-    if self._copyDialog then return self._copyDialog end
-    if not (CreateFrame and UIParent) then return nil end
-
-    local f = CreateFrame("Frame", "HDGR_CopyDialog", UIParent, "BackdropTemplate")
-    f:SetSize(420, 280)
-    f:SetPoint("CENTER")
-    f:SetFrameStrata("DIALOG")
-    f:SetMovable(true); f:EnableMouse(true); f:RegisterForDrag("LeftButton")
-    f:SetScript("OnDragStart", f.StartMoving)
-    f:SetScript("OnDragStop",  f.StopMovingOrSizing)
-    HDG.Theme:Register(f, "Frame")
-
-    local title = f:CreateFontString(nil, "OVERLAY")
-    title:SetPoint("TOPLEFT", 12, -10)
-    applyFontRole(title, "heading")
-    HDG.Theme:Register(title, "Text")
-    f._title = title
-
-    local hint = f:CreateFontString(nil, "OVERLAY")
-    hint:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -2)
-    applyFontRole(hint, "small")
-    hint:SetText("Ctrl+C to copy. Esc to close.")
-    HDG.Theme:Register(hint, "TextDim")
-
-    local sf = CreateFrame("ScrollFrame", nil, f, "InputScrollFrameTemplate")
-    sf:SetPoint("TOPLEFT", 12, -50)
-    sf:SetPoint("BOTTOMRIGHT", -12, 40)
-    if sf.CharCount then sf.CharCount:Hide() end  -- exception(boundary): CharCount is an InputScrollFrameTemplate sub-widget; absent in some Blizzard template versions
-    HDG.Theme:Register(sf, "EditBox")
-    local edit = sf.EditBox
-    if edit then
-        edit:SetAutoFocus(false)
-        edit:SetMultiLine(true)
-        edit:SetMaxLetters(0)
-        edit:SetJustifyH("LEFT")
-        applyFontRole(edit, "body")
-        edit:SetScript("OnEscapePressed", function() f:Hide() end)
-    end
-    sf:HookScript("OnSizeChanged", function(self_, w)
-        if self_.EditBox and self_.EditBox.SetWidth then
-            self_.EditBox:SetWidth(math.max(1, (w or 0) - 24))
-        end
-    end)
-    f._edit = edit
-
-    local close = CreateFrame("Button", nil, f, "UIPanelButtonTemplate")
-    close:SetSize(80, 22); close:SetPoint("BOTTOMRIGHT", -12, 10)
-    close:SetText("Close")
-    close:SetScript("OnClick", function() f:Hide() end)
-
-    local rawShow = f.Show
-    function f:Open(titleText, bodyText)
-        if self._title and self._title.SetText then self._title:SetText(titleText or "Copy") end
-        if self._edit then
-            self._edit:SetText(bodyText or "")
-            self._edit:HighlightText()
-            self._edit:SetFocus()
-        end
-        rawShow(self)
-    end
-
-    self._copyDialog = f
-    return f
-end
-
--- ===== InputDialog: shared multi-line paste-in dialog =======================
---
--- Editable sibling of CopyDialog: same themed frame + multi-line
--- InputScrollFrameTemplate, but with Accept/Cancel buttons + an onAccept
--- callback. For pasting long text IN (shopping-list imports, etc.) where
--- Blizzard's single-line StaticPopup edit box can't show the multi-line blob --
--- so Export (CopyDialog) and Import (InputDialog) now share one look.
--- Lazy-singleton, like CopyDialog.
---
--- Usage:
---     HDG.UI:InputDialog():Open("Import list", {
---         hint = "Paste, then Import.", acceptText = "Import",
---         onAccept = function(text) ... end })
-
-function HDG.UI:InputDialog()
-    if self._inputDialog then return self._inputDialog end
-    if not (CreateFrame and UIParent) then return nil end
-
-    local f = CreateFrame("Frame", "HDGR_InputDialog", UIParent, "BackdropTemplate")
+-- Shared modal dialog shell (hygiene A25): themed movable DIALOG-strata frame
+-- + heading + hint slot + multi-line InputScrollFrameTemplate edit. CopyDialog
+-- and InputDialog build on this identically; only their buttons/callbacks differ.
+local function _buildDialogShell(frameName)
+    local f = CreateFrame("Frame", frameName, UIParent, "BackdropTemplate")
     f:SetSize(420, 280)
     f:SetPoint("CENTER")
     f:SetFrameStrata("DIALOG")
@@ -3204,10 +3101,69 @@ function HDG.UI:InputDialog()
         end
     end)
     f._edit = edit
+    return f
+end
+
+-- ===== CopyDialog: shared multi-line "Ctrl+C to copy" popup =================
+--
+-- WoW's StaticPopup edit field is single-line, so any time we need the user
+-- to copy multi-line text (waypoint lists, source paste, exports, etc) we
+-- pop this dialog instead. Lazy-singleton: first call builds the frame and
+-- caches it on HDG.UI; subsequent calls just populate + show.
+--
+-- Usage:
+--     HDG.UI:CopyDialog():Show("Copy coordinates", text)
+
+function HDG.UI:CopyDialog()
+    if self._copyDialog then return self._copyDialog end
+    if not (CreateFrame and UIParent) then return nil end
+
+    local f = _buildDialogShell("HDGR_CopyDialog")
+    f._hint:SetText("Ctrl+C to copy. Esc to close.")
+
+    local close = CreateFrame("Button", nil, f, "UIPanelButtonTemplate")
+    close:SetSize(80, 22); close:SetPoint("BOTTOMRIGHT", -12, 10)
+    close:SetText("Close")
+    close:SetScript("OnClick", function() f:Hide() end)
+
+    local rawShow = f.Show
+    function f:Open(titleText, bodyText)
+        if self._title and self._title.SetText then self._title:SetText(titleText or "Copy") end
+        if self._edit then
+            self._edit:SetText(bodyText or "")
+            self._edit:HighlightText()
+            self._edit:SetFocus()
+        end
+        rawShow(self)
+    end
+
+    self._copyDialog = f
+    return f
+end
+
+-- ===== InputDialog: shared multi-line paste-in dialog =======================
+--
+-- Editable sibling of CopyDialog: same themed frame + multi-line
+-- InputScrollFrameTemplate, but with Accept/Cancel buttons + an onAccept
+-- callback. For pasting long text IN (shopping-list imports, etc.) where
+-- Blizzard's single-line StaticPopup edit box can't show the multi-line blob --
+-- so Export (CopyDialog) and Import (InputDialog) now share one look.
+-- Lazy-singleton, like CopyDialog.
+--
+-- Usage:
+--     HDG.UI:InputDialog():Open("Import list", {
+--         hint = "Paste, then Import.", acceptText = "Import",
+--         onAccept = function(text) ... end })
+
+function HDG.UI:InputDialog()
+    if self._inputDialog then return self._inputDialog end
+    if not (CreateFrame and UIParent) then return nil end
+
+    local f = _buildDialogShell("HDGR_InputDialog")
 
     local function commit()
         -- Capture the callback before Hide() (OnHide clears _onAccept).
-        local text = ((f._edit and f._edit:GetText()) or ""):gsub("^%s+", ""):gsub("%s+$", "")
+        local text = HDG.Format.Trim(f._edit and f._edit:GetText())
         local cb = f._onAccept
         f:Hide()
         if cb and text ~= "" then cb(text) end
@@ -3397,33 +3353,4 @@ function HDG.UI:EnsureRowChrome(row)
         hover      = hover,
     }
     return row._hdgrChrome
-end
-
--- MapPin: pin frame for the drawer map. Pure construction -- positions, sizes,
--- and pin colours are driven by DrawerController at refresh time (via the
--- Theme tokens it reads). Lives in Components so controllers don't construct
--- frames -- they call this factory and decorate the returned frame.
-function HDG.UI:MapPin(parent)
-    if not (parent and _G.CreateFrame) then return nil end
-    local pin = _G.CreateFrame("Frame", nil, parent)
-    pin:EnableMouse(true)
-    if pin.CreateTexture then  -- exception(false-positive): Frame always has CreateTexture; mock-fidelity guard
-        local dot = pin:CreateTexture(nil, "OVERLAY")
-        dot:SetPoint("CENTER")
-        dot:SetAtlas("WhiteCircle-RaidBlips")
-        pin._dot = dot
-    end
-
-    -- Index label centred on the dot. FRIZQT__ ascender/descender asymmetry
-    -- shifts digits slightly low -- Y offset +1 compensates so "2" looks as
-    -- centred as "1".
-    if pin.CreateFontString then  -- exception(false-positive): Frame always has CreateFontString; mock-fidelity guard
-        local label = pin:CreateFontString(nil, "OVERLAY")
-        label:SetPoint("CENTER", 0, 1)
-        label:SetJustifyH("CENTER")
-        label:SetJustifyV("MIDDLE")
-        pin._label = label
-    end
-
-    return pin
 end

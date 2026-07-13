@@ -75,6 +75,10 @@ end
 -- (ExportBlueprint(Room, ...) reports RoomNotFound). The room the player stands
 -- in comes from HousingObserver, which owns C_HousingLayout.
 function BP:Export(typeEnum, name)
+    -- Stash the requested name: EXPORT_SUCCESS only carries the shareCode, and
+    -- the collection round-trip takes seconds -- the optimistic label keeps the
+    -- header showing the typed name instead of a code flash (UX review #8).
+    self._pendingExportName = name
     if typeEnum == Enum.HousingBlueprintType.Room then  -- exception(boundary): Blizzard enum
         local roomGUID = HDG.HousingObserver:GetCurrentRoomGUID()
         if not roomGUID then  -- exception(nullable): player not standing in a room
@@ -129,7 +133,14 @@ end
 
 function BP:OnCollectionReceived(coll)
     local groups, used = coll.groups or {}, 0  -- exception(boundary): server payload
-    for _, g in ipairs(groups) do used = used + #(g.entries or {}) end  -- exception(boundary): server payload
+    -- Auto-saves (the "Backups" group) do NOT count against the 50-blueprint
+    -- cap -- Blizzard's dashboard excludes them (11/50 vs our old 20/50), so
+    -- count only non-auto-save entries (isAutoSave per HousingBlueprintInfo).
+    for _, g in ipairs(groups) do
+        for _, e in ipairs(g.entries or {}) do  -- exception(boundary): server payload
+            if not e.isAutoSave then used = used + 1 end
+        end
+    end
     HDG.Store:Dispatch({ type = A.BLUEPRINT_COLLECTION_RECEIVED,
         payload = { groups = groups, slots = { used = used, max = HDG.Constants.BLUEPRINT_SLOT_MAX } } })
 end
@@ -168,7 +179,9 @@ function BP:OnContentsFailure(shareCode, reasonCode)
 end
 
 function BP:OnExportSuccess(shareCode)
-    HDG.Store:Dispatch({ type = A.BLUEPRINT_EXPORT_SUCCESS, payload = { shareCode = shareCode } })
+    HDG.Store:Dispatch({ type = A.BLUEPRINT_EXPORT_SUCCESS,
+        payload = { shareCode = shareCode, label = self._pendingExportName } })
+    self._pendingExportName = nil
     HDG.Log:Info("blueprints", "Blueprint saved -- code ready to share")
     -- The new blueprint now exists server-side; re-pull the collection so it
     -- appears in the list, and fetch its contents so the auto-selected code

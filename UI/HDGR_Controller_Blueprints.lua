@@ -20,11 +20,14 @@ local function _targetHouse()
     return HDG.Store:GetState().session.blueprints.targetHouseGUID  -- exception(false-positive): top-level controller read, not a row factory
 end
 
--- Select a code and fetch its manifest unless a received one is already cached.
+-- Select a code and fetch its manifest unless one is already cached OR already
+-- in flight (design's in-flight dedupe: re-firing a pending request resets
+-- requestedAt, silently postponing the escalation copy and the timeout sweep).
+-- Failed manifests DO re-request -- re-selecting the row is the retry path.
 local function _selectAndFetch(shareCode)
     HDG.Store:Dispatch({ type = A.BLUEPRINT_SELECT, payload = { shareCode = shareCode } })
     local m = HDG.Store:GetState().session.blueprints.manifests[shareCode]  -- exception(false-positive): top-level controller read
-    if not m or m.status ~= "received" then
+    if not m or (m.status ~= "received" and m.status ~= "pending") then
         HDG.BlueprintObserver:RequestContents(shareCode, _targetHouse())
     end
 end
@@ -40,6 +43,7 @@ local function _layoutCollectionRow(row)
     local headerFs = HDG.UI.RowText(row, "caption", "TextStatus", "LEFT")
     headerFs:SetPoint("LEFT", row, "LEFT", 8, 0)
     headerFs:SetPoint("RIGHT", row, "RIGHT", -8, 0)
+    headerFs:SetWordWrap(false)   -- long names truncate, never wrap into the next row
     row._headerFs = headerFs
 
     -- Zone divider ("Your catalog") -- centered white label with a hairline
@@ -47,6 +51,7 @@ local function _layoutCollectionRow(row)
     local dividerFs = HDG.UI.RowText(row, "caption", "Text", "CENTER")
     dividerFs:SetPoint("LEFT", row, "LEFT", 8, 0)
     dividerFs:SetPoint("RIGHT", row, "RIGHT", -8, 0)
+    dividerFs:SetWordWrap(false)
     row._dividerFs = dividerFs
 
     local dividerLine = row:CreateTexture(nil, "ARTWORK", nil, 2)
@@ -67,6 +72,15 @@ local function _layoutCollectionRow(row)
     forgetBtn:SetAlpha(0.4)  -- quiet until hovered; always present on pasted rows (visible affordance)
     forgetBtn:SetScript("OnEnter", function(self) self:SetAlpha(1) end)
     forgetBtn:SetScript("OnLeave", function(self) self:SetAlpha(0.4) end)
+    -- Hover tooltip names WHICH remove this is BEFORE the click: catalog rows
+    -- delete permanently, pasted rows just forget the code (UX review #4).
+    -- Attach hooks (doesn't clobber the alpha scripts above).
+    HDG.TooltipEngine:Attach(forgetBtn, function(self)
+        if self._deleteBID then
+            return { title = HDG.Locale:Get("TIP_BP_DELETE_TITLE"), body = HDG.Locale:Get("TIP_BP_DELETE_BODY") }
+        end
+        return { title = HDG.Locale:Get("TIP_BP_FORGET_TITLE"), body = HDG.Locale:Get("TIP_BP_FORGET_BODY") }
+    end)
     forgetBtn:SetScript("OnClick", function(self)
         if self._deleteBID then
             HDG.Controller_Blueprints:_ConfirmDelete(self._deleteBID, self._deleteName)
@@ -78,11 +92,13 @@ local function _layoutCollectionRow(row)
 
     local tagFs = HDG.UI.RowText(row, "caption", "TextDim", "RIGHT")
     tagFs:SetPoint("RIGHT", forgetBtn, "LEFT", -4, 0)
+    tagFs:SetWordWrap(false)
     row._tagFs = tagFs
 
     local nameFs = HDG.UI.RowText(row, "body", "Text", "LEFT")
     nameFs:SetPoint("LEFT", row, "LEFT", 8, 0)
     nameFs:SetPoint("RIGHT", tagFs, "LEFT", -4, 0)
+    nameFs:SetWordWrap(false)
     row._nameFs = nameFs
 
     row._laidOut = true
@@ -197,26 +213,31 @@ local function _layoutContentRow(row)
     local headerFs = HDG.UI.RowText(row, "body", "TextStatus", "LEFT")
     headerFs:SetPoint("LEFT", row, "LEFT", 8, 0)
     headerFs:SetPoint("RIGHT", row, "RIGHT", -8, 0)
+    headerFs:SetWordWrap(false)   -- long names truncate, never wrap into the next row
     row._headerFs = headerFs
 
     local chipFs = HDG.UI.RowText(row, "caption", "TextDim", "RIGHT")
     chipFs:SetPoint("RIGHT", row, "RIGHT", -8, 0)
     chipFs:SetWidth(190)
+    chipFs:SetWordWrap(false)
     row._chipFs = chipFs
 
     local needFs = HDG.UI.RowText(row, "caption", "TextDim", "RIGHT")
     needFs:SetPoint("RIGHT", chipFs, "LEFT", -6, 0)
     needFs:SetWidth(52)
+    needFs:SetWordWrap(false)
     row._needFs = needFs
 
     local ownFs = HDG.UI.RowText(row, "caption", "TextDim", "RIGHT")
     ownFs:SetPoint("RIGHT", needFs, "LEFT", -6, 0)
     ownFs:SetWidth(36)
+    ownFs:SetWordWrap(false)
     row._ownFs = ownFs
 
     local nameFs = HDG.UI.RowText(row, "body", "Text", "LEFT")
     nameFs:SetPoint("LEFT", row, "LEFT", 16, 0)
     nameFs:SetPoint("RIGHT", ownFs, "LEFT", -4, 0)
+    nameFs:SetWordWrap(false)
     row._nameFs = nameFs
 
     row._laidOut = true
@@ -228,6 +249,9 @@ local function _paintContentRow(row, ed)
         row._nameFs:Hide(); row._ownFs:Hide(); row._needFs:Hide(); row._chipFs:Hide()
         local suffix = (ed.missing > 0) and ("  --  " .. ed.missing .. " missing") or ""
         row._headerFs:SetText(HDG.UI.CollapsePrefix(ed.collapsed) .. ed.label .. "  (" .. ed.count .. ")" .. suffix)
+        -- Headers carrying missing items escalate so a scroll down the group
+        -- bars alone shows where the gaps are (UX review #12).
+        HDG.Theme:Register(row._headerFs, (ed.missing > 0) and "TextWarning" or "TextStatus")
         HDG.Theme:Register(row, "RowChrome", { header = true })
     else
         row._headerFs:Hide()
@@ -239,7 +263,8 @@ local function _paintContentRow(row, ed)
             row._needFs:SetText("need " .. ed.numMissing)
             HDG.Theme:Register(row._needFs, "TextWarning")
         else
-            row._needFs:SetText("have")
+            -- Owned: the same green check the Decor/Acquire collected marks use.
+            row._needFs:SetText("|A:common-icon-checkmark:12:12|a")
             HDG.Theme:Register(row._needFs, "TextDim")
         end
         if ed.srcKind then
@@ -302,7 +327,7 @@ HDG.Rows:Register("blueprintContentRow", {
 -- select+fetch path. pasteError drives the inline field state.
 
 function C:_SubmitPaste(text)
-    local code = (text or ""):gsub("^%s+", ""):gsub("%s+$", "")
+    local code = HDG.Format.Trim(text)
     if code == "" then return end
     if not HDG.BlueprintObserver:IsShareCodeValid(code) then
         HDG.Store:Dispatch({ type = A.UI_SET_TRANSIENT,
@@ -378,12 +403,15 @@ function C:Wire(root)
     -- Focus-lost is the ONLY commit path (Enter just clears focus -- committing
     -- in OnEnterPressed double-fired via ClearFocus -> OnEditFocusLost), and it
     -- commits only USER-typed edits (_dirty), so Escape can genuinely cancel.
+    -- HookScript, NOT SetScript: the editbox factory already hooked
+    -- OnTextChanged/OnEditFocus* for the placeholder overlay + focus ring, and
+    -- SetScript wiped that chain (PTR 2026-07-13: "Name this blueprint..."
+    -- ghosting under real text). Enter already ClearFocus()es via the factory.
     local nameBox = HDG.UI.W(root, "blueprintsDetailPanel.nameBox")
-    nameBox:SetScript("OnTextChanged", function(box, userInput)
+    nameBox:HookScript("OnTextChanged", function(box, userInput)
         if userInput then box._dirty = true end
     end)
-    nameBox:SetScript("OnEnterPressed", function(box) box:ClearFocus() end)
-    nameBox:SetScript("OnEditFocusLost", function(box) C:_CommitName(box) end)
+    nameBox:HookScript("OnEditFocusLost", function(box) C:_CommitName(box) end)
     nameBox:SetScript("OnEscapePressed", function(box)
         box._dirty = nil  -- discard the typed edit...
         local entry = HDG.Selectors:Call("blueprints.selectedEntry", HDG.Store:GetState(), {})  -- exception(false-positive): top-level controller read
@@ -395,14 +423,13 @@ function C:Wire(root)
     -- pattern -- no clipboard API). Programmatic SetText happens in Refresh;
     -- user edits revert instantly.
     local codeBox = HDG.UI.W(root, "blueprintsDetailPanel.codeBox")
-    codeBox:SetScript("OnEditFocusGained", function(box) box:HighlightText() end)
-    codeBox:SetScript("OnTextChanged", function(box, userInput)
+    codeBox:HookScript("OnEditFocusGained", function(box) box:HighlightText() end)  -- hook: keep the factory's focus ring
+    codeBox:HookScript("OnTextChanged", function(box, userInput)
         if userInput then
             box:SetText(_selectedCode() or "")
             box:HighlightText()
         end
     end)
-    codeBox:SetScript("OnEscapePressed", function(box) box:ClearFocus() end)
 
     -- Link in chat: insert the blueprint's chat hyperlink (players link builds
     -- like items). Blizzard's own LinkItem pattern -- insert if a chat editbox
@@ -447,12 +474,10 @@ function C:_BuildMissingItems()
     for _, g in ipairs(insp.groups) do
         if g.ct == 3 or g.ct == 4 then
             for _, it in ipairs(g.items) do
-                if it.numMissing > 0 then
-                    if it.itemID then
-                        items[#items + 1] = { itemID = it.itemID, npcID = 0, qty = it.numMissing }
-                    else
-                        skipped = skipped + 1
-                    end
+                if it.numMissing > 0 and it.itemID then
+                    items[#items + 1] = { itemID = it.itemID, npcID = 0, qty = it.numMissing }
+                elseif it.numMissing > 0 then
+                    skipped = skipped + 1  -- no itemID: can't route
                 end
             end
         end
@@ -477,6 +502,11 @@ function C:_RouteMissingToShopping()
         HDG.Log:Info("blueprints", skipped .. " item(s) not in the catalog yet were skipped")
     end
     HDG.Log:Info("blueprints", ("Shopping list %q updated: %d missing item(s)"):format(name, #items))
+    -- Show the result: open the shopping widget on the routed list (design doc
+    -- seams: "Widget switches to the list"; UX review #9). Toggle-only when closed.
+    if HDG.Store:GetState().account.ui.shoppingWidgetShown ~= true then
+        HDG.Store:Dispatch({ type = A.SHOPPING_WIDGET_TOGGLE })
+    end
 end
 
 -- Import ALL decor (full quantities) as a furnishing set: encode an HDGRCRATE
@@ -515,14 +545,11 @@ function C:_ImportAsSet()
     end
 end
 
--- Rooms -> a new Architect layout: shapes via ShapeAtlas, positions via the
--- AutoLayout grid-pack ("arranged for you" -- share codes carry no positions).
-function C:_OpenInArchitect(ownerBtn)
-    -- Shapes resolve from the RAW manifest (recordID lives on raw entries, not
-    -- the projected inspector rows).
-    local sb = HDG.Store:GetState().session.blueprints  -- exception(false-positive): top-level controller read
-    local m = sb.selectedCode and sb.manifests[sb.selectedCode]
-    if not (m and m.status == "received") then return end
+-- Rooms from a received blueprint manifest -> a slot-src map for AutoLayout.
+-- Shapes resolve from the RAW manifest (recordID lives on raw entries, not the
+-- projected inspector rows). Returns the room map, room count, and the count of
+-- unrecognized (unknown-shape) rooms.
+local function _extractBlueprintRooms(m)
     local rooms, n, unknown = {}, 0, 0
     for _, g in ipairs(m.raw.contentGroups) do
         if g.contentType == 2 then
@@ -539,30 +566,47 @@ function C:_OpenInArchitect(ownerBtn)
             end
         end
     end
+    return rooms, n, unknown
+end
+
+-- Slot-keyed placements from the auto-packed layout (floor 1; blueprints carry
+-- no floor/position data -- AutoLayout arranges them).
+local function _buildArchitectPlacements(rooms, packed)
+    local placements, slotSeq = {}, 0
+    for id, room in pairs(rooms) do
+        local p = packed.layout[id]
+        if p then
+            slotSeq = slotSeq + 1
+            placements["slot:" .. slotSeq] = {
+                floor = 1, x = p.cell.x, y = p.cell.y,
+                rotation = p.rotation or 0, shape = room.shape,
+            }
+        end
+    end
+    return placements, slotSeq
+end
+
+-- Rooms -> a new Architect layout: shapes via ShapeAtlas, positions via the
+-- AutoLayout grid-pack ("arranged for you" -- share codes carry no positions).
+function C:_OpenInArchitect(ownerBtn)
+    local sb = HDG.Store:GetState().session.blueprints  -- exception(false-positive): top-level controller read
+    local m = sb.selectedCode and sb.manifests[sb.selectedCode]
+    if not (m and m.status == "received") then return end
+    local rooms, n, unknown = _extractBlueprintRooms(m)
     if n == 0 then
         HDG.Log:Warn("blueprints", "No recognizable rooms in this blueprint")
         return
     end
     local packed = HDG.Projects.AutoLayout.compute({ rooms = rooms })
-
     local name = HDG.Selectors:Call("blueprints.displayName", HDG.Store:GetState(), {})  -- exception(false-positive): top-level controller read
+
     local function commitTo(houseID, houseName)
-        local placements, slotSeq = {}, 0
-        for id, room in pairs(rooms) do
-            local p = packed.layout[id]
-            if p then
-                slotSeq = slotSeq + 1
-                placements["slot:" .. slotSeq] = {
-                    floor = 1, x = p.cell.x, y = p.cell.y,
-                    rotation = p.rotation or 0, shape = room.shape,
-                }
-            end
-        end
+        local placements, slotSeq = _buildArchitectPlacements(rooms, packed)
         HDG.Store:Dispatch({ type = A.PROJECTS_IMPORT_LAYOUT, payload = {
             houseID = houseID, houseName = houseName,
             version = {
                 houseID = houseID, name = name .. " (blueprint)",
-                createdAt = (time and time()) or 0,  -- exception(boundary): time()
+                createdAt = HDG.ControllerHelpers.Mechanics.Now(),  -- exception(boundary): time()
                 basedOn = nil, placements = placements, slotSeq = slotSeq, numFloors = 1,
             },
         } })
@@ -573,21 +617,10 @@ function C:_OpenInArchitect(ownerBtn)
     end
 
     -- House targeting mirrors the Layouts importer: the only house, or a menu.
-    local houses = HDG.Selectors:Call("projects.houseMenuItems", HDG.Store:GetState(), {})  -- exception(false-positive): top-level controller read
-    if #houses == 0 then
+    if not HDG.ControllerHelpers.Mechanics.PromptHouseTarget(
+            ownerBtn, "Open in Architect for which house?", commitTo) then
         HDG.Log:Warn("blueprints", "No Projects house yet -- visit a house first")
-        return
     end
-    if #houses == 1 then
-        commitTo(houses[1].value, houses[1].text)
-        return
-    end
-    local menu = { { isTitle = true, text = "Open in Architect for which house?" } }
-    for _, h in ipairs(houses) do
-        local hid, hname = h.value, h.text
-        menu[#menu + 1] = { text = h.text, callback = function() commitTo(hid, hname) end }
-    end
-    HDG.UI.ShowMenu(ownerBtn, menu)
 end
 
 -- Save the current location as a blueprint into Blizzard's catalog. This is
@@ -642,6 +675,12 @@ function C:Refresh(rootFrame, _ctx)
         local bar = HDG.UI.W(rootFrame, METER_BAR_IDS[m.key])
         HDG.Theme:Register(bar._hdgrBarFill, "ProgressBarFill", METER_VARIANT[m.state])
     end
+    -- Verdict badge text: green when it fits, red when blocked (the band's
+    -- card chrome stays accent; only the text role tones -- UX review #14).
+    local verdictFs = HDG.UI.W(rootFrame, "blueprintsDetailPanel.verdict")
+    if verdictFs then  -- exception(nullable): windows without the Blueprints view
+        HDG.Theme:Register(verdictFs, b.fits and "TextSuccess" or "TextError")
+    end
     if not codeBox:HasFocus() then
         codeBox:SetText(_selectedCode() or "")
     end
@@ -650,6 +689,9 @@ function C:Refresh(rootFrame, _ctx)
     if not nameBox:HasFocus() then
         local entry = HDG.Selectors:Call("blueprints.selectedEntry", HDG.Store:GetState(), {})  -- exception(false-positive): top-level controller read
         nameBox:SetText((entry and (entry.isOwn and entry.name or entry.label)) or "")
+        -- Programmatic SetText: poke the placeholder overlay (OnTextChanged-
+        -- via-SetText isn't guaranteed; same belt the binding dispatch wears).
+        if nameBox._hdgrPlaceholderRefresh then nameBox._hdgrPlaceholderRefresh() end
     end
 end
 
@@ -680,13 +722,19 @@ function C:_CommitName(box)
     box._dirty = nil
     local code = _selectedCode()
     if not code then return end
-    local text = (box:GetText() or ""):gsub("^%s+", ""):gsub("%s+$", "")
+    local text = HDG.Format.Trim(box:GetText())
     if text == "" then return end
     local entry = HDG.Selectors:Call("blueprints.selectedEntry", HDG.Store:GetState(), {})  -- exception(false-positive): top-level controller read
     if entry and entry.isOwn then
-        -- Own saved blueprint: rename in Blizzard's catalog (auto-backups are
-        -- read-only, so skip those).
-        if not entry.isAuto and entry.blueprintID and text ~= entry.name then
+        if entry.isAuto then
+            -- Auto-backups are read-only: say so and revert instead of the old
+            -- silent no-op-then-revert (UX review #3).
+            if text ~= entry.name then
+                HDG.Log:Warn("blueprints", "Auto-backups can't be renamed")
+                box:SetText(entry.name or "")
+            end
+        elseif entry.blueprintID and text ~= entry.name then
+            -- Own saved blueprint: rename in Blizzard's catalog.
             HDG.BlueprintObserver:Rename(entry.blueprintID, text)
         end
     elseif text ~= (entry and entry.label) then

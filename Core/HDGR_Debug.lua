@@ -92,7 +92,7 @@ end
 -- /hdgr log <tag>          -- last 10 of that tag
 -- /hdgr log clear [<tag>]  -- clear all or one tag
 function D:Log(rest)
-    local arg = (rest or ""):gsub("^%s+", ""):gsub("%s+$", "")
+    local arg = HDG.Format.Trim(rest)
     if arg:match("^clear") then
         local tag = arg:match("^clear%s+(%S+)$")
         if tag then

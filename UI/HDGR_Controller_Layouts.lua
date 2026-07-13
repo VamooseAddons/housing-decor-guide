@@ -199,21 +199,9 @@ HDG.WidgetTypes:Register("layoutPreview", {
 local PREVIEW_CAPTION_H = 16
 
 -- Pool helpers (keyed mark/sweep; same pattern as ProjectsCanvasController).
-local function _beginPass(host, pool)
-    local p = host[pool]
-    if p then for _, f in pairs(p) do f._used = false end end
-end
-local function _endPass(host, pool)
-    local p = host[pool]
-    if p then for _, f in pairs(p) do if not f._used then f:Hide() end end end
-end
-local function _acquire(host, pool, key, factory)
-    host[pool] = host[pool] or {}
-    local f = host[pool][key]
-    if not f then f = factory(host); host[pool][key] = f end
-    f._used = true
-    return f
-end
+local _beginPass = HDG.UI.BeginPoolPass   -- hygiene A8: shared keyed mark/sweep pool
+local _endPass   = HDG.UI.EndPoolPass
+local _acquire   = HDG.UI.AcquirePooled
 
 -- Faint footprint fill (one quad per occupied cell).
 local function _previewFillFactory(host)
@@ -455,7 +443,7 @@ local function _doImport(text, targetHouseID, targetHouseName)
     local layout = {
         houseID    = targetHouseID,
         name       = decoded.name or "Imported",
-        createdAt  = (time and time()) or 0,   -- exception(boundary): time()
+        createdAt  = HDG.ControllerHelpers.Mechanics.Now(),   -- exception(boundary): time()
         basedOn    = nil,
         placements = placements,
         slotSeq    = slotSeq,
@@ -489,18 +477,10 @@ end
 -- creates the house record if it isn't captured yet). One house -> straight to paste;
 -- 2+ houses -> a chooser menu (the Alliance/Horde picker), then paste.
 local function _beginImport(owner)
-    local houses = HDG.Selectors:Call("projects.houseMenuItems", HDG.Store:GetState(), {})  -- exception(false-positive): top-level controller helper, not a row factory
-    if #houses == 0 then
+    if not HDG.ControllerHelpers.Mechanics.PromptHouseTarget(
+            owner, "Import into which house?", _showImportPopup) then
         if _G.UIErrorsFrame then _G.UIErrorsFrame:AddMessage("Projects: no house found -- visit one first", 1, 0.3, 0.3) end  -- exception(boundary): Blizzard toast
-        return
     end
-    if #houses == 1 then _showImportPopup(houses[1].value, houses[1].text); return end
-    local items = { { isTitle = true, text = "Import into which house?" } }
-    for _, h in ipairs(houses) do
-        local hid, hname = h.value, h.text
-        items[#items + 1] = { text = h.text, callback = function() _showImportPopup(hid, hname) end }
-    end
-    HDG.UI.ShowMenu(owner, items)
 end
 
 local function _renameSelected()
@@ -518,7 +498,7 @@ local function _duplicateSelected()
         houseID   = detail.houseID,
         basedOn   = detail.versionID,
         name      = (detail.name or "Layout") .. " copy",
-        createdAt = (time and time()) or 0,   -- exception(boundary): time()
+        createdAt = HDG.ControllerHelpers.Mechanics.Now(),   -- exception(boundary): time()
     }})
     local newState = HDG.Store:GetState()  -- exception(false-positive): top-level controller helper, not a row factory
     local newHouse = newState.account.projects.houses[detail.houseID]

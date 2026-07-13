@@ -64,14 +64,6 @@ function E:Build(overrides)
     return env
 end
 
--- Get the current env table. Used when env isn't threaded explicitly.
-function E:Current()
-    if not self._current then
-        error("HDG.Environment: not built yet (call Build() in OnEnable)", 2)
-    end
-    return self._current
-end
-
 -- Strict slot read. Errors on unknown slot; use when slot existence must be verified.
 function E:Get(name)
     if not self._current then
@@ -83,33 +75,7 @@ function E:Get(name)
     return self._current[name]
 end
 
--- Build a child env with selected slots overridden (preview/tooltip/test).
--- Shallow-merge; does NOT mutate self._current.
-function E:WithOverrides(overrides)
-    if not self._current then
-        error("HDG.Environment:WithOverrides: not built yet", 2)
-    end
-    overrides = overrides or {}
-    local child = {}
-    for k, v in pairs(self._current) do child[k] = v end
-    for k, v in pairs(overrides) do
-        if not self._slots[k] then
-            error(("HDG.Environment:WithOverrides: undeclared slot %q"):format(k), 2)
-        end
-        local def = self._slots[k]
-        if def.validator and not def.validator(v) then
-            error(("HDG.Environment:WithOverrides: slot %q failed validator"):format(k), 2)
-        end
-        child[k] = v
-    end
-    return child
-end
-
 -- ===== Introspection / test helpers =======================================
-
-function E:GetSlots()
-    return self._slots
-end
 
 function E:_Reset()
     self._slots = {}

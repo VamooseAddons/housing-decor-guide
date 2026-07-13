@@ -83,25 +83,7 @@ R.BuyAll = {
     anchor = "ANCHOR_RIGHT",
 }
 
--- Compartment / minimap buttons -- click hints inline (button-specific, not reusable).
-R.AddonCompartment = {
-    title      = "locale:TIP_ADDON_TITLE",
-    body       = "locale:TIP_ADDON_BODY",
-    anchor     = "ANCHOR_RIGHT",
-    extraLines = {
-        { text = "locale:TIP_COMPARTMENT_CLICK", r = 0.7, g = 0.7, b = 0.7 },
-    },
-}
 
-R.MinimapButton = {
-    title      = "locale:TIP_ADDON_TITLE",
-    anchor     = "ANCHOR_LEFT",   -- LibDBIcon-managed; engine override may apply
-    extraLines = {
-        { text = "locale:TIP_MINIMAP_LEFT_CLICK",   r = 0.7, g = 0.7, b = 0.7 },
-        { text = "locale:TIP_MINIMAP_RIGHT_CLICK",  r = 0.7, g = 0.7, b = 0.7 },
-        { text = "locale:TIP_MINIMAP_DRAG",         r = 0.7, g = 0.7, b = 0.7 },
-    },
-}
 
 -- ===== Outreach (about pane) ================================================
 
@@ -117,10 +99,6 @@ R.Coffee = {
     anchor = "ANCHOR_RIGHT",
 }
 
--- ===== Config sidebar checkboxes ============================================
-R.ConfigDebugToggle    = { title = "locale:TIP_CONFIG_DEBUG_TITLE",    body = "locale:TIP_CONFIG_DEBUG_BODY" }
-R.ConfigMinimapToggle  = { title = "locale:TIP_CONFIG_MINIMAP_TITLE",  body = "locale:TIP_CONFIG_MINIMAP_BODY" }
-R.OpenDebugLog         = { title = "locale:TIP_OPEN_DEBUG_LOG_TITLE",  body = "locale:TIP_OPEN_DEBUG_LOG_BODY" }
 R.WowheadLink          = { title = "locale:TIP_WOWHEAD_TITLE",         body = "locale:TIP_WOWHEAD_BODY" }
 R.ProjectsNewRoom      = { title = "locale:TIP_PROJECTS_NEW_ROOM_TITLE",     body = "locale:TIP_PROJECTS_NEW_ROOM_BODY" }
 R.ProjectsOpenArchitect = { title = "locale:TIP_PROJECTS_OPEN_ARCHITECT_TITLE", body = "locale:TIP_PROJECTS_OPEN_ARCHITECT_BODY" }
@@ -169,6 +147,9 @@ R.EssenceBadge = function()
 end
 R.LumberAutoShow       = { title = "locale:TIP_LUMBER_AUTO_SHOW_TITLE",      body = "locale:TIP_LUMBER_AUTO_SHOW_BODY" }
 R.LumberGoal           = { title = "locale:TIP_LUMBER_GOAL_TITLE",           body = "locale:TIP_LUMBER_GOAL_BODY" }
+R.BlueprintMeterRoom     = { title = "locale:TIP_BP_METER_ROOM",     anchor = "ANCHOR_TOP" }
+R.BlueprintMeterInterior = { title = "locale:TIP_BP_METER_INTERIOR", anchor = "ANCHOR_TOP" }
+R.BlueprintMeterExterior = { title = "locale:TIP_BP_METER_EXTERIOR", anchor = "ANCHOR_TOP" }
 R.VendorJump           = { title = "locale:TIP_VENDOR_JUMP_TITLE",           body = "locale:TIP_VENDOR_JUMP_BODY",    anchor = "ANCHOR_RIGHT" }
 R.ZoneMapOpen          = { title = "locale:TIP_ZONE_MAP_TITLE",              body = "locale:TIP_ZONE_MAP_BODY" }
 
@@ -190,7 +171,6 @@ R.BlueprintArchitect   = { title = "locale:TIP_BP_ARCHITECT_TITLE",   body = "lo
 R.BlueprintSave        = { title = "locale:TIP_BP_SAVE_TITLE",        body = "locale:TIP_BP_SAVE_BODY",        anchor = "ANCHOR_TOP" }
 R.BlueprintLink        = { title = "locale:TIP_BP_LINK_TITLE",        body = "locale:TIP_BP_LINK_BODY",        anchor = "ANCHOR_TOP" }
 R.BlueprintImportHouse = { title = "locale:TIP_BP_IMPORT_HOUSE_TITLE", body = "locale:TIP_BP_IMPORT_HOUSE_BODY", anchor = "ANCHOR_TOP" }
-R.BlueprintDelete      = { title = "locale:TIP_BP_DELETE_TITLE",      body = "locale:TIP_BP_DELETE_BODY",      anchor = "ANCHOR_TOP" }
 
 -- ===== Mogul / Goblin TSM columns ==========================================
 -- Registered unconditionally so Layout:Validate passes regardless of TSM load state.
@@ -257,8 +237,6 @@ R.MogulOptBuy         = { title = "locale:TIP_MOGUL_OPT_BUY_TITLE",         body
 R.MogulFrugal         = { title = "locale:TIP_MOGUL_FRUGAL_TITLE",          body = "locale:TIP_MOGUL_FRUGAL_BODY",          anchor = "ANCHOR_BOTTOMRIGHT" }
 R.MogulSupplyImpact   = { title = "locale:TIP_MOGUL_SUPPLY_IMPACT_TITLE",   body = "locale:TIP_MOGUL_SUPPLY_IMPACT_BODY",   anchor = "ANCHOR_BOTTOMRIGHT" }
 
--- ===== Recipe list filters =================================================
-R.RecipeFilterUnknown = { title = "locale:TIP_RECIPE_FILTER_UNKNOWN_TITLE", body = "locale:TIP_RECIPE_FILTER_UNKNOWN_BODY", anchor = "ANCHOR_BOTTOM" }
 R.RedeemableTag       = { title = "locale:TIP_REDEEMABLE_TAG_TITLE",         body = "locale:TIP_REDEEMABLE_TAG_BODY",         anchor = "ANCHOR_BOTTOM" }
 
 -- ===== House-editor companion: mode tabs ===================================
@@ -269,25 +247,8 @@ R.CompanionThemes      = { title = "locale:TIP_COMPANION_THEMES_TITLE",      bod
 R.CompanionCollections = { title = "locale:TIP_COMPANION_COLLECTIONS_TITLE", body = "locale:TIP_COMPANION_COLLECTIONS_BODY", anchor = "ANCHOR_BOTTOM" }
 R.CompanionRecent      = { title = "locale:TIP_COMPANION_RECENT_TITLE",      body = "locale:TIP_COMPANION_RECENT_BODY",      anchor = "ANCHOR_BOTTOM" }
 
--- ===== Section headers / instructional ======================================
-R.QueueHeader = {
-    title  = "locale:TIP_QUEUE_HEADER_TITLE",
-    body   = "locale:TIP_QUEUE_HEADER_BODY",
-    anchor = "ANCHOR_BOTTOM",
-}
 
-R.MaterialsHeader = {
-    title  = "locale:TIP_MATERIALS_HEADER_TITLE",
-    body   = "locale:TIP_MATERIALS_HEADER_BODY",
-    anchor = "ANCHOR_BOTTOM",
-}
 
--- ===== Warning button recipes ===============================================
-R.WarnResetConfig = {
-    title  = "locale:TIP_WARN_RESET_CONFIG_TITLE",
-    body   = "locale:TIP_WARN_RESET_CONFIG_BODY",
-    anchor = "ANCHOR_BOTTOM",
-}
 
 R.WarnHardReset = {
     title  = "locale:TIP_WARN_HARD_RESET_TITLE",
@@ -307,25 +268,6 @@ R.WarnClearPins = {
 -- Each recipe gates on expected stamp fields and returns nil if not stamped (pooled-row safety).
 -- TODOs are placeholders; replace as each tab is migrated.
 
--- R1: Item row -- item-icon buttons, trophies, favorites, crate cells, picker cells.
--- stamp: row._itemID; optional row._hintKeys = {"shift_shopping", ...}
-function R.ItemRow(self)
-    if not self._itemID then return nil end
-    local extras = {}
-    if self._hintKeys then
-        for _, key in ipairs(self._hintKeys) do
-            local hint = H[key]
-            if hint then
-                extras[#extras + 1] = { text = hint, r = 0.5, g = 0.5, b = 0.5 }
-            end
-        end
-    end
-    return {
-        itemID     = self._itemID,
-        anchor     = "ANCHOR_RIGHT",
-        extraLines = extras,
-    }
-end
 
 -- R2: Decor row -- decor picker, house editor grid.
 -- Custom (non-item) tooltip; source + expansion read live at hover from HousingCatalogObserver.
@@ -338,118 +280,112 @@ local DECOR_ROW_HINTS = {
     shiftText = "locale:DECOR_HINT_SHIFT",
 }
 
-function R.DecorRow(self)
-    if not self._itemID then return nil end
-    local extras = {}
-
-    -- Ownership breakdown (matches the Housing Companion editor tooltip
-    -- "Owned: N (Placed: P, Storage: S)"), source, and expansion -- all read live
-    -- from the catalog row at hover (fresher than a filter-time stamp). Counts are
-    -- aggregate across dye variants (the 12.0.5 catalog API doesn't split them).
-    local row = HDG.HousingCatalogObserver:GetRow(self._itemID)
-    if row then
-        local storage = row.quantity or 0  -- exception(boundary): catalog struct field sparse
-        local placed  = row.numPlaced or 0  -- exception(boundary): catalog struct field sparse
-        local redeem  = row.remainingRedeemable or 0  -- exception(boundary): catalog struct field sparse
-        local owned   = storage + placed + redeem
-        if owned > 0 then
-            local parts = { ("Placed: %d"):format(placed), ("Storage: %d"):format(storage) }
-            if redeem > 0 then parts[#parts + 1] = ("Redeemable: %d"):format(redeem) end
-            extras[#extras + 1] = { text = ("Owned: %d (%s)"):format(owned, table.concat(parts, ", ")), r = 0.4, g = 0.9, b = 0.4 }
-        else
-            extras[#extras + 1] = { text = "Not collected", r = 0.85, g = 0.72, b = 0.35 }
-        end
-        local kind = row.sourceType and HDG.Constants.SOURCE_KIND_BY_DONOR[row.sourceType]
-        if kind and kind.label then
-            -- Decor is often sold by MORE than one vendor. List every vendor, the
-            -- way the House Editor / native-catalog tooltip does, instead of only
-            -- the primary one (ReganB 2026-07-05: browser tooltip showed 1 of the
-            -- Nightborne Lantern's 2 vendors). Non-vendor sources keep one line.
-            if kind.key == "VENDOR" and row.vendors and #row.vendors > 0 then
-                for _, v in ipairs(row.vendors) do
-                    local line = kind.label .. ": " .. v.name
-                    if v.zone and v.zone ~= "" then line = line .. " (" .. v.zone .. ")" end
-                    extras[#extras + 1] = { text = line, r = 0.6, g = 0.78, b = 0.95 }
-                end
-            else
-                local line = kind.label
-                if row.sourceName and row.sourceName ~= "" then
-                    line = line .. ": " .. row.sourceName
-                    if row.sourceDetail and row.sourceDetail ~= "" then
-                        line = line .. " (" .. row.sourceDetail .. ")"
-                    end
-                end
-                extras[#extras + 1] = { text = line, r = 0.6, g = 0.78, b = 0.95 }
-            end
-        end
-        if row.expansion and row.expansion ~= "" and row.expansion ~= "?" then
-            extras[#extras + 1] = { text = "Expansion: " .. row.expansion, r = 0.6, g = 0.6, b = 0.6 }
-        end
-    end
-
-    -- Title: [icon] quality-colored name (custom, non-item tooltip -- no spam).
-    local name = self._name or HDG.ItemNameResolver:ResolveName(self._itemID)
+-- [icon] quality-colored name for a custom (non-item) tooltip title. Quality
+-- color + icon come from C_Item; both are nil for an uncached item. Shared by
+-- the Decor and Recipe row recipes (identical construction).
+local function _buildIconQualityTitle(itemID, name)
+    name = name or HDG.ItemNameResolver:ResolveName(itemID)
     local CI = _G.C_Item
-    local q  = CI and CI.GetItemQualityByID and CI.GetItemQualityByID(self._itemID)  -- exception(boundary): nil uncached
+    local q  = CI and CI.GetItemQualityByID and CI.GetItemQualityByID(itemID)  -- exception(boundary): nil for uncached
     if q then
         local _, _, _, hex = CI.GetItemQualityColor(q)
         if hex then name = "|c" .. hex .. name .. "|r" end
     end
-    local icon  = CI and CI.GetItemIconByID and CI.GetItemIconByID(self._itemID)  -- exception(boundary): nil uncached
-    local title = icon and (("|T%d:16:16|t "):format(icon) .. name) or name
+    local icon = CI and CI.GetItemIconByID and CI.GetItemIconByID(itemID)  -- exception(boundary): nil for uncached
+    return icon and (("|T%d:16:16|t "):format(icon) .. name) or name
+end
+
+-- Ownership breakdown ("Owned: N (Placed: P, Storage: S[, Redeemable: R])" /
+-- "Not collected"), matching the Housing Companion editor tooltip. Counts are
+-- aggregate across dye variants (the 12.0.5 catalog API doesn't split them).
+local function _appendDecorOwnership(extras, row)
+    local storage = row.quantity or 0  -- exception(boundary): catalog struct field sparse
+    local placed  = row.numPlaced or 0  -- exception(boundary): catalog struct field sparse
+    local redeem  = row.remainingRedeemable or 0  -- exception(boundary): catalog struct field sparse
+    local owned   = storage + placed + redeem
+    if owned > 0 then
+        local parts = { ("Placed: %d"):format(placed), ("Storage: %d"):format(storage) }
+        if redeem > 0 then parts[#parts + 1] = ("Redeemable: %d"):format(redeem) end
+        extras[#extras + 1] = { text = ("Owned: %d (%s)"):format(owned, table.concat(parts, ", ")), r = 0.4, g = 0.9, b = 0.4 }
+    else
+        extras[#extras + 1] = { text = "Not collected", r = 0.85, g = 0.72, b = 0.35 }
+    end
+end
+
+-- Source line(s). Decor is often sold by MORE than one vendor -- list every
+-- vendor the way the House Editor / native-catalog tooltip does (ReganB
+-- 2026-07-05: browser tooltip showed 1 of the Nightborne Lantern's 2 vendors).
+-- Non-vendor sources keep a single line.
+local function _appendDecorSource(extras, row)
+    local kind = row.sourceType and HDG.Constants.SOURCE_KIND_BY_DONOR[row.sourceType]
+    if not (kind and kind.label) then return end
+    if kind.key == "VENDOR" and row.vendors and #row.vendors > 0 then
+        for _, v in ipairs(row.vendors) do
+            local line = kind.label .. ": " .. v.name
+            if v.zone and v.zone ~= "" then line = line .. " (" .. v.zone .. ")" end
+            extras[#extras + 1] = { text = line, r = 0.6, g = 0.78, b = 0.95 }
+        end
+    else
+        local line = kind.label
+        if row.sourceName and row.sourceName ~= "" then
+            line = line .. ": " .. row.sourceName
+            if row.sourceDetail and row.sourceDetail ~= "" then
+                line = line .. " (" .. row.sourceDetail .. ")"
+            end
+        end
+        extras[#extras + 1] = { text = line, r = 0.6, g = 0.78, b = 0.95 }
+    end
+end
+
+-- Expansion line (skips "" / "?" placeholders).
+local function _appendDecorExpansion(extras, row)
+    if row.expansion and row.expansion ~= "" and row.expansion ~= "?" then
+        extras[#extras + 1] = { text = "Expansion: " .. row.expansion, r = 0.6, g = 0.6, b = 0.6 }
+    end
+end
+
+function R.DecorRow(self)
+    if not self._itemID then return nil end
+    local extras = {}
+
+    -- Ownership, source, and expansion -- all read live from the catalog row at
+    -- hover (fresher than a filter-time stamp).
+    local row = HDG.HousingCatalogObserver:GetRow(self._itemID)
+    if row then
+        _appendDecorOwnership(extras, row)
+        _appendDecorSource(extras, row)
+        _appendDecorExpansion(extras, row)
+    end
 
     HDG.TooltipEngine.AppendClickHints(extras, DECOR_ROW_HINTS)
     return {
-        title      = title,
+        title      = _buildIconQualityTitle(self._itemID, self._name),
         anchor     = "ANCHOR_RIGHT",
         extraLines = extras,
     }
 end
 
--- R3: Vendor item row -- VendorShoppingList, ZoneMode, AcqRows.
--- stamp: row._itemID; prefer pre-projected row._priceLines to avoid mid-paint vendor lookups.
-function R.VendorItemRow(self)
-    if not self._itemID then return nil end
-    local extras = {}
-    extras[#extras + 1] = { text = "TODO: price + currency lines", r = 0.5, g = 0.5, b = 0.5 }
-    extras[#extras + 1] = { text = H.shift_shopping,                r = 0.5, g = 0.5, b = 0.5 }
-    extras[#extras + 1] = { text = H.shift_waypoint,                r = 0.5, g = 0.5, b = 0.5 }
-    return {
-        itemID     = self._itemID,
-        anchor     = "ANCHOR_RIGHT",
-        extraLines = extras,
-    }
-end
 
--- R4: Recipe row -- Recipes tab, Mogul, Queue.
--- stamp: row._itemID, _recipeID, optional _qtyMult (queue rows)
--- Materials computed at hover time from StaticData.Professions + BagObserver.
-function R.RecipeRow(self)
-    if not self._itemID then return nil end
-    local extras = {}
-
-    -- Decor collection status (the item this recipe produces). Same green/amber as
-    -- the decor row tooltip; catalog miss (non-decor recipe / uncached) skips the line.
-    local crow = HDG.HousingCatalogObserver:GetRow(self._itemID)
-    if crow then
-        if crow.isOwned then
-            extras[#extras + 1] = { text = "Decor: Collected",     r = 0.4,  g = 0.9,  b = 0.4  }
-        else
-            extras[#extras + 1] = { text = "Decor: Not collected", r = 0.85, g = 0.72, b = 0.35 }
-        end
+-- Decor collection status of the item this recipe produces. Same green/amber as
+-- the decor row tooltip; catalog miss (non-decor recipe / uncached) skips the line.
+local function _appendRecipeDecorStatus(extras, itemID)
+    local crow = HDG.HousingCatalogObserver:GetRow(itemID)
+    if not crow then return end
+    if crow.isOwned then
+        extras[#extras + 1] = { text = "Decor: Collected",     r = 0.4,  g = 0.9,  b = 0.4  }
+    else
+        extras[#extras + 1] = { text = "Decor: Not collected", r = 0.85, g = 0.72, b = 0.35 }
     end
+end
 
-    -- Recipe knowledge status. For alt-known recipes, NAME the alt: Mogul resolves
-    -- the char from per-char knownRecipes (recipeID == spellID). Char name is the
-    -- part of the "Name-Realm" key before the "-" (same as the Mogul plan rows).
-    -- Falls back to the generic line if no scanner data has landed for the alt.
-    local known = HDG.Store:GetState().account.recipes[self._itemID]
+-- Recipe knowledge status. For alt-known recipes, NAME the alt: Mogul resolves
+-- the char from per-char knownRecipes (keyed by spellID, NOT the recipe key).
+-- Falls back to the generic line if no scanner data has landed for the alt.
+local function _appendRecipeKnowledge(extras, itemID)
+    local known = HDG.Store:GetState().account.recipes[itemID]
     if known and known.selfKnown then
         extras[#extras + 1] = { text = "Recipe: Known", r = 0.45, g = 0.82, b = 0.45 }
     elseif known and known.altKnown then
-        -- Use the entry's spellID (NOT _recipeID): per-char knownRecipes + the
-        -- scanner's altKnown bridge are keyed by spellID, and _recipeID is the
-        -- ProfessionsDB recipe key (works for materials, but != the craft spell).
         local knowers = known.spellID and HDG.Mogul:AltsKnowingSpellID(known.spellID)
         local who     = knowers and #knowers > 0 and table.concat(knowers, ", ")
         extras[#extras + 1] = {
@@ -459,163 +395,81 @@ function R.RecipeRow(self)
     else
         extras[#extras + 1] = { text = "Recipe: Not learned", r = 0.78, g = 0.45, b = 0.45 }
     end
+end
 
-    -- Queue multiplier: queue rows stamp _qtyMult = queued count; recipe-list /
-    -- goblin / mogul rows leave it nil (= 1). The materials below scale by it.
-    local mult = self._qtyMult or 1
+-- Queue multiplier note + seller stock context (Deadi, Discord 2026-06-13):
+-- own-listings count from the AH-open ownedAuctions snapshot + bag count.
+local function _appendRecipeStockContext(extras, itemID, counts, mult)
     if mult > 1 then
         extras[#extras + 1] = { text = ("Queued: %dx -- materials below are for all %d"):format(mult, mult), r = 0.6, g = 0.78, b = 0.95 }
     end
-
-    -- Seller stock context (Deadi, Discord 2026-06-13): own-listings count from
-    -- the AH-open ownedAuctions snapshot + the crafted item's bag count.
-    -- Snapshot refreshes on AH open; the Goblin view surfaces freshness.
-    local counts = HDG.BagObserver:GetCounts() or {}
-    local mine = HDG.Store:GetState().account.prices.ownedAuctions[self._itemID]  -- top-level only: hover-time read
+    local mine = HDG.Store:GetState().account.prices.ownedAuctions[itemID]  -- top-level only: hover-time read
     if mine then
-        extras[#extras + 1] = {
-            text = ("Yours on AH: x%d"):format(mine.qty),
-            r = 0.45, g = 0.82, b = 0.45,
-        }
+        extras[#extras + 1] = { text = ("Yours on AH: x%d"):format(mine.qty), r = 0.45, g = 0.82, b = 0.45 }
     end
     extras[#extras + 1] = {
-        text = ("In bags: %d"):format(counts[self._itemID] or 0),  -- exception(nullable): sparse bag map; miss = 0
+        text = ("In bags: %d"):format(counts[itemID] or 0),  -- exception(nullable): sparse bag map; miss = 0
         r = 0.75, g = 0.75, b = 0.75,
     }
+end
 
-    -- Materials (have / need x qty), colored by sufficiency. VisitReagents
-    -- yields the immediate reagents; bag counts come from the BagObserver
-    -- fetch above.
-    local recipe = self._recipeID and HDG.StaticData.Recipes:Get(self._recipeID)
-    if recipe then
-        local mats = {}
-        HDG.StaticData.Recipes:VisitReagents(recipe, function(slot)
-            if slot.itemID and slot.qty then
-                -- Locale-correct reagent name (resolver first); baked slot.name is the fallback.
-                -- Render-time resolve: a cold miss shows the placeholder, the next hover shows localized.
-                local rn, resolved = HDG.ItemNameResolver:ResolveName(slot.itemID)
-                mats[#mats + 1] = {
-                    name = (resolved and rn) or slot.name or ("item " .. tostring(slot.itemID)),
-                    have = counts[slot.itemID] or 0,
-                    need = slot.qty * mult,
-                }
-            end
-        end)
-        if #mats > 0 then
-            extras[#extras + 1] = { text = "Materials:", r = 0.75, g = 0.75, b = 0.75 }
-            for i = 1, math.min(#mats, 8) do
-                local m  = mats[i]
-                local ok = m.have >= m.need
-                extras[#extras + 1] = {
-                    text = ("  %s  %d/%d"):format(m.name, m.have, m.need),
-                    r = ok and 0.45 or 0.85, g = ok and 0.82 or 0.45, b = 0.45,
-                }
-            end
-            if #mats > 8 then
-                extras[#extras + 1] = { text = ("  +%d more"):format(#mats - 8), r = 0.6, g = 0.6, b = 0.6 }
-            end
+-- Materials (have / need x qty), colored by sufficiency. VisitReagents yields
+-- the immediate reagents; bag counts come from the BagObserver fetch. Locale-
+-- correct reagent name (resolver first); baked slot.name is the fallback.
+local function _buildRecipeRowMaterials(extras, recipe, counts, mult)
+    local mats = {}
+    HDG.StaticData.Recipes:VisitReagents(recipe, function(slot)
+        if slot.itemID and slot.qty then
+            local rn, resolved = HDG.ItemNameResolver:ResolveName(slot.itemID)
+            mats[#mats + 1] = {
+                name = (resolved and rn) or slot.name or ("item " .. tostring(slot.itemID)),
+                have = counts[slot.itemID] or 0,
+                need = slot.qty * mult,
+            }
         end
+    end)
+    if #mats == 0 then return end
+    extras[#extras + 1] = { text = "Materials:", r = 0.75, g = 0.75, b = 0.75 }
+    for i = 1, math.min(#mats, 8) do
+        local m  = mats[i]
+        local ok = m.have >= m.need
+        extras[#extras + 1] = {
+            text = ("  %s  %d/%d"):format(m.name, m.have, m.need),
+            r = ok and 0.45 or 0.85, g = ok and 0.82 or 0.45, b = 0.45,
+        }
     end
+    if #mats > 8 then
+        extras[#extras + 1] = { text = ("  +%d more"):format(#mats - 8), r = 0.6, g = 0.6, b = 0.6 }
+    end
+end
 
-    -- Custom (non-item) tooltip: avoids third-party addon pile-on. Icon + quality-colored name.
-    local name = self._name or HDG.ItemNameResolver:ResolveName(self._itemID)
-    local CI = _G.C_Item
-    local q  = CI and CI.GetItemQualityByID and CI.GetItemQualityByID(self._itemID)  -- exception(boundary): nil for uncached
-    if q then
-        local _, _, _, hex = CI.GetItemQualityColor(q)
-        if hex then name = "|c" .. hex .. name .. "|r" end
-    end
-    -- Item icon to the LEFT of the name (texture escape accepts the fileID directly).
-    local icon  = CI and CI.GetItemIconByID and CI.GetItemIconByID(self._itemID)  -- exception(boundary): nil for uncached
-    local title = icon and (("|T%d:16:16|t "):format(icon) .. name) or name
+-- R4: Recipe row -- Recipes tab, Mogul, Queue.
+-- stamp: row._itemID, _recipeID, optional _qtyMult (queue rows), _clickHints (goblin)
+-- Materials computed at hover time from StaticData.Professions + BagObserver.
+function R.RecipeRow(self)
+    if not self._itemID then return nil end
+    local extras = {}
+    local counts = HDG.BagObserver:GetCounts() or {}
+    local mult   = self._qtyMult or 1  -- queue rows stamp count; other rows leave nil (= 1)
+
+    _appendRecipeDecorStatus(extras, self._itemID)
+    _appendRecipeKnowledge(extras, self._itemID)
+    _appendRecipeStockContext(extras, self._itemID, counts, mult)
+    local recipe = self._recipeID and HDG.StaticData.Recipes:Get(self._recipeID)
+    if recipe then _buildRecipeRowMaterials(extras, recipe, counts, mult) end
 
     -- Goblin scanner rows stamp _clickHints; recipe-list / queue rows leave it nil (no hints).
     HDG.TooltipEngine.AppendClickHints(extras, self._clickHints)
     return {
-        title      = title,
+        title      = _buildIconQualityTitle(self._itemID, self._name),
         anchor     = "ANCHOR_RIGHT",
         extraLines = extras,
     }
 end
 
--- R5: Vendor location -- VSL vendor row, ZoneMode vendor row.
--- stamp: row._vendorName, optional row._coords = { x, y, mapID, zone }
-function R.VendorLocation(self)
-    if not self._vendorName then return nil end
-    local extras = {}
-    if self._coords then
-        local zone = self._coords.zone or "Unknown zone"
-        extras[#extras + 1] = {
-            text = string.format("%s  (%.1f, %.1f)", zone, self._coords.x or 0, self._coords.y or 0),
-            r = 0.7, g = 0.7, b = 0.7,
-        }
-    end
-    extras[#extras + 1] = { text = H.shift_waypoint, r = 0.5, g = 0.5, b = 0.5 }
-    return {
-        title      = self._vendorName,
-        anchor     = "ANCHOR_RIGHT",
-        extraLines = extras,
-    }
-end
 
--- R6: Toggle -- pin, sort, mode, eye, view toggles.
--- Recipe-as-function reads state at hover time (not creation time, which goes stale).
--- stamp: row._stateLabel
-function R.Toggle(self)
-    if not self._stateLabel then return nil end
-    return {
-        title      = self._stateLabel,
-        anchor     = "ANCHOR_RIGHT",
-        extraLines = {
-            { text = H.click_cycle_sort, r = 0.5, g = 0.5, b = 0.5 },
-        },
-    }
-end
 
--- R7: Progress header -- sidebar headers, profession buttons.
--- stamp: row._headerName, optional _known, _total, _descLine
-function R.ProgressHeader(self)
-    if not self._headerName then return nil end
-    local extras = {}
-    if self._known and self._total then
-        local pct = (self._total > 0) and math.floor(100 * self._known / self._total) or 0
-        extras[#extras + 1] = {
-            text = string.format("%d / %d (%d%%)", self._known, self._total, pct),
-            r = 0.7, g = 0.7, b = 0.7,
-        }
-    end
-    if self._descLine then
-        extras[#extras + 1] = { text = self._descLine, r = 0.7, g = 0.7, b = 0.7 }
-    end
-    return {
-        title      = self._headerName,
-        anchor     = "ANCHOR_BOTTOM",
-        extraLines = extras,
-    }
-end
 
--- R8: Profession status -- alts skill button, sidebar prof button.
--- stamp: row._profName, optional _stateLabel, _known, _total
--- TODO: wire alts knowers selector
-function R.ProfessionStatus(self)
-    if not self._profName then return nil end
-    local extras = {}
-    if self._stateLabel then
-        extras[#extras + 1] = { text = self._stateLabel, r = 0.7, g = 0.7, b = 0.7 }
-    end
-    if self._known and self._total then
-        extras[#extras + 1] = {
-            text = string.format("%d / %d recipes known", self._known, self._total),
-            r = 0.7, g = 0.7, b = 0.7,
-        }
-    end
-    extras[#extras + 1] = { text = "TODO: knowers (Known by alt: N)", r = 0.5, g = 0.5, b = 0.5 }
-    return {
-        title      = self._profName,
-        anchor     = "ANCHOR_RIGHT",
-        extraLines = extras,
-    }
-end
 
 -- R9: Material stock -- warehouse + recipes materials rows. Per-stash breakdown of
 -- what you're holding (bags / bank / warband). Title-only (NO itemID/SetItemByID) so

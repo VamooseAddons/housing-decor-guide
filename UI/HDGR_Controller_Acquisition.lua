@@ -101,13 +101,7 @@ HDG.Rows:Register("itemRow", {
 -- ===== Vendor row factory: name + zone/faction/expansion meta =================
 -- acqVendorRow factory: canonical layout/paint/wire split.
 local function _layoutAcqVendorRow(row)
-    local name = HDG.UI.RowText(row, "body", "Text", "LEFT")
-    name:SetPoint("LEFT", row, "LEFT", 4, 0)
-    row._nameFs = name
-    local meta = HDG.UI.RowText(row, "caption", "TextDim", "RIGHT")
-    meta:SetPoint("RIGHT", row, "RIGHT", -4, 0)
-    row._metaFs = meta
-    name:SetPoint("RIGHT", meta, "LEFT", -8, 0)
+    HDG.UI.LayoutNameMetaRow(row, { leftInset = 4, rightInset = -4, gap = 8 })  -- hygiene A10
 end
 
 local function _paintAcqVendorRow(row, ed)
@@ -124,11 +118,7 @@ local function _wireAcqVendorRow(row, ed)
     local npcID = ed.npcID
     local vname, vzone = ed.name, ed.catalogZone or ed.zone   -- catalogZone is byVendor key; display zone may differ
     row:SetScript("OnClick", function()
-        CH.Mechanics.SetUITransientView("acquisition", "selectedNpcID", npcID)
-        CH.Mechanics.SetUITransientView("acquisition", "selectedVendorName", vname)
-        CH.Mechanics.SetUITransientView("acquisition", "selectedVendorZone", vzone)
-        CH.Mechanics.SetUITransientView("acquisition", "selectedItemID", nil)
-        CH.Mechanics.SetUITransientView("acquisition", "selectedRecipeItemID", nil)
+        CH.Mechanics.SelectVendor(npcID, vname, vzone)
     end)
 end
 
@@ -172,7 +162,7 @@ local function _layoutAcqItemRow(row)
     local icon = row:CreateTexture(nil, "ARTWORK", nil, 2)
     icon:SetSize(18, 18)
     icon:SetPoint("LEFT", row, "LEFT", 4, 0)
-    icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+    icon:SetTexCoord(unpack(HDG.Constants.ICON_CROP))
     row._iconTex = icon
 
     -- Single chips strip at the right edge -- mirrors the left-list-row
@@ -336,16 +326,7 @@ local function _wireItemVendorRowClicks(row, ed)
     end)
     row._mapBtn:SetScript("OnClick", function()
         if not (vMapID and vX and vY) then return end
-        if InCombatLockdown() then return end
-        local uiMapID, mapX, mapY = HDG.Waypoints.ZonePctToMap(vMapID, vX, vY)
-        if not uiMapID then return end
-        if C_Map.CanSetUserWaypointOnMap(uiMapID) then
-            local point = UiMapPoint.CreateFromCoordinates(uiMapID, mapX, mapY)
-            C_Map.SetUserWaypoint(point)
-            C_SuperTrack.SetSuperTrackedUserWaypoint(true)
-        end
-        HDG.Waypoints:AddMapPin(uiMapID, mapX, mapY, vName)
-        HDG.AcquisitionController:OpenWorldMapAt(uiMapID)
+        HDG.Waypoints:ShowOnMap(vMapID, vX, vY, vName)  -- hygiene A7: the helper built for this call site
     end)
     row:SetScript("OnClick", function()
         if npcID then
@@ -549,18 +530,9 @@ function AcquisitionController:_wireShowOnMap(rootFrame)
         local state  = HDG.Store:GetState()  -- exception(false-positive): top-level controller method (not a row factory)
         local vendor = HDG.Selectors:Call("acq.selectedVendor", state, {})
         if not (vendor and vendor.mapID and vendor.x and vendor.y) then return end
-        if InCombatLockdown() then return end
-        local uiMapID, mapX, mapY = HDG.Waypoints.ZonePctToMap(
-            vendor.mapID, vendor.x, vendor.y)
-        if not uiMapID then return end
-        if C_Map.CanSetUserWaypointOnMap(uiMapID) then
-            local point = UiMapPoint.CreateFromCoordinates(uiMapID, mapX, mapY)
-            C_Map.SetUserWaypoint(point)
-            C_SuperTrack.SetSuperTrackedUserWaypoint(true)
+        if HDG.Waypoints:ShowOnMap(vendor.mapID, vendor.x, vendor.y, vendor.name) ~= false then  -- hygiene A7
+            HDG.Log:Info("waypoints_user", "Showing " .. vendor.name .. " on map")
         end
-        HDG.Waypoints:AddMapPin(uiMapID, mapX, mapY, vendor.name)
-        HDG.AcquisitionController:OpenWorldMapAt(uiMapID)
-        HDG.Log:Info("waypoints_user", "Showing " .. vendor.name .. " on map")
     end)
 end
 
@@ -568,33 +540,10 @@ end
 -- note is displayed (binding-driven SetText runs a frame after npcID flips); OnTextChanged
 -- skips when displayed npcID doesn't match selection.
 function AcquisitionController:_wireVendorNoteBox(rootFrame)
-    local noteBox = HDG.UI.W(rootFrame, "acquisitionDetailPanel.vendorNote")
-    if not noteBox then return end
-    noteBox._lastBoundNpcID = nil
-    if not noteBox._setTextHooked then
-        hooksecurefunc(noteBox, "SetText", function(self)
-            self._lastBoundNpcID = HDG.Store:GetState().session.ui.acquisition.selectedNpcID  -- exception(false-positive): top-level controller read
-        end)
-        noteBox._setTextHooked = true
-    end
-    noteBox:SetScript("OnTextChanged", function(self, userInput)
-        if not userInput then return end
-        local npcID = HDG.Store:GetState().session.ui.acquisition.selectedNpcID  -- exception(false-positive): top-level controller read
-        if not npcID then return end
-        if self._lastBoundNpcID ~= nil and self._lastBoundNpcID ~= npcID then return end
-        local text = self:GetText() or ""
-        if text == "" then
-            HDG.Store:Dispatch({
-                type = HDG.Constants.ACTIONS.VENDOR_NOTE_CLEAR,
-                payload = { npcID = npcID },
-            })
-        else
-            HDG.Store:Dispatch({
-                type = HDG.Constants.ACTIONS.VENDOR_NOTE_SET,
-                payload = { npcID = npcID, text = text },
-            })
-        end
-    end)
+    HDG.ControllerHelpers.Mechanics.WireNoteBox(
+        HDG.UI.W(rootFrame, "acquisitionDetailPanel.vendorNote"),
+        function() return HDG.Store:GetState().session.ui.acquisition.selectedNpcID end,  -- exception(false-positive): top-level controller read
+        "npcID", "VENDOR_NOTE_CLEAR", "VENDOR_NOTE_SET")
 end
 
 function AcquisitionController:Wire(rootFrame)
@@ -786,11 +735,7 @@ function AcquisitionController:Refresh(rootFrame, ctx)
     local first = vendors[1]
     if not first then return end
     _autoSelectPending = true
-    CH.Mechanics.SetUITransientView("acquisition", "selectedNpcID",      first.npcID)
-    CH.Mechanics.SetUITransientView("acquisition", "selectedVendorName", first.name)
-    CH.Mechanics.SetUITransientView("acquisition", "selectedVendorZone", first.catalogZone or first.zone)
-    CH.Mechanics.SetUITransientView("acquisition", "selectedItemID",     nil)
-    CH.Mechanics.SetUITransientView("acquisition", "selectedRecipeItemID", nil)
+    CH.Mechanics.SelectVendor(first.npcID, first.name, first.catalogZone or first.zone)
 end
 
 HDG.Controllers:Register("acquisition", AcquisitionController)

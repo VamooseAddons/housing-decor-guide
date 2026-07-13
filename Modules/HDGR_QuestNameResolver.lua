@@ -1,91 +1,18 @@
 -- HDG.QuestNameResolver
 -- ============================================================================
--- Mirror of HDG.ItemNameResolver for quest titles. C_QuestLog.GetTitleForQuestID
--- returns nil for quests whose data hasn't been client-loaded yet; calling
--- C_QuestLog.RequestLoadQuestByID fires QUEST_DATA_LOAD_RESULT once the title
--- is available.
+-- Quest COMPLETION surface (sole owner of C_QuestLog, ADR-011). Quest TITLES
+-- come from baked catalog data; the async title-resolution apparatus this
+-- module once mirrored from ItemNameResolver was never consumed by any
+-- selector and was removed in the 2026-07-13 hygiene review (git remembers).
 --
--- Selectors that read quest titles route through ResolveTitle so the impure
--- API call is localized here. Cache misses queue an async load + return the
--- "quest N" fallback. When the QUEST_DATA_LOAD_RESULT batch drains, we
--- dispatch QUEST_INFO_RESOLVED which bumps session.resolvers.questNames.tick;
--- consumers listing that path in `reads` invalidate + repaint with the
--- now-cached title.
+-- IsComplete answers "has the player finished this quest (or any variant)?";
+-- QUEST_TURNED_IN bumps session.resolvers.questStatus.tick so [QUST] chips
+-- repaint live, then RecordCompletions persists newly-completed decor quests.
 
 HDG = HDG or {}
 HDG.QuestNameResolver = HDG.QuestNameResolver or {}
 local R = HDG.QuestNameResolver
 
-R._cache            = R._cache            or {}     -- [questID] = title (resolved)
-R._pending          = R._pending          or {}     -- [questID] = true (deduped batch)
-R._requested        = R._requested        or {}     -- [questID] = true (load already requested)
-R._tick             = R._tick             or 0  -- exception(false-positive): idempotent module-load init
-R._timerScheduled   = R._timerScheduled   or false
-
-R.BATCH_WINDOW = 0.5
-
-function R:GetTick() return self._tick end
-
--- Returns (title, resolved). `resolved` is true when the title came from
--- the cache / live API; false when we returned the "quest N" placeholder
--- and queued an async load.
-function R:ResolveTitle(questID)
-    if not questID or questID == 0 then return "", false end
-    local cached = self._cache[questID]
-    if cached then return cached, true end
-    local title = C_QuestLog.GetTitleForQuestID(questID)
-    if title and title ~= "" then
-        self._cache[questID] = title
-        return title, true
-    end
-    if not self._requested[questID] then
-        self._requested[questID] = true
-        C_QuestLog.RequestLoadQuestByID(questID)
-    end
-    return "quest " .. tostring(questID), false
-end
-
--- QUEST_DATA_LOAD_RESULT subscriber. Two-arg event: (questID, success).
--- Gotcha: QUEST_DATA_LOAD_RESULT fires for EVERY quest any system loads
--- (Blizzard UI, other addons, world quests). Filter to _requested only.
-function R:OnQuestDataLoadResult(questID, success)
-    if not (questID and success) then return end
-    if not self._requested[questID] then return end
-    self._pending[questID] = true
-    if self._timerScheduled then return end
-    self._timerScheduled = true
-    C_Timer.After(self.BATCH_WINDOW, function() R:Drain() end)
-end
-
-function R:Drain()
-    self._timerScheduled = false
-    local batch = self._pending
-    self._pending = {}
-    self._tick = self._tick + 1
-    local list, titles, count = {}, {}, 0
-    for questID in pairs(batch) do
-        local title = C_QuestLog.GetTitleForQuestID(questID)
-        if title and title ~= "" then self._cache[questID] = title end
-        count = count + 1
-        list[count] = questID
-        -- titles is log-only (reducer ignores payload, just bumps tick).
-        -- "<loading>" until RequestLoadQuestByID fills on a later drain.
-        titles[questID] = self._cache[questID] or "<loading>"
-    end
-    if count > 0 then
-        HDG.Store:Dispatch({
-            type    = HDG.Constants.ACTIONS.QUEST_INFO_RESOLVED,
-            payload = { questIDs = list, titles = titles, count = count },
-        })
-    end
-    return batch
-end
-
--- IsComplete: is this quest flagged completed for the player? questID is a
--- single number OR { ids } variant set (A/H / version / campaign-per-zone);
--- any variant completing = true. C_QuestLog.IsQuestFlaggedCompleted is sync
--- + cheap; QUEST_TURNED_IN bumps session.resolvers.questStatus.tick for repaint.
--- Selectors MUST declare reads = { "session.resolvers.questStatus.tick" }.
 function R:IsComplete(questID)
     if not questID then return nil end
     if type(questID) == "table" then
@@ -148,14 +75,9 @@ HDG.Modules:Declare({
     dependencies = {},
     ownsBlizzardNamespaces = { "C_QuestLog" },   -- ADR-011: sole owner
     blizzardEvents = {
-        QUEST_DATA_LOAD_RESULT = { handler = "OnQuestDataLoadResult",
-                                   requiresMainWindow = true },
         QUEST_TURNED_IN        = { handler = "OnQuestTurnedIn",
                                    requiresMainWindow = true },
     },
-    OnQuestDataLoadResult = function(self, questID, success)
-        R:OnQuestDataLoadResult(questID, success)
-    end,
     OnQuestTurnedIn = function(self, questID)
         R:OnQuestTurnedIn(questID)
     end,

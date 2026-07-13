@@ -340,7 +340,7 @@ local function _buildHelpersSubcategory(category)
     BindProxyBool(sub, layout, "merchantDecorOverlay", "Mark collected decor at vendors",
         "On a vendor's items, show a check on housing decor you've collected and a plus "
         .. "on decor you still need. Default merchant window only.")
-    BindProxyBool(sub, layout, "merchantQtyPicker", "Right-click quantity picker at decor vendors",
+    BindProxyBool(sub, layout, "merchantQtyPicker", HDG.Locale:Get("CFG_MERCHANT_QTY_PICKER"),
         "Right-click a housing decor item at a vendor to open a quantity picker: set how "
         .. "many to buy, see the total against your gold and decor storage, and buy in one go. "
         .. "Default merchant window only.")
