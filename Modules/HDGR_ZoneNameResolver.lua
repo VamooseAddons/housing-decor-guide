@@ -50,11 +50,8 @@ R.ZONE_MAP_IDS = {
     ["Valdrakken"]                  = 2112,
     -- The War Within
     ["Dornogal"]                    = 2339,
-    -- Midnight (12.0.7 vendor zones). Naigtal + Val are the weekly-rotating
-    -- housing zones; the catalog lists BOTH statically on a rotating vendor's
-    -- items (e.g. Zuronar), so both must resolve to draw the zone map.
+    -- Midnight (12.0.7 vendor zones)
     ["Naigtal"]                     = 2600,  -- verified in-game 2026-07-12; NOT 2623 (System=2 variant) or 924 (Legion "Invasion Point: Naigtal")
-    ["Val"]                         = 2599,  -- verified 2026-07-13 (Zuronar's other rotation; catalog zone string "Val")
 }
 
 -- Zone NAME -> uiMapID. Curated table first (disambiguates duals like

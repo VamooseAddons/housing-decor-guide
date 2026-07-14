@@ -270,6 +270,19 @@ local function _buildMainPage(layout)
         true
     ))
 
+    -- Recovery for a lost/stuck minimap button: seeds a known position angle so
+    -- LibDBIcon stops falling back to its lower-left default. Fixes the case a
+    -- game crash cleared the saved position (SavedVariables never flushed).
+    layout:AddInitializer(CreateSettingsButtonInitializer(
+        "",
+        "Reset minimap button position",
+        function() HDG.MinimapButton:ResetPosition() end,
+        "Moves the HDG minimap button back to a default spot on the minimap. Use this if the button "
+            .. "has gone missing or snaps to the lower-left corner every time you open HDG (this can "
+            .. "happen after a game crash clears its saved position).",
+        true
+    ))
+
     -- Special Thanks moved to the Config tab's credits scrollbox (see HDGR_LayoutConfig_Config.lua).
 end
 
@@ -338,8 +351,11 @@ local function _buildHelpersSubcategory(category)
 
     layout:AddInitializer(CreateSettingsListSectionHeaderInitializer("Vendors"))
     BindProxyBool(sub, layout, "merchantDecorOverlay", "Mark collected decor at vendors",
-        "On a vendor's items, show a check on housing decor you've collected and a plus "
-        .. "on decor you still need. Default merchant window only.")
+        "On a vendor's items, a marker in the icon's top-right corner shows "
+        .. _G.CreateAtlasMarkup("common-icon-checkmark", 14, 14)
+        .. " on housing decor you've collected and "
+        .. _G.CreateAtlasMarkup("common-icon-plus", 14, 14, 0, 0, 255, 26, 26)
+        .. " on decor you still need. Default merchant window only.")
     BindProxyBool(sub, layout, "merchantQtyPicker", HDG.Locale:Get("CFG_MERCHANT_QTY_PICKER"),
         "Right-click a housing decor item at a vendor to open a quantity picker: set how "
         .. "many to buy, see the total against your gold and decor storage, and buy in one go. "

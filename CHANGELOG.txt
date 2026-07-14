@@ -1,3 +1,18 @@
+## [Unreleased]
+
+## [3.15.0] - 2026-07-14 (July 2026)
+
+### Added
+- A "Reset minimap button position" button in Settings (under "Reset all settings to defaults"). Use it if the HDG minimap button goes missing or keeps snapping to the lower-left corner -- it puts the button back at a visible spot so you can drag it where you want. (This can happen after a game crash clears the button's saved position.)
+
+### Changed
+- The "Mark collected decor at vendors" setting tooltip now shows the actual check and plus markers (and notes they sit in the item's top-right corner), so it matches what you see on the vendor.
+
+### Fixed
+- Destroying a dyed decor variant now works. The Destroy button previously did nothing for a dyed copy because it targeted the undyed base stack; it now destroys the specific dyed variant you selected.
+- The decor list now updates immediately after destroying a dyed variant, instead of needing a reload to reflect the new count.
+- Corrected T'lama's map location: Show on Map placed the pin outside the Great Seal in Dazar'alor instead of on the vendor inside it (thanks Gnuclear Gnome).
+
 ## [3.14.1] - 2026-07-13 (July 2026)
 
 ### Changed
@@ -13,7 +28,6 @@
 ### Fixed
 - Automatic Save backups no longer count toward your blueprint slot total, so the count matches the game's own dashboard (it was over-reporting by the number of backups you had).
 - Corrected the map and coordinates for several decor vendors whose records pointed at older versions of the NPC, so Show on Map could land on the wrong spot: First Arcanist Thalyssra, Moon Priestess Lasara, Lifecaller Tzadrak, Ta'sam, and Celestine of the Harvest.
-- Zuronar's second weekly rotation zone (Val) now resolves to its map as well, so the vendor's zone shows whichever week it is in.
 
 ## [3.14.0] - 2026-07-12 (July 2026)
 

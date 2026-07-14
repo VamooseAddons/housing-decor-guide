@@ -157,7 +157,7 @@ HDGR_VendorAugment = {
     [252312] = { name = "Second Chair Pawdo", zone = "Dornogal", mapID = 2339, x = 56.0, y = 76.4, faction = "N", exp = "The War Within" },
     [252313] = { name = "Caspian", zone = "Stormsong Valley", mapID = 942, x = 59.5, y = 69.6, faction = "A", exp = "Battle for Azeroth" },
     [252316] = { name = "Delphine", zone = "Tiragarde Sound", mapID = 895, x = 53.4, y = 31.2, faction = "A", exp = "Battle for Azeroth" },
-    [252326] = { name = "T'lama", zone = "Dazar'alor", mapID = 1165, x = 32.4, y = 65.4, faction = "H", exp = "Battle for Azeroth" },
+    [252326] = { name = "T'lama", zone = "Dazar'alor", mapID = 1164, x = 36, y = 61.2, faction = "H", exp = "Battle for Azeroth" },
     [252345] = { name = "Pearl Barlow", zone = "Boralus", mapID = 1161, x = 70.7, y = 15.7, faction = "A", exp = "Battle for Azeroth" },
     [252498] = { name = "Corbin Branbell", zone = "Val'sharah", mapID = 641, x = 42.0, y = 59.4, faction = "N", exp = "Legion" },
     [252520] = { name = "Ripley Kiefer", zone = "Teldrassil", mapID = 57, x = 55.2, y = 89.2, faction = "A", exp = "Classic" },

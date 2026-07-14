@@ -12,15 +12,13 @@
 
 ---
 
-## What's New in v3.14.1
+## What's New in v3.15.0
 
-This covers the player-facing changes in 3.14.1.
+This covers the player-facing changes in 3.15.0.
 
-- **Several changes across the Blueprints tab.** Action buttons stay greyed out until a blueprint is selected, and an empty tab explains what to do instead of showing a blank panel. The "fits this house" result is a badge that turns green when a build fits and red with the game's reason when it does not. Content group headers turn amber when they hold missing items, so the group bars alone show where the gaps are. The budget meters use the game's own room, interior, and exterior icons, owned items show a checkmark, and Route to Shopping opens the shopping widget on the routed list so the result is visible.
-- **The blueprint slot count matches the game.** Automatic Save backups no longer count toward your blueprint total, so the number follows Blizzard's own dashboard (11 of 50 where it used to read 20 of 50).
-- **The Blueprints tab works on the 12.1 PTR.** The tab is built for the Midnight 12.1 housing update. If you want to use it now, install Housing Decor Guide to your PTR game folder from CurseForge. On current retail (12.0.7) the tab stays hidden and nothing else changes.
-- **Corrected several vendor maps.** A handful of decor vendors pointed at older versions of their NPC, so Show on Map could open the wrong place. First Arcanist Thalyssra, Moon Priestess Lasara, Lifecaller Tzadrak, Ta'sam, and Celestine of the Harvest now resolve to the right map and coordinates.
-- **Zuronar's second rotation zone (Val) shows its map**, alongside Naigtal, so the vendor's zone appears whichever week it is in.
+- **Destroying a dyed decor variant now works.** In the Decor browser's Stored view, selecting a dyed copy and pressing Destroy previously did nothing; it now destroys the specific dyed variant you picked, and the list updates right away without a reload.
+- **New "Reset minimap button position" button in Settings.** If the HDG minimap button goes missing or snaps to the lower-left corner (which can happen after a game crash clears its saved position), this button puts it back at a visible spot so you can drag it where you want.
+- **Corrected T'lama's map location.** Show on Map placed the pin outside the Great Seal in Dazar'alor instead of on the vendor inside it.
 
 ---
 
@@ -111,7 +109,7 @@ A companion window injects into Blizzard's House Editor so you can **place decor
 ---
 
 **Author:** Vamoose
-**Version:** 3.14.1
+**Version:** 3.15.0
 **Game Version:** 12.0.5+ (Midnight)
 **Source / Issues:** https://github.com/VamooseAddons/housing-decor-guide
 **Discord:** https://discord.gg/RWZaxJaHFP

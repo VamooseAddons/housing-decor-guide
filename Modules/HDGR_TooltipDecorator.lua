@@ -71,6 +71,103 @@ local function reagentLine(itemID)
     return string.format("%sUsed in %d decor recipe%s", ACCENT_PREFIX(), n, n == 1 and "" or "s")
 end
 
+-- ===== Debug: icon marker inspector =========================================
+-- When debug mode is on, list every ADDON marker stuck to an item button by its
+-- /framestack-style name, so overlapping overlays (HDG's own mark, CanIMogIt's
+-- CIMIOverlayFrame, ...) are identifiable inline without opening /fstack. We show
+-- the raw fsobj name -- the name already identifies the addon (CIMI... = CanIMogIt,
+-- _hdgr... = HDG); no translation table needed. Blizzard's own button regions are
+-- filtered by key/name so only foreign (addon) markers remain.
+local NATIVE_KEYS = {
+    icon = true, IconTexture = true, IconBorder = true, IconOverlay = true,
+    IconOverlay2 = true, NormalTexture = true, HighlightTexture = true,
+    PushedTexture = true, Count = true, count = true, stock = true, Stock = true,
+    searchOverlay = true, SearchOverlay = true, ItemContextOverlay = true,
+    Cooldown = true, cooldown = true, ProfessionQualityOverlay = true,
+    UpgradeIcon = true, JunkIcon = true, NewActionTexture = true, flash = true,
+    Name = true, name = true, ItemLevel = true, BattlepayItemTexture = true,
+}
+
+local function _isVisualObject(v)
+    return type(v) == "table" and type(v.GetObjectType) == "function"
+        and type(v.IsShown) == "function"
+end
+
+-- Addon markers shown on `button`, each { name = <fsobj key/global name>, obj }.
+-- Keyed overlays use their key (HDG's _hdgrMerchantMark, EnhanceQoL's
+-- MerchantKnownOverlay); named siblings use their global name (CanIMogIt's
+-- CIMIOverlayFrame_<button>). Blizzard names its own sub-regions "<button><suffix>",
+-- so a global name that starts with the button name is native and skipped.
+local function _iconMarkers(button)
+    local buttonName = button.GetName and button:GetName() or nil
+    local out, seen = {}, {}
+    local function add(obj, name)
+        if seen[obj] then return end
+        seen[obj] = true
+        out[#out + 1] = { name = name, obj = obj }
+    end
+    for key, v in pairs(button) do
+        if type(key) == "string" and not NATIVE_KEYS[key]
+           and _isVisualObject(v) and v:IsShown() then
+            add(v, key)
+        end
+    end
+    local function scanNamed(list)
+        for _, obj in ipairs(list) do
+            local n = obj.GetName and obj:GetName()
+            if n and obj:IsShown()
+               and (not buttonName or n:sub(1, #buttonName) ~= buttonName) then
+                add(obj, n)
+            end
+        end
+    end
+    scanNamed({ button:GetChildren() })
+    scanNamed({ button:GetRegions() })
+    return out
+end
+
+-- fsobj -> owning addon, fully automatic (no maintained list). Two signals:
+--   1. the fsobj name contains a loaded addon's folder name (CanIMogItOverlay -> CanIMogIt)
+--   2. the marker's texture is a file under Interface/AddOns/<Addon>/
+-- Returns the addon name, or nil when neither fires -- the caller then shows the raw
+-- fsobj name, which usually identifies the addon on its own (_hdgr..., MerchantKnown...).
+local _loadedAddons   -- cached folder names, longest-first (specific wins)
+local function _loadedAddonList()
+    if _loadedAddons then return _loadedAddons end
+    _loadedAddons = {}
+    local api = _G.C_AddOns
+    local num = (api and api.GetNumAddOns and api.GetNumAddOns()) or 0   -- exception(boundary): C_AddOns API
+    for i = 1, num do
+        if api.IsAddOnLoaded(i) then
+            local name = api.GetAddOnInfo(i)
+            if name and #name >= 4 then _loadedAddons[#_loadedAddons + 1] = name end
+        end
+    end
+    table.sort(_loadedAddons, function(a, b) return #a > #b end)
+    return _loadedAddons
+end
+
+-- Addon folder from a custom texture path on the object (or its child regions).
+local function _addonFromTexture(obj)
+    local function fromPath(t)
+        return type(t) == "string" and t:match("[Aa][Dd][Dd][Oo][Nn][Ss][/\\]([^/\\]+)") or nil
+    end
+    if obj.GetTexture then local a = fromPath(obj:GetTexture()); if a then return a end end
+    if obj.GetRegions then
+        for _, r in ipairs({ obj:GetRegions() }) do
+            if r.GetTexture then local a = fromPath(r:GetTexture()); if a then return a end end
+        end
+    end
+    return nil
+end
+
+local function _resolveAddon(name, obj)
+    for _, addon in ipairs(_loadedAddonList()) do
+        if name:find(addon, 1, true) then return addon end
+    end
+    return _addonFromTexture(obj)   -- may be nil (caller shows raw fsobj name)
+end
+
 function TD:DecorateItemTooltip(tooltip, tooltipData)
     if not (tooltip and tooltipData and tooltipData.id) then return end
     if not tooltip.AddLine then return end
@@ -85,6 +182,34 @@ function TD:DecorateItemTooltip(tooltip, tooltipData)
     local q = queueLine(itemID); if q then lines[#lines + 1] = q end
     for _, line in ipairs(lines) do
         tooltip:AddLine(line, 1, 1, 1, false)   -- white, no wrap
+    end
+
+    -- Debug only: name every addon marker sitting on the item's button, so
+    -- overlapping overlays across addons are identifiable inline. Gated on the
+    -- Button owner (skips UIParent/link-hover tooltips with no button).
+    if HDG.Config:Get("DEBUG") then
+        local owner = tooltip.GetOwner and tooltip:GetOwner()
+        if owner and owner ~= _G.UIParent and owner.GetObjectType
+           and owner:GetObjectType() == "Button" then
+            local markers = _iconMarkers(owner)
+            if #markers > 0 then
+                -- Roll up fsobj -> addon: one line per addon, listing its markers.
+                local order, groups = {}, {}
+                for _, m in ipairs(markers) do
+                    local addon = _resolveAddon(m.name, m.obj)
+                    local key = addon or m.name   -- unresolved: its own raw-name line
+                    local g = groups[key]
+                    if not g then g = { addon = addon, names = {} }; groups[key] = g; order[#order + 1] = key end
+                    g.names[#g.names + 1] = m.name
+                end
+                tooltip:AddLine("HDG debug -- icon markers:", 0.55, 0.75, 1.0, false)
+                for _, key in ipairs(order) do
+                    local g = groups[key]
+                    local text = g.addon and (g.addon .. " (" .. table.concat(g.names, ", ") .. ")") or g.names[1]
+                    tooltip:AddLine("  - " .. text, 0.7, 0.7, 0.7, false)
+                end
+            end
+        end
     end
 end
 

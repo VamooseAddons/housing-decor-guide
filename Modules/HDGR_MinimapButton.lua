@@ -65,6 +65,25 @@ local function _stripBorder()
     icon:SetSize(28, 28)                                                -- fill the button (no frame to inset for)
 end
 
+-- ===== Position recovery =====================================================
+-- Reseed the button's angle to a known, visible default. Removes the nil-angle
+-- state (LibDBIcon then falls back to its 225-deg lower-left default) that a
+-- SavedVariables loss -- e.g. an unclean client exit that never flushed HDG_DB
+-- -- can leave behind. Writes the persisted config table AND the live LibDBIcon
+-- db (same table in the normal case; set both so a divergence can't leave one
+-- stale), then re-show + reposition via _applyVisibility. NOT LibDBIcon Refresh:
+-- Refresh obeys the button's stored .hide flag, which reads stale-true under a
+-- db/config divergence and hides a button the user just asked to reposition.
+-- Exposed for the Settings "reset" button.
+local DEFAULT_ANGLE = 45  -- upper-right; clear of the crowded lower-left cluster
+function MB:ResetPosition()
+    if not (_dbicon and _dbicon:IsRegistered(ADDON_KEY)) then return end  -- exception(boundary): LibDBIcon not up yet
+    HDG.Store:GetState().account.config.minimapPos.minimapPos = DEFAULT_ANGLE  -- exception(boundary): LibDBIcon position field (ADR-006)
+    local button = _dbicon:GetMinimapButton(ADDON_KEY)
+    if button then button.db.minimapPos = DEFAULT_ANGLE end  -- exception(boundary): live db may diverge from the config ref after an SV reload
+    _applyVisibility()   -- unconditional Show + reposition; re-asserts the shown state
+end
+
 -- ===== Init ==================================================================
 
 function MB:Init()

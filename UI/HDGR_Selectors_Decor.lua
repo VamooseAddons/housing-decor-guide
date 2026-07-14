@@ -147,6 +147,7 @@ local function _emitDecorRows(out, stamped, activeTag)
         vrow.dyeColorsByChannel = dv.dyeColorsByChannel
         vrow.numStored          = dv.numStored
         vrow.destroyableCount   = dv.numStored
+        vrow.entryID            = dv.entryID   -- per-variant destroy identity (else destroy hits the base stack)
         out[#out + 1] = vrow
     end
 end
@@ -231,7 +232,7 @@ Selectors:Register("decor.selectedVariantKey", {
 -- Observer is primary. Returns nil while catalog loads (layout shows loading panel).
 Selectors:Register("decor.selectedItem", {
     memoized = true,
-    calls = {"decor.selectedItemID"},
+    calls = {"decor.selectedItemID", "decor.selectedVariantKey"},
     reads = {"session.resolvers.catalog.tick"},
     fn = function(state, ctx)
         local id = Selectors:Call("decor.selectedItemID", state, ctx)
@@ -248,6 +249,21 @@ Selectors:Register("decor.selectedItem", {
            or (row.quest and 2)                                   -- QUEST
            or (row.recipe and 6)                                  -- CRAFTED (recipe DB canonical)
            or 0                                                   -- truly unknown
+
+        -- Destroy identity: base stack by default; a selected dyed variant
+        -- overrides entryID + destroyable count so the destroy button acts on
+        -- THAT stack (its own entryVariantID + stored count). Only the destroy
+        -- path reads entryID / destroyableInstanceCount off selectedItem.
+        local vEntryID, vDestroyable = row.entryID, row.destroyableInstanceCount or 0  -- exception(boundary): catalog struct field sparse
+        local variantKey = Selectors:Call("decor.selectedVariantKey", state, ctx)
+        if variantKey and row.dyedVariants then
+            for _, dv in ipairs(row.dyedVariants) do
+                if variantKey == tostring(id) .. ":" .. tostring(dv.variantIdentifier) then
+                    vEntryID, vDestroyable = dv.entryID, dv.numStored
+                    break
+                end
+            end
+        end
         return {
             itemID        = id,
             decorID       = row.decorID,
@@ -269,11 +285,11 @@ Selectors:Register("decor.selectedItem", {
             isAllowedOutdoors        = row.isAllowedOutdoors,
             placementCost            = row.placementCost or 0,  -- exception(boundary): catalog struct field sparse
             numPlaced                = row.numPlaced or 0,  -- exception(boundary): catalog struct field sparse
-            destroyableInstanceCount = row.destroyableInstanceCount or 0,  -- exception(boundary): catalog struct field sparse
+            destroyableInstanceCount = vDestroyable,
             firstAcquisitionBonus    = row.firstAcquisitionBonus or 0,  -- exception(boundary): catalog struct field sparse
             dataTagsByID             = row.dataTagsByID,
             variants                 = row.variants,
-            entryID                  = row.entryID,
+            entryID                  = vEntryID,
         }
     end,
 })

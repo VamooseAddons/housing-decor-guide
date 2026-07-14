@@ -443,6 +443,20 @@ function R:ReconcileEntry(entryID)
                                      or row.firstAcquisitionBonus or 0,  -- exception(boundary): Blizzard struct field sparse
     }
     R:PatchCounts(decorID, counts)
+    -- Re-derive dye variants: destroying/acquiring a specific dyed stack changes
+    -- per-variant numStored (and can empty a stack). PatchCounts touches only the
+    -- base scalars, so without this the list keeps rendering stale variant rows
+    -- after a destroy. Mutate before the signal, same ordering as PatchCounts.
+    if row.canCustomize and _G.C_HousingCatalog.GetAllVariantInfosForEntry then
+        local entryType = (type(info.entryID) == "table" and info.entryID.entryType) or 1  -- exception(boundary): Blizzard struct field sparse
+        local variants = _G.C_HousingCatalog.GetAllVariantInfosForEntry({
+            recordID = decorID, entryType = entryType,
+        })
+        if type(variants) == "table" then   -- exception(boundary): API returns nil on cold/invalidated cache
+            row.variants = variants
+            R:_bakeVariantDyes(row)
+        end
+    end
     HDG.Store:Dispatch({
         type    = A.COLLECTION_CATALOG_ROW_COUNTS_UPDATED,
         payload = { decorID = decorID, counts = counts },
