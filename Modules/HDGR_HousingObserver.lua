@@ -847,7 +847,8 @@ HDG.Modules:Declare({
         HOUSING_NUM_DECOR_PLACED_CHANGED     = { handler = "OnHousingBudgetEvent",      debounce = 0.3 },
         HOUSING_LAYOUT_ROOM_RECEIVED         = { handler = "OnHousingBudgetEvent",      debounce = 0.3 },
         HOUSING_LAYOUT_ROOM_REMOVED          = { handler = "OnHousingBudgetEvent",      debounce = 0.3 },
-        HOUSING_LAYOUT_NUM_FLOORS_CHANGED    = { handler = "OnHousingBudgetEvent",      debounce = 0.3 },
+        HOUSING_LAYOUT_NUM_FLOORS_CHANGED    = { handler = "OnHousingBudgetEvent",      debounce = 0.3 }, -- live 12.0.x
+        HOUSING_LAYOUT_OCCUPIED_FLOOR_RANGE_CHANGED = { handler = "OnHousingBudgetEvent", debounce = 0.3 }, -- 12.1 rename of NUM_FLOORS_CHANGED; invalid name skipped per-client
     },
 
     OnEditorModeChanged = function(self)

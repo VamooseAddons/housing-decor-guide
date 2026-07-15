@@ -138,11 +138,22 @@ Selectors:Register("blueprints.budgetFit", {
         local m = sb.selectedCode and sb.manifests[sb.selectedCode]
         if not m or m.status ~= "received" then return { meters = {}, fits = false } end  -- exception(nullable): no manifest yet
         local raw = m.raw
-        local bi = raw.targetHouseBudgetInfo or {}  -- exception(boundary): nilable for houseless players (schema)
+        -- 12.1 (68675) reshaped the blueprint contents budget (verified in-game
+        -- 2026-07-15). `budgetInfo` now holds `interiorBudgets` + `exteriorBudgets`,
+        -- each a map keyed by HousingBudgetType (0 = RoomPlacement, 1 = DecorPlacement,
+        -- 2 = PetDecor) -> { max, current, cost }. The old flat targetHouseBudgetInfo /
+        -- raw.*BudgetCost fields are gone. Rooms are interior-only; decor splits
+        -- interior/exterior; PetDecor (2) isn't surfaced as a meter yet (see TODO).
+        local bi = raw.budgetInfo or {}  -- exception(boundary): nilable for houseless players
+        local inter, exter = bi.interiorBudgets or {}, bi.exteriorBudgets or {}
+        local room, intDecor, extDecor = inter[0] or {}, inter[1] or {}, exter[1] or {}  -- exception(boundary): reshaped/nilable budget map
+        local intPet, extPet = inter[2] or {}, exter[2] or {}  -- PetDecor = budgetType 2; exception(boundary): reshaped/nilable
         local meters = {
-            { key = "room",     name = "Rooms",          cost = raw.roomBudgetCost,          max = bi.roomBudgetMax          or 0, cur = bi.roomBudgetCurrent          or 0 },  -- exception(boundary): nilable budget info
-            { key = "interior", name = "Interior decor", cost = raw.interiorDecorBudgetCost, max = bi.interiorDecorBudgetMax or 0, cur = bi.interiorDecorBudgetCurrent or 0 },  -- exception(boundary): nilable budget info
-            { key = "exterior", name = "Exterior decor", cost = raw.exteriorDecorBudgetCost, max = bi.exteriorDecorBudgetMax or 0, cur = bi.exteriorDecorBudgetCurrent or 0 },  -- exception(boundary): nilable budget info
+            { key = "room",        name = "Rooms",          cost = room.cost     or 0, max = room.max     or 0, cur = room.current     or 0 },
+            { key = "interior",    name = "Interior decor", cost = intDecor.cost or 0, max = intDecor.max or 0, cur = intDecor.current or 0 },
+            { key = "exterior",    name = "Exterior decor", cost = extDecor.cost or 0, max = extDecor.max or 0, cur = extDecor.current or 0 },
+            { key = "interiorPet", name = "Interior pets",  cost = intPet.cost   or 0, max = intPet.max   or 0, cur = intPet.current   or 0 },
+            { key = "exteriorPet", name = "Exterior pets",  cost = extPet.cost   or 0, max = extPet.max   or 0, cur = extPet.current   or 0 },
         }
         -- Room blueprints ADD to the target's spent budget (House/Interior/
         -- Exterior REPLACE -- verified 68629), so a Room's headroom is what's
@@ -153,7 +164,10 @@ Selectors:Register("blueprints.budgetFit", {
             local avail = isRoomAdd and (mt.max - mt.cur) or mt.max
             mt.used    = mt.cost > 0
             mt.state   = _meterState(mt.cost, avail)
-            mt.label   = mt.cost .. " / " .. avail
+            -- 12.1 uses cost = -1 (was 0) for a budget the blueprint doesn't touch;
+            -- _meterState already maps cost<=0 -> "na", so clamp the DISPLAY so the
+            -- label reads "0 / N" (not "-1 / N"). Caption still says "not used".
+            mt.label   = math.max(mt.cost, 0) .. " / " .. avail
             mt.caption = METER_CAPTION[mt.state]
         end
         local blocking = raw.blockingRequirementFlags
@@ -424,9 +438,11 @@ end
 -- ptr): rooms / interior decor / exterior decor. Icon + numbers, like the
 -- Import dialog; the bar tooltips carry the full budget names.
 local METER_ICON = {
-    room     = "house-room-limit-icon",
-    interior = "house-decor-budget-icon",
-    exterior = "house-decor-exteriorbudget-icon",
+    room        = "house-room-limit-icon",
+    interior    = "house-decor-budget-icon",
+    exterior    = "house-decor-exteriorbudget-icon",
+    interiorPet = "house-decor-pets-icon",
+    exteriorPet = "house-decor-pets-icon",
 }
 
 local function _meterText(m)
@@ -459,6 +475,22 @@ Selectors:Register("blueprints.meterFracExterior", {
 Selectors:Register("blueprints.meterTextExterior", {
     calls = { "blueprints.budgetFit" },
     fn = function(state, ctx) return _meterText(_meterByKey(state, ctx, "exterior")) end,
+})
+Selectors:Register("blueprints.meterFracInteriorPet", {
+    calls = { "blueprints.budgetFit" },
+    fn = function(state, ctx) return _meterFrac(_meterByKey(state, ctx, "interiorPet")) end,
+})
+Selectors:Register("blueprints.meterTextInteriorPet", {
+    calls = { "blueprints.budgetFit" },
+    fn = function(state, ctx) return _meterText(_meterByKey(state, ctx, "interiorPet")) end,
+})
+Selectors:Register("blueprints.meterFracExteriorPet", {
+    calls = { "blueprints.budgetFit" },
+    fn = function(state, ctx) return _meterFrac(_meterByKey(state, ctx, "exteriorPet")) end,
+})
+Selectors:Register("blueprints.meterTextExteriorPet", {
+    calls = { "blueprints.budgetFit" },
+    fn = function(state, ctx) return _meterText(_meterByKey(state, ctx, "exteriorPet")) end,
 })
 
 -- Fit verdict pill line ("Fits this house -- N items to acquire first").

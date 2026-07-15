@@ -1,4 +1,14 @@
-## [Unreleased]
+## [3.16.0] - 2026-07-15 (July 2026)
+
+### Added
+- Blueprints: the budget meters now include Interior and Exterior pet-decor budgets (12.1), shown as two slimmer bars beside the room and decor meters, with the game's pet icon and the full budget name on hover.
+- Blueprints: a blueprint icon now sits to the left of the "Blueprints" heading above the list.
+
+### Fixed
+- HDG could fail to load on the 12.1 client: the game renamed a housing event, and registering the old name aborted startup (which then left the main window unable to build). HDG now skips any housing event that isn't valid on your game version, so a rename like this can't stop it loading.
+- Blueprints: clicking a blueprint no longer errors on 12.1. The game changed how a blueprint reports its budget costs, and HDG now reads the new format.
+- Blueprints: a budget the blueprint doesn't use now reads "0" instead of "-1" (for example, the exterior-decor meter on a room blueprint).
+- Blueprints: if the game fails to send your blueprint list, HDG now shows the reason instead of leaving the browser silently empty.
 
 ## [3.15.0] - 2026-07-14 (July 2026)
 

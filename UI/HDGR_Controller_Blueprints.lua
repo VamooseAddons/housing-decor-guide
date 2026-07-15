@@ -656,9 +656,11 @@ local METER_VARIANT = {
     over = { variant = "error" },
 }
 local METER_BAR_IDS = {
-    room     = "blueprintsDetailPanel.meterRoomBar",
-    interior = "blueprintsDetailPanel.meterIntBar",
-    exterior = "blueprintsDetailPanel.meterExtBar",
+    room        = "blueprintsDetailPanel.meterRoomBar",
+    interior    = "blueprintsDetailPanel.meterIntBar",
+    exterior    = "blueprintsDetailPanel.meterExtBar",
+    interiorPet = "blueprintsDetailPanel.meterIntPetBar",
+    exteriorPet = "blueprintsDetailPanel.meterExtPetBar",
 }
 
 function C:Refresh(rootFrame, _ctx)

@@ -12,13 +12,16 @@
 
 ---
 
-## What's New in v3.15.0
+## What's New in v3.16.0
 
-This covers the player-facing changes in 3.15.0.
+This covers the player-facing changes in 3.16.0. These affect the Blueprints tab, which appears automatically on a 12.1 (Midnight) client -- nothing changes on current retail.
 
-- **Destroying a dyed decor variant now works.** In the Decor browser's Stored view, selecting a dyed copy and pressing Destroy previously did nothing; it now destroys the specific dyed variant you picked, and the list updates right away without a reload.
-- **New "Reset minimap button position" button in Settings.** If the HDG minimap button goes missing or snaps to the lower-left corner (which can happen after a game crash clears its saved position), this button puts it back at a visible spot so you can drag it where you want.
-- **Corrected T'lama's map location.** Show on Map placed the pin outside the Great Seal in Dazar'alor instead of on the vendor inside it.
+- **Pet-decor budgets in the blueprint inspector.** When you inspect a blueprint, the budget row now includes two meters for interior and exterior pet placement alongside the room and decor meters, each with the game's pet icon and the full budget name on hover.
+- **A blueprint icon now sits to the left of the "Blueprints" heading** above the blueprint list.
+- **Fixed HDG failing to load on 12.1.** The game renamed a housing event, and registering the old name stopped the addon from starting. HDG now skips any housing event that isn't valid on your game version.
+- **Fixed a Lua error when clicking a blueprint on 12.1.** The game changed how a blueprint reports its budget costs, and HDG now reads the new format.
+- **A budget the blueprint doesn't use now reads "0" instead of "-1"** (for example, the exterior-decor meter on a room blueprint).
+- **Blueprint list load failures now show the reason** instead of leaving the browser empty.
 
 ---
 
@@ -109,7 +112,7 @@ A companion window injects into Blizzard's House Editor so you can **place decor
 ---
 
 **Author:** Vamoose
-**Version:** 3.15.0
+**Version:** 3.16.0
 **Game Version:** 12.0.5+ (Midnight)
 **Source / Issues:** https://github.com/VamooseAddons/housing-decor-guide
 **Discord:** https://discord.gg/RWZaxJaHFP

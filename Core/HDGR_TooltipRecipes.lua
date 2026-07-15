@@ -147,9 +147,11 @@ R.EssenceBadge = function()
 end
 R.LumberAutoShow       = { title = "locale:TIP_LUMBER_AUTO_SHOW_TITLE",      body = "locale:TIP_LUMBER_AUTO_SHOW_BODY" }
 R.LumberGoal           = { title = "locale:TIP_LUMBER_GOAL_TITLE",           body = "locale:TIP_LUMBER_GOAL_BODY" }
-R.BlueprintMeterRoom     = { title = "locale:TIP_BP_METER_ROOM",     anchor = "ANCHOR_TOP" }
-R.BlueprintMeterInterior = { title = "locale:TIP_BP_METER_INTERIOR", anchor = "ANCHOR_TOP" }
-R.BlueprintMeterExterior = { title = "locale:TIP_BP_METER_EXTERIOR", anchor = "ANCHOR_TOP" }
+R.BlueprintMeterRoom        = { title = "locale:TIP_BP_METER_ROOM",         anchor = "ANCHOR_TOP" }
+R.BlueprintMeterInterior    = { title = "locale:TIP_BP_METER_INTERIOR",     anchor = "ANCHOR_TOP" }
+R.BlueprintMeterExterior    = { title = "locale:TIP_BP_METER_EXTERIOR",     anchor = "ANCHOR_TOP" }
+R.BlueprintMeterInteriorPet = { title = "locale:TIP_BP_METER_INTERIOR_PET", anchor = "ANCHOR_TOP" }
+R.BlueprintMeterExteriorPet = { title = "locale:TIP_BP_METER_EXTERIOR_PET", anchor = "ANCHOR_TOP" }
 R.VendorJump           = { title = "locale:TIP_VENDOR_JUMP_TITLE",           body = "locale:TIP_VENDOR_JUMP_BODY",    anchor = "ANCHOR_RIGHT" }
 R.ZoneMapOpen          = { title = "locale:TIP_ZONE_MAP_TITLE",              body = "locale:TIP_ZONE_MAP_BODY" }
 

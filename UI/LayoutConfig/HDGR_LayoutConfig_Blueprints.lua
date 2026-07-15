@@ -57,6 +57,10 @@ LC.panels.blueprintsDetailPanel = {
 
 -- ===== Left: paste + collection browser =====================================
 
+LC.widgets["blueprintsListPanel.titleIcon"] = {
+    tooltip = false, kind = "label", ["in"] = "blueprintsListPanel", slot = "header",
+    text = "|A:common-icons-blueprints:18:18|a", font = "heading", height = 18, width = "auto", order = 3,
+}
 LC.widgets["blueprintsListPanel.title"] = {
     tooltip = false, kind = "label", ["in"] = "blueprintsListPanel", slot = "header",
     text = "locale:BP_TITLE", font = "heading", height = 18, width = "auto", order = 5,
@@ -188,6 +192,30 @@ LC.widgets["blueprintsDetailPanel.meterExtText"] = {
 LC.widgets["blueprintsDetailPanel.meterExtBar"] = {
     tooltip = { recipe = "BlueprintMeterExterior" }, kind = "progressbar", ["in"] = "blueprintsDetailPanel.meterExtCol",
     binding = { progress = "blueprints.meterFracExterior" }, width = "fill", height = 8, order = 10,
+}
+-- Pet decor budgets (12.1): interior + exterior. Deliberately NARROWER than the
+-- three main meters (fixed width vs "fill") -- pet budgets are small and secondary.
+LC.sections["blueprintsDetailPanel.meterIntPetCol"] = {
+    ["in"] = "blueprintsDetailPanel.meters", layout = "vertical", width = 56, gap = "xs", order = 20,
+}
+LC.widgets["blueprintsDetailPanel.meterIntPetText"] = {
+    tooltip = false, kind = "label", ["in"] = "blueprintsDetailPanel.meterIntPetCol",
+    binding = "blueprints.meterTextInteriorPet", font = "caption", height = 14, width = "fill", order = 5,
+}
+LC.widgets["blueprintsDetailPanel.meterIntPetBar"] = {
+    tooltip = { recipe = "BlueprintMeterInteriorPet" }, kind = "progressbar", ["in"] = "blueprintsDetailPanel.meterIntPetCol",
+    binding = { progress = "blueprints.meterFracInteriorPet" }, width = "fill", height = 8, order = 10,
+}
+LC.sections["blueprintsDetailPanel.meterExtPetCol"] = {
+    ["in"] = "blueprintsDetailPanel.meters", layout = "vertical", width = 56, gap = "xs", order = 25,
+}
+LC.widgets["blueprintsDetailPanel.meterExtPetText"] = {
+    tooltip = false, kind = "label", ["in"] = "blueprintsDetailPanel.meterExtPetCol",
+    binding = "blueprints.meterTextExteriorPet", font = "caption", height = 14, width = "fill", order = 5,
+}
+LC.widgets["blueprintsDetailPanel.meterExtPetBar"] = {
+    tooltip = { recipe = "BlueprintMeterExteriorPet" }, kind = "progressbar", ["in"] = "blueprintsDetailPanel.meterExtPetCol",
+    binding = { progress = "blueprints.meterFracExteriorPet" }, width = "fill", height = 8, order = 10,
 }
 
 -- Filter row: segmented All / Missing-only pair + item counts right.

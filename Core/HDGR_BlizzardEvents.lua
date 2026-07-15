@@ -40,6 +40,12 @@ HDG.BlizzardEvents = HDG.BlizzardEvents or {
 
 local BE = HDG.BlizzardEvents
 
+-- Debug tag for BlizzardEvents diagnostics -- notably when an event subscription
+-- is skipped because the name isn't valid on this client version (see the
+-- RegisterEvent boundary guard in addSubscription). user=false: debug log only,
+-- not a user-facing status toast.
+HDG.Log:RegisterTags({ blizzard_events = { user = false, level = "debug" } })
+
 -- ===== Closed event taxonomy (high-frequency events that REQUIRE debounce) ==
 -- Validator enforces: subscribing to any of these without `debounce` errors.
 -- Add rows as the monorepo accumulates evidence of new high-freq events.
@@ -208,8 +214,16 @@ local function addSubscription(modDef, event, sub)
             end
         else
             if BE._frame and not BE._registeredEvents[event] then
-                BE._frame:RegisterEvent(event)
-                BE._registeredEvents[event] = true
+                -- exception(boundary): event names drift across client versions (e.g.
+                -- HOUSING_LAYOUT_NUM_FLOORS_CHANGED was renamed to
+                -- HOUSING_LAYOUT_OCCUPIED_FLOOR_RANGE_CHANGED in 12.1). Skip events not
+                -- valid on this client so one unknown name can't throw and abort init.
+                if C_EventUtils.IsEventValid(event) then
+                    BE._frame:RegisterEvent(event)
+                    BE._registeredEvents[event] = true
+                else
+                    HDG.Log:Debug("blizzard_events", "skipped event not valid on this client: " .. event)
+                end
             end
         end
     end

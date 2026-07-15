@@ -274,6 +274,8 @@ HDG.Locale:Register("enUS", {
     TIP_BP_METER_ROOM           = "Room Placement Budget",
     TIP_BP_METER_INTERIOR       = "Interior Decor Placement Budget",
     TIP_BP_METER_EXTERIOR       = "Exterior Decor Placement Budget",
+    TIP_BP_METER_INTERIOR_PET   = "Interior Pet Placement Budget",
+    TIP_BP_METER_EXTERIOR_PET   = "Exterior Pet Placement Budget",
     TIP_BP_FORGET_TITLE         = "Forget code",
     TIP_BP_FORGET_BODY          = "Remove this pasted code from HDG's list. The code itself keeps working -- paste it again any time.",
     TIP_BP_MISSING_TITLE        = "Missing only",

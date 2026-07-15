@@ -145,6 +145,14 @@ function BP:OnCollectionReceived(coll)
         payload = { groups = groups, slots = { used = used, max = HDG.Constants.BLUEPRINT_SLOT_MAX } } })
 end
 
+function BP:OnCollectionFailure(reasonCode)
+    -- The blueprint LIST failed to load (server error / feature toggling). Surface
+    -- Blizzard's reason as a status toast instead of leaving the browser silently
+    -- empty -- same shape as the export/rename/delete failure handlers.
+    local map = _G.HousingResultToErrorText  -- exception(boundary): Blizzard global map
+    HDG.Log:Warn("blueprints", (map and map[reasonCode]) or "Couldn't load your blueprints")  -- exception(boundary): not every value mapped
+end
+
 -- Derive a blueprint's ABSOLUTE faction from the inspected manifest. Only
 -- House/Exterior blueprints carry an exterior faction; the server sets the
 -- MismatchedExteriorFaction bit (32) when the blueprint differs from the
@@ -227,6 +235,7 @@ HDG.Modules:Declare({
     },
     blizzardEvents = {
         HOUSING_BLUEPRINT_COLLECTION_RECEIVED = { handler = "OnCollectionReceived" },
+        HOUSING_BLUEPRINT_COLLECTION_FAILURE  = { handler = "OnCollectionFailure" },
         HOUSING_BLUEPRINT_CONTENTS_RECEIVED   = { handler = "OnContentsReceived" },
         HOUSING_BLUEPRINT_CONTENTS_FAILURE    = { handler = "OnContentsFailure" },
         HOUSING_BLUEPRINT_EXPORT_SUCCESS      = { handler = "OnExportSuccess" },
@@ -239,6 +248,7 @@ HDG.Modules:Declare({
     -- BlizzardEvents resolves handlers ON THIS DEF TABLE (module = the def);
     -- delegate to the BP singleton, forwarding the event args (MerchantObserver idiom).
     OnCollectionReceived = function(_, ...) BP:OnCollectionReceived(...) end,
+    OnCollectionFailure  = function(_, ...) BP:OnCollectionFailure(...) end,
     OnContentsReceived   = function(_, ...) BP:OnContentsReceived(...) end,
     OnContentsFailure    = function(_, ...) BP:OnContentsFailure(...) end,
     OnExportSuccess      = function(_, ...) BP:OnExportSuccess(...) end,
