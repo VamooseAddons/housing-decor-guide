@@ -552,7 +552,7 @@ HDG.Theme.Skinners = {
         -- Normal = border color; active = accent; hover = accent; pressed = accent dark.
         -- Dropdown: swap NormalAtlas to -open variant via _activeNormalAtlas when active.
         local accent      = HDG.Theme:GetColor("semantic.accent")
-        local accentDark  = HDG.Theme:GetColor("button.primary.bg.active") or accent
+        local accentDark  = HDG.Theme:GetColor("button.primary.bg.active")
         local disabledCol = HDG.Theme:GetColor("text.disabled")
         -- All atlas-path widgets share a fixed dark Blizzard atlas; text must be light.
         -- Anchor to button.tertiary.text.normal (encodes the isLight override).

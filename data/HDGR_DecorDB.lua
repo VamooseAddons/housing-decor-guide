@@ -948,8 +948,8 @@ HDGR_DecorDB = {
             [192837] = { name = "Queen's Ruby", qty = 1 },
             [192840] = { name = "Mystic Sapphire", qty = 1 },
             [192843] = { name = "Vibrant Emerald", qty = 1 },
-            [192847] = { name = "Sundered Onyx", qty = 1 },
-            [192850] = { name = "Eternity Amber", qty = 1 },
+            [192846] = { name = "Sundered Onyx", qty = 1 },
+            [192849] = { name = "Eternity Amber", qty = 1 },
         },
     },
     -- EXPANSION: Khaz Algar Blacksmithing
@@ -1209,10 +1209,10 @@ HDGR_DecorDB = {
         expansionID = 2824,
         reagents = {
             [251773] = { name = "Dragonpine Lumber", qty = 28 },
+            [259894] = { name = "Perfect Preservatives", qty = 15 },
+            [189143] = { name = "Draconium Ore", qty = 10 },
             [197764] = { name = "Salad on the Side", qty = 5 },
             [197788] = { name = "Braised Bruffalon Brisket", qty = 4 },
-            [259894] = { name = "Perfect Preservatives", qty = 15 },
-            [188658] = { name = "Draconium Ore", qty = 10 },
         },
     },
     [55945] = { -- Valdrakken Blossomfruit Platter
@@ -3413,7 +3413,7 @@ HDGR_DecorDB = {
         expansionID = 2828,
         reagents = {
             [251773] = { name = "Dragonpine Lumber", qty = 10 },
-            [190396] = { name = "Serevite Ore", qty = 8 },
+            [190395] = { name = "Serevite Ore", qty = 8 },
             [194850] = { name = "Flourishing Ink", qty = 3 },
         },
     },
@@ -3428,7 +3428,7 @@ HDGR_DecorDB = {
         expansionID = 2828,
         reagents = {
             [251773] = { name = "Dragonpine Lumber", qty = 10 },
-            [190396] = { name = "Serevite Ore", qty = 8 },
+            [190395] = { name = "Serevite Ore", qty = 8 },
             [194751] = { name = "Blazing Ink", qty = 4 },
         },
     },
@@ -4170,10 +4170,10 @@ HDGR_DecorDB = {
         expansion = "Dragon Isles Jewelcrafting",
         expansionID = 2829,
         reagents = {
+            [190395] = { name = "Serevite Ore", qty = 18 },
             [251773] = { name = "Dragonpine Lumber", qty = 15 },
-            [192872] = { name = "Fractured Glass", qty = 2 },
-            [190396] = { name = "Serevite Ore", qty = 18 },
             [192883] = { name = "Glossy Stone", qty = 4 },
+            [192872] = { name = "Fractured Glass", qty = 2 },
         },
     },
     [55764] = { -- Valdrakken Fencepost
@@ -4187,7 +4187,7 @@ HDGR_DecorDB = {
         expansionID = 2829,
         reagents = {
             [251773] = { name = "Dragonpine Lumber", qty = 10 },
-            [190396] = { name = "Serevite Ore", qty = 8 },
+            [190395] = { name = "Serevite Ore", qty = 8 },
             [192883] = { name = "Glossy Stone", qty = 4 },
         },
     },
@@ -5316,9 +5316,9 @@ HDGR_DecorDB = {
         expansionID = 2831,
         reagents = {
             [251773] = { name = "Dragonpine Lumber", qty = 35 },
-            [190396] = { name = "Serevite Ore", qty = 16 },
-            [192095] = { name = "Spool of Wilderthread", qty = 12 },
             [193926] = { name = "Wildercloth Bolt", qty = 20 },
+            [190395] = { name = "Serevite Ore", qty = 16 },
+            [192095] = { name = "Spool of Wilderthread", qty = 12 },
             [194751] = { name = "Blazing Ink", qty = 5 },
         },
     },
@@ -5333,11 +5333,11 @@ HDGR_DecorDB = {
         expansionID = 2831,
         reagents = {
             [251773] = { name = "Dragonpine Lumber", qty = 28 },
+            [190395] = { name = "Serevite Ore", qty = 3 },
             [192872] = { name = "Fractured Glass", qty = 3 },
-            [190396] = { name = "Serevite Ore", qty = 3 },
+            [194011] = { name = "Frozen Spellthread", qty = 2 },
             [193935] = { name = "Chronocloth Bolt", qty = 1 },
             [193938] = { name = "Azureweave Bolt", qty = 1 },
-            [194011] = { name = "Frozen Spellthread", qty = 2 },
         },
     },
     -- EXPANSION: Khaz Algar Tailoring

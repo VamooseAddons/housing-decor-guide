@@ -132,7 +132,11 @@ local function _emitDecorRows(out, stamped, activeTag)
     local id = stamped.itemID
     local dyedVariants = stamped.dyedVariants
     local hasDyed = dyedVariants and #dyedVariants > 0
-    if not (activeTag == "Dyed" and hasDyed) then
+    -- Base row = the undyed (vid=0) variant. In Stored view, suppress it when the item
+    -- has dyed stacks but zero undyed copies (Blizzard's showQuantity > 0) -- else the
+    -- undyed slot renders a phantom count that can't be destroyed.
+    local hideEmptyUndyed = hasDyed and stamped.inStoredMode and (stamped.destroyableCount or 0) <= 0
+    if not (activeTag == "Dyed" and hasDyed) and not hideEmptyUndyed then
         stamped.variantKey = tostring(id) .. ":base"
         out[#out + 1] = stamped
     end
@@ -250,11 +254,12 @@ Selectors:Register("decor.selectedItem", {
            or (row.recipe and 6)                                  -- CRAFTED (recipe DB canonical)
            or 0                                                   -- truly unknown
 
-        -- Destroy identity: base stack by default; a selected dyed variant
-        -- overrides entryID + destroyable count so the destroy button acts on
-        -- THAT stack (its own entryVariantID + stored count). Only the destroy
-        -- path reads entryID / destroyableInstanceCount off selectedItem.
-        local vEntryID, vDestroyable = row.entryID, row.destroyableInstanceCount or 0  -- exception(boundary): catalog struct field sparse
+        -- Destroy identity: base stack = the undyed (vid=0) variant. row.entryID is already
+        -- the vid=0 entry, and its destroyable count is the undyed numStored (real per-variant),
+        -- NOT the aggregate destroyableInstanceCount. A selected dyed variant overrides both
+        -- with its own entryVariantID + stored count.
+        local vEntryID = row.entryID
+        local vDestroyable = row.undyedNumStored or row.quantity or 0  -- exception(nullable): undyedNumStored nil for non-customizable decor -> all copies undyed
         local variantKey = Selectors:Call("decor.selectedVariantKey", state, ctx)
         if variantKey and row.dyedVariants then
             for _, dv in ipairs(row.dyedVariants) do
@@ -274,6 +279,13 @@ Selectors:Register("decor.selectedItem", {
             sourceName    = (firstVendor and firstVendor.name) or "",
             sourceDetail  = (firstVendor and firstVendor.zone) or "",
             sourceNpcID   = firstVendor and firstVendor.npcID or nil,  -- exception(nullable): non-vendor sources have no npc; drives the source-line vendor hyperlink
+            -- Primary vendor's location for the detail-panel Show on Map / Waypoint buttons
+            -- (same shape Shop-by-Vendor feeds HDG.Waypoints). nil => no mappable vendor.
+            vendor        = (firstVendor and firstVendor.canWaypoint and firstVendor.mapID
+                             and firstVendor.x and firstVendor.y)
+                            and { mapID = firstVendor.mapID, x = firstVendor.x, y = firstVendor.y,
+                                  name = firstVendor.name or "", faction = firstVendor.faction }
+                            or nil,  -- exception(nullable): non-vendor decor / vendor lacks coords
             sourceTags    = row.sourceTags,   -- full baked tag list for the detail chip strip
             canCustomize  = row.canCustomize or false,
             isOwned       = row.isOwned or false,
@@ -299,6 +311,15 @@ Selectors:Register("decor.hasSelectedItem", {
     calls = {"decor.selectedItem"},
     fn = function(state, ctx)
         return Selectors:Call("decor.selectedItem", state, ctx) ~= nil
+    end,
+})
+
+-- True when the selected decor has a vendor with coordinates -> Show on Map / Waypoint gate.
+Selectors:Register("decor.selectedItemHasVendorWaypoint", {
+    calls = {"decor.selectedItem"},
+    fn = function(state, ctx)
+        local sel = Selectors:Call("decor.selectedItem", state, ctx)
+        return sel ~= nil and sel.vendor ~= nil
     end,
 })
 
@@ -619,14 +640,18 @@ Selectors:Register("decor.isCollected", {
     end,
 })
 
--- isStored: destroyableInstanceCount > 0 (stored AND destroyable; unique trophies excluded).
+-- isStored: has destroyable stored copies. quantity (= totalNumStored) > 0 and not a unique
+-- trophy. (Was destroyableInstanceCount > 0, but that aggregate is off-by-one -- it read 0 for
+-- a lone stored copy and wrongly hid single-copy items from the Stored filter. The old gate
+-- excluded trophies only as a side effect of their dic being 0; now it's explicit.)
 Selectors:Register("decor.isStored", {
     reads = {"session.resolvers.catalog.tick"},
     fn = function(state, ctx)
         local byItemID = HDG.HousingCatalogObserver.byItemID
         return function(itemID)
             local row = byItemID[itemID]
-            return (row and (row.destroyableInstanceCount or 0) > 0) or false  -- exception(boundary): catalog struct field sparse
+            -- Stored copies are destroyable (placed ones aren't); unique trophies never are.
+            return (row and (row.quantity or 0) > 0 and not row.isUniqueTrophy) or false  -- exception(boundary): catalog struct field sparse
         end
     end,
 })
@@ -638,7 +663,13 @@ Selectors:Register("decor.destroyableCount", {
         local byItemID = HDG.HousingCatalogObserver.byItemID
         return function(itemID)
             local row = byItemID[itemID]
-            return (row and row.destroyableInstanceCount) or 0
+            if not row then return 0 end
+            -- Undyed row count = the vid=0 variant's real numStored (Blizzard's
+            -- GetEntryQuantity), plus remainingRedeemable which redemptions grant as the
+            -- base variant -- NOT the aggregate destroyableInstanceCount. undyedNumStored is
+            -- nil for non-customizable decor (no variant list) -> quantity (all copies undyed).
+            local undyed = row.undyedNumStored or row.quantity or 0
+            return undyed + (row.remainingRedeemable or 0)
         end
     end,
 })

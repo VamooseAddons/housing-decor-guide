@@ -2,8 +2,9 @@
 --
 -- Selector memoization (Reselect-style). Two entry points:
 --   Memo({ inputs = {fn1, fn2, ...}, compute = fn })  -- 1-entry cache; inputs must return stable references.
---   MakeFactory({ inputs, compute })                   -- per-key cache; use when N callers key by ID.
--- Reselect rules: stable input refs; only memoize non-trivial compute; use MakeFactory for per-instance.
+-- Reselect rules: stable input refs; only memoize non-trivial compute.
+-- (A per-key MakeFactory variant was once advertised here but never built; add it
+-- with (state, ctx) input signature if a per-instance cache is ever needed.)
 
 HDG = HDG or {}
 HDG.Memo = HDG.Memo or {}

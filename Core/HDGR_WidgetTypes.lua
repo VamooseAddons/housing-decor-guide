@@ -202,6 +202,7 @@ end
 -- shape): WidgetType declares the role; paint fn lives in Theme.Skinners.
 local function _validateSkin(def, err)
     if def.skin == nil then return end
+    if not (HDG.Theme and HDG.Theme.Skinners) then return end  -- exception(boundary): Theme absent in minimal test harnesses
     if type(def.skin) ~= "string" then
         err("`skin` must be a string (paint role name in HDG.Theme.Skinners)")
         return

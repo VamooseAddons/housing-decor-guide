@@ -68,9 +68,13 @@ function UI.WireTextChanged(widget, fn)
 end
 
 function UI.WireSearchBox(rootFrame, widgetId, tabName, stateKey)
-    UI.WireTextChanged(UI.W(rootFrame, widgetId), function(text)
+    local box = UI.W(rootFrame, widgetId)
+    UI.WireTextChanged(box, function(text)
         HDG.ControllerHelpers.Mechanics.SetUITransientView(tabName, stateKey, text)
     end)
+    -- Return the EditBox so callers can imperatively clear it (e.g. the Reset button):
+    -- UI_FILTER_RESET zeroes the search state, but nothing pushes that back to the widget.
+    return box
 end
 
 -- ===== Workflow dialogs ==================================================
@@ -417,7 +421,7 @@ end
 -- Waypoint-pin AtlasButton at a row's right edge, hidden until shown by the
 -- painter (hygiene A12 -- Zone + Shopping shared this verbatim).
 function UI.RowPinButton(row)
-    local pin = HDG.UI:AtlasButton(row, "Waypoint-MapPin-ChatIcon", 14)
+    local pin = HDG.UI:AtlasButton(row, "housing-decor-vendor_32", 14)
     pin:SetPoint("RIGHT", row, "RIGHT", -4, 0)
     pin:Hide()
     return pin

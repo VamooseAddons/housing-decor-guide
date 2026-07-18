@@ -17,7 +17,6 @@ HDG.RepObserver = HDG.RepObserver or {}
 local R = HDG.RepObserver
 
 -- Log tag for the rep-API boundary (SECRET-value returns / cold-cache nil).
-HDG.Log:RegisterTags({ rep_api = { user = false, level = "warn" } })
 
 -- Priority: Friendship -> MajorFaction -> Standard (Blizzard's order).
 -- Paragon intentionally skipped: decor gates are all <= Exalted.
@@ -85,9 +84,6 @@ HDG.Modules:Declare({
     name = "RepObserver",
     ownsBlizzardNamespaces = { "C_Reputation", "C_MajorFactions", "C_GossipInfo" },
     dependencies = {},
-    logTags = {
-        rep_changed = { user = false, level = "debug" },
-    },
     blizzardEvents = {
         -- Debounce the UPDATE_FACTION firehose (fires repeatedly per rep gain).
         UPDATE_FACTION                        = { handler = "OnRepChanged", debounce = 0.5 },

@@ -948,7 +948,12 @@ local function ApplyOne(widget, region)
     -- GetUnboundedStringWidth (a pure read, no SetWidth probe), so nothing
     -- mutates a widget's size out of band to invalidate this cache.
     if rectsEqual(widget._lastRect, region) then return end
-    widget._lastRect = { x = region.x, y = region.y, width = region.width, height = region.height }
+    local lr = widget._lastRect
+    if lr then  -- reuse in place: one table per widget for life, not per geometry change
+        lr.x, lr.y, lr.width, lr.height = region.x, region.y, region.width, region.height
+    else
+        widget._lastRect = { x = region.x, y = region.y, width = region.width, height = region.height }
+    end
 
     if widget.ApplyLayout then widget:ApplyLayout(region); return end  -- exception(optional): ApplyLayout is an optional override protocol (e.g. CardGrid); absent = default anchor path
     widget:ClearAllPoints()

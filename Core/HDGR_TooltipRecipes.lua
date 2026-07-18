@@ -174,6 +174,9 @@ R.BlueprintSave        = { title = "locale:TIP_BP_SAVE_TITLE",        body = "lo
 R.BlueprintLink        = { title = "locale:TIP_BP_LINK_TITLE",        body = "locale:TIP_BP_LINK_BODY",        anchor = "ANCHOR_TOP" }
 R.BlueprintImportHouse = { title = "locale:TIP_BP_IMPORT_HOUSE_TITLE", body = "locale:TIP_BP_IMPORT_HOUSE_BODY", anchor = "ANCHOR_TOP" }
 
+-- Recipes title: guild recipe scan.
+R.RecipesScanGuild = { title = "locale:TIP_REC_SCAN_GUILD_TITLE", body = "locale:TIP_REC_SCAN_GUILD_BODY" }
+
 -- ===== Mogul / Goblin TSM columns ==========================================
 -- Registered unconditionally so Layout:Validate passes regardless of TSM load state.
 R.GoblinTsmServer  = { title = "locale:TIP_GOBLIN_TSM_SERVER_TITLE",   body = "locale:TIP_GOBLIN_TSM_SERVER_BODY" }

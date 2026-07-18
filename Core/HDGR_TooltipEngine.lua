@@ -136,11 +136,11 @@ local function _renderTooltipExtraLines(tooltip, lines)
         if type(line) == "string" then
             tooltip:AddLine(_loc(line), 1, 1, 1, true)
         elseif type(line) == "table" and line.right ~= nil then
-            tooltip:AddDoubleLine(_loc(line.text or ""), _loc(line.right),
+            tooltip:AddDoubleLine(_loc(line.text), _loc(line.right),
                 line.r or 1, line.g or 1, line.b or 1,
                 line.rr or 1, line.rg or 1, line.rb or 1)
         elseif type(line) == "table" then
-            tooltip:AddLine(_loc(line.text or ""),
+            tooltip:AddLine(_loc(line.text),
                 line.r or 1, line.g or 1, line.b or 1,
                 line.wrap ~= false)  -- exception(optional): tooltip line.wrap absent = default-on per extraLines protocol
         end

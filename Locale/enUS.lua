@@ -59,7 +59,9 @@ HDG.Locale:Register("enUS", {
     -- Detail pane
     DECOR_PREVIEW_PLACEHOLDER = "Click an item to preview",
     DECOR_DESTROY_BTN      = "Destroy a stored copy",
-    DECOR_WISHLIST_BTN     = "+ Wishlist",
+    DECOR_WISHLIST_BTN     = "+ Wish",
+    DECOR_MAP_BTN          = "+ Map",
+    DECOR_WAYPOINT_BTN     = "+ Way",
     DECOR_NOTE_PLACEHOLDER = "Add a personal note...",
 
     -- ===== Acquisition =====
@@ -372,6 +374,10 @@ HDG.Locale:Register("enUS", {
     REC_FILTER_READY_DESC             = "have the reagents",
     REC_FILTER_UNKNOWN_DESC           = "no alt knows",
     REC_SEARCH_PLACEHOLDER     = "Search recipes...",
+    REC_SCAN_GUILD             = "Scan Recipes",
+    REC_SCAN_GUILD_WAIT        = "Scanning...",
+    TIP_REC_SCAN_GUILD_TITLE   = "Scan Recipes",
+    TIP_REC_SCAN_GUILD_BODY    = "Reads decor recipes from your guildmates' profession books -- every profession in the guild, even members who are offline -- and uses them to fill out this list with up-to-date recipes and material costs.",
     REC_QUEUE_TITLE            = "Queue",
     REC_QUEUE_HINTS_TITLE      = "Queue actions",
     REC_QUEUE_HINTS_LEFT       = "Pick a recipe -- scopes its materials + previews it (click again to clear).",

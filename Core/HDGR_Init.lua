@@ -173,6 +173,12 @@ function HDG:OnInitialize()
     if HDG.InitSettingsPanel then  -- exception(boundary): file may not be loaded in minimal test builds
         HDG.InitSettingsPanel()
     end
+    -- Boot bookend (debug-gated by tag level) + one-shot migration breadcrumb:
+    -- HDG.Migration:Run returns true only when a v2 SavedVariables actually migrated.
+    if HDG.Migration and HDG.Migration.lastResult == true then
+        HDG.Log:Info("boot", "SavedVariables migrated from HDG v2 -- collection/notes/favorites kept; caches + settings reset to fresh defaults")
+    end
+    HDG.Log:Debug("boot", "OnInitialize complete")
 end
 
 function HDG:OnEnable()
@@ -201,7 +207,7 @@ function HDG:OnEnable()
     -- which taints WorldMapFrame -> AreaPOI tooltip errors after combat. boundary
     if HDG.Waypoints and HDG.Waypoints.InitMapPins then  -- exception(boundary): optional module / not yet built
         C_Timer.After(2, function() HDG.Waypoints:InitMapPins() end)
-    end
+    end    HDG.Log:Debug("boot", "OnEnable complete")
 end
 
 -- Lifecycle bootstrap via BlizzardEvents._internalSubscribe (spec section 15).

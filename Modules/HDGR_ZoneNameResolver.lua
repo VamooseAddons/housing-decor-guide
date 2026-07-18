@@ -11,7 +11,6 @@ HDG.ZoneNameResolver = HDG.ZoneNameResolver or {}
 local R = HDG.ZoneNameResolver
 
 -- Log tag for C_Map.GetMapInfo boundary failures (invalid mapID etc).
-HDG.Log:RegisterTags({ map_api = { user = false, level = "warn" } })
 
 R._cache = R._cache or {}   -- [enUSName] = localizedName
 

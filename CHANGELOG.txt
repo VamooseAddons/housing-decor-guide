@@ -1,3 +1,33 @@
+## [3.17.1] - 2026-07-18 (July 2026)
+
+### Fixed
+- Vendor map pins got a full audit (Verified standing at each vendor in-game) and 12 pins were corrected. Highlights: Provisioner Aristta moved to her real home in Thaldraszus (she was pinned in the Azure Span), Captain Donald Adams now points at the present-day captain in Orgrimmar (no Zidormi time-phasing required), Val'zuun and Halenthos Brightstride now pin the correct Dalaran maps, "Yen" Malone and "High Tides" Ren no longer share another vendor cluster's spot on Razorwind Shores, and Thraxadar pins his actual perch on Slayer's Rise. Also nudged: Mothkeeper Wew'tam, Morta Gage, Brave Tuho, Paul North, and the Brawlpub pair in the Deeprun Tram.
+- Removed "Bad Luck" Symmes from the vendor list -- he's been replaced by Paul North in the Brawl'gar Arena, who sells the same decor.
+- Fixed Falara Nightsong (Fel Hammer decor vendor) being pinned to the wrong map entirely -- her map pin and waypoint now point at the actual demon hunter hall.
+- Fixed Second Chair Pawdo's vendor pin in Dornogal sitting about 135 yards from where he actually stands.
+- Future-proofed the decor catalog against Blizzard removing the housing-catalog compatibility shim: HDG now reads the current API fields directly (owned counts, destroy identities). No visible change today; prevents a breakage when the deprecated bridge is deleted (and fixes HDG for anyone running with deprecation fallbacks disabled).
+- Fixed the decor catalog failing to load when the game hands back a corrupted catalog row (seen once in the wild) -- HDG now skips the unreadable row with a note in the Debug log and loads the other ~1,800 items normally.
+
+## [3.17.0] - 2026-07-17 (July 2026)
+
+> Note: the recipe-data changes in this release should not change anything you see on 12.0.7 -- the live capture matches the built-in database. This build is PTR-compatible: if you'd like to test the new recipe harvesting against 12.1.0's changes, install it on the PTR and open a profession (or hit Scan Recipes).
+
+### Added
+- Zone alerts: the zone-entry chat message got a glow-up -- vendor-pin icon, gold branding, a clear headline -- and now ends with a clickable [View] link that opens the Zone Scanner with that list. It also fires reliably on fresh logins without opening HDG first. (Thanks Woodymakespizza!)
+- Recipes: a new Scan Recipes button on the Recipes title harvests decor recipe data from every profession in your guild -- guildmates don't need to be online. One click keeps recipe costs current across all professions without switching alts. The button shows live progress and a second click cancels; it only updates recipe data, never who-knows-what.
+- Recipes: recipe materials are now read live from your profession book -- including the sub-recipes behind them, so the Raw materials view, Craft These First list and readiness percentages all track the live game too. Material quality tiers are captured as groups, so any tier you hold counts toward a recipe (recipes list the cheapest tier). Opening a profession captures every decor recipe's reagents, and the Recipes, Materials, Lumber and Mogul views use the captured data over the built-in database -- so when a patch changes crafting costs (or adds brand-new decor recipes), HDG reflects it as soon as you open the profession, no addon update needed.
+- Decor: the number you own now shows on every decor row, all the time -- not just in the Destroy view -- so you can see how many copies you have while browsing. It sits in a tidy right-hand column, and the craftable star tucks into its top-left corner.
+- Decor: the detail panel has two new buttons beside Wishlist -- Map and Waypoint -- that route you straight to a decor's vendor (same actions as Shop by Vendor). They appear only for decor a vendor actually sells.
+
+### Changed
+- The per-zone waypoint button in the Shopping list and the Zone tab now uses the housing vendor icon.
+
+### Fixed
+- Decor: destroying decor you own in dyed colors now works reliably in the Stored view. An item you own only in dyed colors no longer shows a phantom "undyed" row with a count that won't destroy -- the undyed row appears only when you genuinely have undyed copies, and its number now matches what you actually own.
+- Decor: items you own a single copy of now appear in the Stored view (they were being hidden), and you can destroy your last stored copy instead of one always being left behind.
+- Decor: the search box now clears when you press Reset (the text used to stay put even though the list had already been unfiltered).
+- Recipes: corrected the built-in reagent data for 8 recipes that listed the wrong quality tier of a material (Serevite Ore, Draconium Ore, Sundered Onyx, Eternity Amber) -- material counts for those recipes now match your bags. Verified against a live in-game capture of all 305 recipes.
+
 ## [3.16.0] - 2026-07-15 (July 2026)
 
 ### Added

@@ -7,6 +7,8 @@
 -- Why onEnable not PLAYER_LOGIN: PLAYER_LOGIN is owned by Init.lua's bootstrap;
 -- onEnable runs after it drains, guaranteeing UnitName + UnitClass resolve.
 
+HDG.Log:RegisterTags({ identity = { user = false, level = "warn" } })
+
 HDG = HDG or {}
 HDG.SessionIdentity = HDG.SessionIdentity or {}
 
@@ -28,7 +30,7 @@ HDG.Modules:Declare({
             -- regression worth surfacing -- not silently leaving identity
             -- at "" for the whole session (which causes consumers to
             -- silently early-exit).
-            HDG.Log:Warn("modules",
+            HDG.Log:Warn("identity",
                 "SessionIdentity: UnitName returned nil at onEnable -- session.identity stays empty")
             return
         end

@@ -483,14 +483,38 @@ LC.widgets["decorDetailPanel.destroyBtn"] = {
     textTone = "error",
     visible = "decor.showDestroyButton",
 }
--- + Wishlist: adds selected item as wishlist entry (npcID=nil). Wired in HDGR_Controller_Decor.
--- Lives in the note column (above the note editbox) so the left meta column isn't squeezed.
+-- Detail action row (note column, above the note editbox): + Wish / Map / Waypoint sharing
+-- the width. Map + Waypoint reuse Shop-by-Vendor's actions against the decor's primary vendor
+-- and hide when there's no mappable vendor, leaving + Wish to fill the row.
+LC.sections["decor.detailActionRow"] = {
+    ["in"]  = "decor.noteCard",
+    layout  = "horizontal",
+    height  = 22,
+    gap     = "xs",
+    order   = 5,
+}
+-- + Wish: adds selected item as wishlist entry (npcID=nil). Wired in HDGR_Controller_Decor.
 LC.widgets["decorDetailPanel.wishlistBtn"] = {
     tooltip = { recipe = "DecorWishlist" },
-    kind = "button", ["in"] = "decor.noteCard", font = "small",
+    kind = "button", ["in"] = "decor.detailActionRow", font = "small",
     text = "locale:DECOR_WISHLIST_BTN", width = "fill", height = 22,
-    order = 5, variant = "tertiary",
+    order = 10, variant = "tertiary",
     visible = "decor.hasSelectedItem",
+}
+-- Show on Map / Waypoint: same actions as Shop by Vendor, on the decor's primary vendor.
+LC.widgets["decorDetailPanel.showOnMapBtn"] = {
+    tooltip = false,
+    kind = "button", ["in"] = "decor.detailActionRow", font = "small",
+    text = "locale:DECOR_MAP_BTN", width = "fill", height = 22,
+    order = 20, variant = "tertiary",
+    visible = "decor.selectedItemHasVendorWaypoint",
+}
+LC.widgets["decorDetailPanel.waypointBtn"] = {
+    tooltip = false,
+    kind = "button", ["in"] = "decor.detailActionRow", font = "small",
+    text = "locale:DECOR_WAYPOINT_BTN", width = "fill", height = 22,
+    order = 30, variant = "tertiary",
+    visible = "decor.selectedItemHasVendorWaypoint",
 }
 -- Note editbox column (right, 220px; height fills parent).
 LC.widgets["decorDetailPanel.note"] = {

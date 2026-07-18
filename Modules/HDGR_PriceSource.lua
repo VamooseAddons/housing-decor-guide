@@ -17,6 +17,8 @@
 -- writes go via Dispatch -> reducer so persistence middleware marks the
 -- bucket dirty and SavedVariables write follows.
 
+HDG.Log:RegisterTags({ prices_scan = { user = false, level = "warn" } })
+
 HDG = HDG or {}
 HDG.PriceSource = HDG.PriceSource or {}
 local P = HDG.PriceSource
@@ -326,9 +328,14 @@ function P:StartDirectScan(itemIDs, force)
         payload = { total = n },
     })
 
-    -- Safety timeout (60s for a full browse scan).
+    -- Safety timeout (60s for a full browse scan). Fires = the AH browse
+    -- stalled; say so -- "prices never load" reports were undiagnosable.
     scan.timeoutTimer = C_Timer.NewTimer(60, function()
-        if scan.active then finalizeScan() end
+        if scan.active then
+            HDG.Log:Warn("prices_scan", ("Auction browse scan stalled -- gave up after 60s (%d/%d items priced); prices may be incomplete")
+                :format(scan.found or 0, scan.total or 0))
+            finalizeScan()
+        end
     end)
 
     _G.C_AuctionHouse.SendBrowseQuery({

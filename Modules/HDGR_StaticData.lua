@@ -266,21 +266,6 @@ function S.Professions:GetThresholds()
     return _table("HDGR_ProfessionThresholds")
 end
 
--- Reverse index: produced itemID -> recipeID. ProfessionsDB is keyed by recipeID
--- with `.itemID` on each entry; this lets decor rows (which carry no recipeID)
--- resolve a craftable item to its recipe for the craft queue. Lazily built;
--- rebuilt when the source table identity changes. Last-wins on the rare
--- item-with-multiple-recipes (any recipe that yields the item suffices).
-local _itemToRecipeCache, _itemToRecipeSource
-local function _ensureItemToRecipe()
-    local db = _table("HDGR_ProfessionsDB")
-    if _itemToRecipeSource == db then return end
-    _itemToRecipeCache, _itemToRecipeSource = {}, db
-    for recipeID, recipe in pairs(db) do
-        if recipe.itemID then _itemToRecipeCache[recipe.itemID] = recipeID end
-    end
-end
-
 -- Quality-variant groups: tiered reagents have separate itemIDs per quality
 -- tier; `slot.variants` lists the siblings. Reverse map lets material counting
 -- sum across the whole quality group (any quality satisfies the slot).
@@ -329,6 +314,14 @@ end
 
 function S.Professions:GetQualityVariants(itemID)
     if not itemID then return nil end
+    -- Captured quality groups win: the profession-book scan records the LIVE tier
+    -- siblings (account.reagentVariants), covering new 12.1 tiered reagents the
+    -- seed's frozen slot.variants can't know. ANY tier satisfies a slot, so bag
+    -- counting must sum the whole group. DELIBERATE ADR-003c deviation: this one
+    -- accessor reads live Store state, so the facade is no longer "immutable within
+    -- a session" here (addendum in HDGR_ARCHITECTURE.md; all four consumers are modules).
+    local captured = HDG.Store:GetState().account.reagentVariants[itemID]  -- exception(nullable): most reagents aren't tiered
+    if captured then return captured end
     _ensureQualityVariants()
     return _qvCache[itemID]
 end

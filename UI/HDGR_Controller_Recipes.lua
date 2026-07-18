@@ -656,6 +656,17 @@ function RecipesController:Wire(rootFrame)
         setBreadcrumb(scrollBox.GetDataIndexBegin and scrollBox:GetDataIndexBegin())
     end
 
+    -- Scan Guild: kicks off the guild recipe harvest (ProfessionScanner owns the
+    -- choreography; the button label tracks progress via recipes.scanGuildLabel).
+    -- Second click mid-run cancels.
+    HDG.UI.OnClick(rootFrame, "recipesListPanel.scanGuild", function()
+        if HDG.Store:GetState().session.recipeHarvest.active then
+            HDG.ProfessionScanner:CancelGuildHarvest()
+        else
+            HDG.ProfessionScanner:StartGuildHarvest()
+        end
+    end)
+
     -- Clear all: empties both persisted filter sets via the "all" sentinel.
     -- Per-chip removal is wired by the recipesFilterChip binder.
     HDG.UI.OnClick(rootFrame, "recipesStripPanel.runClear", function()

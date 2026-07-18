@@ -79,7 +79,7 @@ end
 -- Built lazily from Constants.SOURCE_TYPE_COLOR.
 local _sourceCache = nil
 local function _buildSourceCache()
-    local data = HDG.Constants.SOURCE_TYPE_COLOR or {}
+    local data = HDG.Constants.SOURCE_TYPE_COLOR
     local out = {}
     for id, e in pairs(data) do
         local c = e.color

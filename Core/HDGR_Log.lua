@@ -138,6 +138,8 @@ local ENGINE_TAGS = {
     binding       = { user = false, level = "debug" },   -- binding refresh decisions
     cache         = { user = false, level = "debug" },   -- memo hits/misses
     invalidations = { user = false, level = "debug" },   -- /hdgr trace invalidations: dispatch invalidation sets
+    boot           = { user = false, level = "debug" },
+    recipe_capture = { user = true, level = "info" },    -- runtime decor-recipe reagent capture (ProfessionScanner)
     layout        = { user = false, level = "warn"  },   -- over-spec rows, anchor inconsistencies (warn-level -> always prints)
     modules       = { user = false, level = "error" },   -- Modules engine lifecycle errors (Phase1/Phase2/Shutdown failures)
 
@@ -287,6 +289,17 @@ end
 
 -- Subscriber callback: walks new entries since the last call.
 function Log:_OnNotify(actionType)
+    -- Debug-mode flips announce to chat (user request 2026-07-17): compare against
+    -- the cached value so only genuine CONFIG_SET debug toggles speak. Seeded on
+    -- first notification so boot state never false-announces.
+    local dbg = HDG.Store:GetState().account.config.debug == true
+    if self._lastDebugMode == nil then
+        self._lastDebugMode = dbg
+    elseif dbg ~= self._lastDebugMode then
+        self._lastDebugMode = dbg
+        self:Info("notify", dbg and "Debug mode ON -- dispatches and diagnostics will print to chat"
+                             or  "Debug mode OFF -- chat goes quiet (Debug tab keeps recording)")
+    end
     if actionType ~= HDG.Constants.ACTIONS.LOG_PUSH then return end
     local state = HDG.Store:GetState()
     local entries = state and state.session and state.session.log

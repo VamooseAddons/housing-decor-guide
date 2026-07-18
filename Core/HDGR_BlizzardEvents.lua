@@ -181,6 +181,13 @@ local function validateSub(modName, event, spec)
             :format(modName, event), 2)
     end
 
+    -- once + debounce is incoherent (debounced timer can outlive the one-shot);
+    -- reject at declaration time.
+    if spec.once and spec.debounce then
+        error(("Module %q subscription to %q declares both `once` and `debounce`; pick one")
+            :format(modName, event), 2)
+    end
+
     -- Validate debounce requirement for high-frequency events
     if BE.DEBOUNCE_REQUIRED[event] and not spec.debounce then
         error(("Module %q subscription to %q requires `debounce` (recommended %.1fs). "

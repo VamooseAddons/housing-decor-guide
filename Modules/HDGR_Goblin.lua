@@ -151,10 +151,12 @@ end
 -- ===== BuildProfitData ======================================================
 -- Walks every recipe in HDGR_DecorDB, scores each one, returns the list.
 
-function G:BuildProfitData()
+-- db: the merged recipe DB (seed <- runtime reagent override), itemID-keyed, from
+-- the recipes.db selector. Callers (goblin.rows selector, HouseAggregator) pass it so
+-- profit reflects 12.1's captured reagents; iterating values ignores the key.
+function G:BuildProfitData(db)
     local out = {}
-    local db = HDG.StaticData.Recipes:GetAll()
-    if type(db) ~= "table" then return out end
+    if type(db) ~= "table" then return out end  -- exception(boundary): public module API, db is caller-supplied
     for _, recipe in pairs(db) do
         local row = self:ScoreRecipe(recipe)
         if row then out[#out + 1] = row end

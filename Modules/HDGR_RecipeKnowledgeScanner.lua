@@ -79,7 +79,10 @@ function R:Scan()
     -- Re-scan guard: DECOR_CATALOG_READY can fire twice (cold+warm paths).
     -- Subsequent fires are no-ops until _scanned is explicitly reset.
     if self._scanned then return 0 end
-    local db = HDG.StaticData.Recipes:GetAll()
+    -- Merged capture-over-seed DB (recipes.db): materialized capture-only recipes
+    -- (new 12.1 recipes before a seed ships them) carry spellID, so they get
+    -- selfKnown/altKnown like any seed recipe -- no angle reads the raw seed.
+    local db = HDG.Selectors:Call("recipes.db", HDG.Store:GetState())
     if not (db and _G.C_SpellBook and _G.C_SpellBook.IsSpellKnown) then
         return 0
     end
@@ -110,7 +113,7 @@ function R:Scan()
         payload = { entries = entries },
     })
     HDG.Log:Success("recipes_scanned",
-        string.format("Recipe scan complete -- %d decor recipes indexed", count))
+        string.format("Recipe scan complete -- %d decor recipes indexed (capture + seed)", count))
     -- One-shot per session: recipe vendors missing from VendorAugment (generated
     -- tables out of step). The facade computes (pure); this module logs -- the
     -- selectors that consume the join skip such vendors silently.
@@ -159,6 +162,19 @@ HDG.Modules:Declare({
             elseif actionType == HDG.Constants.ACTIONS.CHARACTER_PROFESSION_UPDATED then
                 -- Alt's professions updated: re-derive altKnown.
                 R:RecomputeAltKnown()
+            elseif actionType == HDG.Constants.ACTIONS.RECIPE_DATA_CAPTURED then
+                -- Rescan ONLY when the capture store holds an itemID with no
+                -- knowledge entry yet (a materialized recipe). Reagent/cost deltas
+                -- don't affect selfKnown/altKnown -- a full rescan + 305-entry
+                -- re-dispatch per capture was pure duplication.
+                local st = HDG.Store:GetState()
+                for itemID in pairs(st.account.recipeCapture) do
+                    if not st.account.recipes[itemID] then
+                        R._scanned = false
+                        R:Scan()
+                        break
+                    end
+                end
             end
         end)
     end,

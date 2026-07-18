@@ -18,6 +18,115 @@ local reagentInfo, reagentName, expansionShort
 -- async resolve (ITEM_INFO_RESOLVED) re-fires it (sweep resolver-facade contract enforces this).
 local _localName = HDG.Format.LocalItemName  -- hygiene A16
 
+-- ---------- Resolved recipe DB (seed <- runtime capture) ---------------------
+-- Convert a captured reagent set { [rid] = qty } into the DecorDB reagent shape
+-- { [rid] = { qty, name } }. Carries the seed's reagent name when the id is
+-- unchanged; a genuinely new reagent id (12.1 swap) resolves its name at display
+-- via _localName, so a nil name here is fine.
+local function _overlayReagents(captured, seedReagents)
+    local out = {}
+    for rid, qty in pairs(captured) do
+        local sr = seedReagents and seedReagents[rid]  -- exception(nullable): new reagent id absent from seed
+        out[rid] = { qty = qty, name = sr and sr.name }
+    end
+    return out
+end
+
+-- The single read seam for recipe REAGENTS: the shipped seed (StaticData.Recipes)
+-- with runtime-captured reagents + profession overlaid per crafted-decor itemID
+-- (account.recipeCapture, filled by ProfessionScanner:CaptureRecipeData). This is
+-- how 12.1's reduced-lumber costs reach the UI without a seed reship -- the scan
+-- overrides whatever the seed shipped. Identity fields (name/spellID/decorID/
+-- category) stay seed-owned; only reagents + profession are corrected, and only
+-- on entries the seed already knows (new-recipe materialization is a later stage).
+-- Memoized on account.recipeCapture: rebuilds only when a scan changes capture.
+-- Keyed by crafted-decor itemID to match StaticData.Recipes:Get -- consumers that
+-- did :Get(itemID) index this by the same key. (GetAll's raw table is keyed by the
+-- DecorDB synthetic build-ID instead, so we re-key here; iteration consumers read
+-- entry.itemID either way.)
+Selectors:Register("recipes.db", {
+    reads    = { "account.recipeCapture", "session.resolvers.staticData.tick" },  -- staticData.tick: ADR-003c GetAll facade contract
+    memoized = true,
+    fn = function(state)
+        local seed = HDG.StaticData.Recipes:GetAll()
+        local cap  = state.account.recipeCapture
+        local merged = {}
+        for _, entry in pairs(seed) do
+            if entry.itemID then
+                local ov = cap[entry.itemID]  -- exception(nullable): most entries have no override
+                if ov then
+                    local m = {}
+                    for k, v in pairs(entry) do m[k] = v end
+                    m.profession = ov.profession
+                    m.reagents   = _overlayReagents(ov.reagents, entry.reagents)
+                    merged[entry.itemID] = m
+                else
+                    merged[entry.itemID] = entry   -- unchanged: share the seed ref
+                end
+            end
+        end
+        -- Materialize captured recipes the seed doesn't ship (new 12.1 recipes): the scan is
+        -- the source of truth, seed a shrinking fallback. category is the decor constant;
+        -- name/decorID resolve downstream from the catalog + itemID; expansion is the captured
+        -- skill-line from the profession book's category-tree walk (nil on pre-walk captures
+        -- until the next scan backfills -> uncategorized rather than not-at-all).
+        for itemID, ov in pairs(cap) do
+            if not merged[itemID] then
+                merged[itemID] = {
+                    itemID     = itemID,
+                    spellID    = ov.spellID,
+                    profession = ov.profession,
+                    category   = "House Decor",
+                    expansion  = ov.expansion,
+                    name       = ov.name,
+                    reagents   = _overlayReagents(ov.reagents, nil),
+                }
+            end
+        end
+        return merged
+    end,
+})
+
+-- The craft graph PowerCrafter walks (ADR-013 explicit-parameter): the shipped
+-- ProfessionsDB closure (fallback) overlaid with runtime capture -- sub-recipe
+-- records first, decor records last (capture wins; decor can't collide with a
+-- sub but the order makes it deterministic). Captured records synthesize the
+-- ProfessionsDB slot shape from their {id=qty} reagent map so VisitBasicSlots
+-- reads both identically; the seed's name carries over when known (PowerCrafter
+-- falls back to slot.name/itemID otherwise). Keyed by output itemID -- same as
+-- ProfessionsDB, so queue recipeIDs (crafted-decor itemIDs) index directly.
+Selectors:Register("recipes.craftGraph", {
+    reads    = { "account.recipeCapture", "account.subRecipeCapture",
+                 "session.resolvers.staticData.tick" },  -- staticData.tick: ADR-003c GetAll facade contract
+    memoized = true,
+    fn = function(state)
+        local graph = {}
+        for itemID, entry in pairs(HDG.StaticData.Professions:GetAll()) do
+            graph[itemID] = entry   -- seed fallback: share the ref
+        end
+        local function overlay(store)
+            for itemID, rec in pairs(store) do
+                local slots = {}
+                for rid, qty in pairs(rec.reagents) do
+                    slots[#slots + 1] = { type = "basic", qty = qty, itemID = rid }
+                end
+                local seed = graph[itemID]  -- exception(nullable): captured recipe may be absent from seed
+                graph[itemID] = {
+                    itemID       = itemID,
+                    recipeID     = rec.spellID,
+                    profession   = rec.profession,
+                    categoryName = rec.categoryName or (seed and seed.categoryName),
+                    name         = seed and seed.name,
+                    slots        = slots,
+                }
+            end
+        end
+        overlay(state.account.subRecipeCapture)
+        overlay(state.account.recipeCapture)
+        return graph
+    end,
+})
+
 -- ---------- Filter state mirrors ---------------------------------------------
 Selectors:DefinePath("recipes.searchQuery",      "session.ui.recipes.searchQuery")
 Selectors:DefinePath("recipes.selectedRecipeID", "session.ui.recipes.selectedRecipeID")
@@ -178,7 +287,7 @@ local function buildLumberRequiredMap(state)
     local byItemID  = HDG.HousingCatalogObserver.byItemID
     local lumberSet = _buildLumberItemSet()
     local out       = {}
-    local db = HDG.StaticData.Recipes:GetAll()
+    local db = Selectors:Call("recipes.db", state)   -- seed <- runtime reagent override
     if type(db) ~= "table" then return out end
     for _, recipe in pairs(db) do
         if recipe.itemID then
@@ -201,8 +310,9 @@ local function buildLumberQueueNeed(state)
     for _, l in ipairs(HDG.Constants.LUMBER_DATA) do
         if l.id then lumberSet[l.id] = true end
     end
+    local db = Selectors:Call("recipes.db", state)   -- seed <- runtime reagent override
     for _, row in ipairs(q) do
-        local recipe = HDG.StaticData.Recipes:Get(row.recipeID)
+        local recipe = db[row.recipeID]
         HDG.StaticData.Recipes:VisitReagents(recipe, function(slot)
             if slot.itemID and slot.qty and lumberSet[slot.itemID] then
                 out[slot.itemID] = (out[slot.itemID] or 0)
@@ -224,6 +334,7 @@ Selectors:Register("warehouse.lumberRequired", {
         "session.resolvers.catalog.tick",   -- recipe itemID -> decorID via HousingCatalogObserver.byItemID (warms async)
         "session.resolvers.staticData.tick",
     },
+    calls = { "recipes.db" },
     fn = function(state)
         return buildLumberRequiredMap(state)
     end,
@@ -237,7 +348,7 @@ Selectors:Register("warehouse.lumberRows", {
         "session.resolvers.catalog.tick",
         "session.resolvers.achievementStatus.tick",   -- exp-acronym gold = lumber milestone earned (live IsEarned)
     },
-    calls = { "warehouse.lumberRequired" },
+    calls = { "warehouse.lumberRequired", "recipes.db" },
     fn = function(state, ctx)
         local data = HDG.Constants.LUMBER_DATA
         if type(data) ~= "table" then return {} end
@@ -273,10 +384,10 @@ Selectors:Register("warehouse.lumberRows", {
 
 -- Collect distinct basic reagents: { [itemID] = displayName }.
 -- slot.name preferred; falls back to reagentName(). First-occurrence wins.
-local function _collectDistinctBasicReagents(recipes)
+local function _collectDistinctBasicReagents(recipes, db)
     local distinct = {}
     for _, r in ipairs(recipes) do
-        HDG.StaticData.Recipes:VisitReagents(HDG.StaticData.Recipes:Get(r.recipeID), function(slot)
+        HDG.StaticData.Recipes:VisitReagents(db[r.recipeID], function(slot)
             if slot.itemID and not distinct[slot.itemID] then
                 distinct[slot.itemID] = _localName(slot.itemID, slot.name)
             end
@@ -286,11 +397,11 @@ local function _collectDistinctBasicReagents(recipes)
 end
 
 -- Sum needed reagents across the queue: { [itemID] = totalQty }.
-local function _buildNeedMapFromQueue(queue)
+local function _buildNeedMapFromQueue(queue, db)
     local need = {}
     if #queue == 0 then return need end
     for _, row in ipairs(queue) do
-        HDG.StaticData.Recipes:VisitReagents(HDG.StaticData.Recipes:Get(row.recipeID), function(slot)
+        HDG.StaticData.Recipes:VisitReagents(db[row.recipeID], function(slot)
             if slot.itemID and slot.qty then
                 need[slot.itemID] = (need[slot.itemID] or 0)
                     + slot.qty * (row.remaining or 1)  -- exception(boundary): queue row from SVars may lack remaining
@@ -315,13 +426,14 @@ Selectors:Register("warehouse.allMaterialsRows", {
     -- selectedMaterialID retired: selection owned by SelectionBehaviorMixin.
     -- Cross-file calls dependency on filteredRecipes is intentional (scoped to recipe filter).
     calls = {"recipes.filteredRecipes",
-             "warehouse.matSearch"},
+             "warehouse.matSearch", "recipes.db"},
     reads = {"session.resolvers.bag.tick", "account.craft.queue", "session.itemNames.names"},
     fn = function(state, ctx)
         local recipes  = Selectors:Call("recipes.filteredRecipes",       state, ctx)
         local query    = Selectors:Call("warehouse.matSearch",           state, ctx):lower()
-        local distinct = _collectDistinctBasicReagents(recipes)
-        local need     = _buildNeedMapFromQueue(state.account.craft.queue)
+        local rdb      = Selectors:Call("recipes.db", state, ctx)
+        local distinct = _collectDistinctBasicReagents(recipes, rdb)
+        local need     = _buildNeedMapFromQueue(state.account.craft.queue, rdb)
         local counts   = HDG.BagObserver:GetCounts()
         local bo       = HDG.BagObserver
         local out = {}
@@ -349,7 +461,7 @@ Selectors:Register("warehouse.allMaterialsRows", {
 -- Used In: recipes whose basic slots include the selected material.
 -- Follows the filter chain (expansion + profession + listFilter).
 Selectors:Register("warehouse.usedInRows", {
-    calls = {"warehouse.selectedMaterialID", "recipes.filteredRecipes"},
+    calls = {"warehouse.selectedMaterialID", "recipes.filteredRecipes", "recipes.db"},
     reads = {"session.resolvers.staticData.tick"},
     fn = function(state, ctx)
         local materialID = Selectors:Call("warehouse.selectedMaterialID", state, ctx)
@@ -357,9 +469,10 @@ Selectors:Register("warehouse.usedInRows", {
             return { { kind = "usedInEmpty", label = "Click a material -> uses" } }
         end
         local all = Selectors:Call("recipes.filteredRecipes", state, ctx)
+        local rdb = Selectors:Call("recipes.db", state, ctx)
         local out = {}
         for _, r in ipairs(all) do
-            HDG.StaticData.Recipes:VisitReagents(HDG.StaticData.Recipes:Get(r.recipeID), function(slot)
+            HDG.StaticData.Recipes:VisitReagents(rdb[r.recipeID], function(slot)
                 if slot.itemID == materialID then
                     out[#out + 1] = {
                         kind           = "usedInRow",
@@ -424,19 +537,19 @@ end
 -- ProfessionsDB read per ADR-003a carve-out.
 Selectors:Register("recipes.allRecipes", {
     memoized = true,  -- perf: ~1050-row walk; called by professionRows/groupedRows/filteredRecipes
+    calls = { "recipes.db" },
     reads = {
         "session.itemNames.names",  -- resolver-facade contract (sweep rule 4c)
-        "session.resolvers.staticData.tick",  -- ADR-003c StaticData marker (sweep rule 4c)
         "account.recipes",
         "account.collection.ownedDecorIDs",
         "session.resolvers.catalog.tick",
     },
     fn = function(state)
-        -- DecorDB (curated, decor-only) is the source of truth; ProfessionsDB is
-        -- PowerCrafter-only now. recipeID == produced itemID (DecorDB's top-level key
-        -- is a synthetic build ID -- emit r.itemID). expansion is a profession
-        -- skill-line ("Classic Alchemy") -> normalize; icon comes from the item.
-        local db = HDG.StaticData.Recipes:GetAll()
+        -- recipes.db = runtime capture (source of truth) UNION the shipped seed (fallback), so
+        -- new 12.1 recipes the seed doesn't carry still list. recipeID == produced itemID
+        -- (emit r.itemID). expansion is a profession skill-line ("Classic Alchemy") -> normalize
+        -- (nil for a not-yet-enriched captured recipe -> uncategorized); icon comes from the item.
+        local db = Selectors:Call("recipes.db", state)
         if type(db) ~= "table" then return {} end
         -- EnsureStateShape guarantees account.recipes + account.collection. Strict read.
         local knownByItem = state.account.recipes
@@ -488,9 +601,9 @@ Selectors:Register("recipes.decorItemSet", {
 
 -- recipes.filteredRecipes: expansion + profession + search filter on allRecipes.
 -- Search matches recipe name OR reagent name; reagents come from HDGR_DecorDB (no slot walk needed).
-local function _recipeMatchesSearch(r, query)
+local function _recipeMatchesSearch(r, query, db)
     if r.name:lower():find(query, 1, true) then return true end
-    local entry = HDG.StaticData.Recipes:Get(r.itemID)
+    local entry = db[r.itemID]  -- merged capture-over-seed (recipes.db): live reagents, materialized recipes included
     if not (entry and entry.reagents) then return false end
     for _, reagent in pairs(entry.reagents) do
         if reagent.name and reagent.name:lower():find(query, 1, true) then return true end
@@ -535,12 +648,13 @@ Selectors:Register("recipes.isBlank", {
 
 Selectors:Register("recipes.filteredRecipes", {
     memoized = true,  -- perf: called by hasRecipes/isBlank/groupedRows + more; memo dedupes to ~1/flush
-    calls = {"recipes.allRecipes", "recipes.searchQuery",
+    calls = {"recipes.allRecipes", "recipes.searchQuery", "recipes.db",
              "recipes.professionFilter", "recipes.expansionFilter",
              "recipes.decorItemSet"},
     fn = function(state, ctx)
         local all      = Selectors:Call("recipes.allRecipes", state, ctx)
         local query    = Selectors:Call("recipes.searchQuery", state, ctx):lower()
+        local rdb      = Selectors:Call("recipes.db", state, ctx)
         local profSet  = Selectors:Call("recipes.professionFilter", state, ctx)
         local expSet   = Selectors:Call("recipes.expansionFilter", state, ctx)
 
@@ -556,7 +670,7 @@ Selectors:Register("recipes.filteredRecipes", {
             if decorSet and not decorSet[r.itemID]            then pass = false end
             if pass and hasProf  and not profSet[r.profession] then pass = false end
             if pass and hasExp   and not expSet[r.expansion]   then pass = false end
-            if pass and hasQuery and not _recipeMatchesSearch(r, query) then pass = false end
+            if pass and hasQuery and not _recipeMatchesSearch(r, query, rdb) then pass = false end
             if pass then out[#out + 1] = r end
         end
         return out
@@ -764,13 +878,16 @@ Selectors:Register("recipes.gridRows", {
 Selectors:Register("recipes.queueRows", {
     reads = {"session.itemNames.names", "account.craft.queue", "session.resolvers.staticData.tick", "session.resolvers.bag.tick",
              "account.recipes"},
+    calls = {"recipes.db", "recipes.craftGraph"},
     fn = function(state)
         local q        = state.account.craft.queue
         local known    = state.account.recipes
         local counts   = HDG.BagObserver:GetCounts()
+        local rdb      = Selectors:Call("recipes.db", state)
+        local graph    = Selectors:Call("recipes.craftGraph", state)
         local out = {}
         for pos, row in ipairs(q) do
-            local recipe     = HDG.StaticData.Recipes:Get(row.recipeID)
+            local recipe     = rdb[row.recipeID]
             -- recipeID == crafted-decor itemID -> resolver localises (catalog/live API); baked name fallback.
             local recipeName = _localName(row.recipeID, (recipe and recipe.name)
                 or ("recipe " .. tostring(row.recipeID)))
@@ -779,7 +896,7 @@ Selectors:Register("recipes.queueRows", {
             local selfKnown  = (knownRow and knownRow.selfKnown) and true or false
             -- pct: 0..1 ratio of materials covered.
             local pct        = (recipe and spellID)
-                and HDG.PowerCrafter:GetCraftReadiness(row.recipeID, counts) or 0
+                and HDG.PowerCrafter:GetCraftReadiness(graph, row.recipeID, counts) or 0
             local canCraft   = pct >= 1.0
             -- maxCraftable: floor(min(have/need) over slots). 0 when can't craft.
             local maxCraftable = 0
@@ -818,10 +935,11 @@ Selectors:Register("recipes.queueRows", {
 -- Also drives craftTheseRows (materials panel footer).
 Selectors:Register("recipes.craftOrderRows", {
     reads = {"account.craft.queue", "session.resolvers.staticData.tick", "session.itemNames.names"},
-    calls = {"decor.craftableState"},
+    calls = {"decor.craftableState", "recipes.craftGraph"},
     fn = function(state, ctx)
         local craftableState = Selectors:Call("decor.craftableState", state, ctx)
-        local entries = HDG.PowerCrafter:GetCraftingOrder(state.account.craft.queue)
+        local entries = HDG.PowerCrafter:GetCraftingOrder(
+            Selectors:Call("recipes.craftGraph", state, ctx), state.account.craft.queue)
         local out = {}
         for i, e in ipairs(entries) do
             out[#out + 1] = {
@@ -884,16 +1002,18 @@ Selectors:Register("recipes.queueLumberHeaderLabel", {
 -- queueReadinessRows: per-entry readiness sorted DESC by pct. Drives the queue footer.
 Selectors:Register("recipes.queueReadinessRows", {
     reads = {"account.craft.queue", "session.resolvers.bag.tick", "session.itemNames.names", "session.resolvers.staticData.tick"},
-    calls = {"decor.craftableState"},
+    calls = {"decor.craftableState", "recipes.craftGraph", "recipes.db"},
     fn = function(state, ctx)
         local q = state.account.craft.queue
         if not q or #q == 0 then return {} end
         local bagCounts = HDG.BagObserver:GetCounts()
         local craftableState = Selectors:Call("decor.craftableState", state, ctx)
+        local graph = Selectors:Call("recipes.craftGraph", state, ctx)
+        local rdb   = Selectors:Call("recipes.db", state, ctx)
         local out = {}
         for _, row in ipairs(q) do
-            local recipe = HDG.StaticData.Recipes:Get(row.recipeID)
-            local s = HDG.PowerCrafter:GetRecipeShortage(
+            local recipe = rdb[row.recipeID]  -- merged: materialized 12.1 recipes carry their captured name
+            local s = HDG.PowerCrafter:GetRecipeShortage(graph,
                 row.recipeID, row.remaining or 1, bagCounts)  -- migration: old SVars may lack `remaining`
             out[#out + 1] = {
                 kind             = "queueReadinessRow",
@@ -917,8 +1037,8 @@ Selectors:Register("recipes.queueReadinessRows", {
 
 
 -- computeReadiness delegates to PowerCrafter:GetCraftReadiness (shared logic).
-local function computeReadiness(recipeID, counts)
-    return HDG.PowerCrafter:GetCraftReadiness(recipeID, counts)
+local function computeReadiness(graph, recipeID, counts)
+    return HDG.PowerCrafter:GetCraftReadiness(graph, recipeID, counts)
 end
 
 -- Readiness buckets (higher priority sorts first in "Ready" mode).
@@ -942,12 +1062,13 @@ Selectors:Register("recipes.groupedRows", {
     -- selectedRecipeID retired: selection owned by SelectionBehaviorMixin;
     -- clicks no longer rebuild the whole grouped list.
     calls = {"recipes.filteredRecipes",
-             "decor.craftableState", "recipes.listFilter"},
+             "decor.craftableState", "recipes.listFilter", "recipes.craftGraph"},
     reads = {"session.resolvers.bag.tick"},
     fn = function(state, ctx)
         local recipes        = Selectors:Call("recipes.filteredRecipes", state, ctx)
         local craftableState = Selectors:Call("decor.craftableState", state, ctx)
         local listFilter     = Selectors:Call("recipes.listFilter", state, ctx)
+        local graph          = Selectors:Call("recipes.craftGraph", state, ctx)
         local counts         = HDG.BagObserver:GetCounts()
 
         -- Known filter: drop rows the current char hasn't learned.
@@ -996,7 +1117,7 @@ Selectors:Register("recipes.groupedRows", {
             -- Bucket every recipe by readiness; drop 0% rows entirely.
             local byBucket = {}
             for _, r in ipairs(pre) do
-                local ratio  = computeReadiness(r.recipeID, counts)
+                local ratio  = computeReadiness(graph, r.recipeID, counts)
                 local b      = bucketFor(ratio)
                 if b then
                     byBucket[b.id] = byBucket[b.id] or {}
@@ -1100,15 +1221,28 @@ Selectors:Register("recipes.countLabel", {
     end,
 })
 
+-- Scan Guild button label: progress while a harvest runs, else the localized idle text.
+Selectors:Register("recipes.scanGuildLabel", {
+    reads = { "session.recipeHarvest", "account.config.locale" },
+    fn = function(state)
+        local h = state.session.recipeHarvest
+        if h.active then
+            if h.total > 0 then return ("%d/%d %s"):format(h.done, h.total, h.name) end
+            return HDG.Locale:Get("REC_SCAN_GUILD_WAIT")
+        end
+        return HDG.Locale:Get("REC_SCAN_GUILD")
+    end,
+})
+
 -- ---------- Selected-recipe panel --------------------------------------------
 -- ADR-003a: DecorDB read inside closure (deterministic post-init).
 Selectors:Register("recipes.selectedRecipe", {
-    reads = {"session.resolvers.staticData.tick"},
-    calls = {"recipes.selectedRecipeID"},
+    -- staticData.tick arrives transitively via recipes.db's reads closure.
+    calls = {"recipes.selectedRecipeID", "recipes.db"},
     fn = function(state, ctx)
         local rid = Selectors:Call("recipes.selectedRecipeID", state, ctx)
         if not rid then return nil end
-        return HDG.StaticData.Recipes:Get(rid)
+        return Selectors:Call("recipes.db", state, ctx)[rid]   -- seed <- runtime reagent override
     end,
 })
 
@@ -1284,7 +1418,7 @@ end
 
 -- Direct mode: sum each queue row's basic slots (qty * remaining) into a flat reagent list.
 Selectors:Register("recipes.materials.direct", {
-    calls = {"recipes.queue", "recipes.selectedRecipe"},
+    calls = {"recipes.queue", "recipes.selectedRecipe", "recipes.db"},
     -- queueSelectedRecipeID is read inside effectiveQueue -- the scope
     -- filter narrows the queue to a single recipe. Track here so toggling
     -- it invalidates the materials list.
@@ -1292,9 +1426,10 @@ Selectors:Register("recipes.materials.direct", {
     fn = function(state, ctx)
         local queue = effectiveQueue(state, ctx)
         if not queue then return {} end
+        local rdb    = Selectors:Call("recipes.db", state, ctx)   -- seed <- runtime reagent override
         local qtyMap = {}
         for _, row in ipairs(queue) do
-            HDG.StaticData.Recipes:VisitReagents(HDG.StaticData.Recipes:Get(row.recipeID), function(slot)
+            HDG.StaticData.Recipes:VisitReagents(rdb[row.recipeID], function(slot)
                 if slot.itemID and slot.qty then
                     qtyMap[slot.itemID] = (qtyMap[slot.itemID] or 0)
                         + slot.qty * (row.remaining or 1)  -- exception(boundary): queue row from SVars may lack remaining
@@ -1306,13 +1441,14 @@ Selectors:Register("recipes.materials.direct", {
 })
 
 Selectors:Register("recipes.materials.raw", {
-    calls = {"recipes.queue", "recipes.selectedRecipe"},
+    calls = {"recipes.queue", "recipes.selectedRecipe", "recipes.craftGraph"},
     reads = {"session.resolvers.bag.tick", "session.ui.recipes.queueSelectedRecipeID", "session.itemNames.names"},
     fn = function(state, ctx)
         local queue = effectiveQueue(state, ctx)
         if not queue then return {} end
         -- Raw expansion is known-agnostic (no account.recipes dependency).
-        local qtyMap = HDG.PowerCrafter:CalculateRawMaterials(queue)
+        local qtyMap = HDG.PowerCrafter:CalculateRawMaterials(
+            Selectors:Call("recipes.craftGraph", state, ctx), queue)
         return stampBagCounts(qtyMap)
     end,
 })
@@ -1320,7 +1456,7 @@ Selectors:Register("recipes.materials.raw", {
 -- ByRecipe family: grouped view with matSubHeader per queue row.
 -- byRecipe = direct; byRecipeRaw = DAG-expanded. Row keys include fromPosition
 -- so same-itemID-across-recipes doesn't collide in the scrollbox key map.
-local function emitByRecipeGroups(queue, groups)
+local function emitByRecipeGroups(queue, groups, db)
     local counts = HDG.BagObserver:GetCounts()
     local bo     = HDG.BagObserver
     local out = {}
@@ -1328,7 +1464,7 @@ local function emitByRecipeGroups(queue, groups)
         local group = groups[pos]
         if group and group.materials then
             local row = queue[pos]
-            local recipe = HDG.StaticData.Recipes:Get(group.recipeID)
+            local recipe = db[group.recipeID]  -- merged: materialized 12.1 recipes carry their captured name
             -- recipeID == the crafted-decor itemID (see recipes.allRecipes build) -> resolver localises it.
             local recipeName = _localName(group.recipeID, (recipe and recipe.name)
                 or ("recipe " .. tostring(group.recipeID)))
@@ -1374,22 +1510,26 @@ local function emitByRecipeGroups(queue, groups)
 end
 
 Selectors:Register("recipes.materials.byRecipe", {
-    calls = {"recipes.queue", "recipes.selectedRecipe"},
+    calls = {"recipes.queue", "recipes.selectedRecipe", "recipes.craftGraph", "recipes.db"},
     reads = {"session.resolvers.bag.tick", "session.ui.recipes.queueSelectedRecipeID", "session.resolvers.staticData.tick", "session.itemNames.names"},
     fn = function(state, ctx)
         local queue = effectiveQueue(state, ctx)
         if not queue then return {} end
-        return emitByRecipeGroups(queue, HDG.PowerCrafter:AggregateByRecipe(queue))
+        return emitByRecipeGroups(queue, HDG.PowerCrafter:AggregateByRecipe(
+            Selectors:Call("recipes.craftGraph", state, ctx), queue),
+            Selectors:Call("recipes.db", state, ctx))
     end,
 })
 
 Selectors:Register("recipes.materials.byRecipeRaw", {
-    calls = {"recipes.queue", "recipes.selectedRecipe"},
+    calls = {"recipes.queue", "recipes.selectedRecipe", "recipes.craftGraph", "recipes.db"},
     reads = {"session.resolvers.bag.tick", "session.ui.recipes.queueSelectedRecipeID", "session.resolvers.staticData.tick", "session.itemNames.names"},
     fn = function(state, ctx)
         local queue = effectiveQueue(state, ctx)
         if not queue then return {} end
-        return emitByRecipeGroups(queue, HDG.PowerCrafter:AggregateByRecipeRaw(queue))
+        return emitByRecipeGroups(queue, HDG.PowerCrafter:AggregateByRecipeRaw(
+            Selectors:Call("recipes.craftGraph", state, ctx), queue),
+            Selectors:Call("recipes.db", state, ctx))
     end,
 })
 

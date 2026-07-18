@@ -8,6 +8,8 @@
 
 HDG = HDG or {}
 HDG.BagObserver = HDG.BagObserver or {}
+
+HDG.Log:RegisterTags({ bag_scan = { user = false, level = "debug" } })
 local B = HDG.BagObserver
 
 B._tick = B._tick or 0  -- exception(false-positive): idempotent module-load init
@@ -80,6 +82,9 @@ function B:GetCounts() return CountsProxy end
 -- Scan: bump tick + dispatch BAG_INVENTORY_UPDATED so selectors invalidate.
 -- Per-item totals pulled on demand; no map building, no slot walking.
 function B:Scan()
+    -- Milestone breadcrumb: a blank-bag-data report is debuggable the same way
+    -- catalog_refreshed debugs a blank catalog. Debug level -- zero user noise.
+    HDG.Log:Debug("bag_scan", "Bag scan -- tick " .. tostring((self._tick or 0) + 1))
     self._tick = self._tick + 1
     HDG.Store:Dispatch({
         type    = HDG.Constants.ACTIONS.BAG_INVENTORY_UPDATED,

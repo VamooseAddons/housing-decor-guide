@@ -14,7 +14,6 @@ HA._scheduled = HA._scheduled or false
 
 -- Log tag for Blizzard API boundary failures inside this module's pcalls.
 -- Surfaces silent SECRET-value / cold-cache / API-unavailable cases.
-HDG.Log:RegisterTags({ house_api = { user = false, level = "warn" } })
 
 -- ===== BuildSnapshot primitives =============================================
 
@@ -271,7 +270,7 @@ local function _goblinTopLumberSnapshot()
     if not (Goblin and Goblin.BuildProfitData) then return {} end
     -- Goblin is an internal Lattice module; strict call. If it errors,
     -- that's a real bug to surface, not paper over.
-    local rows = Goblin:BuildProfitData()
+    local rows = Goblin:BuildProfitData(HDG.Selectors:Call("recipes.db", HDG.Store:GetState()))
     if type(rows) ~= "table" then return {} end
     local CI = _G.C_Item  -- exception(boundary): sync icon lookup
     local filtered = {}

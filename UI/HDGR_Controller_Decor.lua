@@ -10,7 +10,7 @@ local DecorController = HDG.DecorController
 local CH = HDG.ControllerHelpers
 
 -- ===== Row factory ==========================================================
--- [fav 14x14] [name] ... [collected 12x12] [craftable 12x12]
+-- [fav 14x14] [name] ... [dye dots] [collected 12x12] [owned-count 22w (craftable star underlaid top-right)]
 -- MakeRowFactory row: layout builds texture children; paint writes per-paint values.
 
 local ATLAS_FAV_FILLED   = "delves-scenario-heart-icon"        -- ships pre-tinted red
@@ -28,34 +28,43 @@ local function _layoutDecorRow(row)
     fav:SetAtlas(ATLAS_FAV_FILLED)
     row._favStar = fav
 
-    -- Stored-count badge: swapped in over the fav slot when ed.inStoredMode.
+    -- Owned-count column: always-on, hard right, right-aligned + tabular so digits line
+    -- up down the list. The craftable star underlays its top-right corner (below).
     local storedFs = row:CreateFontString(nil, "OVERLAY")
     HDG.UI.applyFontRole(storedFs, "small")
     HDG.Theme:Register(storedFs, "Text")
-    storedFs:SetPoint("LEFT", row, "LEFT", 2, 0)
-    storedFs:SetWidth(18)
-    storedFs:SetJustifyH("CENTER")
+    storedFs:SetPoint("RIGHT", row, "RIGHT", -4, 0)
+    storedFs:SetWidth(22)
+    storedFs:SetJustifyH("RIGHT")
+    storedFs:SetDrawLayer("OVERLAY", 3)   -- ON TOP of the underlaid craftable star (sublevel 1)
+    storedFs:SetShadowColor(0, 0, 0, 1)   -- dark halo keeps digits legible over the star
+    storedFs:SetShadowOffset(1, -1)
     row._storedCountFs = storedFs
 
     local name = row:CreateFontString(nil, "OVERLAY")
     HDG.UI.applyFontRole(name, "subheading")
     HDG.Theme:Register(name, "Text")
     name:SetPoint("LEFT",  fav, "RIGHT", 6, 0)
-    name:SetPoint("RIGHT", row, "RIGHT", -34, 0)
+    name:SetPoint("RIGHT", row, "RIGHT", -44, 0)
     name:SetJustifyH("LEFT")
     row._nameFs = name
 
-    -- Collected check (right -- second column from edge)
+    -- Collected check (just left of the count column)
     local check = row:CreateTexture(nil, "OVERLAY")
     check:SetSize(12, 12)
-    check:SetPoint("RIGHT", row, "RIGHT", -18, 0)
+    check:SetPoint("RIGHT", row, "RIGHT", -28, 0)
     check:SetAtlas(ATLAS_CHECK)
     row._checkIcon = check
 
-    -- Craftable star (right edge)
+    -- Craftable star: small, tucked into the count column's top-right corner so it no
+    -- longer eats its own slot -- the count number reads below-left of it.
     local star = row:CreateTexture(nil, "OVERLAY")
-    star:SetSize(12, 12)
-    star:SetPoint("RIGHT", row, "RIGHT", -2, 0)
+    star:SetSize(9, 9)
+    -- Top-LEFT of the count column: a right-aligned number leaves the left side empty
+    -- (esp. 1-2 digits), so the star tucks up there clear of the digits. Count column
+    -- left edge is row-right -26 (RIGHT -4, width 22); star's right edge sits at -17.
+    star:SetPoint("TOPRIGHT", row, "TOPRIGHT", -17, -1)
+    star:SetDrawLayer("OVERLAY", 1)                       -- behind the count number, for wide (3-digit) counts
     star:SetAtlas(ATLAS_CRAFT_STAR)
     row._craftStar = star
 
@@ -70,19 +79,21 @@ local function _layoutDecorRow(row)
     end
 end
 
--- Left-edge column: stored-count badge (Stored mode) or favorite heart. Badge takes priority.
-local function _paintFavOrStored(row, ed)
-    if ed.inStoredMode and (ed.destroyableCount or 0) > 0 then  -- exception(boundary): sparse decor struct field
-        if row._favStar       then row._favStar:Hide() end
-        if row._storedCountFs then
-            row._storedCountFs:SetText(tostring(ed.destroyableCount))
-            row._storedCountFs:Show()
-        end
-        return
-    end
-    if row._storedCountFs then row._storedCountFs:Hide() end
+-- Favourite heart (left edge) + owned-count (right column) -- now independent. The count
+-- shows for any owned copies in EVERY mode, so browsing shows "how many" too, not just
+-- Destroy mode. A blank count means 0 in storage, not "unowned" (the check covers ownership).
+local function _paintFavAndCount(row, ed)
     if row._favStar then
         if ed.isFavorite then row._favStar:Show() else row._favStar:Hide() end
+    end
+    if row._storedCountFs then
+        local c = ed.destroyableCount or 0  -- exception(boundary): sparse decor struct field
+        if c > 0 then
+            row._storedCountFs:SetText(tostring(c))
+            row._storedCountFs:Show()
+        else
+            row._storedCountFs:Hide()
+        end
     end
 end
 
@@ -108,7 +119,7 @@ local function _paintDroplets(row, ed)
         local dyeColorID = ids and ids[i]
         if dyeColorID then
             d:ClearAllPoints()
-            d:SetPoint("RIGHT", row, "RIGHT", -34 - (i - 1) * 9, 0)
+            d:SetPoint("RIGHT", row, "RIGHT", -44 - (i - 1) * 9, 0)
             local info = HDG.HousingCatalogObserver:GetDyeColorInfo(dyeColorID)
             if info and info.swatchColorStart then
                 HDG.UI._TintTexture(d, info.swatchColorStart); d:SetAlpha(1)  -- data: the dye's actual swatch color (runtime)
@@ -122,7 +133,7 @@ local function _paintDroplets(row, ed)
     end
     -- Reserve name space when droplets present (-34 default; -34 each paint is
     -- a harmless no-op for the common non-variant row).
-    row._nameFs:SetPoint("RIGHT", row, "RIGHT", n > 0 and (-34 - n * 9 - 2) or -34, 0)
+    row._nameFs:SetPoint("RIGHT", row, "RIGHT", n > 0 and (-44 - n * 9 - 2) or -44, 0)
 end
 
 -- Left = select, right = favorite toggle. Toast reads state BEFORE dispatch (sync Store; order matters).
@@ -168,7 +179,7 @@ local function _paintDecorRow(row, ed)
     row._itemID, row._name = ed.itemID, ed.name   -- R2 tooltip stamps
     _paintName(row, ed)
     _paintDroplets(row, ed)
-    _paintFavOrStored(row, ed)
+    _paintFavAndCount(row, ed)
     _paintCheckmark(row, ed)
     if row._craftStar then
         HDG.UI:PaintCraftStar(row._craftStar, ed.craftableState,
@@ -227,20 +238,6 @@ local function validateDestroyArgs(entryID, q, max)
     if q < 1 then return nil end
     if q > max then q = max end
     return q
-end
-
--- Live destroyable count: final gate before the loop (player may have destroyed copies elsewhere).
-local function liveDestroyableCount(entryID)
-    if not entryID then return 0 end
-    local cat = _G.C_HousingCatalog
-    if not (cat and cat.GetCatalogEntryInfo) then return 0 end
-    local ok, info = pcall(cat.GetCatalogEntryInfo, entryID)
-    if not ok then
-        HDG.Log:Warn("decor", "GetCatalogEntryInfo failed: " .. tostring(info))
-        return 0
-    end
-    if type(info) ~= "table" then return 0 end
-    return info.destroyableInstanceCount or 0   -- exception(boundary): Blizz C_HousingCatalog struct sparse
 end
 
 local function buildDestroyDialog()
@@ -410,10 +407,10 @@ local function ShowDestroyStepperDialog(sel)
         local q = validateDestroyArgs(entryID_, qRaw, maxRaw)
         if not q then f:Hide(); return end
 
-        local liveCount = liveDestroyableCount(entryID_)   -- re-resolve; clamp DOWN only
-        if liveCount < 1 then f:Hide(); return end
-        if q > liveCount then q = liveCount end
-
+        -- q is already clamped to the per-variant numStored (maxRaw). We deliberately do NOT
+        -- re-gate on GetCatalogEntryInfo(entryID).destroyableInstanceCount: on the base/undyed
+        -- (vid=0) entry that field is an off-by-one AGGREGATE, which would leave the last undyed
+        -- copy undestroyable. Any stale over-count is absorbed by DestroyEntry's graceful no-op.
         local cat = _G.C_HousingCatalog
         if not (cat and cat.DestroyEntry) then f:Hide(); return end
 
@@ -504,6 +501,7 @@ function DecorController:Wire(rootFrame)
     end
 
     self:_wireWishlist(rootFrame)
+    self:_wireVendorNav(rootFrame)
     self:_wireVendorHyperlink(rootFrame)
 end
 
@@ -642,6 +640,26 @@ function DecorController:_wireWishlist(rootFrame)
         })
         HDG.Log:Success("shopping",
             (item.name or "Item") .. " added to wishlist")
+    end)
+end
+
+-- Show on Map / Waypoint: reuse the shared Waypoints module against the decor's primary
+-- vendor -- identical actions to Shop by Vendor. Buttons are gated visible on a mappable
+-- vendor, so vendorOf() is non-nil at click time; the strict read is intentional.
+function DecorController:_wireVendorNav(rootFrame)
+    local function vendorOf()
+        local item = HDG.Selectors:Call("decor.selectedItem", HDG.Store:GetState(), {})  -- exception(false-positive): top-level controller method (not a row factory)
+        return item and item.vendor
+    end
+    HDG.UI.OnClick(rootFrame, "decorDetailPanel.showOnMapBtn", function()
+        local v = vendorOf()
+        if not v then return end  -- exception(nullable): selection changed between paint + click
+        HDG.Waypoints:ShowOnMap(v.mapID, v.x, v.y, v.name)
+    end)
+    HDG.UI.OnClick(rootFrame, "decorDetailPanel.waypointBtn", function()
+        local v = vendorOf()
+        if not v then return end  -- exception(nullable): selection changed between paint + click
+        HDG.Waypoints:Set(v.mapID, v.x, v.y, v.name, v.faction)
     end)
 end
 

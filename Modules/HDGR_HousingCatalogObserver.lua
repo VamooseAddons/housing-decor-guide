@@ -207,10 +207,22 @@ end
 local function _processEntry(acc, entry)
     local rid = entry.recordID
     if not rid then return end
+    -- exception(boundary): searcher results can carry a poisoned row (secret values /
+    -- negative recordID / out-of-range entryType -- seen live on 12.0.7: recordID
+    -- -902229712, entryType 9). GetCatalogEntryInfo THROWS on these via the
+    -- deprecation shim, and one bad row would abort the whole sweep. Validate the
+    -- struct here; count skips for the post-loop warn.
+    local secret = _G.issecretvalue
+    if (secret and (secret(rid) or secret(entry.entryType) or secret(entry.variantIdentifier)))
+        or type(rid) ~= "number" or rid <= 0 then
+        acc.skippedPoisoned = (acc.skippedPoisoned or 0) + 1
+        return
+    end
     local info = _G.C_HousingCatalog.GetCatalogEntryInfo(entry)
     if not info then return end
-    local subtype = (type(entry) == "table" and entry.subtypeIdentifier) or 0
-    if subtype ~= 0 or not info.itemID then return end
+    -- (12.0.5+ searcher rows have no subtypeIdentifier -- the old variant-placeholder
+    -- filter is gone with the compound-entryID era.)
+    if not info.itemID then return end
     -- info.recordID isn't always populated by the entry-info API; the entry
     -- itself carries it via the searcher result.
     info.recordID = info.recordID or rid
@@ -255,6 +267,10 @@ function R:_OnSearcherResults(searcher)
     local _t0    = _timed and _G.debugprofilestop() or nil
     for _, entry in ipairs(items) do
         _processEntry(acc, entry)
+    end
+    if acc.skippedPoisoned then
+        HDG.Log:Warn("catalog_error", ("%d searcher row(s) skipped: unreadable entry IDs (secret/poisoned) -- sweep completed without them")
+            :format(acc.skippedPoisoned))
     end
     if _timed then
         _perf:RecordOp("catalog.indexSweep (" .. #items .. " entries)",
@@ -378,13 +394,13 @@ function R:ReconcileEntry(entryID)
             "GetCatalogEntryInfo returned non-table for entryID: " .. tostring(entryID))
         return
     end
-    local decorID = type(info.entryID) == "table" and info.entryID.recordID or nil
+    local decorID = info.recordID  -- exception(boundary): Blizz struct; nil for non-catalog entries
     if not decorID then return end
 
     local A        = HDG.Constants.ACTIONS
     local row      = R.byDecorID[decorID]
     local wasOwned = row and row.isOwned or false
-    local total    = (info.quantity or 0) + (info.remainingRedeemable or 0) + (info.numPlaced or 0)  -- exception(boundary): Blizzard struct field sparse
+    local total    = (info.totalNumStored or 0) + (info.remainingRedeemable or 0) + (info.totalNumPlaced or 0)  -- exception(boundary): Blizzard struct field sparse
     local isOwned  = total > 0
 
     -- New row path: build + ROW_ADDED immediately (don't defer to next full sweep).
@@ -435,8 +451,8 @@ function R:ReconcileEntry(entryID)
     -- REMOVED only touch ownedDecorIDs, which those selectors do NOT read).
     -- `row` is always set (built above).
     local counts = {
-        quantity                 = info.quantity                 or 0,  -- exception(boundary): Blizzard struct field sparse
-        numPlaced                = info.numPlaced                or 0,  -- exception(boundary): Blizzard struct field sparse
+        quantity                 = info.totalNumStored           or 0,  -- exception(boundary): Blizzard struct field sparse (row.quantity KEEPS its name; source is the 12.0.5 field)
+        numPlaced                = info.totalNumPlaced           or 0,  -- exception(boundary): Blizzard struct field sparse
         remainingRedeemable      = info.remainingRedeemable      or 0,  -- exception(boundary): Blizzard struct field sparse
         destroyableInstanceCount = info.destroyableInstanceCount or 0,  -- exception(boundary): Blizzard struct field sparse
         firstAcquisitionBonus    = info.firstAcquisitionBonus
@@ -448,7 +464,7 @@ function R:ReconcileEntry(entryID)
     -- base scalars, so without this the list keeps rendering stale variant rows
     -- after a destroy. Mutate before the signal, same ordering as PatchCounts.
     if row.canCustomize and _G.C_HousingCatalog.GetAllVariantInfosForEntry then
-        local entryType = (type(info.entryID) == "table" and info.entryID.entryType) or 1  -- exception(boundary): Blizzard struct field sparse
+        local entryType = info.entryType or 1  -- exception(boundary): Blizzard struct field sparse
         local variants = _G.C_HousingCatalog.GetAllVariantInfosForEntry({
             recordID = decorID, entryType = entryType,
         })
@@ -493,7 +509,10 @@ function R:BuildRow(info)
         -- identity
         itemID    = info.itemID,
         decorID   = info.recordID,
-        entryID   = info.entryID,
+        -- Composed (NOT the shim's backfilled info.entryID): the 12.0.5 entryVariantID
+        -- shape. variantIdentifier 0 = base stack -- the destroy identity default;
+        -- dyed variants override it from GetAllVariantInfosForEntry (_bakeVariantDyes).
+        entryID   = { recordID = info.recordID, entryType = info.entryType, variantIdentifier = 0 },
         entryType = info.entryType,
 
         -- catalog scalars
@@ -523,19 +542,18 @@ function R:BuildRow(info)
         categoryName    = resolveCategoryName(info.categoryIDs    and info.categoryIDs[1]),
         subcategoryName = resolveSubcategoryName(info.subcategoryIDs and info.subcategoryIDs[1]),
         dataTagsByID    = info.dataTagsByID,
-        dyeSlots        = info.dyeSlots,
 
-        -- Ownership counters. Three real fields: quantity / numPlaced / remainingRedeemable.
-        -- NOTE: info.numStored / totalNumStored / totalNumPlaced are documented but
-        -- NEVER exposed at runtime -- reading them gives nil (verified 12.0.5+).
-        quantity                 = info.quantity                 or 0,  -- exception(boundary): Blizzard struct field sparse
-        numPlaced                = info.numPlaced                or 0,  -- exception(boundary): Blizzard struct field sparse
+        -- Ownership counters. row.quantity / row.numPlaced KEEP their names (20+ readers)
+        -- but source from the 12.0.5 fields -- info.quantity/info.numPlaced were
+        -- Blizzard_DeprecatedHousingCatalog backfills, gone when the shim goes
+        -- (dump-verified 2026-07-16: totalNumStored=3 on a 3-owned entry).
+        quantity                 = info.totalNumStored           or 0,  -- exception(boundary): Blizzard struct field sparse
+        numPlaced                = info.totalNumPlaced           or 0,  -- exception(boundary): Blizzard struct field sparse
         remainingRedeemable      = info.remainingRedeemable      or 0,  -- exception(boundary): Blizzard struct field sparse
         destroyableInstanceCount = info.destroyableInstanceCount or 0,  -- exception(boundary): Blizzard struct field sparse
         firstAcquisitionBonus    = info.firstAcquisitionBonus    or 0,  -- exception(boundary): Blizzard struct field sparse
 
         -- customization metadata
-        showQuantity   = info.showQuantity,
         customizations = info.customizations,
         dyeIDs         = info.dyeIDs,
     }
@@ -546,8 +564,7 @@ function R:BuildRow(info)
     -- (not positional -- exception(boundary): positional args silently errored under old pcall).
     if row.canCustomize and _G.C_HousingCatalog
        and _G.C_HousingCatalog.GetAllVariantInfosForEntry then
-        local entryType = (type(info.entryID) == "table"
-                           and info.entryID.entryType) or 1
+        local entryType = info.entryType or 1  -- exception(boundary): Blizzard struct field sparse
         local variants = _G.C_HousingCatalog.GetAllVariantInfosForEntry({
             recordID  = info.recordID,
             entryType = entryType,
@@ -753,7 +770,14 @@ end
 function R:_bakeVariantDyes(row)
     if not row.variants then return end
     local dyed = {}
+    -- Undyed base variant (variantIdentifier 0) is a first-class tile in Blizzard's
+    -- catalog with its OWN numStored -- captured here so the base row reads its real
+    -- undyed count, never the aggregate destroyableInstanceCount (off-by-one on the base).
+    row.undyedNumStored = 0
     for _, v in ipairs(row.variants) do
+        if v.entryVariantID.variantIdentifier == 0 then
+            row.undyedNumStored = v.numStored
+        end
         if v.numStored > 0 then
             local byChannel, names = {}, {}
             for _, slot in ipairs(v.dyeSlots) do
@@ -1300,9 +1324,11 @@ function R:GetVariantDyes(itemID, variantKey)
     return nil
 end
 
--- IsOwned: canonical ownership predicate. Three real fields: quantity + remainingRedeemable
--- + numPlaced (per Blizzard_HousingTemplates/HousingCatalogEntry.lua:437-438).
--- DEAD fields (boundary: always nil at runtime): numStored, totalNumStored, totalNumPlaced.
+-- IsOwned: canonical ownership predicate. quantity + remainingRedeemable + numPlaced
+-- (Blizzard's GetEntryTotalOwned = totalNumStored + remainingRedeemable + totalNumPlaced;
+-- quantity/numPlaced mirror the total* fields). totalNumStored/totalNumPlaced and per-variant
+-- numStored are ALL live at runtime (dump-verified 2026-07-16) -- earlier "always nil" note
+-- was wrong and is what pushed the undyed row onto the aggregate destroyableInstanceCount.
 -- Accepts a row table, itemID, or decorID. Returns false for unknown inputs.
 function R:IsOwned(rowOrID)
     local row
@@ -1517,7 +1543,7 @@ function R:_OnRoomResults(searcher)
                 placementCost     = info.placementCost,
                 numStored         = stored,
                 numPlaced         = placed,
-                quantity          = info.quantity,
+                quantity          = info.totalNumStored,  -- exception(boundary): 12.0.5 field; shim-free
                 owned             = (stored + placed) > 0,
                 isAllowedIndoors  = info.isAllowedIndoors,
                 isAllowedOutdoors = info.isAllowedOutdoors,
@@ -1683,7 +1709,6 @@ HDG.Modules:Declare({
         catalog_swept     = { user = false, level = "info"    },
         catalog_refreshed = { user = true,  level = "success", duration = 5    },
         catalog_error     = { user = true,  level = "error",   duration = nil  },
-        catalog_validated = { user = false, level = "debug"   },
     },
     blizzardEvents = {
         -- Queuing model: events dispatch CATALOG_REFRESH_QUEUED regardless of window state.

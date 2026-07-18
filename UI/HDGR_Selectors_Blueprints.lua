@@ -143,7 +143,7 @@ Selectors:Register("blueprints.budgetFit", {
         -- each a map keyed by HousingBudgetType (0 = RoomPlacement, 1 = DecorPlacement,
         -- 2 = PetDecor) -> { max, current, cost }. The old flat targetHouseBudgetInfo /
         -- raw.*BudgetCost fields are gone. Rooms are interior-only; decor splits
-        -- interior/exterior; PetDecor (2) isn't surfaced as a meter yet (see TODO).
+        -- interior/exterior; PetDecor (2) feeds the interiorPet/exteriorPet meters below.
         local bi = raw.budgetInfo or {}  -- exception(boundary): nilable for houseless players
         local inter, exter = bi.interiorBudgets or {}, bi.exteriorBudgets or {}
         local room, intDecor, extDecor = inter[0] or {}, inter[1] or {}, exter[1] or {}  -- exception(boundary): reshaped/nilable budget map

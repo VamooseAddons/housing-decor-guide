@@ -967,8 +967,8 @@ local function _openNewRecentSession(house)
     local newestID = house.sessionOrder[1]
     local newest   = newestID and house.sessions[newestID]
     if newest and not newest.endedAt and (newest.eventCount or 0) == 0 then return end  -- reuse the empty active one
-    if newest and not newest.endedAt then newest.endedAt = time() end
-    local sid = time()
+    if newest and not newest.endedAt then newest.endedAt = _G.time() end  -- exception(boundary): wall-clock stamp
+    local sid = _G.time()  -- exception(boundary): wall-clock session key (single-player surface; collision accepted, owner call 2026-07-17)
     if house.sessions[sid] then sid = sid + 1 end  -- collision-safe within one second
     house.sessions[sid] = { sessionID = sid, startedAt = sid, endedAt = nil,
                             eventCount = 0, events = {}, actions = {} }
@@ -1141,7 +1141,7 @@ local function EnsureShopping(account)
             name      = "Shopping List",
             items     = {},
             meta      = {},
-            createdAt = time(),
+            createdAt = _G.time(),  -- exception(boundary): wall-clock stamp
         }
         account.activeShoppingListId = id
     end
@@ -1173,6 +1173,9 @@ local function EnsureSession(state)
     state.session.zone      = state.session.zone      or NewZoneState()
     state.session.catalog   = state.session.catalog   or NewSessionCatalog()
     state.session.lumber    = state.session.lumber    or NewLumberSession()
+    -- Guild recipe harvest choreography state (Scan Guild button on the Recipes title).
+    state.session.recipeHarvest = state.session.recipeHarvest
+        or { phase = "idle", active = false, done = 0, total = 0, name = "" }
     state.session.blueprints    = state.session.blueprints    or NewBlueprintsSession()
     state.session.ui.blueprints = state.session.ui.blueprints or NewBlueprintsSessionUI()
     -- session.house + session.daily are seeded by NewDefaultSession; EnsureSession
@@ -1238,6 +1241,16 @@ local function EnsureStateShape(state)
     EnsureCraft(state.account)
     EnsureShopping(state.account)
     state.account.characters  = state.account.characters  or NewCharacters()
+    -- Runtime decor-recipe override (itemID -> { reagents = {[id]=qty}, profession }); unions
+    -- across alts + guild scans, overrides the seed DB. Plain map; capture-wins per itemID.
+    state.account.recipeCapture = state.account.recipeCapture or {}
+    -- Sub-recipe craft graph (intermediates decor recipes need, walked to roots) --
+    -- PowerCrafter's captured override of the shipped ProfessionsDB closure.
+    state.account.subRecipeCapture = state.account.subRecipeCapture or {}
+    -- Reagent quality groups ([memberID] = sibling ids): ANY tier satisfies a slot,
+    -- so bag counting sums across the group. Captured live; overrides the seed's
+    -- frozen variant data (GetQualityVariants reads this first).
+    state.account.reagentVariants = state.account.reagentVariants or {}
     state.account.prices      = state.account.prices      or NewPrices()
     state.account.prices.directCache    = state.account.prices.directCache    or {}
     state.account.prices.directQtyCache = state.account.prices.directQtyCache or {}
@@ -1372,8 +1385,12 @@ function HDG.Store:_Notify(actionType, invalidation, action)
         if not pending then return end
         local snapshot = {}
         for fn in pairs(self._subscribers) do snapshot[#snapshot + 1] = fn end
-        -- No blanket pcall: real bugs must surface loudly, not silently corrupt state.
-        -- ErrorBoundaryMiddleware handles crash-recovery at the outer layer.
+        -- No blanket pcall (ADR-042): real bugs must surface loudly. NOTE: this
+        -- flush runs on a deferred C_Timer, OUTSIDE the dispatch chain -- so
+        -- ErrorBoundaryMiddleware does NOT cover it. A raising subscriber
+        -- surfaces as a raw Lua error and aborts the remaining subscribers for
+        -- this flush; that loss is deliberate (the alternative silently runs
+        -- downstream subscribers against state the failed one never processed).
         -- exception(boundary): Perf instrumentation is optional, may be absent in early boot / tests.
         local perf = HDG.Perf
         local timed = perf and perf:Enabled()
@@ -1446,7 +1463,13 @@ function HDG.Store:_RawDispatch(action)
         error("HDG.Store:_RawDispatch requires {type=..., payload=?}", 2)
     end
     local payload = action.payload or {}
-    EnsureStateShape(self.state)
+    -- EnsureStateShape deliberately NOT called here (engine-review 2026-06-07,
+    -- removed 2026-07-17): it's a boot/migration guard and runs in
+    -- LoadFromSavedVariables. Per-dispatch re-minting cost allocations + ~80
+    -- field checks on EVERY action and, worse, silently healed shape drift a
+    -- reducer bug should surface loudly. HARD_RESET re-mints from
+    -- NewDefaultState(); PROFILE_SWITCH imports schema defaults before
+    -- rehydrating -- neither depends on this.
 
     -- Resolve the invalidation set BEFORE running the reducer.
     -- Action meta declares `invalidates` as a static list, a function
@@ -1594,6 +1617,12 @@ HDG.Actions:Register{ name = "PROFILE_CREATE",
         end
     end }
 
+-- PROFILE_* reducers: ACCEPTED Invariant-6 deviation (engine-review 2026-06-07,
+-- dispositioned 2026-07-17). HDG_DB.profiles IS the persistence root for
+-- per-profile config -- deliberately outside state.account; nothing reads it but
+-- the hydration path, and the reducer is the natural transaction point (import
+-- defaults THEN hydrate mirror, synchronously, before the deferred subscriber
+-- flush repaints). A middleware move = same code, new ordering risk, no payoff.
 HDG.Actions:Register{ name = "PROFILE_SWITCH",
     persists = true,  combatUnsafe = false,
             invalidates = "*",
@@ -1742,6 +1771,13 @@ HDG.Actions:Register{ name = "HARD_RESET",
         local fresh = NewDefaultState().account
         for k in pairs(state.account) do state.account[k] = nil end
         for k, v in pairs(fresh) do state.account[k] = v end
+        -- NewDefaultState is INCOMPLETE by design debt: post-release slots
+        -- (houseTab, lumber, blueprints, recipeCapture, ...) live only as
+        -- EnsureStateShape backfills. Run it here so the reset shape is whole --
+        -- surfaced 2026-07-17 when the per-dispatch Ensure (which silently healed
+        -- this) was removed. Folding backfills into the factories is the real fix
+        -- (see TODO: factory completeness).
+        EnsureStateShape(state)
         -- Fresh SV root: drops profiles + characterSpecific too ("wipes ALL HDG
         -- data"). Seed the active/default profile buckets and the char bucket so
         -- Config reads stay valid until the /reload the reset UX already requires.
@@ -1886,18 +1922,16 @@ HDG.Actions:Register{ name = "LOG_PUSH",
             metadata  = payload.metadata,
         }
         log.entries[#log.entries + 1] = entry
-        -- Per-tag sub-cap for the "dispatch" tag; removes oldest first.
+        -- Per-tag sub-cap for the "dispatch" tag; removes oldest first. Running
+        -- count (log.dispatchN) replaces the old per-push O(n) rescan; the ring
+        -- cap below keeps it honest when it evicts a dispatch entry.
         if entry.tag == "dispatch" then
-            local dispatchCap = log.dispatchCap
-            local dispatchCount = 0
-            for _, e in ipairs(log.entries) do
-                if e.tag == "dispatch" then dispatchCount = dispatchCount + 1 end
-            end
-            while dispatchCount > dispatchCap do
+            log.dispatchN = (log.dispatchN or 0) + 1
+            while log.dispatchN > log.dispatchCap do
                 for i, e in ipairs(log.entries) do
                     if e.tag == "dispatch" then
                         table.remove(log.entries, i)
-                        dispatchCount = dispatchCount - 1
+                        log.dispatchN = log.dispatchN - 1
                         break
                     end
                 end
@@ -1906,7 +1940,10 @@ HDG.Actions:Register{ name = "LOG_PUSH",
         -- Overall ring buffer cap.
         local cap = log.cap
         while #log.entries > cap do
-            table.remove(log.entries, 1)
+            local evicted = table.remove(log.entries, 1)
+            if evicted.tag == "dispatch" then
+                log.dispatchN = (log.dispatchN or 1) - 1
+            end
         end
     end }
 
@@ -1914,15 +1951,21 @@ HDG.Actions:Register{ name = "LOG_CLEAR",
     persists = false, combatUnsafe = false, 
     invalidates = { "session.log.entries" },
     reduce = function(state, payload)
+        local log = state.session.log
         if payload.tag and payload.tag ~= "all" and payload.tag ~= "*" then
-            local entries = state.session.log.entries
+            local entries = log.entries
             for i = #entries, 1, -1 do
                 if entries[i].tag == payload.tag then
+                    if entries[i].tag == "dispatch" then
+                        log.dispatchN = (log.dispatchN or 1) - 1
+                    end
                     table.remove(entries, i)
                 end
             end
+            if payload.tag == "dispatch" then log.dispatchN = 0 end
         else
-            state.session.log.entries = {}
+            log.entries = {}
+            log.dispatchN = 0   -- keep the running dispatch-cap counter honest
         end
     end }
 
@@ -2285,6 +2328,56 @@ HDG.Actions:Register{ name = "CRAFT_HISTORY_PUSH",
         end
 
     -- ===== Per-character roster (alts) ============================
+    end }
+
+HDG.Actions:Register{ name = "RECIPE_DATA_CAPTURED",
+    persists = true, combatUnsafe = false,
+    invalidates = function(action)
+        local paths = { "account.recipeCapture" }
+        if action.payload and action.payload.subRecipes then
+            paths[#paths + 1] = "account.subRecipeCapture"
+        end
+        if action.payload and action.payload.reagentVariants then
+            paths[#paths + 1] = "account.reagentVariants"
+        end
+        return paths
+    end,
+    reduce = function(state, payload)
+        -- Merge a scanned profession's decor recipes into the account-wide override store
+        -- (unions across alts + guild scans). Capture-wins per itemID -- reagents are the
+        -- live game's truth. Whole-record replace; no field-level merge needed.
+        local store = state.account.recipeCapture
+        for itemID, rec in pairs(payload.recipes) do
+            store[itemID] = rec
+        end
+        -- Sub-recipe closure records (optional): PowerCrafter's captured craft graph.
+        if payload.subRecipes then
+            local subStore = state.account.subRecipeCapture
+            for itemID, rec in pairs(payload.subRecipes) do
+                subStore[itemID] = rec
+            end
+        end
+        -- Reagent quality groups (optional): any tier satisfies a slot.
+        if payload.reagentVariants then
+            local vStore = state.account.reagentVariants
+            for id, sibs in pairs(payload.reagentVariants) do
+                vStore[id] = sibs
+            end
+        end
+    end }
+
+HDG.Actions:Register{ name = "RECIPE_HARVEST_PROGRESS",
+    persists = false, combatUnsafe = false,
+    invalidates = function() return { "session.recipeHarvest" } end,
+    reduce = function(state, payload)
+        -- Guild-harvest choreography state (ProfessionScanner:StartGuildHarvest).
+        -- phase machine: idle -> headers -> profession(xN) -> complete|error|cancelled.
+        local h = state.session.recipeHarvest
+        h.phase  = payload.phase
+        h.active = payload.phase == "headers" or payload.phase == "profession"
+        h.done   = payload.done or 0    -- exception(optional): only "profession"/"complete" phases carry done/total/name
+        h.total  = payload.total or 0   -- exception(optional): phase-dependent payload
+        h.name   = payload.name or ""   -- exception(optional): phase-dependent payload
     end }
 
 HDG.Actions:Register{ name = "CHARACTER_PROFESSION_UPDATED",
@@ -3546,7 +3639,7 @@ HDG.Actions:Register{ name = "STYLES_PLACED_DECOR_OBSERVED",
     reduce = function(state, payload)
         local guid = payload.decorGUID
         if guid then
-            local now = time()
+            local now = _G.time()  -- exception(boundary): wall-clock stamp
             local map = state.session.styles.placedDecor
             local existing = map[guid]
             map[guid] = {
@@ -4165,7 +4258,7 @@ HDG.Actions:Register{ name = "SHOPPING_LIST_CREATE",
             name      = type(payload.name) == "string" and payload.name or ("List " .. id),
             items     = {},
             meta      = {},
-            createdAt = time(),
+            createdAt = _G.time(),  -- exception(boundary): wall-clock stamp
         }
         -- Auto-activate the first list created (HDG parity).
         if state.account.activeShoppingListId == "" then
@@ -4221,7 +4314,7 @@ HDG.Actions:Register{ name = "SHOPPING_LIST_DUPLICATE",
                 name      = tostring(payload.name or (src.name .. " (copy)")),
                 items     = copyItems,
                 meta      = {},   -- duplicates start with fresh meta (no inherited attribution)
-                createdAt = time(),
+                createdAt = _G.time(),  -- exception(boundary): wall-clock stamp
             }
         end
     end }

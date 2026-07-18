@@ -443,7 +443,7 @@ Selectors:Register("mogul.matsRows", {
 -- Per-decor profit table with profession/knowledge/queue/auction filters + sortable columns.
 Selectors:Register("goblin.rows", {
     memoized = true,
-    calls = { "goblin.isTSMActive" },
+    calls = { "goblin.isTSMActive", "recipes.db" },
     reads = {
         "account.prices",  -- resolver-facade contract (sweep rule 4c)
         "session.itemNames.names",  -- row.name localised via _localName -> re-fire when names resolve
@@ -486,7 +486,7 @@ Selectors:Register("goblin.rows", {
         end
         local auctionSet = state.account.prices.ownedAuctions
 
-        local data = HDG.Goblin:BuildProfitData()
+        local data = HDG.Goblin:BuildProfitData(Selectors:Call("recipes.db", state, ctx))
         -- Per-lumber-type quantity already committed by the craft queue (each queued
         -- craft's need x remaining). The Lumber column rolls this into each row's need
         -- (held vs need+queued), and the "Have lumber" filter hides what held can't cover.

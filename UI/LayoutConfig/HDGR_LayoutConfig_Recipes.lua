@@ -324,6 +324,15 @@ LC.widgets["recipesListPanel.title"] = {
     text = "locale:REC_RECIPES_TITLE", font = "heading",
     height = 18, width = "auto", order = 10,
 }
+-- Guild recipe scan: harvests decor recipe data (reagents/costs) from every guild
+-- profession -- offline guildmates included. Label goes live-progress during a run.
+LC.widgets["recipesListPanel.scanGuild"] = {
+    tooltip = { recipe = "RecipesScanGuild" },
+    kind = "button", ["in"] = "recipesListPanel", slot = "header",
+    text = "locale:REC_SCAN_GUILD", font = "small",
+    width = "auto", height = 18, order = 12, variant = "tertiary",
+    binding = { text = "recipes.scanGuildLabel" },
+}
 LC.widgets["recipesListPanel.headerSpacer"] = {
     tooltip = false,
     kind = "spacer", ["in"] = "recipesListPanel", slot = "header",

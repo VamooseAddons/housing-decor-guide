@@ -473,6 +473,16 @@ HDG.Constants = {
         -- CHARACTER_PROFESSION_UPDATED payload: { charKey, name, realm, class, classFile, profName,
         --   skillLines = { [expName] = { current, max } }, knownRecipes = { [recipeID] = true } }
         CHARACTER_PROFESSION_UPDATED = "HDGR_CHARACTER_PROFESSION_UPDATED",
+        -- RECIPE_DATA_CAPTURED payload: { recipes = { [itemID] = { reagents = {[id]=qty},
+        --   profession, spellID } }, subRecipes? = same shape + categoryName }. Ungated capture
+        -- of decor-recipe data (+ the sub-recipe craft-graph closure) from ANY opened profession
+        -- (own or a guildmate's window). Merges into account.recipeCapture / .subRecipeCapture --
+        -- the runtime overrides read over the shipped seed DBs. See docs/RECIPE_CAPTURE_ARCHITECTURE.
+        RECIPE_DATA_CAPTURED         = "HDGR_RECIPE_DATA_CAPTURED",
+        -- RECIPE_HARVEST_PROGRESS payload: { phase = "headers"|"profession"|"complete"|"error"|"cancelled",
+        --   done?, total?, name?, reason? }. Guild recipe harvest choreography state
+        -- (session.recipeHarvest) -- drives the Recipes title Scan Guild button label.
+        RECIPE_HARVEST_PROGRESS      = "HDGR_RECIPE_HARVEST_PROGRESS",
         CHARACTER_DELETED            = "HDGR_CHARACTER_DELETED",            -- payload: { charKey }
         CHARACTER_HIDDEN             = "HDGR_CHARACTER_HIDDEN",             -- payload: { charKey, hidden }
         CHARACTER_HIDDEN_TOGGLE      = "HDGR_CHARACTER_HIDDEN_TOGGLE",      -- payload: { charKey }
@@ -916,6 +926,12 @@ HDG.Constants.MERCHANT_BUY_TICK_SECS    = 0     -- seconds between ticks (0 = ev
 -- flight is what stranded an item in bags). Generous so a merely slow-to-start signal
 -- (first landings lag 2-3s + a ~500ms catalog settle) never trips it.
 HDG.Constants.MERCHANT_BUY_TIMEOUT_SECS = 8
+
+-- Guild recipe harvest choreography (ProfessionScanner:StartGuildHarvest; timings
+-- ported from VWB RecipeHarvest -- functional throttles, not UI transitions).
+HDG.Constants.GUILD_HARVEST_HEADER_TIMEOUT = 5      -- s; QueryGuildRecipes -> GUILD_TRADESKILL_UPDATE wait
+HDG.Constants.GUILD_HARVEST_PROF_TIMEOUT   = 10     -- s; per-profession ViewGuildRecipes wait (largest profs load slow)
+HDG.Constants.GUILD_HARVEST_PAUSE          = 0.25   -- s; breather between profession loads
 
 -- Outreach URLs (Config tab About section).
 HDG.Constants.DISCORD_URL = "https://discord.gg/RWZaxJaHFP"

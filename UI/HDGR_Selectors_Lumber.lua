@@ -60,6 +60,7 @@ Selectors:Register("lumber.activeFarmingID", {
 -- cold-cache recipe DB landing after first paint triggers re-bind.
 Selectors:Register("lumber.queueNeed", {
     reads = { "account.craft.queue", "session.resolvers.staticData.tick" },
+    calls = { "recipes.db" },
     fn = function(state, _ctx)
         -- Dense map: every LUMBER_DATA id pre-seeded to 0 so consumers
         -- strict-read (no `or 0` fallback at the call site). Lumber types
@@ -68,9 +69,10 @@ Selectors:Register("lumber.queueNeed", {
         for _, l in ipairs(HDG.Constants.LUMBER_DATA) do
             out[l.id] = 0
         end
-        local q  = state.account.craft.queue
+        local q   = state.account.craft.queue
+        local rdb = Selectors:Call("recipes.db", state)   -- seed <- runtime reagent override
         for _, row in ipairs(q) do
-            HDG.StaticData.Recipes:VisitReagents(HDG.StaticData.Recipes:Get(row.recipeID), function(slot)
+            HDG.StaticData.Recipes:VisitReagents(rdb[row.recipeID], function(slot)
                 -- ~= nil discriminates lumber slots (dense pre-seed)
                 if slot.itemID and slot.qty and out[slot.itemID] ~= nil then
                     out[slot.itemID] = out[slot.itemID] + slot.qty * (row.remaining or 1)  -- exception(boundary): queue row from SVars may lack remaining
