@@ -77,7 +77,7 @@ HDGR_VendorAugment = {
     [112716] = { name = "Rasil Fireborne", zone = "Dalaran (Broken Isles)", mapID = 627, x = 43.4, y = 49.4, faction = "N", exp = "Legion" },
     [115736] = { name = "First Arcanist Thalyssra", zone = "Suramar", mapID = 680, x = 36.4, y = 46.8, faction = "N", exp = "Legion" },
     [115805] = { name = "Hoddruc Bladebender", zone = "Burning Steppes", mapID = 36, x = 46.8, y = 44.4, faction = "N", exp = "Classic" },
-    [127151] = { name = "Toraan the Revered", zone = "The Vindicaar", mapID = 940, x = 55.4, y = 28.6, faction = "N", exp = "Legion" },
+    [127151] = { name = "Toraan the Revered", zone = "The Vindicaar", mapID = 831, x = 61.1, y = 56.1, faction = "N", exp = "Legion" },
     [135459] = { name = "Provisioner Lija", zone = "Nazmir", mapID = 863, x = 39.1, y = 79.5, faction = "H", exp = "Battle for Azeroth" },
     [135808] = { name = "Provisioner Fray", zone = "Boralus", mapID = 895, x = 67.5, y = 21.5, faction = "A", exp = "Battle for Azeroth" },
     [144129] = { name = "Plugger Spazzring", zone = "Searing Gorge", mapID = 32, x = 34.8, y = 83.5, faction = "N", exp = "Classic", note = "Use Dark Iron Dwarf racial Mole Machine -> Eastern Kingdom -> Shadowforge City, run up the ramp to the bar" },

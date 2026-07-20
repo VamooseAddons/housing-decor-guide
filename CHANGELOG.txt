@@ -1,3 +1,10 @@
+## [3.17.2] - 2026-07-20 (July 2026)
+
+### Fixed
+- Non-English game clients: professions now display correctly on the Alts tab's Account Summary, and the Battle for Azeroth column now appears across the profession views. HDG had been matching professions and expansions by their English names, so on a localized client (e.g. Spanish) the summary grid came up empty and BfA didn't register. It now matches on stable IDs and localized names, and existing characters fill in automatically on your next login -- no rescan needed. (Thanks to the reporter on a Spanish client!)
+- Corrected Toraan the Revered's vendor pin to the Vindicaar map you arrive on when you zone in.
+- Minimap button: HDG no longer re-anchors its minimap button every time the window opens. This stops the button "jumping" for players who use a minimap-button manager like SexyMap (the button now stays wherever SexyMap places it). (Thanks Paulo!)
+
 ## [3.17.1] - 2026-07-18 (July 2026)
 
 ### Fixed

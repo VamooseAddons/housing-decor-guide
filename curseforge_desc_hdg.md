@@ -12,14 +12,13 @@
 
 ---
 
-## What's New in v3.17.1
+## What's New in v3.17.2
 
-A vendor-location accuracy pass. Every disputed decor-vendor pin was checked by standing at the vendor in-game.
+Fixes for non-English game clients, the minimap button, and one vendor pin.
 
-- **Twelve vendor map pins corrected.** Provisioner Aristta now points to Thaldraszus instead of the Azure Span; Captain Donald Adams points to the present-day captain in Orgrimmar (no time-phasing needed); Val'zuun and Halenthos Brightstride pin the correct Dalaran maps; "Yen" Malone and "High Tides" Ren no longer share another vendor's spot on Razorwind Shores; and Thraxadar pins his perch on Slayer's Rise. Mothkeeper Wew'tam, Morta Gage, Brave Tuho, Paul North, and the Deeprun Tram brawlpub pair were also nudged onto their exact spots.
-- **"Bad Luck" Symmes removed** -- he has been replaced in the Brawl'gar Arena by Paul North, who sells the same decor.
-- **Decor catalog future-proofed** against Blizzard removing the housing-catalog compatibility bridge. HDG now reads the current catalog fields directly. No visible change today; it prevents a break when the deprecated bridge is deleted, and fixes the catalog for anyone running with deprecation fallbacks turned off.
-- **Corrupted catalog row no longer blocks loading.** If the game returns an unreadable catalog entry, HDG skips that one row (with a note in the Debug log) and loads the rest of the catalog normally.
+- **Non-English game clients now show professions correctly.** On a localized client (for example, a Spanish client), the Alts tab's Account Summary came up empty and the Battle for Azeroth column did not appear, because HDG matched professions and expansions by their English names. HDG now matches on stable IDs and localized names, so your characters fill in on your next login with no rescan needed.
+- **Minimap button stays put with button managers.** The HDG minimap button no longer returns to the minimap edge each time you open the window, so managers like SexyMap keep it where you placed it.
+- **Toraan the Revered vendor pin corrected** to the Vindicaar map you arrive on when you zone in.
 
 ---
 
@@ -110,7 +109,7 @@ A companion window injects into Blizzard's House Editor so you can **place decor
 ---
 
 **Author:** Vamoose
-**Version:** 3.17.1
+**Version:** 3.17.2
 **Game Version:** 12.0.5+ (Midnight)
 **Source / Issues:** https://github.com/VamooseAddons/housing-decor-guide
 **Discord:** https://discord.gg/RWZaxJaHFP

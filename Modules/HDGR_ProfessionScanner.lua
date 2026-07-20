@@ -400,6 +400,7 @@ function PS:Scan()
             class           = ident.class,
             classFile       = ident.classFile,
             profName        = base.professionName,
+            professionID    = base.professionID,   -- stable TradeSkillLineID; locale-invariant join key
             skillLines      = skillLines,
             knownRecipes    = knownRecipes,
             knowsFindLumber = knowsFindLumber,

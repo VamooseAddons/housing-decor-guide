@@ -43,6 +43,19 @@ local function aliasIndex(name)
     return canonical and HDG.Expansion.GetIndex(canonical) or nil
 end
 
+-- char.professions is keyed by the LOCALIZED profession name (the scanner writes
+-- base.professionName). The summary + seed lookups run off canonical PROFESSION_DATA
+-- (English), so joining by name misses on every non-enUS client. Resolve instead by
+-- the stable professionID stamped on each record (EnsureStateShape backfills it onto
+-- older records). Small linear scan -- a char has at most a dozen professions.
+local function profByID(char, profID)
+    if not (profID and char.professions) then return nil end
+    for _, prof in pairs(char.professions) do
+        if prof.professionID == profID then return prof end
+    end
+    return nil
+end
+
 -- Per-(profession, expansion) decor recipe index. Built directly from
 -- HDGR_DecorDB (the curated 305-entry craftable-decor list -- every
 -- entry is a decor recipe by construction). Registered as a memoized
@@ -126,8 +139,9 @@ local function decorDataFor(profName, expIdx, knownRecipes)
     return total, known, threshold
 end
 
-local function buildCells(char, profName)
-    local prof = char.professions and char.professions[profName]
+-- prof = the char's profession record; profName = its canonical English name (for
+-- the decor + threshold seed lookups). Caller resolves both from the professionID.
+local function buildCells(prof, profName)
     if not prof or not prof.skillLines then return {} end
     local cells = {}
     for key, sl in pairs(prof.skillLines) do
@@ -144,14 +158,6 @@ local function buildCells(char, profName)
         end
     end
     return cells
-end
-
--- Predicate: char is visible and has data for this specific profession.
--- Single source of truth for the two-pass scan below.
-local function _hasProfession(char, profName)
-    return not char.hidden
-        and char.professions
-        and char.professions[profName] ~= nil
 end
 
 -- A profession "counts" only if it has REAL skill data (some expansion child
@@ -177,13 +183,13 @@ local function _charHasRealProfession(char)
     return false
 end
 
--- Pass-1 worker: stamp best-skill cell for one char (no-op if char lacks
--- the profession or has no skillLines).
-local function _visitCharForBestSkill(char, profName, cells)
-    if not _hasProfession(char, profName) then return end
-    local skillLines = char.professions[profName].skillLines
-    if not skillLines then return end
-    for key, sl in pairs(skillLines) do
+-- Pass-1 worker: stamp best-skill cell for one char (no-op if char is hidden,
+-- lacks the profession, or has no skillLines).
+local function _visitCharForBestSkill(char, profID, cells)
+    if char.hidden then return end
+    local prof = profByID(char, profID)
+    if not (prof and prof.skillLines) then return end
+    for key, sl in pairs(prof.skillLines) do
         local idx = aliasIndex(key)
         if idx then
             local existing = cells[idx]
@@ -196,11 +202,11 @@ end
 
 -- Pass-2 worker: union one char's known recipes into the running set,
 -- filtered to recipes that belong to this cell's expansion bucket.
-local function _visitCharForUnionKnown(char, profName, recipeSet, unionSet)
-    if not _hasProfession(char, profName) then return end
-    local known = char.professions[profName].knownRecipes
-    if not known then return end
-    for recipeID in pairs(known) do
+local function _visitCharForUnionKnown(char, profID, recipeSet, unionSet)
+    if char.hidden then return end
+    local prof = profByID(char, profID)
+    if not (prof and prof.knownRecipes) then return end
+    for recipeID in pairs(prof.knownRecipes) do
         if recipeSet[recipeID] then
             unionSet[recipeID] = true
         end
@@ -208,10 +214,10 @@ local function _visitCharForUnionKnown(char, profName, recipeSet, unionSet)
 end
 
 -- Count distinct recipes known by ANYONE in the roster for this prof + bucket.
-local function _countUnionKnown(chars, profName, recipeSet)
+local function _countUnionKnown(chars, profID, recipeSet)
     local unionSet = {}
     for _, char in pairs(chars) do
-        _visitCharForUnionKnown(char, profName, recipeSet, unionSet)
+        _visitCharForUnionKnown(char, profID, recipeSet, unionSet)
     end
     local n = 0
     for _ in pairs(unionSet) do n = n + 1 end
@@ -224,11 +230,13 @@ end
 -- Computed by walking chars per cell -- O(chars * recipes_per_cell), but
 -- recipes_per_cell is bounded (~10-50 typical) and cells are bounded (12),
 -- so it stays cheap.
-local function buildSummaryCells(chars, profName)
+-- profID joins the roster's char.professions (locale-invariant); profName is the
+-- canonical English name for the decor-bucket + threshold seed lookups.
+local function buildSummaryCells(chars, profID, profName)
     local cells = {}
     -- Pass 1: best skill per expansion index.
     for _, char in pairs(chars) do
-        _visitCharForBestSkill(char, profName, cells)
+        _visitCharForBestSkill(char, profID, cells)
     end
     -- Pass 2: per-cell decor total + threshold + UNION known across chars.
     local thresholds = HDG.StaticData.Professions:GetThresholds()
@@ -241,7 +249,7 @@ local function buildSummaryCells(chars, profName)
             cell.decorTotal     = data.total
             cell.decorThreshold = expT and expT.threshold or nil
             cell.decorKnown     = data.total > 0
-                and _countUnionKnown(chars, profName, data.recipeSet)
+                and _countUnionKnown(chars, profID, data.recipeSet)
                 or 0
         else
             cell.decorTotal = 0
@@ -368,7 +376,8 @@ Selectors:Register("alts.summaryRows", {
                 kind     = "altsProfRow",
                 tag      = "summary:" .. p.name,
                 profName = p.name,
-                cells    = buildSummaryCells(chars, p.name),
+                profID   = p.id,
+                cells    = buildSummaryCells(chars, p.id, p.name),
             }
         end
         return rows
@@ -384,12 +393,23 @@ local function emitFullCharBlock(rows, charKey, char, current, exps, tagPrefix, 
     -- Only professions with real skill data -- foreign 0-skill records (a guild/
     -- linked profession that was scanned against this char) are hidden, and the
     -- header count derives from the filtered set (no phantom "+1 profession").
-    local profNames = {}
-    for p, prof in pairs(char.professions) do
-        if _profHasSkill(prof) then profNames[#profNames + 1] = p end
+    -- Resolve each localized-name-keyed record to its canonical English PROFESSION_DATA
+    -- entry via the stable professionID; a record predating ID-stamping (not yet re-scanned
+    -- on a non-enUS client) falls back to its localized key for display and shows no decor.
+    local entries = {}
+    for name, prof in pairs(char.professions) do
+        if _profHasSkill(prof) then
+            local pe = prof.professionID and HDG.Profession.GetByID(prof.professionID)  -- exception(nullable): un-backfilled legacy record
+            entries[#entries + 1] = {
+                prof     = prof,
+                profID   = pe and pe.id or nil,
+                display  = pe and pe.name or name,   -- English if resolved, else the localized key
+                seedName = pe and pe.name or nil,    -- decor lookup needs English; nil -> empty decor (unchanged pre-rescan)
+            }
+        end
     end
-    table.sort(profNames)
-    local profCount = #profNames
+    table.sort(entries, function(a, b) return a.display < b.display end)
+    local profCount = #entries
     rows[#rows + 1] = {
         kind            = "altsCharHeaderRow",
         charKey         = charKey,
@@ -408,12 +428,13 @@ local function emitFullCharBlock(rows, charKey, char, current, exps, tagPrefix, 
         tag  = tagPrefix .. ":" .. charKey,
         exps = exps,
     }
-    for _, profName in ipairs(profNames) do
+    for _, e in ipairs(entries) do
         rows[#rows + 1] = {
             kind     = "altsProfRow",
-            tag      = tagPrefix .. ":" .. charKey .. ":" .. profName,
-            profName = profName,
-            cells    = buildCells(char, profName),
+            tag      = tagPrefix .. ":" .. charKey .. ":" .. (e.profID or e.display),
+            profName = e.display,
+            profID   = e.profID,
+            cells    = buildCells(e.prof, e.seedName),
         }
     end
 end

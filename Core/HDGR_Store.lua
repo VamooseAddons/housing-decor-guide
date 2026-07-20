@@ -811,7 +811,8 @@ end
 -- "Name-Realm"):
 --   { name, realm, class, classFile, hidden, lastSeen,
 --     essenceStock = { bag, bank },   -- Essence of Lumber snapshot (soulbound; no warband)
---     professions = { [profName] = {
+--     professions = { [profName] = {          -- keyed by LOCALIZED name (back-compat)
+--         professionID = <TradeSkillLineID>,  -- stable, locale-invariant join key
 --         skillLines   = { [expName] = { current, max } },
 --         knownRecipes = { [recipeID] = true },
 --     } } }
@@ -1241,6 +1242,21 @@ local function EnsureStateShape(state)
     EnsureCraft(state.account)
     EnsureShopping(state.account)
     state.account.characters  = state.account.characters  or NewCharacters()
+    -- Backfill professionID onto pre-existing profession records (SV migration):
+    -- records predating ID-stamping are keyed by the localized profession name and
+    -- carry no .professionID. Recover it from the English name so the Alts summary
+    -- (which joins by ID) keeps working with no rescan on enUS accounts; a localized
+    -- (non-enUS) key won't match PROFESSION_DATA and heals on the next profession scan.
+    for _, char in pairs(state.account.characters) do
+        if type(char.professions) == "table" then   -- exception(boundary): SV migration -- record may be malformed
+            for name, prof in pairs(char.professions) do
+                if type(prof) == "table" and not prof.professionID then
+                    local entry = HDG.Profession.GetByName(name)   -- exception(nullable): localized (non-enUS) key won't match
+                    if entry then prof.professionID = entry.id end
+                end
+            end
+        end
+    end
     -- Runtime decor-recipe override (itemID -> { reagents = {[id]=qty}, profession }); unions
     -- across alts + guild scans, overrides the seed DB. Plain map; capture-wins per itemID.
     state.account.recipeCapture = state.account.recipeCapture or {}
@@ -2417,6 +2433,7 @@ HDG.Actions:Register{ name = "CHARACTER_PROFESSION_UPDATED",
             end
             if payload.profName then
                 c.professions[payload.profName] = {
+                    professionID = payload.professionID,   -- stable TradeSkillLineID; locale-invariant join key (name key stays for back-compat)
                     skillLines   = payload.skillLines,
                     knownRecipes = payload.knownRecipes,
                 }

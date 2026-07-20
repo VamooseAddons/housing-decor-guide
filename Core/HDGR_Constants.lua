@@ -74,7 +74,9 @@ HDG.Constants = {
         { display = "Legion",               api = "Legion",       abbr = "Legion",  short = "LEG", color = { 0.5, 0.9, 0.3 },
           aliases = { "Légion", "Легион", "军团再临", "軍臨天下", "군단" } },
         { display = "Battle for Azeroth",   api = "BfA",          abbr = "BfA",     short = "BFA", color = { 0.8, 0.7, 0.2 },
-          aliases = { "Kul", "Kul Tiran", "Zandalari", "Zandalar", "Kul Tiras", "Культирас", "Кул-Тирас", "Кул-тирас", "Зандалари", "Зандалар", "库尔提拉斯", "争霸艾泽拉斯", "庫爾提拉斯", "決戰艾澤拉斯", "赞达拉", "贊達拉", "쿨 티란", "잔달라", "격전의 아제로스" } },
+          -- esES "Kultirano" + ptBR "Kul Tiraz" were the last Latin-European gap (the
+          -- BfA faction expansionName; DB2 SharedString 960/963, wago.tools 12.0.7.68453).
+          aliases = { "Kul", "Kul Tiran", "Zandalari", "Zandalar", "Kul Tiras", "Kultirano", "Kul Tiraz", "Культирас", "Кул-Тирас", "Кул-тирас", "Зандалари", "Зандалар", "库尔提拉斯", "争霸艾泽拉斯", "庫爾提拉斯", "決戰艾澤拉斯", "赞达拉", "贊達拉", "쿨 티란", "잔달라", "격전의 아제로스" } },
         { display = "Shadowlands",          api = "Shadowlands",  abbr = "SL",      short = "SL",  color = { 0.6, 0.4, 0.8 },
           aliases = { "Schattenlande", "Ombreterre", "Tierras Sombrías", "Terre Ombrose", "Terras Sombrias", "Темные Земли", "暗影国度", "暗影之境", "暗影界", "어둠땅" } },
         { display = "Dragonflight",         api = "Dragon Isles", abbr = "DF",      short = "DF",  color = { 0.2, 0.6, 1.0 },
@@ -100,19 +102,36 @@ HDG.Constants = {
     -- Profession master data. Each entry: name, TradeSkillLineID, 2-letter code, atlas, shortLabel.
     -- shortLabel trims the longer names for cramped strips (Goblin filter pills).
     -- First 9 are crafting professions; last 3 are gathering. "Mobile-*" atlases have transparent backgrounds.
+    -- `aliases`: localized professionName forms (GetBaseProfessionInfo().professionName)
+    -- across de/fr/es/it/pt/ru/ko/zh. Byte-compared against the API return (never
+    -- displayed), so a non-enUS client's char.professions key (e.g. "Cocina") maps
+    -- back to the stable id. Mirrors EXPANSION_DATA.aliases.
+    -- source: DB2 SkillLine.DisplayName_lang, wago.tools, build 12.0.7.68453
     PROFESSION_DATA = {
-        { name = "Alchemy",       shortLabel = "Alchemy",      id = 171, code = "AL", atlas = "Mobile-Alchemy"        },
-        { name = "Blacksmithing", shortLabel = "Blacksmith",   id = 164, code = "BS", atlas = "Mobile-Blacksmithing"  },
-        { name = "Cooking",       shortLabel = "Cooking",      id = 185, code = "CK", atlas = "Mobile-Cooking"        },
-        { name = "Enchanting",    shortLabel = "Enchanting",   id = 333, code = "EN", atlas = "Mobile-Enchanting"     },
-        { name = "Engineering",   shortLabel = "Engineering",  id = 202, code = "EG", atlas = "Mobile-Enginnering"    },  -- Blizzard typo preserved
-        { name = "Inscription",   shortLabel = "Inscription",  id = 773, code = "IN", atlas = "Mobile-Inscription"    },
-        { name = "Jewelcrafting", shortLabel = "Jewelcraft",   id = 755, code = "JC", atlas = "Mobile-Jewelcrafting"  },
-        { name = "Leatherworking",shortLabel = "Leatherwork",  id = 165, code = "LW", atlas = "Mobile-Leatherworking" },
-        { name = "Tailoring",     shortLabel = "Tailoring",    id = 197, code = "TL", atlas = "Mobile-Tailoring"      },
-        { name = "Herbalism",     shortLabel = "Herbalism",    id = 182, code = "HB", atlas = "Mobile-Herbalism"      },
-        { name = "Mining",        shortLabel = "Mining",       id = 186, code = "MN", atlas = "Mobile-Mining"         },
-        { name = "Skinning",      shortLabel = "Skinning",     id = 393, code = "SK", atlas = "Mobile-Skinning"       },
+        { name = "Alchemy",       shortLabel = "Alchemy",      id = 171, code = "AL", atlas = "Mobile-Alchemy",
+          aliases = { "Alchemie", "Alchimie", "Alquimia", "Alchimia", "Алхимия", "연금술", "炼金术", "鍊金術" } },
+        { name = "Blacksmithing", shortLabel = "Blacksmith",   id = 164, code = "BS", atlas = "Mobile-Blacksmithing",
+          aliases = { "Schmiedekunst", "Forge", "Herrería", "Forgiatura", "Ferraria", "Кузнечное дело", "대장기술", "锻造", "鍛造" } },
+        { name = "Cooking",       shortLabel = "Cooking",      id = 185, code = "CK", atlas = "Mobile-Cooking",
+          aliases = { "Kochkunst", "Cuisine", "Cocina", "Cucina", "Culinária", "Кулинария", "요리", "烹饪", "烹飪" } },
+        { name = "Enchanting",    shortLabel = "Enchanting",   id = 333, code = "EN", atlas = "Mobile-Enchanting",
+          aliases = { "Verzauberkunst", "Enchantement", "Encantamiento", "Incantamento", "Encantamento", "Наложение чар", "마법부여", "附魔" } },
+        { name = "Engineering",   shortLabel = "Engineering",  id = 202, code = "EG", atlas = "Mobile-Enginnering",  -- Blizzard typo preserved
+          aliases = { "Ingenieurskunst", "Ingénierie", "Ingeniería", "Ingegneria", "Engenharia", "Инженерное дело", "기계공학", "工程学", "工程學" } },
+        { name = "Inscription",   shortLabel = "Inscription",  id = 773, code = "IN", atlas = "Mobile-Inscription",
+          aliases = { "Inschriftenkunde", "Calligraphie", "Inscripción", "Runografia", "Escrivania", "Начертание", "주문각인", "铭文", "銘文學" } },
+        { name = "Jewelcrafting", shortLabel = "Jewelcraft",   id = 755, code = "JC", atlas = "Mobile-Jewelcrafting",
+          aliases = { "Juwelierskunst", "Joaillerie", "Joyería", "Oreficeria", "Joalheria", "Ювелирное дело", "보석세공", "珠宝加工", "珠寶設計" } },
+        { name = "Leatherworking",shortLabel = "Leatherwork",  id = 165, code = "LW", atlas = "Mobile-Leatherworking",
+          aliases = { "Lederverarbeitung", "Travail du cuir", "Peletería", "Conciatura", "Couraria", "Кожевничество", "가죽세공", "制皮", "製皮" } },
+        { name = "Tailoring",     shortLabel = "Tailoring",    id = 197, code = "TL", atlas = "Mobile-Tailoring",
+          aliases = { "Schneiderei", "Couture", "Sastrería", "Sartoria", "Alfaiataria", "Портняжное дело", "재봉술", "裁缝", "裁縫" } },
+        { name = "Herbalism",     shortLabel = "Herbalism",    id = 182, code = "HB", atlas = "Mobile-Herbalism",
+          aliases = { "Kräuterkunde", "Herboristerie", "Herboristería", "Erbalismo", "Herborismo", "Травничество", "약초채집", "草药学", "草藥學" } },
+        { name = "Mining",        shortLabel = "Mining",       id = 186, code = "MN", atlas = "Mobile-Mining",
+          aliases = { "Bergbau", "Minage", "Minería", "Estrazione", "Mineração", "Горное дело", "채광", "采矿", "採礦" } },
+        { name = "Skinning",      shortLabel = "Skinning",     id = 393, code = "SK", atlas = "Mobile-Skinning",
+          aliases = { "Kürschnerei", "Dépeçage", "Desuello", "Scuoiatura", "Esfolamento", "Снятие шкур", "무두질", "剥皮", "剝皮" } },
     },
 
     -- Source-type brand colors. Indexed by sourceType integer ID from AllDecorDB entry[2].

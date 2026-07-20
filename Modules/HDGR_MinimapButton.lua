@@ -13,20 +13,32 @@ local ADDON_KEY  = "HousingDecorGuideR"
 local ICON_PATH  = "Interface/AddOns/HousingDecorGuide/textures/Vamoose_HDG_400_trans"
 
 -- LibStub references resolved at onEnable time (libs loaded by TOC ordering).
-local _ldb    -- LibDataBroker-1.1 object
 local _dbicon -- LibDBIcon-1.0 object
 local _launcher
 
 -- ===== Visibility logic ======================================================
+-- LibDBIcon Show()/Hide() are NOT position-neutral: Show() re-runs updatePosition
+-- and re-anchors the button to the minimap ring. So call them ONLY when the shown
+-- flag actually changes -- never on an unrelated "*" invalidation (MAIN_WINDOW_OPENING
+-- fires "*" on every window open). Re-Showing on every open re-anchors the icon, which
+-- fights minimap-button managers like SexyMap that have grabbed it off the ring (the
+-- button "jumps" on every click). _shownState caches the last applied value; nil = unset.
+local _shownState
+
+local function _setShown(show)
+    -- exception(boundary): minimapPos.hide is LibDBIcon's contract; syncing .hide here is
+    -- the external-library handshake, not an HDG-state mutation (ADR-006).
+    HDG.Store:GetState().account.config.minimapPos.hide = not show
+    if show then _dbicon:Show(ADDON_KEY) else _dbicon:Hide(ADDON_KEY) end
+    _shownState = show
+end
 
 local function _applyVisibility()
     if not (_dbicon and _dbicon:IsRegistered(ADDON_KEY)) then return end
     -- Single flag, toggled by both the Settings-panel checkbox and /hdgr minimap.
     local show = HDG.Config:Get("SHOW_MINIMAP_BUTTON")
-    -- exception(boundary): minimapPos.hide is LibDBIcon's contract; syncing .hide here is
-    -- the external-library handshake, not an HDG-state mutation (ADR-006).
-    HDG.Store:GetState().account.config.minimapPos.hide = not show
-    if show then _dbicon:Show(ADDON_KEY) else _dbicon:Hide(ADDON_KEY) end
+    if show == _shownState then return end   -- no change: don't re-anchor (fights SexyMap et al.)
+    _setShown(show)
 end
 
 -- ===== Right-click context menu =============================================
@@ -81,7 +93,8 @@ function MB:ResetPosition()
     HDG.Store:GetState().account.config.minimapPos.minimapPos = DEFAULT_ANGLE  -- exception(boundary): LibDBIcon position field (ADR-006)
     local button = _dbicon:GetMinimapButton(ADDON_KEY)
     if button then button.db.minimapPos = DEFAULT_ANGLE end  -- exception(boundary): live db may diverge from the config ref after an SV reload
-    _applyVisibility()   -- unconditional Show + reposition; re-asserts the shown state
+    _shownState = nil    -- clear the idempotency cache so _applyVisibility re-anchors (reset's whole purpose)
+    _applyVisibility()
 end
 
 -- ===== Init ==================================================================

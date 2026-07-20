@@ -76,10 +76,20 @@ local function _countKnownForRecipeSet(prof, recipeSet)
     return n
 end
 
--- One tooltip-line entry for a char + (profName, idx) cell. Returns nil if hidden / no data.
-local function _buildCharStatLine(char, profName, idx, recipeSet, total)
+-- char.professions is keyed by the LOCALIZED profession name; join by the stable
+-- professionID stamped on each record instead (mirrors Selectors_Alts.profByID).
+local function _profByID(char, profID)
+    if not (profID and char.professions) then return nil end
+    for _, prof in pairs(char.professions) do
+        if prof.professionID == profID then return prof end
+    end
+    return nil
+end
+
+-- One tooltip-line entry for a char + (profID, idx) cell. Returns nil if hidden / no data.
+local function _buildCharStatLine(char, profID, idx, recipeSet, total)
     if char.hidden then return nil end
-    local prof = char.professions and char.professions[profName]
+    local prof = _profByID(char, profID)
     if not (prof and prof.skillLines) then return nil end
     local NormalizeAlias = HDG.Expansion.NormalizeAlias
     local GetIndex       = HDG.Expansion.GetIndex
@@ -100,10 +110,10 @@ local function _buildCharStatLine(char, profName, idx, recipeSet, total)
 end
 
 -- Collect tooltip lines for all chars for this (prof, idx) cell, alpha-sorted.
-local function _collectTooltipLinesForCell(chars, profName, idx, recipeSet, total)
+local function _collectTooltipLinesForCell(chars, profID, idx, recipeSet, total)
     local lines = {}
     for _, char in pairs(chars) do
-        local entry = _buildCharStatLine(char, profName, idx, recipeSet, total)
+        local entry = _buildCharStatLine(char, profID, idx, recipeSet, total)
         if entry then lines[#lines + 1] = entry end
     end
     table.sort(lines, function(a, b) return a.name < b.name end)
@@ -136,6 +146,7 @@ end
 local function _altsCellTooltipDef(hit)
     local row = hit:GetParent()
     local profName = row and row._profName
+    local profID   = row and row._profID
     local idx      = hit._cellIdx
     if not (profName and idx) then return nil end
     -- HDG.Expansion has no GetByIndex helper; the ordered EXPANSION_DATA
@@ -145,7 +156,7 @@ local function _altsCellTooltipDef(hit)
 
     local recipeSet, total = collectDecorRecipesFor(profName, exp.display)
     local chars = HDG.Store:GetState().account.characters  -- exception(false-positive): view-global; account.characters is factory-seeded + strict-read by every Alts selector
-    local lines = _collectTooltipLinesForCell(chars, profName, idx, recipeSet, total)
+    local lines = _collectTooltipLinesForCell(chars, profID, idx, recipeSet, total)
 
     local extraLines = {}
     if #lines == 0 then
@@ -480,6 +491,7 @@ local function _configureProfRow(row, ed)
         for _, bg in ipairs(row._gridHeaderBgs) do bg:Hide() end
     end
     row._profName = ed.profName
+    row._profID   = ed.profID
     if row._gridCellHit then
         for _, hit in ipairs(row._gridCellHit) do hit:Show() end
     end
