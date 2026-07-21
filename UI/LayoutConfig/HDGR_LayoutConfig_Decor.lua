@@ -353,6 +353,7 @@ LC.widgets["decorPanel.clickHints"] = {
     leftText  = "locale:DECOR_HINT_LEFT",
     rightText = "locale:DECOR_HINT_RIGHT",
     shiftText = "locale:DECOR_HINT_SHIFT",
+    ctrlText  = "locale:DECOR_HINT_CTRL",
     width = 34, height = 16, order = 90,
 }
 -- Uncollected toggle in the browser header (moved here from the filter row), left

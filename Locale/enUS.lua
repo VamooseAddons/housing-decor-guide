@@ -55,7 +55,8 @@ HDG.Locale:Register("enUS", {
     -- Browser header click hints
     DECOR_HINT_LEFT        = "Select a decor item",
     DECOR_HINT_RIGHT       = "Favorite or unfavorite",
-    DECOR_HINT_SHIFT       = "Send to craft queue",
+    DECOR_HINT_SHIFT       = "Link in chat",
+    DECOR_HINT_CTRL        = "Send to craft queue",
     -- Detail pane
     DECOR_PREVIEW_PLACEHOLDER = "Click an item to preview",
     DECOR_DESTROY_BTN      = "Destroy a stored copy",

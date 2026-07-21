@@ -146,16 +146,22 @@ local function _wireDecorClicks(row, ed)
     local variantKey = ed.variantKey
     HDG.UI.WireLeftRightClick(row,
         function()
-            -- Shift-click queues the item's recipe (decor rows carry no recipeID,
+            -- Ctrl-click queues the item's recipe (decor rows carry no recipeID,
             -- so resolve it via the Professions reverse index); non-craftable
-            -- decor toasts a "no recipe" note instead. A plain click selects.
-            if IsShiftKeyDown() then
+            -- decor toasts a "no recipe" note instead. Shift-click links the item
+            -- in chat (active editbox, or opens chat). A plain click selects.
+            if IsControlKeyDown() then
                 local rid = HDG.StaticData.Recipes:Get(itemID) and itemID
                 if rid then
                     HDG.UI.QueueRecipe(rid, itemID, ed.name)
                 else
                     HDG.Log:Info("queue", ed.name .. " has no recipe")
                 end
+                return
+            end
+            if IsShiftKeyDown() then
+                local _, link = C_Item.GetItemInfo(itemID)  -- exception(boundary): itemLink nil on cold item cache
+                if link then _G.ChatFrameUtil.InsertLink(link) end
                 return
             end
             -- selectedItemID drives the detail pane (base item data); the

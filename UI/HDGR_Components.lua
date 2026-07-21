@@ -620,7 +620,7 @@ local function buildClickHints(parent, spec)
     end
     -- Left button covers click, drag, AND shift-click (shift is a left-button modifier),
     -- so one leftclick glyph serves all three (shift-only hints still get a glyph).
-    if spec.leftText or spec.dragText or spec.shiftText then addGlyph("housing-hotkey-icon-leftclick")  end
+    if spec.leftText or spec.dragText or spec.shiftText or spec.ctrlText then addGlyph("housing-hotkey-icon-leftclick")  end
     if spec.rightText                                    then addGlyph("housing-hotkey-icon-rightclick") end
     frame:SetWidth(math.max(1, count * CLICKHINT_GLYPH + math.max(0, count - 1) * CLICKHINT_GAP))
 
@@ -637,7 +637,7 @@ local function buildClickHints(parent, spec)
 end
 
 HDG.WidgetTypes:Register("clickHints", {
-    specFields = { "leftText", "rightText", "dragText", "shiftText", "noteText", "title" },
+    specFields = { "leftText", "rightText", "dragText", "shiftText", "ctrlText", "noteText", "title" },
     build = function(parent, spec) return buildClickHints(parent, spec) end,
 })
 

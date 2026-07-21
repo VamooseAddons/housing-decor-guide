@@ -283,6 +283,7 @@ local DECOR_ROW_HINTS = {
     leftText  = "locale:DECOR_HINT_LEFT",
     rightText = "locale:DECOR_HINT_RIGHT",
     shiftText = "locale:DECOR_HINT_SHIFT",
+    ctrlText  = "locale:DECOR_HINT_CTRL",
 }
 
 -- [icon] quality-colored name for a custom (non-item) tooltip title. Quality

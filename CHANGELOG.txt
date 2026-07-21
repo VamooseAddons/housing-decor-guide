@@ -1,3 +1,11 @@
+## [3.18.0] - 2026-07-21 (July 2026)
+
+### Added
+- Decor Browser: shift-click a decor row to link it in chat, the same as shift-clicking any item.
+
+### Changed
+- Decor Browser: sending a decor's recipe to the craft queue is now ctrl-click (it was shift-click, which now links the item in chat). The row tooltip and the on-screen hints show the new bindings.
+
 ## [3.17.2] - 2026-07-20 (July 2026)
 
 ### Fixed

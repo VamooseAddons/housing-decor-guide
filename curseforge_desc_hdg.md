@@ -12,13 +12,12 @@
 
 ---
 
-## What's New in v3.17.2
+## What's New in v3.18.0
 
-Fixes for non-English game clients, the minimap button, and one vendor pin.
+Quicker sharing and queueing from the Decor Browser.
 
-- **Non-English game clients now show professions correctly.** On a localized client (for example, a Spanish client), the Alts tab's Account Summary came up empty and the Battle for Azeroth column did not appear, because HDG matched professions and expansions by their English names. HDG now matches on stable IDs and localized names, so your characters fill in on your next login with no rescan needed.
-- **Minimap button stays put with button managers.** The HDG minimap button no longer returns to the minimap edge each time you open the window, so managers like SexyMap keep it where you placed it.
-- **Toraan the Revered vendor pin corrected** to the Vindicaar map you arrive on when you zone in.
+- **Shift-click a decor row to link it in chat.** It drops the decor's item link into chat, the same as shift-clicking any item, so you can share finds with friends or your guild.
+- **Send to craft queue is now Ctrl-click.** It moved off Shift-click, which now links the item in chat. The row tooltip and the on-screen hints show the current bindings.
 
 ---
 
@@ -109,7 +108,7 @@ A companion window injects into Blizzard's House Editor so you can **place decor
 ---
 
 **Author:** Vamoose
-**Version:** 3.17.2
+**Version:** 3.18.0
 **Game Version:** 12.0.5+ (Midnight)
 **Source / Issues:** https://github.com/VamooseAddons/housing-decor-guide
 **Discord:** https://discord.gg/RWZaxJaHFP
