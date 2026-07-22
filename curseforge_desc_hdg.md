@@ -12,12 +12,11 @@
 
 ---
 
-## What's New in v3.18.0
+## What's New in v3.18.1
 
-Quicker sharing and queueing from the Decor Browser.
+Shift-click linking now works on the Acquire tab too.
 
-- **Shift-click a decor row to link it in chat.** It drops the decor's item link into chat, the same as shift-clicking any item, so you can share finds with friends or your guild.
-- **Send to craft queue is now Ctrl-click.** It moved off Shift-click, which now links the item in chat. The row tooltip and the on-screen hints show the current bindings.
+- **Shift-click an item in the Find Decor list to link it in chat.** It drops the item's link into chat, the same as shift-clicking a row in the Decor Browser, so you can share a piece with friends or your guild while you look up where it comes from.
 
 ---
 
@@ -108,7 +107,7 @@ A companion window injects into Blizzard's House Editor so you can **place decor
 ---
 
 **Author:** Vamoose
-**Version:** 3.18.0
+**Version:** 3.18.1
 **Game Version:** 12.0.5+ (Midnight)
 **Source / Issues:** https://github.com/VamooseAddons/housing-decor-guide
 **Discord:** https://discord.gg/RWZaxJaHFP

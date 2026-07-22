@@ -2,7 +2,7 @@
 ## Title: Vamoose's Housing Decor Guide
 ## Notes: Track, craft, preview, and acquire housing decorations across all professions
 ## Author: Vamoose
-## Version: 3.18.0
+## Version: 3.18.1
 ## SavedVariables: HDG_DB
 ## SavedVariablesPerCharacter: HDG_DB_CURRENT_PROFILE
 ## IconTexture: Interface\AddOns\HousingDecorGuide\textures\Vamoose_HDG_400_trans
@@ -75,7 +75,6 @@ Core\HDGR_Middleware.lua
 Core\HDGR_Migration.lua
 Core\HDGR_StoreFurnishings.lua
 Core\HDGR_Store.lua
-# HDG.Config layer (Baganator-style settings facade over the Store).
 # Loads after Store so Config:Initialize can call Store:GetState; the
 # schema must come first because Config indexes it by name at file-load.
 Core\HDGR_ConfigSchema.lua

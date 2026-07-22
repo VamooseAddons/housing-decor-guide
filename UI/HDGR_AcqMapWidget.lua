@@ -8,19 +8,19 @@
 --   { mapID, x, y, name, zone }    or    nil  (no vendor selected)
 --
 -- Map rendering delegates to HDG.MapRenderer (ported from VFN). Pin click:
---   left  -> SetUserWaypoint + super-track (TomTom-style arrow)
+--   left  -> SetUserWaypoint + super-track
 --   right -> OpenWorldMap focused on the vendor's zone
 --
 -- Single pin per widget; no pooling. Player pin is a second pin appended
 -- when GetPlayerMapPosition returns coordinates on the same map.
 
-HDG = HDG or {}
-HDG.AcqMapWidget = HDG.AcqMapWidget or {}
+HDG                = HDG or {}
+HDG.AcqMapWidget   = HDG.AcqMapWidget or {}
 
-local PIN_SIZE_PX  = 20   -- matches "housing-decor-vendor_32" atlas detail
+local PIN_SIZE_PX  = 20                                      -- matches "housing-decor-vendor_32" atlas detail
 local PIN_HIT_PX   = 24
-local VENDOR_COLOR = { r = 1.00, g = 0.82, b = 0.00, a = 1 }   -- amber/warning
-local PLAYER_COLOR = { r = 0.38, g = 0.85, b = 0.50, a = 1 }   -- success green
+local VENDOR_COLOR = { r = 1.00, g = 0.82, b = 0.00, a = 1 } -- amber/warning
+local PLAYER_COLOR = { r = 0.38, g = 0.85, b = 0.50, a = 1 } -- success green
 
 -- Build a pin. Atlas path renders a Blizzard atlas; fallback = colored dot + white ring.
 -- Mutable bits (_label / _onLeftClick / _onRightClick) hang off the pin for reuse.
@@ -54,14 +54,14 @@ local function buildPin(parent, color, label, onLeftClick, onRightClick, atlas)
     end
 
     pin:SetScript("OnClick", function(self, button)
-        if button == "LeftButton"  and self._onLeftClick  then self._onLeftClick()  end
+        if button == "LeftButton" and self._onLeftClick then self._onLeftClick() end
         if button == "RightButton" and self._onRightClick then self._onRightClick() end
     end)
     local function _pinTooltipDef(self)
         if not self._label or self._label == "" then return nil end
         local extras = {}
-        if self._onLeftClick  then extras[#extras+1] = { text="Left-click",  right="Set waypoint"   } end
-        if self._onRightClick then extras[#extras+1] = { text="Right-click", right="Open world map"  } end
+        if self._onLeftClick then extras[#extras + 1] = { text = "Left-click", right = "Set waypoint" } end
+        if self._onRightClick then extras[#extras + 1] = { text = "Right-click", right = "Open world map" } end
         return { title = self._label, extraLines = extras }
     end
     HDG.TooltipEngine:Attach(pin, _pinTooltipDef)
@@ -71,9 +71,11 @@ end
 
 -- Place a pin at canvas-fraction (x, y). Scale-corrects for the canvas SetScale.
 local function placePin(pin, canvas, x, y)
-    local cw = canvas.GetWidth and canvas:GetWidth() or 0  -- exception(boundary): frame geometry nil before first layout
-    local ch = canvas.GetHeight and canvas:GetHeight() or 0  -- exception(boundary): frame geometry nil before first layout
-    local scale = (canvas.GetScale and canvas:GetScale()) or 1  -- exception(boundary): frame geometry nil before first layout
+    local cw = canvas.GetWidth and canvas:GetWidth() or 0      -- exception(boundary): frame geometry nil before first layout
+    local ch = canvas.GetHeight and canvas:GetHeight() or
+    0                                                          -- exception(boundary): frame geometry nil before first layout
+    local scale = (canvas.GetScale and canvas:GetScale()) or
+    1                                                          -- exception(boundary): frame geometry nil before first layout
     if scale <= 0 then scale = 1 end
 
     pin:SetParent(canvas)
@@ -146,9 +148,9 @@ local function dispatchVendorMap(widget, values)
             function()
                 HDG.AcquisitionController:OpenWorldMapAt(widget._currentPoint.mapID)
             end,
-            "housing-decor-vendor_32"   -- native Blizzard housing-vendor pin atlas
+            "housing-decor-vendor_32"         -- native Blizzard housing-vendor pin atlas
         )
-        widget._vendorPin._label = point.name   -- rebind; closure captured the original name
+        widget._vendorPin._label = point.name -- rebind; closure captured the original name
         placePin(widget._vendorPin, canvas, point.x, point.y)
     elseif widget._vendorPin then
         widget._vendorPin:Hide()
@@ -175,8 +177,8 @@ local function dispatchVendorMap(widget, values)
 end
 
 HDG.WidgetTypes:Register("vendorMap", {
-    build    = buildVendorMap,
-    dispatch = { fields = { "mapPoint" }, push = dispatchVendorMap },
+    build        = buildVendorMap,
+    dispatch     = { fields = { "mapPoint" }, push = dispatchVendorMap },
     requiresFont = function() return false end,
-    specFields = {},                   -- mapPoint flows via binding; no kind-specific fields
+    specFields   = {}, -- mapPoint flows via binding; no kind-specific fields
 })

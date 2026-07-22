@@ -76,6 +76,13 @@ local function _wireItemRow(row, ed)
     local itemID = ed.itemID
     row:SetScript("OnClick", function()
         if not itemID then return end
+        -- Shift-click links the item in chat (active editbox, or opens chat);
+        -- mirrors the Decor browser row. A plain click selects.
+        if IsShiftKeyDown() then
+            local _, link = C_Item.GetItemInfo(itemID)  -- exception(boundary): itemLink nil on cold item cache
+            if link then _G.ChatFrameUtil.InsertLink(link) end
+            return
+        end
         CH.Mechanics.SetUITransientView("acquisition", "selectedItemID", itemID)
         local npcID = FindFirstVendorForItem(itemID)
         if npcID then

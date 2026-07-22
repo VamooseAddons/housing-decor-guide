@@ -443,7 +443,7 @@ function HDG.Waypoints:InitMapPins()
     _pinPool = CreateFramePool("FRAME", _mapFrame, nil, _onPinReleased, false, frameInitFunc)
 
     -- MapCanvas.MapSet fires BEFORE canvas geometry settles; poll for non-zero
-    -- width before rendering (RareScanner WaitForCanvasReady pattern).
+    -- width before rendering.
     local function _refreshWhenReady(mapID, attempts)
         attempts = attempts or 0
         if _mapFrame:GetWidth() > 0 then
@@ -459,7 +459,7 @@ function HDG.Waypoints:InitMapPins()
     hooksecurefunc(WorldMapFrame, "OnFrameSizeChanged", _onResize)
     -- Zoom: react to Blizzard's canvas scale-change EVENT (taint-preserving hook),
     -- NOT a per-frame OnUpdate poll. Mirrors MapCanvasPinMixin:OnCanvasScaleChanged --
-    -- every major map addon (HandyNotes/TomTom) scales this way; none poll per frame.
+    -- the canonical map-pin approach; none poll per frame.
     hooksecurefunc(WorldMapFrame, "OnCanvasScaleChanged", _onResize)
 
     -- Initial render in case Init runs while a map is already open.
