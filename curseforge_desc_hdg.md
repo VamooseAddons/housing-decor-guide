@@ -12,11 +12,11 @@
 
 ---
 
-## What's New in v3.19.0
+## What's New in v3.19.1
 
 The House Editor companion can now tell you what you have already placed.
 
-- **The Snapshots tab is now Placed, and opens with a live Placed Decor list.** It shows everything you have put down in the room you are standing in, with a count for each item, and you can search it by name. Walk into another room and the list follows you. Your saved snapshots sit underneath it, unchanged.
+- **The Snapshots tab is now Placed, and opens with a live Placed Decor list.** It shows everything you have put down in the area you are in -- indoors or outdoors -- with a count for each item, and you can search it by name. Step outside and the list switches to your exterior decor. Your saved snapshots sit underneath it, unchanged.
 - **Use it to answer "did I place that, and how many?"** The list is built fresh each session, so it never shows decor from a house you have left.
 - Selecting or removing a piece is still done from the Placed Decor list in Advanced mode. Blizzard restricts those actions to their own interface, so this list is for finding out what is down and how much of it.
 
@@ -109,7 +109,7 @@ A companion window injects into Blizzard's House Editor so you can **place decor
 ---
 
 **Author:** Vamoose
-**Version:** 3.19.0
+**Version:** 3.19.1
 **Game Version:** 12.0.5+ (Midnight)
 **Source / Issues:** https://github.com/VamooseAddons/housing-decor-guide
 **Discord:** https://discord.gg/RWZaxJaHFP

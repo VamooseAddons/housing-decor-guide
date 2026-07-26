@@ -290,9 +290,10 @@ end
 -- entry, is never persisted, and is rebuilt from the burst every session.
 local PLACED_LIVE_ID = "placed:live"
 
--- Decor in the area the player is standing in, from the CUSTOMIZATION_CHANGED
--- burst the HousingObserver already collects. Area-scoped because the burst is
--- per-area; that reproduces Blizzard's own Placed Decor panel exactly.
+-- Decor in the area the player is standing in -- an AREA is indoors vs outdoors,
+-- NOT a single room, so every interior room shares one list. From the
+-- CUSTOMIZATION_CHANGED burst the HousingObserver already collects; matching
+-- Blizzard's own Placed Decor panel, which is scoped the same way.
 local function _placedInCurrentArea(state)
     local area = state.session.styles.currentArea
     local out = {}
@@ -335,7 +336,7 @@ local function _sidebarCollectionRows(state, mode, needle, selected)
             id          = PLACED_LIVE_ID,
             type        = "placedLive",
             displayName = "Placed Decor",
-            subtitle    = "In this room -- live",
+            subtitle    = "Indoors or outdoors -- live",
             count       = #_placedInCurrentArea(state),
             isSelected  = selected == PLACED_LIVE_ID,
         })
@@ -355,7 +356,7 @@ Selectors:Register("companion.sidebarRows", {
         "session.house.roomCatalog",         -- rooms-mode blueprint tiles
         "session.styles.changeSeq",
         "session.styles.placedDecor",       -- live Placed row count
-        "session.styles.currentArea",       -- ...scoped to the current room
+        "session.styles.currentArea",       -- ...scoped to the current area
         "session.resolvers.staticData.tick",
         "session.resolvers.catalog.tick",   -- cost-bucket owned counts
     },
@@ -595,7 +596,7 @@ Selectors:Register("companion.gridItems", {
     reads = {
         "session.ui.companion.mode",
         "session.styles.placedDecor",   -- live Placed list
-        "session.styles.currentArea",   -- ...scoped to the room the player is in
+        "session.styles.currentArea",   -- ...scoped to the area (indoors/outdoors)
         "session.ui.companion.selectedItemID",
         "session.ui.companion.search",
         "session.ui.companion.ioFilter",

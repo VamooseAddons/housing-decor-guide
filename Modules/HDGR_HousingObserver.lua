@@ -85,9 +85,9 @@ function HO:Observe(decorGUID)
                   and C_HousingDecor.GetDecorInstanceInfoForGUID(decorGUID)) or nil  -- exception(boundary): nil during editor-entry burst
     local decorID = tonumber(decorGUID:match("^Housing%-1%-%d+%-(%d+)%-")) or (info and info.decorID)
     if not decorID then return end
-    -- Area segment of the GUID. The burst is per-area, so this is what scopes the
-    -- Placed list to the room/exterior the player is standing in -- verified
-    -- 21/21 against Blizzard's own Placed Decor panel (2026-07-26).
+    -- Area segment of the GUID. An AREA is indoors vs outdoors, NOT a room -- every
+    -- interior room shares one area. This is what scopes the Placed list, matching
+    -- Blizzard's panel -- verified 21/21 against it (2026-07-26).
     local areaID = tonumber(decorGUID:match("^Housing%-1%-(%d+)%-"))
     local name = (info and info.name)
               or (C_HousingDecor and C_HousingDecor.GetDecorName and C_HousingDecor.GetDecorName(decorID))  -- exception(boundary): housing C_API nil off-house-context

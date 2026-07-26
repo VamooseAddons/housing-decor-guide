@@ -641,9 +641,10 @@ end
 
 -- StyleEngine cache invalidation tick (bumped on STYLES_INVALIDATE_CACHE).
 -- placedDecor: live map keyed by decorGUID (only stable handle Blizzard exposes).
--- currentArea: area segment of the most recent CUSTOMIZATION_CHANGED burst, i.e.
--- the room/exterior the player is standing in. The Placed list scopes to it, which
--- reproduces Blizzard's own panel exactly (GetAllPlacedDecor is itself area-scoped).
+-- currentArea: area segment of the most recent CUSTOMIZATION_CHANGED burst. An
+-- AREA is indoors vs outdoors, NOT a single room -- all interior rooms share one.
+-- The Placed list scopes to it, matching Blizzard's own panel (GetAllPlacedDecor
+-- is itself area-scoped).
 local function NewStylesSession()
     return { changeSeq = 0, placedDecor = {}, currentArea = nil }
 end

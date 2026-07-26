@@ -1,11 +1,19 @@
+## [3.19.1] - 2026-07-26 (July 2026)
+
+### Fixed
+- Placed Decor list: corrected the description of what it covers. The list is
+  scoped to the area you are in -- indoors or outdoors -- not to a single room, so
+  every interior room shares one list. The wording in v3.19.0 said "room", which
+  would have had you expecting the list to change as you walked between rooms.
+
 ## [3.19.0] - 2026-07-26 (July 2026)
 
 ### Added
 - House Editor companion: the Snapshots tab is now **Placed**, and it opens with a
-  live **Placed Decor** list showing everything you have put down in the room you
-  are standing in, with a count per item. Search it by name to settle the question
-  the editor cannot answer -- did I actually place that, and how many? Walk into
-  another room and the list follows you. Your saved snapshots sit underneath it,
+  live **Placed Decor** list showing everything you have put down in the area you
+  are in -- indoors or outdoors -- with a count per item. Search it by name to
+  settle the question the editor cannot answer: did I actually place that, and how
+  many? Step outside and the list switches to your exterior decor. Your saved snapshots sit underneath it,
   unchanged. The list is built fresh each session, so it never shows decor from a
   house you have left.
 
