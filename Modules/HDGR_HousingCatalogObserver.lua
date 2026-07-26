@@ -1781,12 +1781,23 @@ HDG.Modules:Declare({
                 -- Still LOADING: re-kick ReconcileFull (tag groups may now be present).
                 -- Editor-only (window closed): skip full sweep; HOUSING_STORAGE_ENTRY_UPDATED
                 -- captures in-editor changes via ReconcileEntry (targeted; avoids 1673-entry storm).
+                -- The still-LOADING re-kick is NOT gated on the main window. The
+                -- companion opens standalone in the editor and calls RequestLoad,
+                -- which flips status to "loading"; if the re-kick that completes
+                -- that sweep only ran for the main window, status stayed "loading"
+                -- forever -- and RequestLoad bails unless status == "idle", so the
+                -- companion could never recover. Symptom: "?" placeholder icons
+                -- until the player opened the main window and switched tabs.
+                -- Cheap: this only fires while a sweep is genuinely mid-flight.
+                if HDG.Store:GetState().session.catalog.status == "loading" then
+                    R:ReconcileFull("refresh-queued:" .. action.payload.event)
+                elseif HDG.Store:GetState().account.ui.mainWindowShown then
+                    R:_OnViewChange(HDG.Store:GetState().account.ui.view)
+                end
+                -- The expensive follow-ups stay main-window-only: editor-only opens
+                -- get targeted ReconcileEntry from HOUSING_STORAGE_ENTRY_UPDATED
+                -- instead, avoiding the 1673-entry storm.
                 if HDG.Store:GetState().account.ui.mainWindowShown then
-                    if HDG.Store:GetState().session.catalog.status == "loading" then
-                        R:ReconcileFull("refresh-queued:" .. action.payload.event)
-                    else
-                        R:_OnViewChange(HDG.Store:GetState().account.ui.view)
-                    end
                     R:ReconcileRooms()         -- storage change -> refresh room stock too
                     R:QueueCategoryTreeRebuild()   -- category ownership (anyStoredEntries) may have changed
                 end

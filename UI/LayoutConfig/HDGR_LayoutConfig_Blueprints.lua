@@ -193,10 +193,12 @@ LC.widgets["blueprintsDetailPanel.meterExtBar"] = {
     tooltip = { recipe = "BlueprintMeterExterior" }, kind = "progressbar", ["in"] = "blueprintsDetailPanel.meterExtCol",
     binding = { progress = "blueprints.meterFracExterior" }, width = "fill", height = 8, order = 10,
 }
--- Pet decor budgets (12.1): interior + exterior. Deliberately NARROWER than the
--- three main meters (fixed width vs "fill") -- pet budgets are small and secondary.
+-- Pet decor budgets (12.1): interior + exterior. Narrower than the three main
+-- meters (fixed width vs "fill") -- pet budgets are secondary. Sized to fit the
+-- widest label "100 / 100": the 12.1 caps rose to 100 interior / 25 exterior, so
+-- the old 56px clipped the 3-digit interior value to "0 / 1...".
 LC.sections["blueprintsDetailPanel.meterIntPetCol"] = {
-    ["in"] = "blueprintsDetailPanel.meters", layout = "vertical", width = 56, gap = "xs", order = 20,
+    ["in"] = "blueprintsDetailPanel.meters", layout = "vertical", width = 76, gap = "xs", order = 20,
 }
 LC.widgets["blueprintsDetailPanel.meterIntPetText"] = {
     tooltip = false, kind = "label", ["in"] = "blueprintsDetailPanel.meterIntPetCol",
@@ -207,7 +209,7 @@ LC.widgets["blueprintsDetailPanel.meterIntPetBar"] = {
     binding = { progress = "blueprints.meterFracInteriorPet" }, width = "fill", height = 8, order = 10,
 }
 LC.sections["blueprintsDetailPanel.meterExtPetCol"] = {
-    ["in"] = "blueprintsDetailPanel.meters", layout = "vertical", width = 56, gap = "xs", order = 25,
+    ["in"] = "blueprintsDetailPanel.meters", layout = "vertical", width = 76, gap = "xs", order = 25,
 }
 LC.widgets["blueprintsDetailPanel.meterExtPetText"] = {
     tooltip = false, kind = "label", ["in"] = "blueprintsDetailPanel.meterExtPetCol",

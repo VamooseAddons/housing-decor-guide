@@ -641,8 +641,11 @@ end
 
 -- StyleEngine cache invalidation tick (bumped on STYLES_INVALIDATE_CACHE).
 -- placedDecor: live map keyed by decorGUID (only stable handle Blizzard exposes).
+-- currentArea: area segment of the most recent CUSTOMIZATION_CHANGED burst, i.e.
+-- the room/exterior the player is standing in. The Placed list scopes to it, which
+-- reproduces Blizzard's own panel exactly (GetAllPlacedDecor is itself area-scoped).
 local function NewStylesSession()
-    return { changeSeq = 0, placedDecor = {} }
+    return { changeSeq = 0, placedDecor = {}, currentArea = nil }
 end
 
 -- Session log: ring buffer (per ADR-013). dispatchCap sub-caps the "dispatch"
@@ -3651,7 +3654,7 @@ HDG.Actions:Register{ name = "STYLES_SMARTSET_CANCEL",
     end }
 
 HDG.Actions:Register{ name = "STYLES_PLACED_DECOR_OBSERVED",
-    persists = false, combatUnsafe = false, 
+    persists = false, combatUnsafe = false,
     invalidates = { "session.styles.placedDecor" },
     reduce = function(state, payload)
         local guid = payload.decorGUID
@@ -3662,6 +3665,9 @@ HDG.Actions:Register{ name = "STYLES_PLACED_DECOR_OBSERVED",
             map[guid] = {
                 decorGUID = guid,
                 decorID   = payload.decorID,
+                -- Same area segment the batch path records, so both producers
+                -- write the same entry shape and the Placed list can scope on it.
+                areaID    = payload.areaID,
                 itemID    = payload.itemID,
                 name      = payload.name,
                 -- placedAt: preserve original on edit re-observe; stamp on first sighting
@@ -5054,8 +5060,8 @@ HDG.Actions:Register{ name = "STYLES_CURATOR_MOVE",
     end }
 
 HDG.Actions:Register{ name = "STYLES_PLACED_DECOR_OBSERVED_BATCH",
-    persists = false, combatUnsafe = false, 
-    invalidates = { "session.styles.placedDecor" },
+    persists = false, combatUnsafe = false,
+    invalidates = { "session.styles.placedDecor", "session.styles.currentArea" },
     reduce = function(state, payload)
         -- Bulk variant used by HousingObserver to coalesce the
         -- HOUSING_DECOR_CUSTOMIZATION_CHANGED burst on edit-mode entry
@@ -5077,10 +5083,14 @@ HDG.Actions:Register{ name = "STYLES_PLACED_DECOR_OBSERVED_BATCH",
                 map[guid] = {
                     decorGUID = guid,
                     decorID   = e.decorID,
+                    areaID    = e.areaID,
                     itemID    = e.itemID,
                     name      = e.name,
                     placedAt  = (existing and existing.placedAt) or now,
                 }
+                -- Last burst wins: entering an area re-bursts that area, so the
+                -- final entry of the batch names where the player now is.
+                if e.areaID then state.session.styles.currentArea = e.areaID end
             end
         end
     end }

@@ -181,7 +181,7 @@ LC.widgets["companionPanel.close"] = {
 local MODE_CHIPS = {
     { value = "styles",      label = "Your Styles", recipe = "CompanionStyles" },
     { value = "rooms",       label = "Designs",     recipe = "CompanionRooms" },
-    { value = "snapshots",   label = "Snapshots",   recipe = "CompanionSnapshots" },
+    { value = "snapshots",   label = "Placed",      recipe = "CompanionSnapshots" },
     { value = "themes",      label = "Themes",      recipe = "CompanionThemes" },
     { value = "collections", label = "Collections", recipe = "CompanionCollections" },
     { value = "recent",      label = "Recent",      recipe = "CompanionRecent" },

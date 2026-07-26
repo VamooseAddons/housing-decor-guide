@@ -13,7 +13,7 @@ HDGR_VendorAugment = {
     [14624] = { name = "Master Smith Burninate", zone = "Searing Gorge", mapID = 32, x = 38.4, y = 28.4, faction = "N", exp = "Cataclysm" },
     [16528] = { name = "Provisioner Vredigar", zone = "Ghostlands", mapID = 95, x = 47.4, y = 32.0, faction = "H", exp = "The Burning Crusade" },
     [25206] = { name = "Ahlurglgr", zone = "Borean Tundra", mapID = 114, x = 43.0, y = 13.8, faction = "N", exp = "Wrath of the Lich King" },
-    [27391] = { name = "Woodsman Drake", zone = "Grizzly Hills", mapID = 116, x = 32.4, y = 60.0, faction = "N", exp = "Wrath of the Lich King" },
+    [27391] = { name = "Woodsman Drake", zone = "Grizzly Hills", mapID = 116, x = 32.4, y = 60.0, faction = "A", exp = "Wrath of the Lich King" },
     [28038] = { name = "Purser Boulian", zone = "Sholazar Basin", mapID = 119, x = 26.8, y = 59.2, faction = "N", exp = "Wrath of the Lich King" },
     [44114] = { name = "Wilkinson", zone = "Duskwood", mapID = 47, x = 20.2, y = 58.2, faction = "A", exp = "Classic" },
     [44337] = { name = "Maurice Essman", zone = "Blasted Lands", mapID = 17, x = 45.8, y = 88.4, faction = "A", exp = "Classic" },

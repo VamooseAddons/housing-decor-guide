@@ -1,3 +1,28 @@
+## [3.19.0] - 2026-07-26 (July 2026)
+
+### Added
+- House Editor companion: the Snapshots tab is now **Placed**, and it opens with a
+  live **Placed Decor** list showing everything you have put down in the room you
+  are standing in, with a count per item. Search it by name to settle the question
+  the editor cannot answer -- did I actually place that, and how many? Walk into
+  another room and the list follows you. Your saved snapshots sit underneath it,
+  unchanged. The list is built fresh each session, so it never shows decor from a
+  house you have left.
+
+  One thing it deliberately does not do: clicking an entry will not select or
+  highlight that piece out in the world. Blizzard restricts selecting and removing
+  placed decor to their own interface, so that part has to be done from the Placed
+  Decor list in Advanced mode -- ours is there to tell you what is down and how
+  much of it, which is the part their list cannot answer. Blizzard have said the
+  restriction may be lifted later; if it is, this list will do the rest.
+  (Thanks ReganB and Madailein Hatter!)
+
+### Fixed
+- Essence of Lumber tracker: characters you've hidden on the Alts tab now count toward the account-wide total and appear in the hover breakdown. Hiding an alt is meant to keep it out of the professions grid, not to remove it from your essence tally -- the tracker was under-counting for anyone who hides their unlevelled alts. (Thanks Pixie!)
+- Vendors: Woodsman Drake (Grizzly Hills) is now correctly listed as Alliance instead of Neutral, so the guide no longer points cross-faction players toward an Alliance hub. (Thanks Haisul!)
+- Blueprints (12.1): the interior pet-decor budget meter now shows its full number. The pet caps rose to 100 interior / 25 exterior, and the interior column was too narrow, so "100" was clipped to "1...". (Thanks Madailein Hatter!)
+- Blueprints (12.1): the house's floor count is read correctly again after the game removed the old floor-count API, so a multi-floor house captures every floor into Projects instead of only the ground floor.
+
 ## [3.18.1] - 2026-07-22 (July 2026)
 
 ### Added

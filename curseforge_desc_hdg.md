@@ -12,11 +12,13 @@
 
 ---
 
-## What's New in v3.18.1
+## What's New in v3.19.0
 
-Shift-click linking now works on the Acquire tab too.
+The House Editor companion can now tell you what you have already placed.
 
-- **Shift-click an item in the Find Decor list to link it in chat.** It drops the item's link into chat, the same as shift-clicking a row in the Decor Browser, so you can share a piece with friends or your guild while you look up where it comes from.
+- **The Snapshots tab is now Placed, and opens with a live Placed Decor list.** It shows everything you have put down in the room you are standing in, with a count for each item, and you can search it by name. Walk into another room and the list follows you. Your saved snapshots sit underneath it, unchanged.
+- **Use it to answer "did I place that, and how many?"** The list is built fresh each session, so it never shows decor from a house you have left.
+- Selecting or removing a piece is still done from the Placed Decor list in Advanced mode. Blizzard restricts those actions to their own interface, so this list is for finding out what is down and how much of it.
 
 ---
 
@@ -107,7 +109,7 @@ A companion window injects into Blizzard's House Editor so you can **place decor
 ---
 
 **Author:** Vamoose
-**Version:** 3.18.1
+**Version:** 3.19.0
 **Game Version:** 12.0.5+ (Midnight)
 **Source / Issues:** https://github.com/VamooseAddons/housing-decor-guide
 **Discord:** https://discord.gg/RWZaxJaHFP

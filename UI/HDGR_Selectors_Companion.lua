@@ -3,7 +3,7 @@
 -- Selectors for the companion window content. Six display modes:
 --   styles      -- user-created style + smartset collections
 --   shopping    -- shopping list collections
---   snapshots   -- saved placed-decor snapshots
+--   snapshots   -- "Placed" tab: live area-scoped placed decor + saved snapshots
 --   themes      -- pre-authored Room Concepts (StyleDefinitions, tier="thematic")
 --   collections -- pre-authored Useful Collections (CollectionDefinitions)
 --   recent      -- live placed decor (session.styles.placedDecor)
@@ -286,6 +286,23 @@ end
 
 -- Membership modes (themes / collections / other): name-filtered defs. count
 -- only for explicit membership defs (.items); rule-based concepts leave it nil.
+-- Synthetic sidebar id for the live list. Not a collection -- it has no account
+-- entry, is never persisted, and is rebuilt from the burst every session.
+local PLACED_LIVE_ID = "placed:live"
+
+-- Decor in the area the player is standing in, from the CUSTOMIZATION_CHANGED
+-- burst the HousingObserver already collects. Area-scoped because the burst is
+-- per-area; that reproduces Blizzard's own Placed Decor panel exactly.
+local function _placedInCurrentArea(state)
+    local area = state.session.styles.currentArea
+    local out = {}
+    if not area then return out end                 -- exception(nullable): no burst seen yet this session
+    for _, entry in pairs(state.session.styles.placedDecor) do
+        if entry.areaID == area then out[#out + 1] = entry end
+    end
+    return out
+end
+
 local function _sidebarCollectionRows(state, mode, needle, selected)
     local typeSet = MODE_TO_TYPES[mode] or {}
     local matches = {}
@@ -309,6 +326,20 @@ local function _sidebarCollectionRows(state, mode, needle, selected)
     if mode == "themes"      then return _sectionByTier(matches) end          -- Room Concepts / Themed / Faction
     if mode == "collections" then return _sidebarCollectionsMode(matches, selected) end
     table.sort(matches, _alphaByDisplayName)
+    -- The Placed tab leads with the live list, ABOVE the saved snapshots -- built
+    -- after the sort so it stays pinned instead of landing alphabetically among
+    -- them. Not search-filtered either: hiding the only live row because the search
+    -- box happens not to match its title would read as a bug.
+    if mode == "snapshots" then
+        table.insert(matches, 1, {
+            id          = PLACED_LIVE_ID,
+            type        = "placedLive",
+            displayName = "Placed Decor",
+            subtitle    = "In this room -- live",
+            count       = #_placedInCurrentArea(state),
+            isSelected  = selected == PLACED_LIVE_ID,
+        })
+    end
     return matches
 end
 
@@ -323,6 +354,8 @@ Selectors:Register("companion.sidebarRows", {
         "session.furn",                      -- rooms-mode change tick
         "session.house.roomCatalog",         -- rooms-mode blueprint tiles
         "session.styles.changeSeq",
+        "session.styles.placedDecor",       -- live Placed row count
+        "session.styles.currentArea",       -- ...scoped to the current room
         "session.resolvers.staticData.tick",
         "session.resolvers.catalog.tick",   -- cost-bucket owned counts
     },
@@ -505,9 +538,64 @@ end
 
 -- Observer is primary source for name/icon/isOwned + placement payload.
 -- Cost-bucket mode walks the whole catalog via IterateRows (tied to sweepGeneration).
+-- One cell per placed instance, collapsed to one cell per item with a count --
+-- individual instances aren't actionable (SetPlacedDecorEntrySelected carries
+-- HasRestrictions, so only Blizzard's own rows may select decor), so a per-instance
+-- cell would offer nothing a count doesn't. Search filters on name.
+-- Resolve decorID -> itemID HERE rather than trusting entry.itemID. The observer
+-- resolves it during the burst, which can land BEFORE the catalog sweep -- a nil
+-- frozen into state then survives every later sweep, because state is stored, not
+-- re-derived, and the icons stay as "?" forever. Deriving in the selector means the
+-- declared read on session.resolvers.catalog.tick actually repairs them on sweep.
+local function _resolvePlacedItemID(entry)
+    local row = HDG.HousingCatalogObserver.byDecorID[entry.decorID]  -- exception(nullable): catalog may not have swept yet
+    return (row and row.itemID) or entry.itemID
+end
+
+local function _gridPlacedLiveItems(state, needle, ioFilter)
+    local byItem = {}
+    for _, entry in ipairs(_placedInCurrentArea(state)) do
+        local itemID = _resolvePlacedItemID(entry)
+        local key = itemID or entry.decorID
+        local cell = byItem[key]
+        if cell then
+            cell.placedCount = cell.placedCount + 1
+        else
+            byItem[key] = { itemID = itemID, decorID = entry.decorID,
+                            name = entry.name, placedCount = 1 }
+        end
+    end
+    local out = {}
+    for _, cell in pairs(byItem) do
+        -- Only emit cells the catalog can name. Passing a decorID where an itemID
+        -- is expected is what renders the red "?" placeholder; an unresolved cell
+        -- reappears on the next sweep because this selector re-derives on the tick.
+        local row = cell.itemID and HDG.HousingCatalogObserver:GetRow(cell.itemID)  -- exception(nullable): catalog may not have swept yet
+        if row then
+            -- _emitDecorCells emits 0..N cells (nothing when the search/IO filter
+            -- excludes it; base + one per dyed variant otherwise), so stamp the
+            -- range it actually appended rather than assuming out[#out] is ours.
+            local before = #out
+            _emitDecorCells(out, cell.itemID, row, needle, ioFilter)
+            for i = before + 1, #out do
+                out[i].placedCount = cell.placedCount
+                -- This list is a read-out of what is ALREADY down, not a shop.
+                -- Dropping entryID reuses the cell click handler's existing
+                -- non-placeable path (`if not entryID then return end`) instead of
+                -- adding a branch, and drops "Place" from the tooltip for free.
+                out[i].entryID = nil
+            end
+        end
+    end
+    table.sort(out, function(a, b) return tostring(a.name) < tostring(b.name) end)
+    return out
+end
+
 Selectors:Register("companion.gridItems", {
     reads = {
         "session.ui.companion.mode",
+        "session.styles.placedDecor",   -- live Placed list
+        "session.styles.currentArea",   -- ...scoped to the room the player is in
         "session.ui.companion.selectedItemID",
         "session.ui.companion.search",
         "session.ui.companion.ioFilter",
@@ -528,7 +616,9 @@ Selectors:Register("companion.gridItems", {
         local showCost = state.session.ui.companion.showCost
 
         local out
-        if mode == "recent" then
+        if state.session.ui.companion.selectedItemID == PLACED_LIVE_ID then
+            out = _gridPlacedLiveItems(state, needle, ioFilter)
+        elseif mode == "recent" then
             out = _gridRecentItems(state, needle)
         elseif mode == "rooms" then
             local room = state.account.rooms[state.session.ui.companion.selectedItemID or ""]   -- exception(nullable): nothing selected yet

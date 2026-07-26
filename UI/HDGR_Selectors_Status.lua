@@ -266,6 +266,9 @@ Selectors:Register("chrome.activeTab", {
 -- pooled, so the whole-warband number is the useful glance. perChar is sorted
 -- count-desc for the hover; the current char is flagged (its snapshot is live,
 -- alts are last-login). Snapshots land via Modules/HDGR_EssenceObserver.lua.
+-- Deliberately ignores char.hidden: the Alts eye means "keep this char out of
+-- my professions grid", not "exclude it from account-wide totals" -- filtering
+-- on it here silently under-counted essence for anyone who hides junk alts.
 Selectors:Register("chrome.essenceBadge", {
     reads = {"account.characters", "session.identity.charKey"},
     fn = function(state, ctx)
@@ -274,7 +277,7 @@ Selectors:Register("chrome.essenceBadge", {
         for charKey, c in pairs(state.account.characters) do
             local stock = c.essenceStock   -- exception(nullable): unset until this char is first scanned
             local count = stock and (stock.bag + stock.bank) or 0
-            if not c.hidden and count > 0 then
+            if count > 0 then
                 total = total + count
                 perChar[#perChar + 1] = {
                     name      = c.name or charKey,   -- exception(nullable): legacy record may predate name capture

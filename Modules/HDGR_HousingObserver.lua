@@ -10,7 +10,7 @@
 -- namespace, not by event family):
 --
 --   1. Placed decor (account.styles.placedDecor):
---        HOUSE_EDITOR_MODE_CHANGED       -> clear on entry
+--        HOUSE_EDITOR_MODE_CHANGED       -> topology capture only (does NOT clear)
 --        HOUSING_DECOR_CUSTOMIZATION_CHANGED  -> per-decor observe (queued + batched)
 --        HOUSING_DECOR_REMOVED           -> remove
 --        PLAYER_ENTERING_WORLD           -> clear when leaving a house context
@@ -27,9 +27,13 @@
 -- the requested one -- payload includes houseGUID so the reducer can
 -- target the right entry.
 --
--- Taint-safe placed-decor enumeration: C_HousingDecor.GetAllPlacedDecor TAINTS
--- unconditionally even via C_Timer.After(0); event-driven OBSERVE is the only safe path.
--- See Reference/HOUSING_API.md.
+-- Placed-decor enumeration: C_HousingDecor.GetAllPlacedDecor is declared
+-- HasRestrictions = true (Blizzard_APIDocumentationGenerated/HousingDecorUIDocumentation.lua:
+-- "Placed Decor List APIs currently restricted due to being potentially very expensive
+-- operations, may be reworked & opened up in the future"). It is a POLICY gate, not taint --
+-- an addon call returns ADDON_ACTION_FORBIDDEN. Re-test each patch; Blizzard flagged it as
+-- temporary. Until then the CUSTOMIZATION_CHANGED burst is the only enumeration available,
+-- and it is complete (verified 21/21 vs Blizzard's own panel, 2026-07-26).
 
 HDG = HDG or {}
 HDG.HousingObserver = HDG.HousingObserver or {}
@@ -81,11 +85,16 @@ function HO:Observe(decorGUID)
                   and C_HousingDecor.GetDecorInstanceInfoForGUID(decorGUID)) or nil  -- exception(boundary): nil during editor-entry burst
     local decorID = tonumber(decorGUID:match("^Housing%-1%-%d+%-(%d+)%-")) or (info and info.decorID)
     if not decorID then return end
+    -- Area segment of the GUID. The burst is per-area, so this is what scopes the
+    -- Placed list to the room/exterior the player is standing in -- verified
+    -- 21/21 against Blizzard's own Placed Decor panel (2026-07-26).
+    local areaID = tonumber(decorGUID:match("^Housing%-1%-(%d+)%-"))
     local name = (info and info.name)
               or (C_HousingDecor and C_HousingDecor.GetDecorName and C_HousingDecor.GetDecorName(decorID))  -- exception(boundary): housing C_API nil off-house-context
     _queue[#_queue + 1] = {
         decorGUID = decorGUID,
         decorID   = decorID,
+        areaID    = areaID,
         itemID    = _resolveItemID(decorID),
         name      = name,
     }
@@ -738,6 +747,24 @@ local function _stepSweep()
     if C_Timer and C_Timer.After then C_Timer.After(_activeSweep.settleSeconds, _stepSweep) end
 end
 
+-- C_HousingLayout.GetNumFloors was REMOVED on 12.1 in favour of the occupied-floor
+-- INDEX range (GetLowest/GetHighestOccupiedFloorIndex). Return the same floor COUNT
+-- the old API gave: prefer it on live 12.0.x, derive it from the index range on 12.1
+-- (highest - lowest + 1 -- correct for a contiguous occupied range, basements included).
+-- VERIFY IN-GAME on 12.1: CaptureAllFloors below maps floor 1 -> SetViewedFloor(0),
+-- which assumes the lowest occupied index is 0. If 12.1 houses can start below 0
+-- (basements), the sweep's viewed-floor mapping needs the range, not just the count.
+-- exception(boundary): C_HousingLayout is a Blizzard API namespace; nil in headless tests.
+local function _numFloors()
+    local CL = C_HousingLayout
+    if not CL then return nil end
+    if CL.GetNumFloors then return CL.GetNumFloors() end                        -- live 12.0.x
+    if CL.GetHighestOccupiedFloorIndex and CL.GetLowestOccupiedFloorIndex then  -- 12.1
+        return CL.GetHighestOccupiedFloorIndex() - CL.GetLowestOccupiedFloorIndex() + 1
+    end
+    return nil
+end
+
 function HO:CaptureAllFloors()
     if _activeSweep then return false, "already in progress" end
     -- exception(boundary): C_Housing.IsInsideHouse() -- external Blizzard API; returns false
@@ -756,7 +783,7 @@ function HO:CaptureAllFloors()
     -- Recapture prep (v8): placements persist so tags survive; CLEAR prunes
     -- only capture-owned placements above the current floor count + resets
     -- the capture echo. Per-floor diffs handle removals on surviving floors.
-    local maxFloor = (C_HousingLayout and C_HousingLayout.GetNumFloors and C_HousingLayout.GetNumFloors()) or 1  -- exception(boundary): C_HousingLayout is a Blizzard API namespace; nil in headless tests
+    local maxFloor = _numFloors() or 1  -- exception(boundary): _numFloors nil in headless tests (no C_HousingLayout)
     HDG.Store:Dispatch({
         type    = HDG.Constants.ACTIONS.PROJECTS_CLEAR_HOUSE,
         payload = { houseID = houseID, clearedAt = (time and time() or 0), maxFloor = maxFloor },  -- exception(boundary): GetTime/time absent in headless harness
@@ -785,7 +812,7 @@ end
 
 -- Budget/floor/editor live reads -> PROJECTS_HOUSE_TICK.
 function HO:_PushHouseTick()
-    local CL, CD, CE = C_HousingLayout, C_HousingDecor, C_HouseEditor
+    local CD, CE = C_HousingDecor, C_HouseEditor
     HDG.Store:Dispatch({
         type    = HDG.Constants.ACTIONS.PROJECTS_HOUSE_TICK,
         payload = {
@@ -795,7 +822,7 @@ function HO:_PushHouseTick()
                 decorSpent = (CD and CD.GetSpentPlacementBudget and CD.GetSpentPlacementBudget()) or 0,  -- exception(boundary): CD = C_HousingDecor, Blizzard API namespace
                 decorCount = (CD and CD.GetNumDecorPlaced       and CD.GetNumDecorPlaced())       or 0,  -- exception(boundary): CD = C_HousingDecor, Blizzard API namespace
             },
-            numFloors    = (CL and CL.GetNumFloors and CL.GetNumFloors()) or 0,  -- exception(boundary): CL = C_HousingLayout, Blizzard API namespace
+            numFloors    = _numFloors() or 0,  -- exception(boundary): _numFloors nil in headless tests (no C_HousingLayout); 12.1-safe (GetNumFloors removed)
             editorActive = (CE and CE.IsHouseEditorActive and CE.IsHouseEditorActive()) or false,  -- exception(boundary): CE = C_HouseEditor, Blizzard API namespace
         },
     })
@@ -814,11 +841,12 @@ HDG.Modules:Declare({
         "C_HousingLayout",   -- Projects topology capture + budget reads
     },
     blizzardEvents = {
-        -- Placed-decor channel. Gated on IsHouseEditorActive in the handler
-        -- so we only observe while the user has explicitly entered Blizzard's
-        -- house editor mode (user-agency proxy). Without the gate, the event
-        -- fires for visible decor across the neighborhood (neighbors' houses,
-        -- flyovers, loading screens) and produces massive debug-log spam.
+        -- Placed-decor channel. CUSTOMIZATION_CHANGED is the enumeration burst --
+        -- ungated on purpose (see OnDecorCustomization). It carries decor from
+        -- several area IDs including neighbouring plots, so consumers scope by the
+        -- GUID's area segment. The old "flyovers, loading screens" rationale for
+        -- gating was never evidenced and is removed; neighbours are the real and
+        -- only observed source of foreign decor.
         HOUSE_EDITOR_MODE_CHANGED            = { handler = "OnEditorModeChanged" },
         HOUSING_DECOR_CUSTOMIZATION_CHANGED  = { handler = "OnDecorCustomization" },
         HOUSING_DECOR_REMOVED                = { handler = "OnDecorRemoved" },
@@ -852,21 +880,38 @@ HDG.Modules:Declare({
     },
 
     OnEditorModeChanged = function(self)
-        if C_HouseEditor and C_HouseEditor.IsHouseEditorActive
-           and C_HouseEditor.IsHouseEditorActive() then
-            HO:ClearPlaced()
-        end
+        -- Deliberately NO ClearPlaced here. This fires on EVERY mode change, not just
+        -- editor entry -- switching to Advanced mode to open Blizzard's Placed Decor
+        -- list is a mode change -- and the CUSTOMIZATION_CHANGED burst does NOT re-fire
+        -- afterwards. Clearing therefore destroyed the enumeration with no way to
+        -- rebuild it: the Placed list read 0 the moment the player touched any mode.
+        -- The clear was correct under the old semantics (placedDecor = "things I placed
+        -- this editor session"); as an enumeration cache it is data loss.
+        -- House-context changes still clear it via PLAYER_ENTERING_WORLD, and
+        -- HOUSING_DECOR_REMOVED prunes individual entries.
         HO:_OnCaptureModeChanged()   -- begin/finalize passive topology capture
         HO:_PushHouseTick()          -- editorActive + budgets may have changed
     end,
 
     OnDecorCustomization = function(self, decorGUID)
-        -- Gate: IsHouseEditorActive = user actively editing their own house.
-        -- Without gate, event fires for neighbors/flyovers/loading screens (spams OBSERVED_BATCH).
-        if not (C_HouseEditor and C_HouseEditor.IsHouseEditorActive
-                and C_HouseEditor.IsHouseEditorActive()) then
-            return
-        end
+        -- NO editor-active gate. This event is the only taint-free enumeration of
+        -- placed decor (GetAllPlacedDecor carries HasRestrictions), and it bulk-fires
+        -- as a burst. Gating on IsHouseEditorActive dropped the ENTIRE burst whenever
+        -- it landed before that flag flipped, which is why HDG never saw its own
+        -- enumeration channel. Verified 2026-07-26: an ungated probe captured the full
+        -- set and matched Blizzard's own Placed Decor panel 21/21 (0 missing, 0 extra);
+        -- HDG with the gate captured nothing.
+        --
+        -- What the gate was actually protecting against is decor that isn't yours --
+        -- the burst spans several area IDs, neighbouring plots included. That is a
+        -- SCOPE problem, not a timing one, so consumers filter on the area segment of
+        -- the GUID (session.styles.currentArea) instead. Scoping by identity works
+        -- regardless of when the burst fires, which matters because the trigger is
+        -- still unverified.
+        --
+        -- Safe because this path writes only session.styles.placedDecor (session-only,
+        -- never persisted). account.recentActivity is written by the REMOVED handler,
+        -- which fires only for the player's own removals.
         HO:Observe(decorGUID)
     end,
 
