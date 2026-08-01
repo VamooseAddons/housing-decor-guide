@@ -1,3 +1,34 @@
+## [3.20.0] - 2026-08-01 (August 2026)
+
+### Added
+- **A new colour theme: Pumpkin Spice.** Warm ivory and rose gold on deep
+  forest and charcoal, edged in pumpkin -- an autumn palette to sit alongside
+  the cool ones. It is built the other way round from every other theme here:
+  the forest is the frame and the cards sit *inset* into it rather than raised
+  off it, which keeps every panel near-black so decor names, swatches and
+  prices carry. The five core colours are Madailein Hatter's, shared and named
+  by them and used with their permission; the pumpkin, amber, oxblood and moss
+  that fill out the autumn range were added on top of those. Pick it in
+  Settings.
+- The Placed Decor list in Advanced mode now has a search box. Type part of a
+  name and everything that does not match fades back, so the piece you are after
+  stands out in a long list. Matching rows still work exactly as they did --
+  hover to highlight the decor, click to select it, then move or remove it with
+  the usual controls.
+- The list is not shortened, only faded. Blizzard restricts changing what that
+  panel contains, and removing rows outright makes the remaining ones
+  unselectable, which would cost you the very thing you opened it for.
+- The fading approach is Liberty's, author of the DoorSearch addon, used with
+  their permission. If you already run DoorSearch you do not need both.
+
+### Fixed
+- The sidebar now keeps the section you are in on screen. Tabs set the window
+  height, and the shorter ones -- Move Planner most of all -- left the sidebar
+  too short to show its lower half, so clicking Move Planner scrolled the
+  entry you just picked out of sight. Whichever entry is lit is now scrolled
+  back into view whenever the sidebar changes, so you can always see where you
+  are and what sits either side of it.
+
 ## [3.19.1] - 2026-07-26 (July 2026)
 
 ### Fixed

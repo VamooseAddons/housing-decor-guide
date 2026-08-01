@@ -186,8 +186,63 @@ HDG.TreeList:RegisterCellKind("navNode", {
         end,
     })
 
+-- ===== Reveal the active row =================================================
+-- The sidebar spans the ACTIVE VIEW's body height (ComposeWindow stretches the
+-- `left` slot to the fill view's height), and every nav.tree rebuild discards the
+-- scroll offset (TreeList:SetItems -> DiscardScrollPosition). So switching to a
+-- short view both resets the tree to the top AND cuts it short: Move Planner's
+-- 502px body fits 19 of the 28 rows, and "Move Planner" is row 21 -- the
+-- destination the user just clicked lands below the fold. Scroll it back.
+--
+-- Deepest-active, not first-active: a leaf click lights its hub too, and
+-- FindElementDataIndexByPredicate returns the FIRST match -- landing on the hub
+-- (up to 3 rows above) can leave the leaf itself below the fold. A hub with no
+-- active child (clicked directly, or collapsed) is itself the target.
+local function _isDeepestActive(node)
+    local data = node:GetData()
+    if not data.active then return false end
+    if data.children then
+        for _, child in ipairs(data.children) do
+            if child.active then return false end
+        end
+    end
+    return true
+end
+
+-- Exposed for the controller-wire smoke test.
+NavController._isDeepestActive = _isDeepestActive
+
+-- Two-phase: the tree's post-rebuild hook marks the reveal pending, the NavReveal
+-- pipeline stage flushes it. SetItems runs in BIND -- before LAYOUT resizes the
+-- sidebar to the new view -- and scrolling against the outgoing height picks the
+-- wrong offset (row 21 reads as "already visible" in a 23-row window, then the
+-- window shrinks to 19 and drops it again).
+function NavController:RevealActive(rootFrame)
+    if not self._revealPending then return end
+    self._revealPending = false
+    local tree = HDG.UI.W(rootFrame, "navPanel.tree")
+    -- AlignNearest = shortest hop, and a no-op when the row is already fully in
+    -- view. noInterpolation: the nav is chrome, it shouldn't animate under a
+    -- window that just resized. Collapsed hubs carry no children in nav.tree, so
+    -- the predicate can never match inside one -- PrepareScrollToElementData
+    -- never expands a group behind the Store's back.
+    tree._scrollBox:ScrollToElementDataByPredicate(
+        _isDeepestActive, ScrollBoxConstants.AlignNearest, 0, true)
+end
+
 -- Clicks live in cell initializers; active highlight flows via nav.tree's `active` flags.
-function NavController:Wire(_rootFrame) end
+function NavController:Wire(rootFrame)
+    local tree = HDG.UI.W(rootFrame, "navPanel.tree")
+    if not tree then return end   -- exception(nullable): satellite windows (shopping/zone/lumber) wire the same controllers onto a frame with no sidebar
+    -- Every rebuild discards the scroll offset, so every rebuild needs a reveal.
+    -- _afterSetItems is TreeList's post-population hook list (the same seam
+    -- WireStoreSelectionSync uses).
+    tree._afterSetItems = tree._afterSetItems or {}
+    tree._afterSetItems[#tree._afterSetItems + 1] = function()
+        NavController._revealPending = true
+    end
+end
+
 function NavController:Refresh(_rootFrame, _ctx) end
 
 HDG.Controllers:Register("nav", NavController)

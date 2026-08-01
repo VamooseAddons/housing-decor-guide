@@ -1181,6 +1181,168 @@ Palettes.Green = {
     diag_hint           = hex("#72f13e"),  -- bright green
 }
 
+-- ----- Pumpkin Spice --------------------------------------------------------
+-- Source: community brand palette from Madailein Hatter, supplied directly on
+-- Discord 2026-07-31 -- their own five hex codes, their own name for it ("I
+-- love calling it pumpkin spice"), and their own go-ahead for both addons
+-- ("Aegis and HDG would be wonderful").
+--
+-- THE ONE THEME WITH NO UPSTREAM COLORSCHEME. Every other palette here ports a
+-- published vim/neovim theme and mirrors its hex verbatim so it verifies
+-- against source. This one has no repo to point at, so the rule is met the
+-- other way: the five brand colours below are Madailein's, quoted exactly as
+-- given, and every other key is derived from them and marked as such.
+--
+--   Rose Gold #C69274   Warm Ivory #DAC7B6   Charcoal #222221
+--   Deep Forest #333526   Soft Bronze #5D4024
+--
+-- THREE COLOURS ADDED, because her five have a 36-POINT LIGHTNESS HOLE between
+-- Soft Bronze (25.3%) and Rose Gold (61.6%) -- more than double any other gap --
+-- and that hole is exactly where autumn lives. Her warm tones also cluster at
+-- 22/28.3/29.5 degrees: one hue at three brightnesses, elegant but never orange.
+-- The additions fill the gap along her OWN hue line rather than intruding:
+--   Pumpkin      #B4642A  26deg / 43%  the missing centre -- borders
+--   Deep Pumpkin #6B3A18  25deg / 25%  the same, dark enough to carry ivory text
+--   Amber        #D9932F  38deg / 52%  candlelight; the 38deg rung she has none of
+--   Oxblood      #7A2E22   8deg / 31%  the red anchor; nothing sat below 20deg
+-- Her five are UNCHANGED except Deep Forest, and that one had to move. At
+-- 16.5% saturation and 17.8% lightness it was the LEAST saturated tone here,
+-- and once the four oranges landed at 62-69% it stopped reading as green at all
+-- -- simultaneous contrast hands the hue to the loudest neighbour (owner, live
+-- 2026-08-01, "the forest green still isnt quite there"). The deeper cause was a
+-- ladder imbalance I created: orange ended up with SIX rungs (25/26/31/44/52/62%
+-- lightness), green with ONE. So Deep Forest is lifted to #3A4527 -- her 68deg
+-- hue kept and saturation roughly doubled to ~28% -- and Moss fills the middle
+-- rung. Green now reads as a family rather than a single dark step.
+--
+-- SATURATION AND LIGHTNESS ARE SEPARATE DIALS, and only the first one was
+-- needed. A first attempt raised BOTH, which made the green read green but also
+-- made it advance: luminance is what the eye reads as depth, so every lifted row
+-- floated forward and long lists fragmented into a stack of raised bars (owner,
+-- live 2026-08-01, "they look raised and discontinuous"). Lightness is now back
+-- near her original 17.8% while the new saturation stays. Rule for any future
+-- tuning here: reach for SATURATION to make a colour read as itself, and leave
+-- LIGHTNESS alone unless you actually intend the surface to advance or recede.
+--
+-- THE SURFACE RAMP RUNS BACKWARDS, ON PURPOSE. Every other scheme here puts
+-- the darkest tone at the canvas and lifts panels off it, so cards read
+-- RAISED. Here the deep forest is the FRAME and the charcoal cards sink into
+-- it (Madailein: "swap charcoal for the green"; owner: "panels should look
+-- inset"). That inversion is the theme's whole character -- it makes every
+-- information surface near-black, which is what carries text and swatches --
+-- so `panel` is deliberately DARKER than `bg`, and `sunken` sits below both.
+-- Anything that assumes panel-is-lighter-than-canvas will read wrong here and
+-- is a bug in that skinner, not in this palette.
+--
+-- WHICH BRAND COLOUR CARRIES THE WINDOW DIFFERS FROM AEGIS, deliberately. The
+-- five hexes are identical in both addons; what changed here is which ROLE each
+-- one takes, because the two layouts weight their surfaces oppositely. Aegis is
+-- frame-dominant (the forest fills the window, charcoal cards are small insets)
+-- so it reads warm. HDG is panel-dominant -- the browser list, preview pane and
+-- note box cover most of the window -- so putting Charcoal on `panel` made the
+-- whole addon read GREY, because Charcoal #222221 is R34 G34 B33: a genuinely
+-- neutral tone, 2.9% saturation against 18-28% for every other surface here
+-- (owner, live side-by-side 2026-08-01, "brown vs gray for hdg").
+--
+-- So the surface ramp is derived from SOFT BRONZE, not Deep Forest. That second
+-- part is not fussiness: deriving every surface from the forest made the whole
+-- window one olive ramp and it read as CAMO (owner, live 2026-08-01, "we are
+-- leaning to 'camo' or army"). Charcoal's neutrality had been doing real work as
+-- the non-green counterpoint to the frame, and dropping it left nothing to break
+-- up the green. The ramp below is brown by construction -- every surface is
+-- R > G > B -- so the forest canvas frames warm cards instead of blending into
+-- them. Green frame, bronze cards, rose gold accents: autumn, not army.
+--
+-- BOTH HUES NEED VISIBLE AREA, and that is what settles which key gets which.
+-- A bronze-only ramp lost the forest entirely -- it survived on `canvas`, which
+-- HDG's panels almost completely cover, so the green had nowhere to show (owner
+-- 2026-08-01, "we've lost the olive entirely"). The fix is to give the forest a
+-- job with real pixel count rather than a bigger swatch: RowChrome drives zebra
+-- alt rows from `panel_soft` and section-header bands from `panel_header`, and
+-- in a list-heavy addon those two out-cover every other surface. So the forest
+-- family holds those, the bronze family holds the card body and the deep insets,
+-- and the two alternate down every list instead of one hue winning outright.
+--
+-- FINAL ALLOCATION IS BY MEASURED PAINT AREA, not by copying Aegis. Full
+-- workings: docs/PUMPKIN_SPICE_SURFACE_ANALYSIS_2026-08-01.md. The headline:
+-- `surface.canvas` has ZERO paint sites -- nothing renders it, the Canvas
+-- skinner draws from `sunken` -- so Deep Forest sat on a key with no pixels for
+-- four tuning passes. That single mis-assignment caused the grey, the camo and
+-- the lost-olive rounds in turn. Site counts: panel 19, sunken 9, panel_header
+-- 6, panel_soft 4, panel_footer 3, raised 1, canvas 0. Big-area keys take
+-- low-chroma bronze; the forest goes on panel_header, whose sites are
+-- structural but THIN (every panel title bar, every list section break, the
+-- active nav item) so a strong hue reads as identity rather than a wash.
+-- No brand hex was altered, the inversion survives (panel L=0.0252 still sits
+-- under canvas L=0.0339), and the addon reads warm at the size it is actually
+-- seen. Aegis needs none of this -- same palette, different geometry.
+Palettes.PumpkinSpice = {
+    sunken          = hex("#2E361E"),                   -- DEEP FOREST, SATURATED: the frame. 9 sites
+                                                        -- the Canvas skinner paints the whole window
+                                                        -- from this, so it is the largest surface.
+    bg              = hex("#2E361E", 0.97),             -- DEEP FOREST, SATURATED -- matches the frame
+    panel_soft      = hex("#222221"),                   -- CHARCOAL (brand): nav rail + zebra alt rows.
+                                                        -- MUST NOT EQUAL `sunken`: RowChrome hides the
+                                                        -- zebra texture on odd rows so sunken shows
+                                                        -- through, and tints even rows with this key --
+                                                        -- so setting both to Deep Forest erased the
+                                                        -- striping outright (owner, live 2026-08-01).
+                                                        -- Charcoal here alternates the two brand grounds
+                                                        -- against each other: 1.27:1 plus a hue step.
+    panel           = hex("#222221"),                   -- CHARCOAL (brand): the inset card. Near-
+                                                        -- neutral ON PURPOSE -- it is the reading
+                                                        -- surface, and text/screenshots/swatches sit
+                                                        -- cleanest on a ground with no hue of its own.
+    panel_footer    = hex("#6B3A18"),                   -- DEEP PUMPKIN (added)
+    panel_header    = hex("#6B3A18"),                   -- DEEP PUMPKIN (added): panel title bars, list
+                                                        -- section headers, active nav item. 1.69:1 off
+                                                        -- the card -- the strongest step in the ramp,
+                                                        -- which is what a band should be.
+    raised          = hex("#404C2A"),                   -- MOSS (added): the green family's missing
+                                                        -- middle rung -- 33% light between the lifted
+                                                        -- forest at 25% and sage at 59%
+
+    border          = hex("#B4642A"),                   -- PUMPKIN (added): borders carry no text, so
+                                                        -- they take the new mid-orange at full strength
+    text            = hex("#DAC7B6"),                   -- WARM IVORY (brand)
+    text_header     = hex("#EFE3D6"),                   -- derived: lifted ivory
+    text_label      = hex("#BFAE9B"),                   -- derived: settled ivory
+    text_dim        = hex("#A2917F"),                   -- derived: muted ivory
+    text_disabled   = hex("#7A6D5E"),                   -- derived
+    text_inverse    = hex("#222221"),                   -- charcoal (dark on light)
+    button_normal   = hex("#333526"),                   -- deep forest
+    button_hover    = hex("#5D4024"),                   -- soft bronze
+    button_active   = hex("#C69274"),                   -- rose gold
+    button_disabled = hex("#333526", 0.40),
+    accent          = hex("#C69274"),                   -- ROSE GOLD (brand)
+    accent_brighter = hex("#D9932F"),                   -- AMBER (added): candlelight, the 38deg rung
+    accent_darker   = hex("#5D4024"),                   -- soft bronze, the brand's darker partner
+    success         = hex("#A3B57A"),                   -- derived: sage
+    warning         = hex("#D9932F"),                   -- AMBER (added)
+    error           = hex("#D9705A"),                   -- derived: terracotta
+    error_deep      = hex("#7A2E22"),                   -- OXBLOOD (added): the red anchor her five
+                                                        -- lack -- nothing sat below 20deg hue
+    -- UI tokens: no upstream highlight groups to mine (see Purpura/Green for
+    -- the same compromise), so these are composed from the brand five.
+    tab_active_bg       = hex("#222221"),  -- CHARCOAL (brand): the active tab sinks deepest
+    tab_active_text     = hex("#EFE3D6"),  -- lifted ivory
+    popup_selected_bg   = hex("#6B3A18"),  -- deep pumpkin
+    popup_selected_text = hex("#EFE3D6"),  -- lifted ivory
+    statusline_bg       = hex("#6B3A18"),  -- DEEP PUMPKIN: bottom rail, matching the header bands  -- DEEP FOREST: the window's bottom band. Matches
+                                                 -- panel_header by design (see StatusRail: "full-bleed
+                                                 -- watercolor + gloss, matching PanelHeader") so forest
+                                                 -- bookends the window -- a band atop every panel and
+                                                 -- one along the base. Dark schemes read surface.
+                                                 -- statusline here, NOT panel_footer (light-only).
+    text_on_accent      = hex("#222221"),  -- charcoal on rose gold
+    float_bg            = hex("#222221"),  -- charcoal card
+    float_border        = hex("#B4642A"),  -- pumpkin: floats wear the new mid-orange
+    diag_error          = hex("#D9705A"),  -- terracotta
+    diag_warn           = hex("#D9932F"),  -- amber (added)
+    diag_info           = hex("#8CA6B8"),  -- derived slate: the palette's only cool tone
+    diag_hint           = hex("#A3B57A"),  -- sage (the green ladder's top rung)
+}
+
 -- ----- BlizzardUI -----------------------------------------------------------
 -- Matches the default Blizzard WoW frame (PortraitFrameTemplate / ButtonFrame-
 -- Template -- the frame used by Toy Box, Collections, Encounter Journal, etc.).
@@ -1284,6 +1446,7 @@ HDGR_SchemeConstants = {
     Housing          = BuildScheme(Palettes.Housing),   -- Badwolf clone + gold/wood overrides + chrome atlas
     Purpura          = BuildScheme(Palettes.Purpura),
     Green            = BuildScheme(Palettes.Green),
+    PumpkinSpice     = BuildScheme(Palettes.PumpkinSpice),  -- community brand palette (Madailein Hatter)
     BlizzardUI       = BuildScheme(Palettes.BlizzardUI),
 }
 
@@ -1299,7 +1462,7 @@ HDGR_SchemeMeta = {
         "Mocha", "TokyonightNight", "RosePineMain", "GruvboxDarkHard",
         "SolarizedDark", "EverforestDark", "KanagawaWave",
         "Nord", "Dracula", "Nightfly", "OneNord", "Badwolf",
-        "Purpura", "Green",
+        "Purpura", "Green", "PumpkinSpice",
         -- Light family
         "SolarizedLight", "GruvboxLightHard", "EverforestLight", "KanagawaLotus",
     },
@@ -1325,5 +1488,6 @@ HDGR_SchemeMeta = {
         BlizzardUI       = "Panseit's Blizzard UI",
         Purpura          = "Purpura",
         Green            = "Green",
+        PumpkinSpice     = "Pumpkin Spice",
     },
 }

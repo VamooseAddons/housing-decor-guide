@@ -402,6 +402,21 @@ PIPELINE_STAGES[#PIPELINE_STAGES + 1] = {
     end,
 }
 
+-- Stage 6b: NAV_REVEAL -- keep the current destination on screen. The sidebar is
+-- sized to the active view's body height, so switching to a shorter view can cut
+-- the tree above the row the user just clicked (Move Planner: 19 rows fit, it is
+-- row 21). Runs AFTER Layout because Apply sizes the nav scrollbox there, and
+-- ScrollBox:OnSizeChanged runs a synchronous FullUpdate -- so the visible extent
+-- the reveal math reads is already the NEW one. No-op unless a nav.tree rebuild
+-- marked it pending.
+PIPELINE_STAGES[#PIPELINE_STAGES + 1] = {
+    name = "NavReveal",
+    predicate = _paintsMainWindow,
+    run = function(ctx)
+        HDG.NavController:RevealActive(ctx.frame)
+    end,
+}
+
 -- Stage 7: THEME -- terminal paint stage per spec section 6. Paint is
 -- event-driven today (Theme:Register at build, Theme:SetState during Bind),
 -- so this stage is a documented no-op until a paint-dirty queue exists.

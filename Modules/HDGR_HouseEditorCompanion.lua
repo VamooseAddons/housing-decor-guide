@@ -409,6 +409,9 @@ local function _onEditorShown()
     -- (owner of C_Housing).
     H._isInside = HDG.HousingObserver:IsInsideHouse()
     HDG.HousingCatalogObserver:RequestLoad("house-editor")
+    -- Search box on Blizzard's own Placed Decor panel (dim-only; see that module
+    -- for why it must never touch their DataProvider). Idempotent.
+    HDG.PlacedDecorSearch:Install()
     _startRecentSession()   -- new edit session per editor open
     H._launcher:Show()
     -- Idempotent: builds the satellite the first time the editor opens (its

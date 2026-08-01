@@ -12,13 +12,14 @@
 
 ---
 
-## What's New in v3.19.1
+## What's New in v3.20.0
 
-The House Editor companion can now tell you what you have already placed.
+A new colour theme, a search box for Blizzard's Placed Decor list, and a sidebar that keeps your place.
 
-- **The Snapshots tab is now Placed, and opens with a live Placed Decor list.** It shows everything you have put down in the area you are in -- indoors or outdoors -- with a count for each item, and you can search it by name. Step outside and the list switches to your exterior decor. Your saved snapshots sit underneath it, unchanged.
-- **Use it to answer "did I place that, and how many?"** The list is built fresh each session, so it never shows decor from a house you have left.
-- Selecting or removing a piece is still done from the Placed Decor list in Advanced mode. Blizzard restricts those actions to their own interface, so this list is for finding out what is down and how much of it.
+- **Pumpkin Spice, a new colour theme.** Warm ivory and rose gold on deep forest and charcoal, edged in pumpkin. It is built the other way round from the other themes here: the forest is the frame and the cards sit inset into it rather than raised off it, which keeps every panel near-black so decor names, swatches and prices carry. Pick it in Settings. The five core colours are Madailein Hatter's, shared and named by them and used with their permission.
+- **The Placed Decor list in Advanced mode now has a search box.** Type part of a name and everything that does not match fades back, so the piece you are after stands out in a long list. Matching rows still work exactly as they did: hover to highlight the decor, click to select it, then move or remove it with the usual controls.
+- The list is faded rather than shortened. Blizzard restricts changing what that panel contains, and removing rows outright makes the remaining ones unselectable, which would cost you the very thing you opened it for. The fading approach is Liberty's, author of the DoorSearch addon, used with their permission. If you already run DoorSearch you do not need both.
+- **The sidebar now keeps the section you are in on screen.** Tabs set the window height, and the shorter ones left the sidebar too short to show its lower half, so opening Move Planner scrolled the entry you had just picked out of sight. Whichever entry is lit is now scrolled back into view.
 
 ---
 
@@ -109,7 +110,7 @@ A companion window injects into Blizzard's House Editor so you can **place decor
 ---
 
 **Author:** Vamoose
-**Version:** 3.19.1
+**Version:** 3.20.0
 **Game Version:** 12.0.5+ (Midnight)
 **Source / Issues:** https://github.com/VamooseAddons/housing-decor-guide
 **Discord:** https://discord.gg/RWZaxJaHFP
