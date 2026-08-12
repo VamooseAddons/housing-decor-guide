@@ -723,6 +723,10 @@ function ShoppingController:_RegisterPopups()
     HDG.UI:RegisterInputDialog("HDGR_SHOPPING_SET_QTY", {
         text = "Quantity:",
         maxLetters = 4,
+        -- Opens on "1", selected, so Enter is the common case and typing a
+        -- different number replaces it. An empty box made the dialog a
+        -- two-keystroke minimum and gave no hint what it wanted.
+        initialText = "1",
         onAccept = function(value, data)
             local n = tonumber(value) or 1  -- exception(boundary): user input
             HDG.Store:Dispatch({

@@ -309,7 +309,6 @@ HDG.Locale:Register("frFR", {
     TIP_MOGUL_VIEW_ACCOUNT_TITLE = "Compte entier",
     TIP_MOGUL_VIEW_CHAR_BODY = "Plans à partir des recettes connues et sacs de ce personnage.",
     TIP_MOGUL_VIEW_CHAR_TITLE = "Ce personnage",
-    TIP_PROJECTS_CAPTURE_ALL_BODY = "Capture toutes les pièces de chaque étage de votre maison. REMARQUE : le jeu n'indique pas aux addons comment vos pièces sont connectées, donc HDG ne peut pas les agencer automatiquement -- après la capture, faites glisser les pièces dans leur agencement réel (elles se rejoignent là où leurs portes se touchent).",
     TIP_PROJECTS_CAPTURE_ALL_TITLE = "Capturer tous les étages",
     TIP_REDEEMABLE_TAG_BODY = "Vous les possédez -- ils vous ont été attribués automatiquement (ex. récompense de haut fait ou de quête) ; vous n'en avez jamais placé un. Placez-en un pour obtenir une copie permanente. En attendant, il figure dans votre catalogue comme instance non échangée.",
     TIP_REDEEMABLE_TAG_TITLE = "Échangeable",

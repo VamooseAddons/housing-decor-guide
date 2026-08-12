@@ -1283,6 +1283,21 @@ local function EnsureStateShape(state)
     state.account.projects.houseFocusSeq = state.account.projects.houseFocusSeq or 0
     MigrateProjectsToVersions(state)   -- schemaVersion 1->2: flat rooms -> versions[current].rooms
     HDG.StoreFurnishings.EnsureShape(state)   -- furnishings shape + v6->7 migration (domain store file)
+    -- Backfill floors=2 onto PLANNER-placed stair rooms (SV migration, sections
+    -- model 2026-08-10): the stair shapes' GetFloors default dropped 2 -> 1
+    -- (captured sections own one floor each), so planner records predating the
+    -- change -- which carried no explicit .floors -- would silently shrink a
+    -- storey. capturedID separates planner rooms (nil) from captured sections.
+    for _, layout in pairs(state.account.projects.layouts) do
+        if type(layout.placements) == "table" then   -- exception(boundary): SV migration -- record may be malformed
+            for _, pl in pairs(layout.placements) do
+                if pl.floors == nil and pl.capturedID == nil
+                   and HDG.Projects.ShapeAtlas.IsStairShape(pl.shape) then
+                    pl.floors = 2
+                end
+            end
+        end
+    end
     state.account.questCompletions = state.account.questCompletions or {}   -- exception(boundary): SV migration
     state.account.houseCapacityCache = state.account.houseCapacityCache or false   -- exception(boundary): SV migration -- buy-picker storage fallback added post-3.12
     -- Lumber tracker config + per-char sessions. Config key-by-key from NewLumberConfig

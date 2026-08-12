@@ -311,7 +311,6 @@ HDG.Locale:Register("deDE", {
     TIP_MOGUL_VIEW_ACCOUNT_TITLE = "Accountweit",
     TIP_MOGUL_VIEW_CHAR_BODY = "Plant auf Basis der bekannten Rezepte und Taschen dieses Charakters.",
     TIP_MOGUL_VIEW_CHAR_TITLE = "Dieser Charakter",
-    TIP_PROJECTS_CAPTURE_ALL_BODY = "Erfasst jeden Raum auf jeder Etage deines Hauses. HINWEIS: Das Spiel teilt Addons nicht mit, wie deine Räume verbunden sind -- nach der Erfassung die Räume selbst in ihr echtes Layout ziehen (Räume verbinden sich, wo ihre Türen aufeinandertreffen).",
     TIP_PROJECTS_CAPTURE_ALL_TITLE = "Alle Etagen erfassen",
     TIP_REDEEMABLE_TAG_BODY = "Du besitzt diese Gegenstände -- sie wurden dir automatisch verliehen (z. B. als Erfolgs- oder Questbelohnung); du hast noch keinen davon platziert. Einmal platzieren, um eine dauerhafte Kopie zu beanspruchen. Bis dahin erscheint er in deinem Katalog als nicht eingelöste Instanz.",
     TIP_REDEEMABLE_TAG_TITLE = "Einlösbar",

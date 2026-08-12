@@ -267,6 +267,8 @@ SlashCmdList["HDG"] = function(msg)
         HDG.Perf:Command(rest)              -- was /hdgr perf
     elseif lower == "doors" then
         HDG.ProjectsCanvasController:DoorAudit()  -- was /hdgr doors
+    elseif lower == "housemap" then
+        HDG.HouseMapHack:Toggle()   -- throwaway prototype, Modules/HDGR_HouseMapHack.lua
     -- ===== User-facing features (stay in Init) ==============================
     elseif lower == "minimap" then
         local cfg = HDG.Store:GetState().account.config

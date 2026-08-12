@@ -12,14 +12,16 @@
 
 ---
 
-## What's New in v3.20.0
+## What's New in v3.21.0
 
-A new colour theme, a search box for Blizzard's Placed Decor list, and a sidebar that keeps your place.
+House capture now arranges your rooms the way they actually connect, the decor vendors added in patch 12.1 are listed, and a set of 12.1 fixes.
 
-- **Pumpkin Spice, a new colour theme.** Warm ivory and rose gold on deep forest and charcoal, edged in pumpkin. It is built the other way round from the other themes here: the forest is the frame and the cards sit inset into it rather than raised off it, which keeps every panel near-black so decor names, swatches and prices carry. Pick it in Settings. The five core colours are Madailein Hatter's, shared and named by them and used with their permission.
-- **The Placed Decor list in Advanced mode now has a search box.** Type part of a name and everything that does not match fades back, so the piece you are after stands out in a long list. Matching rows still work exactly as they did: hover to highlight the decor, click to select it, then move or remove it with the usual controls.
-- The list is faded rather than shortened. Blizzard restricts changing what that panel contains, and removing rows outright makes the remaining ones unselectable, which would cost you the very thing you opened it for. The fading approach is Liberty's, author of the DoorSearch addon, used with their permission. If you already run DoorSearch you do not need both.
-- **The sidebar now keeps the section you are in on screen.** Tabs set the window height, and the shorter ones left the sidebar too short to show its lower half, so opening Move Planner scrolled the entry you had just picked out of sight. Whichever entry is lit is now scrolled back into view.
+- **Capturing your house lays the Architect canvas out like the real thing.** Rooms arrive arranged the way they connect, with doors lined up, neighbours adjacent, and stairwell shafts kept clear on the floors above, instead of a flat row you rebuilt by hand. Where the game cannot say which of two arrangements you built, the closest valid one is picked and a single drag corrects it. Rooms of the same type show their number, so twins are tellable apart.
+- **Upper floors capture correctly.** Stairwells arrive as one room per floor, stacked, so walking your floors in Layout mode no longer produces phantom duplicates that refuse to move. Rooms on an upper floor land on top of the rooms that hold them up, and nothing is laid out inside a garden's open sky.
+- **The decor vendors added in patch 12.1 are now listed.** Thirty vendors across Founder's Point and Razorwind Shores, among them Timicky, Agratha, Griftah and Perry Winkles. Their decor was already named in tooltips, but the vendors themselves were absent from the Zone Scanner and Shop by Vendor, so a neighbourhood of items had no visible seller. Map positions are still being collected, so these vendors appear in the lists without a map pin for now.
+- **The buy-quantity dial at a decor vendor opens on 1.** It opened on 000, so the button read "Buy 0" and did nothing until you clicked a wheel.
+- **Clicking an achievement in an item's source line opens the achievement again.** Patch 12.1 removed the function that link called, which produced an error instead.
+- **An incomplete install reports itself in one line at login.** It used to surface as a couple of dozen similar Lua errors and a missing minimap button, with nothing pointing at the cause. The message names the folders that came up empty. If your WoW install sits inside Dropbox or OneDrive, move it out first: sync clients can report a folder as fully synced while leaving it empty.
 
 ---
 
@@ -110,7 +112,7 @@ A companion window injects into Blizzard's House Editor so you can **place decor
 ---
 
 **Author:** Vamoose
-**Version:** 3.20.0
-**Game Version:** 12.0.5+ (Midnight)
+**Version:** 3.21.0
+**Game Version:** 12.1.0 (Midnight)
 **Source / Issues:** https://github.com/VamooseAddons/housing-decor-guide
 **Discord:** https://discord.gg/RWZaxJaHFP

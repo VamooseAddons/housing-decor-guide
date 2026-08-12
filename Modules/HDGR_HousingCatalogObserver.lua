@@ -202,6 +202,33 @@ local function _indexVendorsFromRow(acc, row)
 end
 
 -- Process one searcher entry: build the row, stamp the indexes, feed vendors.
+-- entryType must be a REAL member of Enum.HousingCatalogEntryType. Blizzard's
+-- argument validator rejects anything else and GetCatalogEntryInfo throws
+-- ("bad argument #2 ... Current Field: [entryType]") -- live reports carried
+-- entryType 247 (2026-08-05) and 9 (2026-07) against a documented range of
+-- 0..2. The guard below already CLAIMED to catch out-of-range entryType; it
+-- only ever tested whether the field was secret, so both got through.
+--
+-- Derived from the live enum rather than a hardcoded 0..2, so a new Blizzard
+-- entry type is not silently classified as poison the day it ships. `Invalid`
+-- is excluded BY NAME: it is a real enum member and a real sentinel, and it is
+-- not something to hand to a lookup.
+--
+-- exception(boundary): _G.Enum is Blizzard's. If HousingCatalogEntryType is
+-- missing entirely the housing API is gone and this whole observer is moot --
+-- let that surface loudly rather than quietly treating every row as poison.
+local _validEntryType
+local function _entryTypeOK(entryType)
+    if type(entryType) ~= "number" then return false end
+    if not _validEntryType then
+        _validEntryType = {}
+        for name, value in pairs(_G.Enum.HousingCatalogEntryType) do
+            if name ~= "Invalid" then _validEntryType[value] = true end
+        end
+    end
+    return _validEntryType[entryType] == true
+end
+
 -- Skips non-qualifying entries (non-zero subtype = variant placeholders; no
 -- itemID = catalog inconsistency).
 local function _processEntry(acc, entry)
@@ -214,7 +241,8 @@ local function _processEntry(acc, entry)
     -- struct here; count skips for the post-loop warn.
     local secret = _G.issecretvalue
     if (secret and (secret(rid) or secret(entry.entryType) or secret(entry.variantIdentifier)))
-        or type(rid) ~= "number" or rid <= 0 then
+        or type(rid) ~= "number" or rid <= 0
+        or not _entryTypeOK(entry.entryType) then
         acc.skippedPoisoned = (acc.skippedPoisoned or 0) + 1
         return
     end

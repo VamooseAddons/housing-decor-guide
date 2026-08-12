@@ -264,17 +264,25 @@ Selectors:Register("projects.roomCatalog", {
 })
 
 -- Plan validation: no footprint overlap AND within room budget (roomMax 0 = skip).
+-- SPAN-AWARE: a lower floor's projected volume (garden; planner-stamped stair
+-- span) occupies this floor too, so a room parked inside it collides -- the old
+-- same-floor-only walk reported "Valid" for exactly the overlaps the drag guard
+-- forbids (2026-08-10 review #8).
 Selectors:Register("projects.planValidation", {
     reads = { "account.projects.houses", "account.projects.layouts", "account.rooms",
               "session.ui.projects.selectedFloor" },
     calls = { "projects.placementCaps" },
+    memoized = true,   -- span-aware walk rotates every in-span mask; cache between invalidations
     fn = function(state, ctx)
         local A = HDG.Projects.ShapeAtlas
         local floor = state.session.ui.projects.selectedFloor
         local occ, collide, cost, count = {}, false, 0, 0
         for rid, room in pairs(_activeRooms(state)) do
+            local span = room.floors or A.GetFloors(room.shape)
             if room.floor == floor then
                 count, cost = count + 1, cost + A.GetBudget(room.shape)
+            end
+            if room.floor <= floor and floor <= room.floor + span - 1 then
                 local rot, cells = room.cell.rotation or 0, A.GetCells(room.shape)
                 for _, m in ipairs(A.RotateMask(A.GetMask(room.shape), rot, cells[1], cells[2])) do
                     local k = (room.cell.x + m[1]) .. "," .. (room.cell.y + m[2])
@@ -557,38 +565,11 @@ local function _extendFootprint(bb, x, y, w, d)
     _extend(bb, x + w - 1, y + d - 1)
 end
 
--- Door midpoint in CELL-BOUNDARY coords: center of the shape's outer edge facing `card`,
--- read from the (rotated) mask so non-convex shapes land on the real footprint edge
--- (not the bounding-box side midpoint). Two opposite-facing doors sharing a midpoint = connected.
+-- Door midpoint in CELL-BOUNDARY coords -- the shared geometry lives in
+-- ShapeAtlas.DoorMid (the connectivity solver aligns doors with the SAME math,
+-- so a solved layout's paired orbs light up as connected here by construction).
 local function _doorMid(card, x, y, w, d, mask)
-    if not mask or #mask == 0 then
-        if card == "N" then return x + w / 2, y end
-        if card == "S" then return x + w / 2, y + d end
-        if card == "E" then return x + w, y + d / 2 end
-        return x, y + d / 2   -- W
-    end
-    local vertical = (card == "E" or card == "W")   -- door on a vertical (E/W) edge?
-    local outward  = (card == "E" or card == "S")   -- extreme is a MAX (else MIN)?
-    local rank
-    for _, c in ipairs(mask) do
-        local v = vertical and c[1] or c[2]
-        if rank == nil then rank = v
-        elseif outward then if v > rank then rank = v end
-        else if v < rank then rank = v end end
-    end
-    local lo, hi   -- span of the cells sitting on that extreme edge
-    for _, c in ipairs(mask) do
-        if (vertical and c[1] == rank) or (not vertical and c[2] == rank) then
-            local s = vertical and c[2] or c[1]
-            lo = (lo == nil) and s or math.min(lo, s)
-            hi = (hi == nil) and (s + 1) or math.max(hi, s + 1)
-        end
-    end
-    local mid = (lo + hi) / 2
-    if card == "N" then return x + mid,      y + rank end
-    if card == "S" then return x + mid,      y + rank + 1 end
-    if card == "E" then return x + rank + 1, y + mid end
-    return x + rank, y + mid   -- W
+    return HDG.Projects.ShapeAtlas.DoorMid(card, x, y, w, d, mask)
 end
 
 -- Floor below the selected one -> dimmed backdrop tiles. Extends bbox for auto-fit.
@@ -1553,8 +1534,9 @@ Selectors:Register("projects.roomDetailName", {
         local roomID = state.session.ui.projects.selectedRoomID
         local room = roomID and _activeRooms(state)[roomID]
         if not room then return "Select a room" end   -- exception(boundary): stale or nil selection
-        local p = HDG.Projects.IDs.parsePath(roomID)
-        return _roomLabel(room, p and p.floor)
+        -- room.floor direct: v8 keys are slot keys, parsePath never matched them,
+        -- so the floor segment of "Hallway 1-2" never rendered (2026-08-10 review #9).
+        return _roomLabel(room, room.floor)
     end,
 })
 

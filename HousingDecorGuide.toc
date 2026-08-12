@@ -2,7 +2,7 @@
 ## Title: Vamoose's Housing Decor Guide
 ## Notes: Track, craft, preview, and acquire housing decorations across all professions
 ## Author: Vamoose
-## Version: 3.20.0
+## Version: 3.21.0
 ## SavedVariables: HDG_DB
 ## SavedVariablesPerCharacter: HDG_DB_CURRENT_PROFILE
 ## IconTexture: Interface\AddOns\HousingDecorGuide\textures\Vamoose_HDG_400_trans
@@ -57,6 +57,7 @@ Core\HDGR_ProjectsIDs.lua
 Core\HDGR_ProjectsShapeAtlas.lua
 Core\HDGR_ProjectsFloorMap.lua
 Core\HDGR_ProjectsFingerprint.lua
+Core\HDGR_ProjectsConnectivity.lua
 Core\HDGR_ProjectsAutoLayout.lua
 Core\HDGR_ProjectsCapture.lua
 Core\HDGR_Codec.lua
@@ -219,6 +220,7 @@ Modules\HDGR_Goblin.lua
 Modules\HDGR_StyleEngine.lua
 Modules\HDGR_StyleSerializer.lua
 Modules\HDGR_Parsers.lua
+Modules\HDGR_CaptureTap.lua
 Modules\HDGR_HousingObserver.lua
 Modules\HDGR_Vamoose.lua
 
@@ -262,3 +264,12 @@ Core\HDGR_Init.lua
 UI\HDGR_MainFrame.lua
 
 Modules\HDGR_Perf.lua
+
+# ===== THROWAWAY PROTOTYPE -- house "you are here" map (/hdg housemap) =====
+# Standalone frame, no Lattice wiring. Delete this line + the file to remove.
+Modules\HDGR_HouseMapHack.lua
+
+# ===== Incomplete-install tripwire =====
+# LAST on purpose: every folder's files have run by this point, so a file-scope
+# check sees exactly which ones left nothing behind.
+UI\HDGR_InstallCheck.lua

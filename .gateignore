@@ -1,0 +1,7 @@
+# Files deliberately absent from the TOC. One path per line, globs allowed.
+#
+# HDGR_DecorNotes.lua: pipeline-generated, kept as the data source for a planned
+# notes/tags feature. Only test fixtures load it. Its own header records the
+# decision (Vamoose, 2026-06-10) -- but the file is regenerated, so the opt-out
+# has to live out here.
+Data/HDGR_DecorNotes.lua

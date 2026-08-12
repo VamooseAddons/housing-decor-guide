@@ -46,14 +46,20 @@ local SHAPES = {
     cross_shape      = { atlas = "Layout_Cross_S_Icon",                   dims = {23,23,7},  cells = {4, 4}, doors = {"N","E","S","W"},  budget = 4,
                          mask = { {1,0},{2,0}, {0,1},{1,1},{2,1},{3,1}, {0,2},{1,2},{2,2},{3,2}, {1,3},{2,3} } },
     hallway          = { atlas = "Layout_Hallway_S_Icon",                 dims = {23,11,7},  cells = {4, 2}, doors = {"E","W"},          budget = 3  },
-    -- floors = vertical span (omitted = 1). Tall room + stairs occupy 2 floors,
-    -- gardens occupy all 3 -- the room's footprint blocks the cells above it.
-    tall_room        = { atlas = "Layout_TallRoom_S_Icon",                dims = {23,23,14}, cells = {4, 4}, doors = {"N","E","S","W"},  budget = 6, floors = 2 },
-    -- Stairwell: ONE door -- the connecting side (mirror flips it W<->E). Both floors
-    -- share the shape, so the door lands at the same position upstairs. (The empty
-    -- "Stairwell Room" with doors on all 4 sides is tall_room above.)
-    staircase        = { atlas = "Layout_Staircase_S_Icon",               dims = {23,23,15}, cells = {4, 4}, doors = {"W"},              budget = 7, floors = 2 },
-    staircase_mirror = { atlas = "Layout_Staircase_Mirrored_S_Icon",      dims = {23,23,15}, cells = {4, 4}, doors = {"E"},              budget = 7, floors = 2 },
+    -- floors = vertical span of ONE RECORD (omitted = 1). SECTIONS model
+    -- (owner-ruled + capture-verified 2026-08-10, solver spec SS10): the three
+    -- stair shapes materialize IN-GAME as one section record per floor, each with
+    -- its own roomGUID, each occupying only its own floor -- so their span here
+    -- is 1. (Placing one in-game creates 2 sections at once; "Expand Stairwell
+    -- up" mints another. The PLANNER mirrors that by stamping floors=2 on the
+    -- single planned record.) Gardens are genuinely ONE record whose volume
+    -- projects up 3 floors (open sky above -- no upper sections, no support).
+    tall_room        = { atlas = "Layout_TallRoom_S_Icon",                dims = {23,23,14}, cells = {4, 4}, doors = {"N","E","S","W"},  budget = 6 },
+    -- Stairwell: ONE door -- the connecting side (mirror flips it W<->E). Every
+    -- section shares the shape, so the door lands at the same position upstairs.
+    -- (The empty "Stairwell Room" with doors on all 4 sides is tall_room above.)
+    staircase        = { atlas = "Layout_Staircase_S_Icon",               dims = {23,23,15}, cells = {4, 4}, doors = {"W"},              budget = 7 },
+    staircase_mirror = { atlas = "Layout_Staircase_Mirrored_S_Icon",      dims = {23,23,15}, cells = {4, 4}, doors = {"E"},              budget = 7 },
     circle_evening   = { atlas = "Full_Layout_Artisinal_Garden_Evening",  dims = {48,50,64}, cells = {8, 8}, doors = {"N"},              budget = 8, circle = true, floors = 3 },
     circle_daylight  = { atlas = "Full_Layout_Artisinal_Garden_Daylight", dims = {48,50,64}, cells = {8, 8}, doors = {"N"},              budget = 8, circle = true, floors = 3 },
     -- Entry is the structural anchor -- no placement budget. 2x1 like the closet.
@@ -65,7 +71,22 @@ function M.GetBudget(shapeID) local s = SHAPES[shapeID]; return s and s.budget o
 function M.GetAtlas(shapeID)  local s = SHAPES[shapeID]; return s and s.atlas end
 function M.GetCells(shapeID)  local s = SHAPES[shapeID]; return s and s.cells or { 1, 1 } end
 function M.GetDims(shapeID)   local s = SHAPES[shapeID]; return s and s.dims end   -- {w,d,h} yards (DB2 RoomWmoData)
-function M.GetFloors(shapeID) local s = SHAPES[shapeID]; return (s and s.floors) or 1 end  -- vertical span (1..3 floors)
+function M.GetFloors(shapeID) local s = SHAPES[shapeID]; return (s and s.floors) or 1 end  -- one RECORD's vertical span (stair sections = 1; gardens = 3)
+
+-- The stair family (sections model, solver spec SS10): the ONE predicate every
+-- consumer shares -- pin matching, planned-span stamping, the expand menu.
+-- Adding a stair-like shape here updates all of them together.
+local STAIR_SHAPES = { staircase = true, staircase_mirror = true, tall_room = true }
+function M.IsStairShape(shapeID) return STAIR_SHAPES[shapeID] == true end
+
+-- Planned-record span for a shape the PLANNER places as a single record: the
+-- in-game placement action creates this many floors at once (sections model,
+-- solver spec SS10). Captured records never use this -- their sections arrive
+-- one per floor.
+function M.GetPlannedSpan(shapeID)
+    if STAIR_SHAPES[shapeID] then return 2 end
+    return M.GetFloors(shapeID)
+end
 function M.GetDoors(shapeID)  local s = SHAPES[shapeID]; return s and s.doors or {} end
 function M.IsKnown(shapeID)   return SHAPES[shapeID] ~= nil end
 function M.IsCircle(shapeID)  local s = SHAPES[shapeID]; return (s and s.circle) == true end
@@ -131,6 +152,59 @@ function M.InferRotation(shapeID, capturedCardinals)
     return 0
 end
 
+-- Door midpoint in CELL-BOUNDARY coords: center of the shape's outer edge facing
+-- `cardinal`, read from the (rotated) mask so non-convex shapes land on the real
+-- footprint edge (not the bounding-box side midpoint). Two opposite-facing doors
+-- sharing a midpoint = connected. Shared by the canvas orb render AND the
+-- connectivity solver's door-to-door alignment.
+-- Every shipped shape's door-run has EVEN length (integer midpoints) -- asserted:
+-- an odd run means a new shape broke the invariant the solver's alignment needs.
+function M.DoorMid(cardinal, x, y, w, d, mask)
+    -- math.floor keeps midpoints INTEGER in Lua 5.4 (where 4/2 is the float 2.0
+    -- and would poison "x,y" cell keys); the even-run invariant makes it exact.
+    if not mask or #mask == 0 then
+        if cardinal == "N" then return x + math.floor(w / 2), y end
+        if cardinal == "S" then return x + math.floor(w / 2), y + d end
+        if cardinal == "E" then return x + w, y + math.floor(d / 2) end
+        return x, y + math.floor(d / 2)   -- W
+    end
+    local vertical = (cardinal == "E" or cardinal == "W")   -- door on a vertical (E/W) edge?
+    local outward  = (cardinal == "E" or cardinal == "S")   -- extreme is a MAX (else MIN)?
+    local rank
+    for _, c in ipairs(mask) do
+        local v = vertical and c[1] or c[2]
+        if rank == nil then rank = v
+        elseif outward then if v > rank then rank = v end
+        else if v < rank then rank = v end end
+    end
+    local lo, hi   -- span of the cells sitting on that extreme edge
+    for _, c in ipairs(mask) do
+        if (vertical and c[1] == rank) or (not vertical and c[2] == rank) then
+            local s = vertical and c[2] or c[1]
+            lo = (lo == nil) and s or math.min(lo, s)
+            hi = (hi == nil) and (s + 1) or math.max(hi, s + 1)
+        end
+    end
+    if ((hi - lo) % 2) ~= 0 then
+        error(("ShapeAtlas.DoorMid: odd door-run (%d) on %s edge -- even-run atlas invariant broken"):format(hi - lo, cardinal))
+    end
+    local mid = math.floor((lo + hi) / 2)
+    if cardinal == "N" then return x + mid,      y + rank end
+    if cardinal == "S" then return x + mid,      y + rank + 1 end
+    if cardinal == "E" then return x + rank + 1, y + mid end
+    return x + rank, y + mid   -- W
+end
+
+-- Rotated footprint for a room from its shape + captured door cardinals (nil ->
+-- rotation 0). Shared by AutoLayout's grid-pack and the Connectivity solver.
+function M.FootprintFor(shape, cardinals)
+    local cells = M.GetCells(shape)
+    local rot   = M.InferRotation(shape, cardinals)
+    local rc    = M.RotateCells(cells, rot)
+    local mask  = M.RotateMask(M.GetMask(shape), rot, cells[1], cells[2])
+    return rc[1], rc[2], mask, rot
+end
+
 -- Stable palette display order, grouped by family. Entry (the structural anchor) is
 -- listed first, but the palette selector filters it out -- it's captured, never placed.
 local PALETTE_ORDER = {
@@ -169,5 +243,8 @@ local RECORD_TO_SHAPE = {
     [12]  = "square_l",        [13]  = "cross_shape",      [14]  = "octagon_s",
     [15]  = "octagon_l",       [48]  = "tall_room",        [50]  = "staircase_mirror",
     [223] = "circle_daylight", [233] = "circle_evening",
+    -- Entry is not a catalog room, but it DOES carry a HouseRoom recordID in its
+    -- roomGUID (Housing-2-46-0, verified live 2026-08-10 via the capture tap).
+    [46]  = "entry",
 }
 function M.ShapeForRecordID(recordID) return RECORD_TO_SHAPE[recordID] end

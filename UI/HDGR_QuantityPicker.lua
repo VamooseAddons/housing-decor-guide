@@ -15,6 +15,9 @@ end
 
 function QP.FromDigits(h, t, o) return h * 100 + t * 10 + o end
 
+-- The quantity a freshly-opened dialog starts on. One, so Buy is live on open.
+function QP.DEFAULT_DIGITS() return QP.Digits(1) end
+
 -- Returns (ok, reasonString). cap = math.huge means "storage data unavailable".
 function QP.Validate(price, qty, money, owned, cap)
     if qty <= 0 then return false, "Pick a quantity" end
@@ -67,7 +70,7 @@ local function _build()
     local wheels = CreateFrame("Frame", nil, f)
     wheels:SetSize(WHEEL_COUNT * 44 + (WHEEL_COUNT - 1) * 8, 80)
     wheels:SetPoint("TOP", title, "BOTTOM", 0, -12)
-    f._digits = { 0, 0, 0 }
+    f._digits = QP.DEFAULT_DIGITS()   -- Open() re-stamps this per dialog
     f._numFS  = {}
     local function step(i, dir)
         if f._buying or f._done then return end   -- wheels inert during a buy AND after one completes (button stays "Close")
@@ -188,7 +191,9 @@ function QP:Open(itemID)
     f:SetScript("OnUpdate", nil)
     f._stats:SetText("")
     f._title:SetText(stock.name or "?")
-    f._digits = { 0, 0, 0 }
+    -- Opens on 1, not 0: nobody opens this dialog to buy nothing, and 000 meant
+    -- the Buy button read "Buy 0" and sat disabled until you clicked a wheel.
+    f._digits = QP.DEFAULT_DIGITS()
 
     f._refresh = function()
         for i = 1, WHEEL_COUNT do f._numFS[i]:SetText(tostring(f._digits[i])) end

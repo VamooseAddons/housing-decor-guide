@@ -794,7 +794,7 @@ HDG.Constants = {
         FURN_ROOM_EQUIP            = "HDGR_FURN_ROOM_EQUIP",            -- payload: { roomID, setID }
         FURN_ROOM_UNEQUIP          = "HDGR_FURN_ROOM_UNEQUIP",          -- payload: { roomID, setID }
         FURN_ROOM_DUPLICATE        = "HDGR_FURN_ROOM_DUPLICATE",        -- payload: { roomID, layoutID?, swap?, ts? } (variant: library sets shared, local pieces cloned; swap takes the source's placement in layoutID)
-        LAYOUT_PLACE               = "HDGR_LAYOUT_PLACE",               -- payload: { layoutID, floor, x, y, rotation?, roomID? | shape? } (roomID places a room; shape places an unassigned slot)
+        LAYOUT_PLACE               = "HDGR_LAYOUT_PLACE",               -- payload: { layoutID, floor, x, y, rotation?, floors?, roomID? | shape? } (roomID places a room; shape places an unassigned slot; floors = planned multi-storey span)
         LAYOUT_MOVE                = "HDGR_LAYOUT_MOVE",                -- payload: { layoutID, key, floor?, x?, y?, rotation? }
         LAYOUT_REMOVE_PLACEMENT    = "HDGR_LAYOUT_REMOVE_PLACEMENT",    -- payload: { layoutID, key }
         LAYOUT_ASSIGN              = "HDGR_LAYOUT_ASSIGN",              -- payload: { layoutID, slotKey, roomID } (tag a slot with a room; multi-assign OK)

@@ -77,7 +77,17 @@ function S.VendorAugment:_EnsureIndexes()
     if self._byName then return end
     local byName, byMapID = {}, {}
     local t = _table("HDGR_VendorAugment")
-    for npcID, v in pairs(t) do
+    -- Iterate npcIDs in SORTED order, not pairs() order. "First occurrence wins
+    -- the unqualified name" is only a meaningful rule if "first" is stable, and
+    -- LuaJIT varies pairs() order per PROCESS -- so with 16 names now living in
+    -- two housing neighborhoods, an unzoned ResolveName could answer with a
+    -- different npcID on each login. Sorting makes the winner the same every
+    -- session and keeps byMapID's per-map order stable for the Zone Scanner.
+    local ids = {}
+    for npcID in pairs(t) do ids[#ids + 1] = npcID end
+    table.sort(ids)
+    for _, npcID in ipairs(ids) do
+        local v = t[npcID]
         -- Name index: first occurrence wins for unqualified name; later
         -- collisions become zone-suffixed.
         if byName[v.name] then

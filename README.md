@@ -134,7 +134,7 @@ placement-cost display, and dye variants handled for you.
 
 ## Requirements
 
-- World of Warcraft Retail **12.0.5+ (Midnight)**
+- World of Warcraft Retail **12.1.0 (Midnight)**
 
 ## Links
 

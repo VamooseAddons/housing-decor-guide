@@ -515,7 +515,7 @@ function AcquisitionController:_wireAchievementHyperlinks(rootFrame)
     hyperHost:SetScript("OnHyperlinkClick", function(_, link)
         local achID = _achievementForItem(_parseAchLink(link))
         if not achID then return end
-        OpenAchievementFrameToAchievement(achID)   -- canonical Blizzard path (same as SetItemRef)
+        ShowAchievementFrameForAchievement(achID)  -- canonical Blizzard path (same as SetItemRef)
     end)
     hyperHost:SetScript("OnHyperlinkEnter", function(self, link)
         local _, achName = _achievementForItem(_parseAchLink(link))

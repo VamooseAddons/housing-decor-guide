@@ -440,10 +440,12 @@ end
 function HO:_BeginCapture(floor)
     -- nextIndex stamps capture order per room (surfaced in "Hallway 2" labels).
     _capture = { active = true, floor = floor or 1, rooms = {}, nextIndex = 1 }
+    HDG.CaptureTap.OnBegin(_capture.floor)   -- raw-stream tap (inert unless HDG_DB.captureTap)
 end
 
 function HO:_EndCapture()
     if not (_capture and _capture.active) then return nil end
+    HDG.CaptureTap.OnEnd()
     _capture.active = false
     local snap = _capture
     _capture = nil
@@ -451,27 +453,12 @@ function HO:_EndCapture()
 end
 
 -- _pinPos: diagnostic screen-coord probe (posAdd/posFinal research; not yet driving layout).
--- Gated on HDG_DB.perf so production sweep allocates nothing per pin.
+-- Gated on HDG_DB.perf so production sweep allocates nothing per pin. The probing
+-- itself lives in CaptureTap (shared with the raw-stream tap).
 local function _pinPos(pin)
     -- exception(boundary): raw SavedVariable read.
     if not (_G.HDG_DB and _G.HDG_DB.perf) then return nil end
-    if not pin then return nil end
-    local o = {}
-    local function g(k, fn)
-        local r = { pcall(fn) }  -- exception(fire-forget): debug-only pin geometry; skip on any error
-        if r[1] and r[2] ~= nil then table.remove(r, 1); o[k] = r end
-    end
-    g("center", function() return pin:GetCenter() end)   -- cx, cy (scaled screen px)
-    g("rect",   function() return pin:GetRect() end)      -- x, y, w, h
-    g("left",   function() return pin:GetLeft() end)
-    g("top",    function() return pin:GetTop() end)
-    g("scale",  function() return pin:GetEffectiveScale() end)
-    g("numPts", function() return pin:GetNumPoints() end)
-    do  -- GetPoint -> point, relativeTo(FRAME -- skip), relativePoint, xOfs, yOfs
-        local ok, pt, _rel, rpt, x, y = pcall(function() return pin:GetPoint(1) end)  -- exception(fire-forget): debug-only pin geometry; skip on any error
-        if ok and pt ~= nil then o.point = { pt, rpt, x, y } end
-    end
-    return o
+    return HDG.CaptureTap.ProbeGeometry(pin)
 end
 
 -- Ingest one live pin frame into the capture buffer (impure boundary read).
@@ -510,6 +497,7 @@ local function _ingestPin(pinFrame)
 end
 
 function HO:OnPinFrameAdded(pinFrame)
+    HDG.CaptureTap.OnPin(pinFrame)   -- raw stream, pre-filter (tap records nil-roomGUID pins too)
     if _capture and _capture.active then _ingestPin(pinFrame) end
 end
 
@@ -538,37 +526,17 @@ end
 
 -- Build fresh room records from the snapshot with DETERMINISTIC IDs (floor +
 -- capture-order) so crates stay attached on recapture; old rooms not reproduced
--- fall to orphaned crates. Multi-floor rooms (stairwell/tall/garden) are
--- enumerated once PER spanned floor section, so the all-floors sweep would re-add
--- them on every higher floor -- skip a shape already committed lower and instead
--- widen the base room's observed span (only the sweep dedups; passive single-
--- floor capture doesn't). Mark this floor's MF shapes seen AFTER committing so
--- two same-shape base rooms HERE don't skip each other. LIMIT: two same-shape
--- MF rooms across overlapping floors collapse into one (shape is the only signal).
-local function _buildCapturedRooms(snapshot, floor, floorID)
+-- fall to orphaned crates. SECTIONS model (solver spec SS10): every enumerated
+-- room IS its own placement -- stair shapes arrive as one section per floor
+-- (own roomGUID each, span 1), gardens as one record on their base floor
+-- (span 3 via ShapeAtlas). No shape-keyed dedup: the old seenLowerMF/mfSpan
+-- machinery collapsed genuinely-distinct stacked rooms and discarded their
+-- door data (2026-08-10 review criticals #1/#4/#7/#10).
+local function _buildCapturedRooms(snapshot, floorID)
     local IDs, Cap, rooms = HDG.Projects.IDs, HDG.Projects.Capture, {}
-    local Atlas   = HDG.Projects.ShapeAtlas
-    local seenLow = _activeSweep and _activeSweep.seenLowerMF
-    local mfSpan  = _activeSweep and _activeSweep.mfSpan
     for _, r in pairs(snapshot.rooms) do
-        local isMF = Atlas.GetFloors(r.shape) > 1
-        if isMF and seenLow and seenLow[r.shape] then
-            local s = mfSpan and mfSpan[r.shape]
-            if s and floor > s.maxFloor then s.maxFloor = floor end   -- projection -> widen span, don't re-add
-        else
-            local id = IDs.makeRoomID(floorID, tostring(r.captureIndex))   -- captureIndex always stamped at ingest
-            if id then
-                rooms[id] = Cap.buildRoomRecord(r)
-                if isMF and mfSpan and not mfSpan[r.shape] then
-                    mfSpan[r.shape] = { floorID = floorID, captureIndex = r.captureIndex, baseFloor = floor, maxFloor = floor }
-                end
-            end
-        end
-    end
-    if seenLow then
-        for _, r in pairs(snapshot.rooms) do
-            if Atlas.GetFloors(r.shape) > 1 then seenLow[r.shape] = true end
-        end
+        local id = IDs.makeRoomID(floorID, tostring(r.captureIndex))   -- captureIndex always stamped at ingest
+        if id then rooms[id] = Cap.buildRoomRecord(r) end
     end
     return rooms
 end
@@ -583,11 +551,171 @@ local function _computeDeletedRoomIDs(rooms, floorID)
     return deleteRoomIDs
 end
 
--- AutoLayout grid-packs each room's cell (no positional API -> a tidy
--- deterministic canvas: rows by capture order, entry at bottom-centre, never
--- overlapping). Baked into stored cells; E4-drag re-positions to match reality.
-local function _packRoomCells(rooms)
-    local packed = HDG.Projects.AutoLayout.compute({ rooms = rooms }).layout
+-- The house's committed live-layout placements, or nil before the first capture.
+local function _committedPlacements(houseID)
+    local p      = HDG.Store:GetState().account.projects
+    local house  = p.houses[houseID]
+    local layout = house and house.currentVersionID and p.layouts[house.currentVersionID]
+    return layout and layout.placements or nil   -- exception(nullable): first capture of a house has no committed layout
+end
+
+-- Solver seed: cells already occupied on `floor` by OTHER floors' committed
+-- multi-span rooms (garden volumes; planner-stamped stair spans) -- FloorMap
+-- projects spans, and the solver must not place into them (solver spec SS5.5).
+-- Rooms committed on THIS floor are excluded: the capture replaces them.
+local function _seedCellsFor(placements, floor)
+    if not placements then return nil end
+    local SA = HDG.Projects.ShapeAtlas
+    local rooms, exclude = {}, {}
+    for key, pl in pairs(placements) do
+        -- A CAPTURED stair section's `floors` override is a PLAN ("Expand up"),
+        -- not reality -- projecting it into the seed would pin-conflict the very
+        -- capture that materializes the plan as a real section (review #2).
+        local floors = pl.floors
+        if floors and pl.capturedID and SA.IsStairShape(pl.shape) then floors = nil end
+        rooms[key] = { shape = pl.shape, floor = pl.floor, floors = floors,
+                       cell = { x = pl.x, y = pl.y, rotation = pl.rotation } }
+        if pl.floor == floor then exclude[key] = true end
+    end
+    return HDG.Projects.FloorMap.OccupiedCells(rooms, floor, exclude)
+end
+
+-- Anchored-from-below (owner-ruled, solver spec SS10): cells on `floor` that
+-- have a ROOF under them -- committed rooms one floor down whose span TOPS OUT
+-- there. Circle shapes never support (open sky). floor 1 (the lowest) is
+-- unconstrained -> nil; an upper floor with nothing committed below returns {}
+-- so the solver falls back rather than solving in an unanchored frame.
+local function _supportCellsFor(placements, floor)
+    if floor <= 1 then return nil end
+    local SA, support = HDG.Projects.ShapeAtlas, {}
+    for _, pl in pairs(placements or {}) do   -- exception(nullable): no committed floors below yet -> empty support -> fallback
+        local span = pl.floors or SA.GetFloors(pl.shape)
+        if (pl.floor + span - 1) == (floor - 1) and not SA.IsCircle(pl.shape) then
+            local cells = SA.GetCells(pl.shape)
+            for _, m in ipairs(SA.RotateMask(SA.GetMask(pl.shape), pl.rotation or 0, cells[1], cells[2])) do
+                support[(pl.x + m[1]) .. "," .. (pl.y + m[2])] = true
+            end
+        end
+    end
+    return support
+end
+
+-- Vertical pinning (solver spec SS10): a captured stair SECTION on this floor
+-- sits directly above its lower-floor mate. Mate preference (owner-refined
+-- 2026-08-10, "a diff should help us with placement"):
+--   1. CONTINUITY -- the section was committed before (same placementIndex on
+--      this floor): its tower is the same-shape section now sitting at its old
+--      cell one floor down. Recaptures keep established towers; only sections
+--      NEW to this capture run chronology matching.
+--   2. Largest counter below its own (subsumes tower-mate adjacency: the
+--      directly-preceding counter is the largest possible). Counters can lie
+--      after edit churn (lowest-free-slot reuse, spec SS2.2) -- acceptable,
+--      continuity shields established towers.
+-- Each lower section anchors at most one upper section.
+local function _pinsFor(rooms, floor, placements)
+    if floor <= 1 or not placements then return nil end
+    local SA  = HDG.Projects.ShapeAtlas
+    local ids = {}
+    for id, rec in pairs(rooms) do
+        if SA.IsStairShape(rec.shape) and rec.placementIndex then ids[#ids + 1] = id end
+    end
+    if #ids == 0 then return nil end
+    table.sort(ids, function(a, b) return rooms[a].placementIndex < rooms[b].placementIndex end)
+
+    -- Lower-floor mate candidates + this floor's previous commit (continuity).
+    local lower, prevCell, unindexed = {}, {}, false
+    for key, pl in pairs(placements) do
+        if SA.IsStairShape(pl.shape) then
+            if pl.floor == floor - 1 then
+                lower[key] = pl
+                if not pl.placementIndex then unindexed = true end
+            elseif pl.floor == floor and pl.placementIndex then
+                prevCell[pl.placementIndex] = { x = pl.x, y = pl.y }
+            end
+        end
+    end
+
+    local pins, used = {}, {}
+    for _, id in ipairs(ids) do   -- pass 1: continuity
+        local rec = rooms[id]
+        local old = prevCell[rec.placementIndex]
+        if old then
+            for key, pl in pairs(lower) do
+                if not used[key] and pl.shape == rec.shape and pl.x == old.x and pl.y == old.y then
+                    used[key], pins[id] = true, { x = pl.x, y = pl.y }
+                    break
+                end
+            end
+        end
+    end
+    for _, id in ipairs(ids) do   -- pass 2: chronology, for NEW sections
+        if not pins[id] then
+            local rec, bestKey, bestIdx = rooms[id], nil, nil
+            for key, pl in pairs(lower) do
+                if not used[key] and pl.shape == rec.shape
+                   and pl.placementIndex and pl.placementIndex < rec.placementIndex
+                   and (bestIdx == nil or pl.placementIndex > bestIdx
+                        or (pl.placementIndex == bestIdx and key < bestKey)) then
+                    bestKey, bestIdx = key, pl.placementIndex
+                end
+            end
+            if bestKey then
+                used[bestKey] = true
+                pins[id] = { x = placements[bestKey].x, y = placements[bestKey].y }
+            elseif unindexed then
+                -- Pre-upgrade lower placements carry no placementIndex until a
+                -- bottom-up recapture -- say so instead of silently not pinning.
+                HDG.Log:Info("projects_save", "stairwell pinning skipped: the floor below predates this version -- run Capture All Floors once to heal")
+            end
+        end
+    end
+    return next(pins) and pins or nil
+end
+
+-- Frame anchor (solver spec SS10): an UNCONSTRAINED re-solve (lowest floor) must
+-- not shift the shared frame under committed upper floors -- translate the fresh
+-- layout so a previously-known room keeps its old cell.
+local function _anchorToPrevious(rooms, packed, placements)
+    if not placements then return end
+    local prev = {}
+    for _, pl in pairs(placements) do
+        if pl.capturedID then prev[pl.capturedID] = { x = pl.x, y = pl.y } end
+    end
+    local anchorID
+    for id, rec in pairs(rooms) do
+        if prev[id] and packed[id] then
+            if not anchorID
+               or (rec.placementIndex or math.huge) < (rooms[anchorID].placementIndex or math.huge)
+               or ((rec.placementIndex or math.huge) == (rooms[anchorID].placementIndex or math.huge) and id < anchorID) then
+                anchorID = id
+            end
+        end
+    end
+    if not anchorID then return end
+    local dx = prev[anchorID].x - packed[anchorID].cell.x
+    local dy = prev[anchorID].y - packed[anchorID].cell.y
+    if dx == 0 and dy == 0 then return end
+    for _, placed in pairs(packed) do
+        placed.cell.x, placed.cell.y = placed.cell.x + dx, placed.cell.y + dy
+    end
+end
+
+-- AutoLayout stamps each room's cell: connectivity-solved arrangement when the
+-- capture carries the transient door data, grid-pack rows otherwise. Baked into
+-- stored cells; E4-drag re-positions afterwards.
+local function _packRoomCells(rooms, floor, houseID)
+    local placements = _committedPlacements(houseID)
+    local seed       = _seedCellsFor(placements, floor)
+    local support    = _supportCellsFor(placements, floor)
+    local pins       = _pinsFor(rooms, floor, placements)
+    local packed = HDG.Projects.AutoLayout.compute({
+        rooms = rooms, seedCells = seed, supportCells = support, pins = pins,
+    }).layout
+    -- Unconstrained solves (lowest floor) anchor to the previous capture so the
+    -- shared frame never shifts under committed upper floors.
+    if not ((seed and next(seed)) or support or pins) then
+        _anchorToPrevious(rooms, packed, placements)
+    end
     for roomID, placed in pairs(packed) do
         local rec = rooms[roomID]
         if rec then
@@ -596,13 +724,16 @@ local function _packRoomCells(rooms)
     end
 end
 
--- Persist ONLY the SSoT fields. doorCardinals fed AutoLayout.InferRotation (a
--- capture-time input) -- not stored; doors/occupancy derive from cell + shape.
+-- Persist ONLY the SSoT fields. doors/recordID fed the solver (capture-time
+-- inputs) -- not stored; doors/occupancy derive from cell + shape.
+-- placementIndex IS kept: immutable per-house identity (solver spec SS10),
+-- the vertical-pinning signal for stair sections on the floor above.
 local function _stripToSSoTFields(rooms)
     for id, rec in pairs(rooms) do
         rooms[id] = {
             shape  = rec.shape, name = rec.name, cell = rec.cell,
             isBase = rec.isBase, captureIndex = rec.captureIndex,
+            placementIndex = rec.placementIndex,
         }
     end
 end
@@ -630,62 +761,33 @@ end
 -- (crates fall to orphan bay); captured rooms added with fresh deterministic IDs +
 -- grid-packed cells. No fingerprint-merge (matching identical shapes was ambiguous).
 function HO:_FinalizeCapture(snapshot, houseID)
-    if not (snapshot and houseID) then return end
+    if not (snapshot and houseID) then
+        HDG.Log:Warn("projects_save", "capture discarded: missing snapshot or houseID (left the house mid-capture?)")
+        return
+    end
     local floor   = snapshot.floor or 1
     local floorID = HDG.Projects.IDs.makeFloorID(houseID, floor)
-    if not floorID then return end
+    if not floorID then
+        HDG.Log:Warn("projects_save", "capture discarded: bad floor " .. tostring(floor))
+        return
+    end
 
     -- Drop the live pin refs (restriction flags + diagnostics no longer persisted -- Phase 4).
     for _, room in pairs(snapshot.rooms) do room._roomPin = nil end
 
-    local rooms         = _buildCapturedRooms(snapshot, floor, floorID)
+    local rooms         = _buildCapturedRooms(snapshot, floorID)
     local deleteRoomIDs = _computeDeletedRoomIDs(rooms, floorID)
-    _packRoomCells(rooms)
+    _packRoomCells(rooms, floor, houseID)
     _stripToSSoTFields(rooms)
     _dispatchCaptureCommit(houseID, rooms, deleteRoomIDs)
 end
 
--- The placement KEY whose room carries this captured lineage, or nil. v8: every
--- committed placement carries capturedID (tagged or not), so the match is direct
--- -- no room.legacyID fallback. (Distinct from _existingRoomIDsForFloor, which
--- filters capturedIDs by floor; this reverse-looks-up a key by exact ID.)
-local function _findPlacementKeyByCapture(layout, capturedID)
-    if not capturedID then return nil end
-    for k, pl in pairs(layout.placements) do
-        if pl.capturedID == capturedID then return k end
-    end
-    return nil
-end
-
--- Stamp one observed vertical span onto its base placement's `floors` field so
--- FloorMap projects it to exactly the floors it occupies. The ShapeAtlas default
--- (tall_room=2, garden=3, ...) is only the uncaptured fallback; a stairwell can
--- legitimately run 1->3.
-local function _applyObservedSpan(layout, lid, shape, s)
-    local span = s.maxFloor - s.baseFloor + 1
-    if span <= 1 or span == HDG.Projects.ShapeAtlas.GetFloors(shape) then return end
-    local capturedID = HDG.Projects.IDs.makeRoomID(s.floorID, tostring(s.captureIndex))
-    local key = _findPlacementKeyByCapture(layout, capturedID)
-    if not key then return end
-    HDG.Store:Dispatch({
-        type    = HDG.Constants.ACTIONS.LAYOUT_MOVE,
-        payload = { layoutID = lid, key = key, floors = span },
-    })
-end
-
--- After an all-floors sweep: each multi-floor room was committed once (its base section)
--- and _FinalizeCapture tracked how high the same shape re-appeared. Stamp those observed
--- spans onto the base placements before teardown.
-function HO:_ApplyMultiFloorSpans()
-    if not (_activeSweep and _activeSweep.mfSpan) then return end
-    local p      = HDG.Store:GetState().account.projects
-    local house  = _activeSweep.houseID and p.houses[_activeSweep.houseID]
-    local lid    = house and house.currentVersionID
-    local layout = lid and p.layouts[lid]
-    if not layout then return end
-    for shape, s in pairs(_activeSweep.mfSpan) do
-        _applyObservedSpan(layout, lid, shape, s)
-    end
+-- GetViewedFloor is 0-INDEXED (the sweep maps floor 1 -> SetViewedFloor(0)); +1 to
+-- the 1-indexed capture floor. Was fed raw: ground-floor passives were silently
+-- DISCARDED (makeFloorID rejects 0) and upper-storey passives committed one floor
+-- low, replacing the floor below via the recapture diff (solver spec SS2.8).
+local function _viewedCaptureFloor()
+    return ((C_HousingLayout and C_HousingLayout.GetViewedFloor and C_HousingLayout.GetViewedFloor()) or 0) + 1  -- exception(boundary): C_HousingLayout is a Blizzard API namespace; nil in headless tests
 end
 
 -- Passive capture: begin on Layout entry, finalize on exit. Suppressed during active sweep.
@@ -695,7 +797,7 @@ function HO:_OnCaptureModeChanged()
     local mode   = (C_HouseEditor and C_HouseEditor.GetActiveHouseEditorMode and C_HouseEditor.GetActiveHouseEditorMode()) or 0  -- exception(boundary): C_HouseEditor is a Blizzard API namespace; nil in headless tests
     if active and mode == _layoutMode() then
         if not self:IsCapturing() then
-            self:_BeginCapture((C_HousingLayout and C_HousingLayout.GetViewedFloor and C_HousingLayout.GetViewedFloor()) or 1)  -- exception(boundary): C_HousingLayout is a Blizzard API namespace; nil in headless tests
+            self:_BeginCapture(_viewedCaptureFloor())
         end
     elseif self:IsCapturing() then
         local snap, houseID = self:_EndCapture(), _currentHouseID()
@@ -707,7 +809,7 @@ function HO:OnLayoutFloorChanged()
     if _activeSweep or not self:IsCapturing() then return end
     local snap, houseID = self:_EndCapture(), _currentHouseID()
     if snap and houseID then self:_FinalizeCapture(snap, houseID) end
-    self:_BeginCapture((C_HousingLayout and C_HousingLayout.GetViewedFloor and C_HousingLayout.GetViewedFloor()) or 1)  -- exception(boundary): C_HousingLayout is a Blizzard API namespace; nil in headless tests
+    self:_BeginCapture(_viewedCaptureFloor())
 end
 
 -- Active sweep: Decorate->Layout (re-emits pins), iterate floors with settle delay.
@@ -720,7 +822,6 @@ local function _stepSweep()
         if snap and houseID then HO:_FinalizeCapture(snap, houseID) end
     end
     if nextFloor > _activeSweep.maxFloor then
-        HO:_ApplyMultiFloorSpans()   -- stamp observed vertical spans onto base rooms before teardown
         if C_HouseEditor and C_HouseEditor.LeaveHouseEditor then C_HouseEditor.LeaveHouseEditor() end
         local floors = _activeSweep.maxFloor
         _activeSweep = nil
@@ -750,10 +851,10 @@ end
 -- C_HousingLayout.GetNumFloors was REMOVED on 12.1 in favour of the occupied-floor
 -- INDEX range (GetLowest/GetHighestOccupiedFloorIndex). Return the same floor COUNT
 -- the old API gave: prefer it on live 12.0.x, derive it from the index range on 12.1
--- (highest - lowest + 1 -- correct for a contiguous occupied range, basements included).
--- VERIFY IN-GAME on 12.1: CaptureAllFloors below maps floor 1 -> SetViewedFloor(0),
--- which assumes the lowest occupied index is 0. If 12.1 houses can start below 0
--- (basements), the sweep's viewed-floor mapping needs the range, not just the count.
+-- (highest - lowest + 1 -- correct for a contiguous occupied range).
+-- Owner-ruled 2026-08-10 (solver spec SS10): floors are ALWAYS indexed from 0
+-- upward regardless of how many sit below the entry -- SetViewedFloor(0) is the
+-- lowest floor, so the floor-1 mapping below is safe, basements included.
 -- exception(boundary): C_HousingLayout is a Blizzard API namespace; nil in headless tests.
 local function _numFloors()
     local CL = C_HousingLayout
@@ -783,7 +884,13 @@ function HO:CaptureAllFloors()
     -- Recapture prep (v8): placements persist so tags survive; CLEAR prunes
     -- only capture-owned placements above the current floor count + resets
     -- the capture echo. Per-floor diffs handle removals on surviving floors.
-    local maxFloor = _numFloors() or 1  -- exception(boundary): _numFloors nil in headless tests (no C_HousingLayout)
+    -- A nil floor count must ABORT: defaulting to 1 would prune every upper
+    -- floor's placements and then never revisit them (2026-08-10 review #6).
+    local maxFloor = _numFloors()
+    if not maxFloor then
+        HDG.Log:Warn("projects_save", "capture aborted: floor count unavailable -- re-enter the house and try again")
+        return false, "floor count unavailable -- try re-entering the house"
+    end
     HDG.Store:Dispatch({
         type    = HDG.Constants.ACTIONS.PROJECTS_CLEAR_HOUSE,
         payload = { houseID = houseID, clearedAt = (time and time() or 0), maxFloor = maxFloor },  -- exception(boundary): GetTime/time absent in headless harness
@@ -795,8 +902,6 @@ function HO:CaptureAllFloors()
         houseID = houseID, floor = 1,
         maxFloor = maxFloor,
         settleSeconds = 1.5, cancelled = false,
-        seenLowerMF = {},   -- multi-floor SHAPES committed on a lower floor -> skip their upper sections
-        mfSpan      = {},    -- shape -> { floorID, captureIndex, baseFloor, maxFloor } observed vertical span
     }
     if C_Timer and C_Timer.After then
         C_Timer.After(0.1, function()

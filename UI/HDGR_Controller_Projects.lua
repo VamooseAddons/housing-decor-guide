@@ -166,9 +166,11 @@ local function _findFreeCellSpanning(rooms, floor, shape, span)
     end
     return nil  -- no free cell across the span -> caller declines to place
 end
--- Place a room: ONE record on the selected floor. A multi-floor shape (stairs/tall =
--- 2, garden = 3) is STILL a single record -- FloorMap derives its vertical span and
--- projects it up. The cell must be free across that whole span.
+-- Place a room: ONE record on the selected floor. The PLANNER mirrors the in-game
+-- placement ACTION: placing a stair shape creates two storeys at once, so the
+-- planned record carries floors = GetPlannedSpan (2 for stairs, 3 for gardens) --
+-- while CAPTURED stair rooms arrive as one section per floor with span 1
+-- (sections model, solver spec SS10). FloorMap projects the planned span up.
 local function _placePlannedRoom(shape)
     if shape == "entry" then return end   -- Entry is the anchor room; never placed
     -- What-if mode only: palette hidden on Live; this is defense-in-depth.
@@ -177,7 +179,7 @@ local function _placePlannedRoom(shape)
     if not version then return end
     local SA    = HDG.Projects.ShapeAtlas
     local floor = HDG.Store:GetState().session.ui.projects.selectedFloor  -- exception(false-positive): top-level controller read
-    local span  = SA.GetFloors(shape)
+    local span  = SA.GetPlannedSpan(shape)
     if floor + span - 1 > 3 then return end   -- the span would exceed the 3-floor cap
     local x, y = _findFreeCellSpanning(version, floor, shape, span)
     if not x then return end   -- exception(nullable): no cell free across the span
@@ -185,6 +187,7 @@ local function _placePlannedRoom(shape)
     -- attaches later via the right panel ("which room?").
     HDG.Store:Dispatch({ type = A.LAYOUT_PLACE, payload = {
         layoutID = vid, shape = shape, floor = floor, x = x, y = y, rotation = 0,
+        floors = (span > 1) and span or nil,
     } })
 end
 

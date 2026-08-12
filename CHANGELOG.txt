@@ -1,3 +1,72 @@
+## [Unreleased]
+
+## [3.21.0] - 2026-08-12 (August 2026)
+
+### Added
+- **Capturing your house now lays the map out like the real thing.** Rooms land
+  on the Architect canvas arranged the way they actually connect -- doors lined
+  up, neighbours adjacent, stairwell shafts kept clear on the floors above --
+  instead of a flat row you rebuilt by hand. Where the game genuinely can't
+  say which of two arrangements you built (it happens with a couple of room
+  combinations per house), the closest valid one is picked and a quick drag
+  fixes it; everything stays connected and nothing overlaps.
+- Rooms of the same type now show their number ("Hallway 1", "Hallway 2") on
+  the canvas again, so twins are tellable apart.
+- **Upper floors now capture properly too.** Stairwells arrive as what they
+  really are -- one room per floor, stacked -- so walking your floors in Layout
+  mode no longer tangles them into phantom duplicates that refused to move.
+  Rooms on upper floors land on top of the rooms that hold them up, stairwell
+  towers line up vertically with the floor below, and nothing gets laid out
+  inside a garden's open sky.
+- **The 12.1 housing vendors are in.** Thirty vendors the game added in 12.1 --
+  Timicky, Agratha, Griftah, Perry Winkles, Cursed Keepsake and the rest,
+  across Founder's Point and Razorwind Shores. Their decor was already named
+  in tooltips but they were missing from the Zone Scanner and Shop by Vendor
+  entirely, so a whole neighbourhood's worth of items had no visible seller.
+- Their map coordinates are not in yet, so they show up in the lists but have
+  no map pin. "Map All" and "Open vendor on map" quietly skip them rather than
+  dropping a marker in the wrong place; the pins follow once each one is walked.
+- If the addon's files are only half there, it now says so in one line at login
+  instead of filling your screen with errors. An incomplete install used to
+  surface as a couple of dozen identical-looking Lua errors and a missing
+  minimap button, with nothing pointing at the cause. It now names the folders
+  that came up empty and tells you to reinstall -- and if your WoW sits inside
+  Dropbox or OneDrive, to move it out first, because sync clients can report a
+  folder as fully synced while leaving it empty.
+
+### Fixed
+- The buy-quantity dial at a decor vendor now opens on 1 instead of 000, so
+  Buy is live the moment it appears. It used to say "Buy 0" and do nothing
+  until you clicked a wheel.
+- "Set quantity" on a shopping list item now opens with 1 already in the box,
+  selected -- so Enter is enough for the common case. It used to open empty.
+- Clicking an achievement in an item's source line opens the achievement again
+  instead of throwing an error. Patch 12.1 removed the call the link used.
+- Opening Layout mode while standing on an upper storey saved those rooms one
+  floor too low -- and on the ground floor, quietly saved nothing at all. Both
+  now land on the right floor.
+- "Expand Stairwell up" plans no longer vanish the next time the house is
+  captured, the option now also appears on the Stairwell Room (Empty) -- it
+  exists in the game, so it exists here -- and it no longer shows on stairwells
+  already at the roof.
+- The floor check in the Architect panel now catches rooms overlapping a
+  garden or stairwell rising from a lower floor -- previously it said "Valid"
+  for exactly the overlaps dragging would refuse.
+- Duplicate rooms on different floors now tell apart in the detail panel
+  ("Hallway 1-2" vs "Hallway 2-1" -- floor, then number).
+- Capturing all floors now stops with a clear message if the game won't say
+  how many floors the house has, instead of quietly forgetting every floor
+  above the first.
+- Stairwells placed in what-if designs before this update keep their two
+  storeys (a data-model change would have silently shrunk them to one).
+- Expanding a stairwell up and then capturing that floor for real no longer
+  fight each other -- the plan hands over to the captured room cleanly.
+- Torv Dubstomp's waypoint pointed at empty ground. Both his Map and Waypoint
+  buttons were working from a position recorded a zone away from where he
+  actually stands, so following them dropped you near Frosthoof Watch instead
+  of Thunder Totem. He and Ransa Greyfeather now both carry positions taken
+  standing next to them.
+
 ## [3.20.0] - 2026-08-01 (August 2026)
 
 ### Added

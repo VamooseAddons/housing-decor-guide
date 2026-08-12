@@ -442,12 +442,13 @@ function C:_OnRoomMenu(tile)
         { text = "Move right", callback = function() move(1,  0, 0) end },
         { text = "Rotate",     callback = function() move(0,  0, 1) end },
     }
-    -- Stairwells grow up a floor (in-game "Expand Stairwell up"), capped at floor 3.
-    -- Single record -> the top floor is base + span - 1 (span = floors override or shape default).
-    if room.shape == "staircase" or room.shape == "staircase_mirror" then
-        local p    = HDG.Projects.IDs.parsePath(roomID)
+    -- Stairwells grow up a floor (in-game "Expand Stairwell up" -- exists on all
+    -- three stair shapes incl. the Empty room, owner-verified 2026-08-10), capped
+    -- at floor 3. room.floor direct: v8 slot keys never parsed, so the old
+    -- parsePath derivation pinned every stairwell to floor 1 (review #9).
+    if HDG.Projects.ShapeAtlas.IsStairShape(room.shape) then
         local span = room.floors or HDG.Projects.ShapeAtlas.GetFloors(room.shape)
-        local top  = (p and p.floor or 1) + span - 1
+        local top  = room.floor + span - 1
         if top < 3 then
             items[#items + 1] = { text = "Expand Stairwell up",
                 callback = function() HDG.ProjectsController:ExpandStackUp(roomID) end }

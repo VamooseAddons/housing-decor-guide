@@ -846,7 +846,7 @@ HDGR_DecorDB = {
             [133588] = { name = "Flaked Sea Salt", qty = 3 },
             [124109] = { name = "Highmountain Salmon", qty = 5 },
             [133591] = { name = "River Onion", qty = 3 },
-            [133589] = { name = "DalapeÃƒÂ±o Pepper", qty = 3 },
+            [133589] = { name = "Dalapeño Pepper", qty = 3 },
         },
     },
     -- EXPANSION: Kul Tiran Blacksmithing / Zandalari Blacksmithing

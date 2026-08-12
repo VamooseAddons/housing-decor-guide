@@ -342,8 +342,17 @@ function SF.ApplyCapture(state, payload)
         end
         local pl = layout.placements[key]
         pl.floor, pl.x, pl.y = (parsed and parsed.floor) or 1, cell.x or 0, cell.y or 0
-        pl.rotation, pl.floors = cell.rotation or 0, record.floors
+        pl.rotation = cell.rotation or 0
+        -- floors PRESERVES an existing override -- the old unconditional copy
+        -- silently wiped "Expand Stairwell up" plans on every recapture
+        -- (2026-08-10 review critical #2).
+        pl.floors = record.floors or pl.floors   -- exception(optional): capture records NEVER carry floors (stripped pre-dispatch); the `or` keeps the planner/expand override, it is not a nil-guard
         pl.shape, pl.capturedID, pl.capturedName = record.shape, capturedID, record.name
+        -- Carried for the selector layer: roomDetail.isBase + the "Hallway 1-2"
+        -- room-number labels (both were dead while these fields were dropped here).
+        -- placementIndex = immutable per-house identity from the roomGUID counter;
+        -- the vertical-pinning signal for stair sections (solver spec SS10).
+        pl.isBase, pl.captureIndex, pl.placementIndex = record.isBase, record.captureIndex, record.placementIndex
         if pl.roomID then
             -- Tag survives; captured name fills a blank room name, never overwrites.
             local room = acct.rooms[pl.roomID]   -- exception(nullable): stale tag (room deleted) -> falls back to slot
@@ -358,6 +367,24 @@ function SF.ApplyCapture(state, payload)
             slots = slots + 1
         end
     end
+    -- A freshly-captured stair section MATERIALIZES a pending "Expand up" plan on
+    -- the section below it: once a real same-shape section sits directly above,
+    -- the override's projection would double-claim that floor and pin-conflict
+    -- the next capture -- clear it (2026-08-10 review #2, owner-approved heal).
+    local SA = HDG.Projects.ShapeAtlas
+    for _, below in pairs(layout.placements) do
+        if below.floors and below.capturedID and SA.IsStairShape(below.shape) then
+            for _, above in pairs(layout.placements) do
+                if above.capturedID and above.shape == below.shape
+                   and above.floor == below.floor + 1
+                   and above.x == below.x and above.y == below.y then
+                    below.floors = nil
+                    break
+                end
+            end
+        end
+    end
+
     local removed = 0
     for _, capturedID in ipairs(payload.deleteRoomIDs or {}) do
         -- Partial-capture removal: drop the placement; tagged ROOMS (and
@@ -407,8 +434,9 @@ end
 -- ===== Layout view (the spatial pipeline's read shape) ======================
 -- Materializes a layout into the record map FloorMap / canvas / selectors
 -- consume: [key] = { shape, name, floor, cell = {x,y,rotation}, roomID?,
--- slotKey?, unassigned? }. Keys are v7 placement keys (room:N / slot:N);
--- records CARRY floor (FloorMap reads record.floor -- v7 keys don't encode it).
+-- slotKey?, unassigned?, isBase?, captureIndex? }. Keys are v7 placement keys
+-- (room:N / slot:N); records CARRY floor (FloorMap reads record.floor -- v7
+-- keys don't encode it).
 
 function SF.LayoutView(state, layoutID)
     local layout = layoutID and state.account.projects.layouts[layoutID]   -- exception(nullable): stale UI layout id
@@ -426,6 +454,8 @@ function SF.LayoutView(state, layoutID)
             roomID     = room and pl.roomID or nil,
             slotKey    = key,
             unassigned = (not room) or nil,
+            isBase       = pl.isBase,
+            captureIndex = pl.captureIndex,
         }
     end
     return out
@@ -735,7 +765,8 @@ HDG.Actions:Register{ name = "LAYOUT_PLACE",
         local layout = payload.layoutID and acct.projects.layouts[payload.layoutID]   -- exception(nullable): lookup can miss on stale UI
         if layout then
             local rec = { floor = payload.floor or 1, x = payload.x or 0,
-                          y = payload.y or 0, rotation = payload.rotation or 0 }
+                          y = payload.y or 0, rotation = payload.rotation or 0,
+                          floors = payload.floors }
             if payload.roomID and acct.rooms[payload.roomID]
                and not acct.rooms[payload.roomID].shape then
                 -- v8 invariant: shape lives on EVERY placement. A shapeless

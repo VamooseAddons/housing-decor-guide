@@ -10,8 +10,12 @@
 --   ProjectedRooms(rooms, floor)           -> { {roomID,shape,cell}, ... } (render ghosts)
 --   CanMoveTo(rooms, roomID, x, y)         -> bool                (drag/move guard)
 --
--- Stairs/tall carry a real linked record per floor (occupy their own floor only);
--- gardens (circle) are a single record that projects up its span.
+-- SECTIONS model (owner-ruled + capture-verified 2026-08-10, solver spec SS10):
+-- CAPTURED stairs/tall arrive as one real record per floor (each occupies only
+-- its own floor, span 1); gardens are a single record that projects up 3 floors
+-- (open sky above). PLANNER-placed stair shapes are a single record stamped
+-- floors=2 (GetPlannedSpan) so the what-if canvas projects them like the game
+-- placement action would create them; "Expand Stairwell up" bumps that field.
 
 HDG = HDG or {}
 HDG.Projects = HDG.Projects or {}
@@ -26,16 +30,16 @@ local function _effectiveSpan(room)
     return room.floors or HDG.Projects.ShapeAtlas.GetFloors(room.shape)
 end
 
--- Cells occupied on `floor`. A CAPTURED multi-floor room (single record, no
--- stairsLink -- garden / stairwell / tall) projects its footprint UP its full span;
--- a PLACED linked stack marks each floor via its own per-floor record (so it's
--- excluded from projection here). `exclude` (set of roomIDs) is skipped -- the move
--- guard passes the moving room + its links so it can't collide with itself.
+-- Cells occupied on `floor`. Any record whose span reaches `floor` marks its
+-- footprint there: garden projections + planner-stamped stair spans; captured
+-- stair sections are span-1 records that mark only their own floor (sections
+-- model). `exclude` (set of roomIDs) is skipped -- the move guard passes the
+-- moving room so it can't collide with itself.
 function M.OccupiedCells(rooms, floor, exclude)
-    local SA, IDs, occ = HDG.Projects.ShapeAtlas, HDG.Projects.IDs, {}
+    local SA, occ = HDG.Projects.ShapeAtlas, {}
     for rid, room in pairs(rooms) do
         if not (exclude and exclude[rid]) then
-            local base = room.floor or ((IDs.parsePath(rid) or {}).floor)   -- v7 entries carry .floor; legacy keys encode it
+            local base = room.floor
             local span = _effectiveSpan(room)
             local top = base and (span > 1 and (base + span - 1) or base)
             if base and floor >= base and floor <= top then
@@ -54,9 +58,9 @@ end
 -- the floors above their own. Every multi-floor room is a single record (the SSoT
 -- derives its span), so there's no double-render to guard against.
 function M.ProjectedRooms(rooms, floor)
-    local IDs, out = HDG.Projects.IDs, {}
+    local out = {}
     for rid, room in pairs(rooms) do
-        local base = room.floor or ((IDs.parsePath(rid) or {}).floor)   -- v7 entries carry .floor
+        local base = room.floor
         local span = _effectiveSpan(room)
         if base and span > 1 and base < floor and floor <= base + span - 1 then
             out[#out + 1] = { roomID = rid, shape = room.shape, cell = room.cell }
@@ -69,10 +73,10 @@ end
 -- floor it occupies (its full span). One record per room -> the span comes from
 -- _effectiveSpan, not from linked counterparts.
 function M.CanMoveTo(rooms, roomID, x, y)
-    local SA, IDs = HDG.Projects.ShapeAtlas, HDG.Projects.IDs
+    local SA = HDG.Projects.ShapeAtlas
     local room = rooms[roomID]
     if not room then return false end
-    local base = room.floor or ((IDs.parsePath(roomID) or {}).floor)   -- v7 entries carry .floor
+    local base = room.floor
     if not base then return false end
     local span    = _effectiveSpan(room)
     local cells   = SA.GetCells(room.shape)
@@ -95,13 +99,13 @@ end
 --   * Stairwell -> the SAME cardinal renders on every floor it spans, so the upper level
 --                  inherits whatever side connected on the ground floor (canvasModel).
 function M.FloatingDoorCardinal(rooms, roomID)
-    local SA, IDs = HDG.Projects.ShapeAtlas, HDG.Projects.IDs
+    local SA = HDG.Projects.ShapeAtlas
     local room    = rooms[roomID]
     local default = SA.GetDoors(room.shape)[1]
     local c       = room.cell
     local rc      = SA.RotateCells(SA.GetCells(room.shape), c.rotation or 0)
     local w, d    = rc[1], rc[2]
-    local base    = room.floor or (IDs.parsePath(roomID) or {}).floor or 1   -- v7 entries carry .floor
+    local base    = room.floor or 1   -- exception(optional): island fallback keeps the render alive
     local exclude = { [roomID] = true }
     local SCAN    = 64   -- max cells to look outward for the nearest neighbour
 
