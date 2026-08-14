@@ -461,7 +461,15 @@ function R.RecipeRow(self)
     _appendRecipeDecorStatus(extras, self._itemID)
     _appendRecipeKnowledge(extras, self._itemID)
     _appendRecipeStockContext(extras, self._itemID, counts, mult)
-    local recipe = self._recipeID and HDG.StaticData.Recipes:Get(self._recipeID)
+    -- recipes.db, NOT StaticData.Recipes:Get -- the seed alone is what the panel
+    -- stopped reading. The scan overlays 12.1's corrected reagents onto
+    -- account.recipeCapture and `recipes.db` merges them, keyed by the same
+    -- itemID :Get uses so this is a drop-in. The tooltip was the last consumer
+    -- still on the raw file, which is why it quoted pre-12.1 quantities beside a
+    -- Materials panel quoting the scanned ones. Memoized on account.recipeCapture,
+    -- so a hover costs a memo hit, not a rebuild.
+    local rdb    = HDG.Selectors:Call("recipes.db", HDG.Store:GetState())
+    local recipe = self._recipeID and rdb[self._recipeID]
     if recipe then _buildRecipeRowMaterials(extras, recipe, counts, mult) end
 
     -- Goblin scanner rows stamp _clickHints; recipe-list / queue rows leave it nil (no hints).

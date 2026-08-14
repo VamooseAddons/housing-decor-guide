@@ -136,9 +136,10 @@ local function _deriveFaction(neighborhoodGUID)
     if not (C_Housing and C_Housing.DoesFactionMatchNeighborhood and neighborhoodGUID) then
         return nil
     end
-    local ok, matches = pcall(C_Housing.DoesFactionMatchNeighborhood, neighborhoodGUID)
-    if not ok then HDG.Log:Warn("housing_api", "DoesFactionMatchNeighborhood(" .. tostring(neighborhoodGUID) .. ") failed: " .. tostring(matches)) end
-    if not ok then return nil end
+    -- Strict: sync bool getter (MCP-verified, "safe to call inline"). The pcall
+    -- that used to wrap this caught nothing and would have turned a rename into
+    -- a quiet nil instead of an error -- the 12.1 IsInsideOwnHouse lesson.
+    local matches = C_Housing.DoesFactionMatchNeighborhood(neighborhoodGUID)
     local pFaction = UnitFactionGroup and UnitFactionGroup("player")
     if pFaction == "Alliance" then return matches and "Alliance" or "Horde"
     elseif pFaction == "Horde"  then return matches and "Horde"    or "Alliance" end
@@ -202,6 +203,10 @@ function HO:OnHouseList(houseInfoList)
     if C_Housing and C_Housing.GetCurrentHouseLevelFavor then
         for _, h in ipairs(houseInfoList) do
             if h.houseGUID then
+                -- exception(fire-forget): ASYNC request, returns NOTHING (MCP-verified);
+                -- the answer arrives on HOUSE_LEVEL_FAVOR_UPDATED. Unlike the sync
+                -- getters above, there is no value to strict-read -- the pcall guards
+                -- the REQUEST against a bad GUID, and the Warn keeps it visible.
                 local ok, err = pcall(C_Housing.GetCurrentHouseLevelFavor, h.houseGUID)
                 if not ok then HDG.Log:Warn("housing_api",
                     "GetCurrentHouseLevelFavor(" .. tostring(h.houseGUID) .. ") failed: " .. tostring(err)) end
@@ -250,9 +255,9 @@ local function _buildThresholds()
     local thresholds = {}
     if C_Housing and C_Housing.GetHouseLevelFavorForLevel then
         for i = 1, maxLevel do
-            local ok, val = pcall(C_Housing.GetHouseLevelFavorForLevel, i)
-            if not ok then HDG.Log:Warn("housing_api", "GetHouseLevelFavorForLevel(" .. tostring(i) .. ") failed: " .. tostring(val)) end
-            thresholds[i] = (ok and val and val > 0) and val
+            -- Strict: sync, returns the favor threshold directly (MCP-verified).
+            local val = C_Housing.GetHouseLevelFavorForLevel(i)
+            thresholds[i] = (val and val > 0) and val
                             or FALLBACK_HOUSE_LEVEL_XP[i] or 0  -- exception(boundary): sparse fallback
         end
     else
@@ -320,6 +325,8 @@ function HO:RequestRewardsForLevel(level)
     -- each GetHouseLevelRewardsForLevel fires RECEIVED_HOUSE_LEVEL_REWARDS, which re-inits + blanks it.
     if HDG.Store:GetState().session.house.rewardsByLevel[level] then return end
     if not (C_Housing and C_Housing.GetHouseLevelRewardsForLevel) then return end
+    -- exception(fire-forget): ASYNC request, returns NOTHING (MCP-verified); the
+    -- rewards arrive on RECEIVED_HOUSE_LEVEL_REWARDS. Nothing to strict-read here.
     local ok, err = pcall(C_Housing.GetHouseLevelRewardsForLevel, level)
     if not ok then HDG.Log:Warn("housing_api",
         "GetHouseLevelRewardsForLevel(" .. tostring(level) .. ") failed: " .. tostring(err)) end

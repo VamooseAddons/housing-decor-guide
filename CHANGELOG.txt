@@ -1,4 +1,32 @@
-## [Unreleased]
+## [3.21.1] - 2026-08-14 (August 2026)
+
+### Added
+- **Four more 12.1 decor vendors can be mapped to.** Firetender Zab'ni and
+  Jan'sari the Watchful on The Coiled Isle, the Skull of Er'inye down in the
+  Vaults of Atal'Utek, and Unquestionably Griftah in the neighbourhood now carry
+  positions, so they get a pin and a waypoint instead of only a name. Reported
+  by soteirian. The rest of the 12.1 sellers are still listed without a pin
+  until someone walks them.
+- **Twenty decor recipes added in patch 12.1 are listed for the first time.**
+  Blacksmithing, Leatherworking, Enchanting, Engineering, Jewelcrafting,
+  Inscription, Tailoring and Alchemy each gained decor the addon had never heard
+  of, so they were missing from the Recipes tab entirely.
+
+### Changed
+- **The recipe costs that ship with the addon are now patch 12.1's.** Most decor
+  recipes were re-costed in 12.1 -- Thalassian Lumber roughly halved across the
+  board, and several recipes gained or lost a material outright -- and until now
+  only players who had run a profession scan saw the new figures. Fifty-eight
+  recipes are corrected, so the Recipes tab, the queue and the shopping list all
+  start from the right numbers whether you have scanned or not.
+
+### Fixed
+- **Recipe tooltips now quote the same material amounts as the Materials panel.**
+  A profession scan picks up 12.1's costs, but the tooltip was still reading the
+  amounts that shipped with the addon -- so hovering a recipe and reading the
+  panel beside it gave two different answers.
+- **The Mogul price refresh was reading that same stale list**, so a reagent a
+  recipe only needs since 12.1 could go unpriced.
 
 ## [3.21.0] - 2026-08-12 (August 2026)
 

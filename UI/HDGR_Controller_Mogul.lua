@@ -108,7 +108,11 @@ function MogulController:_wireGoblinSource(rootFrame)
         function() dispatch("PRICES_SET_PREFERRED_SOURCE", { source = "TSM" }) end)
     HDG.UI.OnClick(rootFrame, "mogulPanel.refreshScanBtn", function()
         local seen, ids = {}, {}
-        for _, recipe in pairs(HDG.StaticData.Recipes:GetAll()) do
+        -- Merged, not the raw seed: a 12.1 scan can swap a recipe's reagents
+        -- outright, and scanning the seed's list would leave the reagent people
+        -- now actually need without a price.
+        local rdb = HDG.Selectors:Call("recipes.db", HDG.Store:GetState())  -- exception(false-positive): OnClick handler, not a row factory; Selectors:Call takes state
+        for _, recipe in pairs(rdb) do
             if recipe.itemID and not seen[recipe.itemID] then
                 seen[recipe.itemID] = true
                 ids[#ids + 1] = recipe.itemID

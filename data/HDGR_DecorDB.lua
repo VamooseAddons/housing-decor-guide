@@ -436,10 +436,9 @@ HDGR_DecorDB = {
         expansion = "Midnight Alchemy",
         expansionID = 2906,
         reagents = {
-            [236952] = { name = "Mote of Pure Void", qty = 8 },
-            [256963] = { name = "Thalassian Lumber", qty = 8 },
+            [236952] = { name = "Mote of Pure Void", qty = 2 },
             [241281] = { name = "Composite Flora", qty = 4 },
-            [241283] = { name = "Wondrous Synergist", qty = 4 },
+            [256963] = { name = "Thalassian Lumber", qty = 4 },
         },
         recipeSource = {
             type = "drop",
@@ -459,10 +458,10 @@ HDGR_DecorDB = {
         expansion = "Midnight Alchemy",
         expansionID = 2906,
         reagents = {
-            [236952] = { name = "Mote of Pure Void", qty = 6 },
-            [256963] = { name = "Thalassian Lumber", qty = 26 },
+            [236952] = { name = "Mote of Pure Void", qty = 2 },
             [241281] = { name = "Composite Flora", qty = 4 },
-            [241283] = { name = "Wondrous Synergist", qty = 4 },
+            [241283] = { name = "Wondrous Synergist", qty = 1 },
+            [256963] = { name = "Thalassian Lumber", qty = 12 },
         },
         recipeSource = {
             type = "drop",
@@ -482,10 +481,9 @@ HDGR_DecorDB = {
         expansion = "Midnight Alchemy",
         expansionID = 2906,
         reagents = {
-            [236950] = { name = "Mote of Primal Energy", qty = 6 },
-            [256963] = { name = "Thalassian Lumber", qty = 8 },
+            [236950] = { name = "Mote of Primal Energy", qty = 1 },
             [241281] = { name = "Composite Flora", qty = 4 },
-            [241283] = { name = "Wondrous Synergist", qty = 4 },
+            [256963] = { name = "Thalassian Lumber", qty = 4 },
         },
         recipeSource = {
             type = "vendor",
@@ -507,9 +505,9 @@ HDGR_DecorDB = {
         expansionID = 2906,
         reagents = {
             [236950] = { name = "Mote of Primal Energy", qty = 6 },
-            [256963] = { name = "Thalassian Lumber", qty = 32 },
             [241281] = { name = "Composite Flora", qty = 4 },
             [241283] = { name = "Wondrous Synergist", qty = 4 },
+            [256963] = { name = "Thalassian Lumber", qty = 16 },
         },
         recipeSource = {
             type = "vendor",
@@ -529,10 +527,9 @@ HDGR_DecorDB = {
         expansion = "Midnight Alchemy",
         expansionID = 2906,
         reagents = {
-            [236949] = { name = "Mote of Light", qty = 6 },
-            [256963] = { name = "Thalassian Lumber", qty = 12 },
+            [236949] = { name = "Mote of Light", qty = 1 },
             [241281] = { name = "Composite Flora", qty = 4 },
-            [241283] = { name = "Wondrous Synergist", qty = 4 },
+            [256963] = { name = "Thalassian Lumber", qty = 6 },
         },
         recipeSource = {
             type = "vendor",
@@ -553,11 +550,11 @@ HDGR_DecorDB = {
         expansion = "Midnight Alchemy",
         expansionID = 2906,
         reagents = {
-            [236951] = { name = "Mote of Wild Magic", qty = 6 },
             [236950] = { name = "Mote of Primal Energy", qty = 6 },
-            [256963] = { name = "Thalassian Lumber", qty = 40 },
+            [236951] = { name = "Mote of Wild Magic", qty = 6 },
             [241281] = { name = "Composite Flora", qty = 4 },
             [241283] = { name = "Wondrous Synergist", qty = 4 },
+            [256963] = { name = "Thalassian Lumber", qty = 20 },
         },
         recipeSource = {
             type = "drop",
@@ -565,6 +562,22 @@ HDGR_DecorDB = {
             zone = "Delves",
             skill = 85,
             notes = "Tradeable on AH",
+        },
+    },
+    [1296429] = { -- Ersatz Venom Splatter
+        name = "Ersatz Venom Splatter",
+        spellID = 1296429,
+        itemID = 279359,
+        decorID = 26391,
+        profession = "Alchemy",
+        category = "House Decor",
+        expansion = "Midnight Alchemy",
+        expansionID = 2906,
+        reagents = {
+            [236950] = { name = "Mote of Primal Energy", qty = 6 },
+            [241281] = { name = "Composite Flora", qty = 4 },
+            [256963] = { name = "Thalassian Lumber", qty = 6 },
+            [274777] = { qty = 6 },   -- name resolved at runtime
         },
     },
 
@@ -996,10 +1009,10 @@ HDGR_DecorDB = {
         expansion = "Midnight Blacksmithing",
         expansionID = 2907,
         reagents = {
-            [256963] = { name = "Thalassian Lumber", qty = 26 },
             [238197] = { name = "Refulgent Copper Ingot", qty = 18 },
             [238202] = { name = "Gloaming Alloy", qty = 5 },
             [238204] = { name = "Sterling Alloy", qty = 5 },
+            [256963] = { name = "Thalassian Lumber", qty = 12 },
         },
         recipeSource = {
             type = "vendor",
@@ -1019,10 +1032,10 @@ HDGR_DecorDB = {
         expansion = "Midnight Blacksmithing",
         expansionID = 2907,
         reagents = {
-            [256963] = { name = "Thalassian Lumber", qty = 12 },
             [238197] = { name = "Refulgent Copper Ingot", qty = 8 },
             [238202] = { name = "Gloaming Alloy", qty = 2 },
             [238204] = { name = "Sterling Alloy", qty = 2 },
+            [256963] = { name = "Thalassian Lumber", qty = 6 },
         },
         recipeSource = {
             type = "vendor",
@@ -1042,10 +1055,10 @@ HDGR_DecorDB = {
         expansion = "Midnight Blacksmithing",
         expansionID = 2907,
         reagents = {
-            [256963] = { name = "Thalassian Lumber", qty = 18 },
             [238197] = { name = "Refulgent Copper Ingot", qty = 12 },
             [238202] = { name = "Gloaming Alloy", qty = 3 },
             [238204] = { name = "Sterling Alloy", qty = 3 },
+            [256963] = { name = "Thalassian Lumber", qty = 8 },
         },
         recipeSource = {
             type = "drop",
@@ -1065,10 +1078,10 @@ HDGR_DecorDB = {
         expansion = "Midnight Blacksmithing",
         expansionID = 2907,
         reagents = {
-            [256963] = { name = "Thalassian Lumber", qty = 18 },
             [238197] = { name = "Refulgent Copper Ingot", qty = 12 },
             [238202] = { name = "Gloaming Alloy", qty = 3 },
             [238204] = { name = "Sterling Alloy", qty = 3 },
+            [256963] = { name = "Thalassian Lumber", qty = 8 },
         },
         recipeSource = {
             type = "vendor",
@@ -1088,10 +1101,10 @@ HDGR_DecorDB = {
         expansion = "Midnight Blacksmithing",
         expansionID = 2907,
         reagents = {
-            [256963] = { name = "Thalassian Lumber", qty = 26 },
             [238197] = { name = "Refulgent Copper Ingot", qty = 18 },
             [238202] = { name = "Gloaming Alloy", qty = 5 },
             [238204] = { name = "Sterling Alloy", qty = 5 },
+            [256963] = { name = "Thalassian Lumber", qty = 12 },
         },
         recipeSource = {
             type = "vendor",
@@ -1099,6 +1112,54 @@ HDGR_DecorDB = {
             vendors = {
                 { npcID = 248328, cost = { {3257, 150} }, factionID = 2699, minRep = 13 },
             },
+        },
+    },
+    [1296497] = { -- Amani Forgemaster's Rack
+        name = "Amani Forgemaster's Rack",
+        spellID = 1296497,
+        itemID = 279329,
+        decorID = 26382,
+        profession = "Blacksmithing",
+        category = "House Decor",
+        expansion = "Midnight Blacksmithing",
+        expansionID = 2907,
+        reagents = {
+            [238197] = { name = "Refulgent Copper Ingot", qty = 18 },
+            [238202] = { name = "Gloaming Alloy", qty = 5 },
+            [238204] = { name = "Sterling Alloy", qty = 5 },
+            [256963] = { name = "Thalassian Lumber", qty = 16 },
+        },
+    },
+    [1296496] = { -- Amani Forgemaster's Decorative Spear
+        name = "Amani Forgemaster's Decorative Spear",
+        spellID = 1296496,
+        itemID = 275305,
+        decorID = 26381,
+        profession = "Blacksmithing",
+        category = "House Decor",
+        expansion = "Midnight Blacksmithing",
+        expansionID = 2907,
+        reagents = {
+            [238197] = { name = "Refulgent Copper Ingot", qty = 8 },
+            [238202] = { name = "Gloaming Alloy", qty = 5 },
+            [238204] = { name = "Sterling Alloy", qty = 5 },
+            [256963] = { name = "Thalassian Lumber", qty = 12 },
+        },
+    },
+    [1296495] = { -- Amani Forgemaster's Workbench
+        name = "Amani Forgemaster's Workbench",
+        spellID = 1296495,
+        itemID = 263709,
+        decorID = 15266,
+        profession = "Blacksmithing",
+        category = "House Decor",
+        expansion = "Midnight Blacksmithing",
+        expansionID = 2907,
+        reagents = {
+            [238197] = { name = "Refulgent Copper Ingot", qty = 18 },
+            [238202] = { name = "Gloaming Alloy", qty = 5 },
+            [238204] = { name = "Sterling Alloy", qty = 5 },
+            [256963] = { name = "Thalassian Lumber", qty = 16 },
         },
     },
 
@@ -1705,11 +1766,11 @@ HDGR_DecorDB = {
         expansion = "Midnight Enchanting",
         expansionID = 2909,
         reagents = {
-            [251665] = { name = "Silverleaf Thread", qty = 50 },
-            [256963] = { name = "Thalassian Lumber", qty = 22 },
             [243599] = { name = "Eversinging Dust", qty = 30 },
             [243602] = { name = "Radiant Shard", qty = 5 },
             [243605] = { name = "Dawn Crystal", qty = 5 },
+            [251665] = { name = "Silverleaf Thread", qty = 50 },
+            [256963] = { name = "Thalassian Lumber", qty = 12 },
         },
         recipeSource = {
             type = "trainer",
@@ -1731,12 +1792,12 @@ HDGR_DecorDB = {
         expansionID = 2909,
         reagents = {
             [236951] = { name = "Mote of Wild Magic", qty = 10 },
-            [245882] = { name = "Thalassian Songwater", qty = 10 },
-            [256963] = { name = "Thalassian Lumber", qty = 14 },
             [242788] = { name = "Duskshrouded Stone", qty = 5 },
             [243599] = { name = "Eversinging Dust", qty = 30 },
             [243602] = { name = "Radiant Shard", qty = 10 },
             [243605] = { name = "Dawn Crystal", qty = 3 },
+            [245882] = { name = "Thalassian Songwater", qty = 10 },
+            [256963] = { name = "Thalassian Lumber", qty = 6 },
         },
         recipeSource = {
             type = "trainer",
@@ -1757,11 +1818,11 @@ HDGR_DecorDB = {
         expansion = "Midnight Enchanting",
         expansionID = 2909,
         reagents = {
+            [238204] = { name = "Sterling Alloy", qty = 6 },
             [243060] = { name = "Luminant Flux", qty = 10 },
-            [256963] = { name = "Thalassian Lumber", qty = 14 },
-            [238204] = { name = "Sterling Alloy", qty = 10 },
             [243602] = { name = "Radiant Shard", qty = 15 },
             [243605] = { name = "Dawn Crystal", qty = 5 },
+            [256963] = { name = "Thalassian Lumber", qty = 6 },
         },
         recipeSource = {
             type = "vendor",
@@ -1781,11 +1842,11 @@ HDGR_DecorDB = {
         expansion = "Midnight Enchanting",
         expansionID = 2909,
         reagents = {
+            [238204] = { name = "Sterling Alloy", qty = 6 },
             [243060] = { name = "Luminant Flux", qty = 10 },
-            [256963] = { name = "Thalassian Lumber", qty = 14 },
-            [238204] = { name = "Sterling Alloy", qty = 10 },
             [243602] = { name = "Radiant Shard", qty = 15 },
             [243605] = { name = "Dawn Crystal", qty = 5 },
+            [256963] = { name = "Thalassian Lumber", qty = 6 },
         },
         recipeSource = {
             type = "vendor",
@@ -1805,11 +1866,11 @@ HDGR_DecorDB = {
         expansion = "Midnight Enchanting",
         expansionID = 2909,
         reagents = {
-            [236950] = { name = "Mote of Primal Energy", qty = 10 },
-            [256963] = { name = "Thalassian Lumber", qty = 32 },
             [236774] = { name = "Azeroot", qty = 10 },
+            [236950] = { name = "Mote of Primal Energy", qty = 10 },
             [243602] = { name = "Radiant Shard", qty = 15 },
             [243605] = { name = "Dawn Crystal", qty = 5 },
+            [256963] = { name = "Thalassian Lumber", qty = 16 },
         },
         recipeSource = {
             type = "drop",
@@ -1830,11 +1891,11 @@ HDGR_DecorDB = {
         expansionID = 2909,
         reagents = {
             [236952] = { name = "Mote of Pure Void", qty = 10 },
-            [245881] = { name = "Lexicologist's Vellum", qty = 20 },
-            [256963] = { name = "Thalassian Lumber", qty = 18 },
             [242788] = { name = "Duskshrouded Stone", qty = 5 },
             [243602] = { name = "Radiant Shard", qty = 15 },
             [243605] = { name = "Dawn Crystal", qty = 5 },
+            [245881] = { name = "Lexicologist's Vellum", qty = 20 },
+            [256963] = { name = "Thalassian Lumber", qty = 8 },
         },
         recipeSource = {
             type = "drop",
@@ -1854,11 +1915,11 @@ HDGR_DecorDB = {
         expansionID = 2909,
         reagents = {
             [236949] = { name = "Mote of Light", qty = 10 },
-            [245881] = { name = "Lexicologist's Vellum", qty = 20 },
-            [256963] = { name = "Thalassian Lumber", qty = 20 },
             [243599] = { name = "Eversinging Dust", qty = 20 },
             [243602] = { name = "Radiant Shard", qty = 10 },
             [243605] = { name = "Dawn Crystal", qty = 3 },
+            [245881] = { name = "Lexicologist's Vellum", qty = 20 },
+            [256963] = { name = "Thalassian Lumber", qty = 10 },
         },
         recipeSource = {
             type = "vendor",
@@ -1878,13 +1939,13 @@ HDGR_DecorDB = {
         expansion = "Midnight Enchanting",
         expansionID = 2909,
         reagents = {
-            [256963] = { name = "Thalassian Lumber", qty = 50 },
             [236949] = { name = "Mote of Light", qty = 20 },
-            [245881] = { name = "Lexicologist's Vellum", qty = 50 },
             [243599] = { name = "Eversinging Dust", qty = 50 },
             [243602] = { name = "Radiant Shard", qty = 10 },
             [243605] = { name = "Dawn Crystal", qty = 3 },
             [245805] = { name = "Sienna Ink", qty = 2 },
+            [245881] = { name = "Lexicologist's Vellum", qty = 50 },
+            [256963] = { name = "Thalassian Lumber", qty = 30 },
         },
         recipeSource = {
             type = "vendor",
@@ -1904,13 +1965,13 @@ HDGR_DecorDB = {
         expansion = "Midnight Enchanting",
         expansionID = 2909,
         reagents = {
-            [256963] = { name = "Thalassian Lumber", qty = 50 },
             [236951] = { name = "Mote of Wild Magic", qty = 20 },
-            [245881] = { name = "Lexicologist's Vellum", qty = 50 },
             [243599] = { name = "Eversinging Dust", qty = 50 },
             [243602] = { name = "Radiant Shard", qty = 10 },
             [243605] = { name = "Dawn Crystal", qty = 3 },
             [245805] = { name = "Sienna Ink", qty = 2 },
+            [245881] = { name = "Lexicologist's Vellum", qty = 50 },
+            [256963] = { name = "Thalassian Lumber", qty = 30 },
         },
         recipeSource = {
             type = "vendor",
@@ -1930,13 +1991,13 @@ HDGR_DecorDB = {
         expansion = "Midnight Enchanting",
         expansionID = 2909,
         reagents = {
-            [256963] = { name = "Thalassian Lumber", qty = 50 },
             [236952] = { name = "Mote of Pure Void", qty = 20 },
-            [245881] = { name = "Lexicologist's Vellum", qty = 50 },
             [243599] = { name = "Eversinging Dust", qty = 50 },
             [243602] = { name = "Radiant Shard", qty = 10 },
             [243605] = { name = "Dawn Crystal", qty = 3 },
             [245801] = { name = "Munsell Ink", qty = 2 },
+            [245881] = { name = "Lexicologist's Vellum", qty = 50 },
+            [256963] = { name = "Thalassian Lumber", qty = 30 },
         },
         recipeSource = {
             type = "vendor",
@@ -1956,10 +2017,10 @@ HDGR_DecorDB = {
         expansion = "Midnight Enchanting",
         expansionID = 2909,
         reagents = {
-            [256963] = { name = "Thalassian Lumber", qty = 18 },
             [242787] = { name = "Crystalline Glass", qty = 5 },
             [243602] = { name = "Radiant Shard", qty = 10 },
             [243605] = { name = "Dawn Crystal", qty = 5 },
+            [256963] = { name = "Thalassian Lumber", qty = 8 },
         },
         recipeSource = {
             type = "vendor",
@@ -1967,6 +2028,54 @@ HDGR_DecorDB = {
             vendors = {
                 { npcID = 242726, cost = { {3379, 200}, {3258, 150} }, factionID = 0, minRep = 0 },
             },
+        },
+    },
+    [1296499] = { -- Furious Tiki Mask
+        name = "Furious Tiki Mask",
+        spellID = 1296499,
+        itemID = 279362,
+        decorID = 5129,
+        profession = "Enchanting",
+        category = "House Decor",
+        expansion = "Midnight Enchanting",
+        expansionID = 2909,
+        reagents = {
+            [243599] = { name = "Eversinging Dust", qty = 12 },
+            [243602] = { name = "Radiant Shard", qty = 6 },
+            [256963] = { name = "Thalassian Lumber", qty = 8 },
+            [274777] = { name = "Neutralized Venom Clot", qty = 6 },
+        },
+    },
+    [1296500] = { -- Enchanted Voidwell Fish
+        name = "Enchanted Voidwell Fish",
+        spellID = 1296500,
+        itemID = 279335,
+        decorID = 26496,
+        profession = "Enchanting",
+        category = "House Decor",
+        expansion = "Midnight Enchanting",
+        expansionID = 2909,
+        reagents = {
+            [238383] = { qty = 1 },   -- name resolved at runtime
+            [243599] = { name = "Eversinging Dust", qty = 25 },
+            [256963] = { name = "Thalassian Lumber", qty = 12 },
+            [274781] = { name = "Cursebound Globe", qty = 6 },
+        },
+    },
+    [1296498] = { -- Keen Hex Mask
+        name = "Keen Hex Mask",
+        spellID = 1296498,
+        itemID = 279332,
+        decorID = 26379,
+        profession = "Enchanting",
+        category = "House Decor",
+        expansion = "Midnight Enchanting",
+        expansionID = 2909,
+        reagents = {
+            [243599] = { name = "Eversinging Dust", qty = 12 },
+            [243602] = { name = "Radiant Shard", qty = 6 },
+            [256963] = { name = "Thalassian Lumber", qty = 12 },
+            [274781] = { name = "Cursebound Globe", qty = 8 },
         },
     },
 
@@ -2414,11 +2523,11 @@ HDGR_DecorDB = {
         expansion = "Midnight Engineering",
         expansionID = 2910,
         reagents = {
-            [256963] = { name = "Thalassian Lumber", qty = 28 },
             [243574] = { name = "Song Gear", qty = 10 },
-            [243576] = { name = "Soul Sprocket", qty = 10 },
+            [243576] = { name = "Soul Sprocket", qty = 6 },
             [243578] = { name = "Aetherlume", qty = 5 },
             [243581] = { name = "Evercore", qty = 5 },
+            [256963] = { name = "Thalassian Lumber", qty = 14 },
         },
         recipeSource = {
             type = "discovery",
@@ -2437,11 +2546,11 @@ HDGR_DecorDB = {
         expansion = "Midnight Engineering",
         expansionID = 2910,
         reagents = {
-            [256963] = { name = "Thalassian Lumber", qty = 18 },
             [243574] = { name = "Song Gear", qty = 10 },
-            [243576] = { name = "Soul Sprocket", qty = 10 },
+            [243576] = { name = "Soul Sprocket", qty = 2 },
             [243578] = { name = "Aetherlume", qty = 5 },
             [243581] = { name = "Evercore", qty = 5 },
+            [256963] = { name = "Thalassian Lumber", qty = 8 },
         },
         recipeSource = {
             type = "discovery",
@@ -2460,11 +2569,11 @@ HDGR_DecorDB = {
         expansion = "Midnight Engineering",
         expansionID = 2910,
         reagents = {
-            [256963] = { name = "Thalassian Lumber", qty = 26 },
             [243574] = { name = "Song Gear", qty = 10 },
-            [243576] = { name = "Soul Sprocket", qty = 10 },
+            [243576] = { name = "Soul Sprocket", qty = 6 },
             [243578] = { name = "Aetherlume", qty = 5 },
             [243581] = { name = "Evercore", qty = 5 },
+            [256963] = { name = "Thalassian Lumber", qty = 12 },
         },
         recipeSource = {
             type = "discovery",
@@ -2483,11 +2592,11 @@ HDGR_DecorDB = {
         expansion = "Midnight Engineering",
         expansionID = 2910,
         reagents = {
-            [256963] = { name = "Thalassian Lumber", qty = 32 },
             [243574] = { name = "Song Gear", qty = 10 },
             [243576] = { name = "Soul Sprocket", qty = 10 },
             [243578] = { name = "Aetherlume", qty = 5 },
             [243581] = { name = "Evercore", qty = 5 },
+            [256963] = { name = "Thalassian Lumber", qty = 16 },
         },
         recipeSource = {
             type = "discovery",
@@ -2506,11 +2615,11 @@ HDGR_DecorDB = {
         expansion = "Midnight Engineering",
         expansionID = 2910,
         reagents = {
-            [256963] = { name = "Thalassian Lumber", qty = 30 },
             [243574] = { name = "Song Gear", qty = 10 },
-            [243576] = { name = "Soul Sprocket", qty = 10 },
+            [243576] = { name = "Soul Sprocket", qty = 5 },
             [243578] = { name = "Aetherlume", qty = 5 },
             [243581] = { name = "Evercore", qty = 5 },
+            [256963] = { name = "Thalassian Lumber", qty = 12 },
         },
         recipeSource = {
             type = "discovery",
@@ -2529,11 +2638,11 @@ HDGR_DecorDB = {
         expansion = "Midnight Engineering",
         expansionID = 2910,
         reagents = {
-            [256963] = { name = "Thalassian Lumber", qty = 24 },
             [243574] = { name = "Song Gear", qty = 10 },
             [243576] = { name = "Soul Sprocket", qty = 10 },
             [243578] = { name = "Aetherlume", qty = 5 },
             [243581] = { name = "Evercore", qty = 5 },
+            [256963] = { name = "Thalassian Lumber", qty = 12 },
         },
         recipeSource = {
             type = "discovery",
@@ -2552,17 +2661,68 @@ HDGR_DecorDB = {
         expansion = "Midnight Engineering",
         expansionID = 2910,
         reagents = {
-            [256963] = { name = "Thalassian Lumber", qty = 22 },
             [243574] = { name = "Song Gear", qty = 10 },
-            [243576] = { name = "Soul Sprocket", qty = 10 },
+            [243576] = { name = "Soul Sprocket", qty = 4 },
             [243578] = { name = "Aetherlume", qty = 5 },
             [243581] = { name = "Evercore", qty = 5 },
+            [256963] = { name = "Thalassian Lumber", qty = 10 },
         },
         recipeSource = {
             type = "discovery",
             method = "Recycling specialization",
             skill = 85,
             notes = "Requires 10+ points in Recycling spec, random discovery from crafting recycled materials",
+        },
+    },
+    [1296503] = { -- Aetherlume Field Lamp
+        name = "Aetherlume Field Lamp",
+        spellID = 1296503,
+        itemID = 279341,
+        decorID = 26372,
+        profession = "Engineering",
+        category = "House Decor",
+        expansion = "Midnight Engineering",
+        expansionID = 2910,
+        reagents = {
+            [243574] = { name = "Song Gear", qty = 10 },
+            [243576] = { name = "Soul Sprocket", qty = 5 },
+            [243578] = { name = "Aetherlume", qty = 5 },
+            [243581] = { name = "Evercore", qty = 5 },
+            [256963] = { name = "Thalassian Lumber", qty = 12 },
+        },
+    },
+    [1296502] = { -- Proudmoore Ship-in-a-Bottle
+        name = "Proudmoore Ship-in-a-Bottle",
+        spellID = 1296502,
+        itemID = 279339,
+        decorID = 26485,
+        profession = "Engineering",
+        category = "House Decor",
+        expansion = "Midnight Engineering",
+        expansionID = 2910,
+        reagents = {
+            [243574] = { name = "Song Gear", qty = 5 },
+            [243576] = { name = "Soul Sprocket", qty = 5 },
+            [243578] = { name = "Aetherlume", qty = 5 },
+            [243581] = { name = "Evercore", qty = 5 },
+            [256963] = { name = "Thalassian Lumber", qty = 6 },
+        },
+    },
+    [1296501] = { -- Coiled Amani Hookshot
+        name = "Coiled Amani Hookshot",
+        spellID = 1296501,
+        itemID = 279337,
+        decorID = 26383,
+        profession = "Engineering",
+        category = "House Decor",
+        expansion = "Midnight Engineering",
+        expansionID = 2910,
+        reagents = {
+            [243574] = { name = "Song Gear", qty = 3 },
+            [243576] = { name = "Soul Sprocket", qty = 3 },
+            [243578] = { name = "Aetherlume", qty = 5 },
+            [243581] = { name = "Evercore", qty = 5 },
+            [256963] = { name = "Thalassian Lumber", qty = 6 },
         },
     },
 
@@ -3570,9 +3730,9 @@ HDGR_DecorDB = {
         expansion = "Midnight Inscription",
         expansionID = 2913,
         reagents = {
-            [256963] = { name = "Thalassian Lumber", qty = 22 },
             [245764] = { name = "Codified Azeroot", qty = 4 },
-            [245766] = { name = "Soul Cipher", qty = 8 },
+            [245766] = { name = "Soul Cipher", qty = 2 },
+            [256963] = { name = "Thalassian Lumber", qty = 10 },
         },
         recipeSource = {
             type = "drop",
@@ -3591,9 +3751,9 @@ HDGR_DecorDB = {
         expansion = "Midnight Inscription",
         expansionID = 2913,
         reagents = {
-            [256963] = { name = "Thalassian Lumber", qty = 24 },
             [245764] = { name = "Codified Azeroot", qty = 4 },
-            [245766] = { name = "Soul Cipher", qty = 9 },
+            [245766] = { name = "Soul Cipher", qty = 6 },
+            [256963] = { name = "Thalassian Lumber", qty = 12 },
         },
         recipeSource = {
             type = "vendor",
@@ -3614,9 +3774,9 @@ HDGR_DecorDB = {
         expansion = "Midnight Inscription",
         expansionID = 2913,
         reagents = {
-            [256963] = { name = "Thalassian Lumber", qty = 24 },
-            [245764] = { name = "Codified Azeroot", qty = 4 },
-            [245766] = { name = "Soul Cipher", qty = 9 },
+            [245764] = { name = "Codified Azeroot", qty = 2 },
+            [245766] = { name = "Soul Cipher", qty = 2 },
+            [256963] = { name = "Thalassian Lumber", qty = 8 },
         },
         recipeSource = {
             type = "drop",
@@ -3659,9 +3819,9 @@ HDGR_DecorDB = {
         expansion = "Midnight Inscription",
         expansionID = 2913,
         reagents = {
-            [256963] = { name = "Thalassian Lumber", qty = 6 },
             [245764] = { name = "Codified Azeroot", qty = 1 },
             [245766] = { name = "Soul Cipher", qty = 2 },
+            [256963] = { name = "Thalassian Lumber", qty = 4 },
         },
         recipeSource = {
             type = "vendor",
@@ -3682,9 +3842,9 @@ HDGR_DecorDB = {
         expansion = "Midnight Inscription",
         expansionID = 2913,
         reagents = {
-            [256963] = { name = "Thalassian Lumber", qty = 18 },
             [245764] = { name = "Codified Azeroot", qty = 3 },
-            [245766] = { name = "Soul Cipher", qty = 7 },
+            [245766] = { name = "Soul Cipher", qty = 2 },
+            [256963] = { name = "Thalassian Lumber", qty = 8 },
         },
         recipeSource = {
             type = "vendor",
@@ -3704,9 +3864,9 @@ HDGR_DecorDB = {
         expansion = "Midnight Inscription",
         expansionID = 2913,
         reagents = {
-            [256963] = { name = "Thalassian Lumber", qty = 22 },
-            [245764] = { name = "Codified Azeroot", qty = 4 },
-            [245766] = { name = "Soul Cipher", qty = 8 },
+            [245764] = { name = "Codified Azeroot", qty = 2 },
+            [245766] = { name = "Soul Cipher", qty = 4 },
+            [256963] = { name = "Thalassian Lumber", qty = 10 },
         },
         recipeSource = {
             type = "vendor",
@@ -3726,9 +3886,9 @@ HDGR_DecorDB = {
         expansion = "Midnight Inscription",
         expansionID = 2913,
         reagents = {
-            [256963] = { name = "Thalassian Lumber", qty = 50 },
             [245764] = { name = "Codified Azeroot", qty = 10 },
-            [245766] = { name = "Soul Cipher", qty = 20 },
+            [245766] = { name = "Soul Cipher", qty = 8 },
+            [256963] = { name = "Thalassian Lumber", qty = 24 },
         },
         recipeSource = {
             type = "vendor",
@@ -3748,9 +3908,9 @@ HDGR_DecorDB = {
         expansion = "Midnight Inscription",
         expansionID = 2913,
         reagents = {
-            [256963] = { name = "Thalassian Lumber", qty = 26 },
-            [245764] = { name = "Codified Azeroot", qty = 5 },
-            [245766] = { name = "Soul Cipher", qty = 10 },
+            [245764] = { name = "Codified Azeroot", qty = 4 },
+            [245766] = { name = "Soul Cipher", qty = 4 },
+            [256963] = { name = "Thalassian Lumber", qty = 12 },
         },
         recipeSource = {
             type = "vendor",
@@ -3770,9 +3930,9 @@ HDGR_DecorDB = {
         expansion = "Midnight Inscription",
         expansionID = 2913,
         reagents = {
-            [256963] = { name = "Thalassian Lumber", qty = 18 },
-            [245764] = { name = "Codified Azeroot", qty = 3 },
-            [245766] = { name = "Soul Cipher", qty = 7 },
+            [245764] = { name = "Codified Azeroot", qty = 2 },
+            [245766] = { name = "Soul Cipher", qty = 4 },
+            [256963] = { name = "Thalassian Lumber", qty = 8 },
         },
         recipeSource = {
             type = "vendor",
@@ -3814,9 +3974,9 @@ HDGR_DecorDB = {
         expansion = "Midnight Inscription",
         expansionID = 2913,
         reagents = {
-            [256963] = { name = "Thalassian Lumber", qty = 18 },
             [245764] = { name = "Codified Azeroot", qty = 3 },
-            [245766] = { name = "Soul Cipher", qty = 7 },
+            [245766] = { name = "Soul Cipher", qty = 1 },
+            [256963] = { name = "Thalassian Lumber", qty = 4 },
         },
         recipeSource = {
             type = "vendor",
@@ -3825,6 +3985,36 @@ HDGR_DecorDB = {
                 { npcID = 243555, cost = { {3261, 150} }, factionID = 0, minRep = 0 },
                 { npcID = 243286, cost = { {3261, 150} }, factionID = 0, minRep = 0 },
             },
+        },
+    },
+    [1296506] = { -- Chiseled Amani Tablet
+        name = "Chiseled Amani Tablet",
+        spellID = 1296506,
+        itemID = 280757,
+        decorID = 26380,
+        profession = "Inscription",
+        category = "House Decor",
+        expansion = "Midnight Inscription",
+        expansionID = 2913,
+        reagents = {
+            [245764] = { name = "Codified Azeroot", qty = 1 },
+            [245766] = { name = "Soul Cipher", qty = 2 },
+            [256963] = { name = "Thalassian Lumber", qty = 6 },
+        },
+    },
+    [1296505] = { -- \"Cursed Gaze of Ula'tek\" Mural
+        name = "\"Cursed Gaze of Ula'tek\" Mural",
+        spellID = 1296505,
+        itemID = 280752,
+        decorID = 26384,
+        profession = "Inscription",
+        category = "House Decor",
+        expansion = "Midnight Inscription",
+        expansionID = 2913,
+        reagents = {
+            [245764] = { name = "Codified Azeroot", qty = 1 },
+            [245766] = { name = "Soul Cipher", qty = 2 },
+            [256963] = { name = "Thalassian Lumber", qty = 6 },
         },
     },
 
@@ -4252,10 +4442,10 @@ HDGR_DecorDB = {
         expansion = "Midnight Jewelcrafting",
         expansionID = 2914,
         reagents = {
-            [251665] = { name = "Silverleaf Thread", qty = 25 },
-            [256963] = { name = "Thalassian Lumber", qty = 36 },
             [242620] = { name = "Glimmering Gemdust", qty = 20 },
             [242788] = { name = "Duskshrouded Stone", qty = 20 },
+            [251665] = { name = "Silverleaf Thread", qty = 25 },
+            [256963] = { name = "Thalassian Lumber", qty = 18 },
         },
         recipeSource = {
             type = "trainer",
@@ -4276,10 +4466,10 @@ HDGR_DecorDB = {
         expansion = "Midnight Jewelcrafting",
         expansionID = 2914,
         reagents = {
-            [251665] = { name = "Silverleaf Thread", qty = 25 },
-            [256963] = { name = "Thalassian Lumber", qty = 24 },
             [240974] = { name = "Kaleidoscopic Prism", qty = 1 },
             [242620] = { name = "Glimmering Gemdust", qty = 15 },
+            [251665] = { name = "Silverleaf Thread", qty = 25 },
+            [256963] = { name = "Thalassian Lumber", qty = 12 },
         },
         recipeSource = {
             type = "vendor",
@@ -4299,10 +4489,10 @@ HDGR_DecorDB = {
         expansion = "Midnight Jewelcrafting",
         expansionID = 2914,
         reagents = {
-            [256963] = { name = "Thalassian Lumber", qty = 26 },
             [240974] = { name = "Kaleidoscopic Prism", qty = 1 },
             [242620] = { name = "Glimmering Gemdust", qty = 5 },
             [242788] = { name = "Duskshrouded Stone", qty = 15 },
+            [256963] = { name = "Thalassian Lumber", qty = 12 },
         },
         recipeSource = {
             type = "trainer",
@@ -4323,9 +4513,9 @@ HDGR_DecorDB = {
         expansion = "Midnight Jewelcrafting",
         expansionID = 2914,
         reagents = {
-            [256963] = { name = "Thalassian Lumber", qty = 18 },
-            [242620] = { name = "Glimmering Gemdust", qty = 20 },
+            [242620] = { name = "Glimmering Gemdust", qty = 8 },
             [242787] = { name = "Crystalline Glass", qty = 50 },
+            [256963] = { name = "Thalassian Lumber", qty = 8 },
         },
         recipeSource = {
             type = "drop",
@@ -4345,10 +4535,10 @@ HDGR_DecorDB = {
         expansion = "Midnight Jewelcrafting",
         expansionID = 2914,
         reagents = {
-            [256963] = { name = "Thalassian Lumber", qty = 48 },
             [240974] = { name = "Kaleidoscopic Prism", qty = 1 },
             [242620] = { name = "Glimmering Gemdust", qty = 5 },
             [242788] = { name = "Duskshrouded Stone", qty = 25 },
+            [256963] = { name = "Thalassian Lumber", qty = 18 },
         },
         recipeSource = {
             type = "drop",
@@ -4367,9 +4557,9 @@ HDGR_DecorDB = {
         expansion = "Midnight Jewelcrafting",
         expansionID = 2914,
         reagents = {
-            [256963] = { name = "Thalassian Lumber", qty = 50 },
             [242620] = { name = "Glimmering Gemdust", qty = 15 },
             [242788] = { name = "Duskshrouded Stone", qty = 25 },
+            [256963] = { name = "Thalassian Lumber", qty = 24 },
         },
         recipeSource = {
             type = "drop",
@@ -4377,6 +4567,54 @@ HDGR_DecorDB = {
             zone = "Eversong Woods",
             skill = 50,
             notes = "Extremely rare drop from Soiree event. Requires participation in the Saltheril's Soiree world event.",
+        },
+    },
+    [1297681] = { -- Roaring Amani Garnet
+        name = "Roaring Amani Garnet",
+        spellID = 1297681,
+        itemID = 280762,
+        decorID = 26490,
+        profession = "Jewelcrafting",
+        category = "House Decor",
+        expansion = "Midnight Jewelcrafting",
+        expansionID = 2914,
+        reagents = {
+            [242553] = { qty = 4 },   -- name resolved at runtime
+            [242620] = { name = "Glimmering Gemdust", qty = 6 },
+            [242788] = { name = "Duskshrouded Stone", qty = 8 },
+            [256963] = { name = "Thalassian Lumber", qty = 6 },
+        },
+    },
+    [1297679] = { -- Opalescent Amani Peridot
+        name = "Opalescent Amani Peridot",
+        spellID = 1297679,
+        itemID = 279356,
+        decorID = 26488,
+        profession = "Jewelcrafting",
+        category = "House Decor",
+        expansion = "Midnight Jewelcrafting",
+        expansionID = 2914,
+        reagents = {
+            [242607] = { qty = 4 },   -- name resolved at runtime
+            [242620] = { name = "Glimmering Gemdust", qty = 6 },
+            [242788] = { name = "Duskshrouded Stone", qty = 8 },
+            [256963] = { name = "Thalassian Lumber", qty = 6 },
+        },
+    },
+    [1297680] = { -- Piercing Amani Lapis
+        name = "Piercing Amani Lapis",
+        spellID = 1297680,
+        itemID = 279343,
+        decorID = 26489,
+        profession = "Jewelcrafting",
+        category = "House Decor",
+        expansion = "Midnight Jewelcrafting",
+        expansionID = 2914,
+        reagents = {
+            [242554] = { qty = 4 },   -- name resolved at runtime
+            [242620] = { name = "Glimmering Gemdust", qty = 6 },
+            [242788] = { name = "Duskshrouded Stone", qty = 8 },
+            [256963] = { name = "Thalassian Lumber", qty = 6 },
         },
     },
 
@@ -4791,10 +5029,10 @@ HDGR_DecorDB = {
         expansion = "Midnight Leatherworking",
         expansionID = 2915,
         reagents = {
-            [238529] = { name = "Majestic Hide", qty = 1 },
-            [251665] = { name = "Silverleaf Thread", qty = 10 },
+            [238518] = { name = "Void-Tempered Hide", qty = 4 },
             [238525] = { name = "Fantastic Fur", qty = 5 },
-            [256963] = { name = "Thalassian Lumber", qty = 18 },
+            [251665] = { name = "Silverleaf Thread", qty = 10 },
+            [256963] = { name = "Thalassian Lumber", qty = 8 },
         },
         recipeSource = {
             type = "vendor",
@@ -4815,11 +5053,10 @@ HDGR_DecorDB = {
         expansion = "Midnight Leatherworking",
         expansionID = 2915,
         reagents = {
-            [238529] = { name = "Majestic Hide", qty = 2 },
-            [251665] = { name = "Silverleaf Thread", qty = 20 },
             [238525] = { name = "Fantastic Fur", qty = 5 },
-            [256963] = { name = "Thalassian Lumber", qty = 24 },
             [244631] = { name = "Scalewoven Hide", qty = 2 },
+            [251665] = { name = "Silverleaf Thread", qty = 20 },
+            [256963] = { name = "Thalassian Lumber", qty = 8 },
         },
         recipeSource = {
             type = "trainer",
@@ -4840,10 +5077,10 @@ HDGR_DecorDB = {
         expansion = "Midnight Leatherworking",
         expansionID = 2915,
         reagents = {
-            [238529] = { name = "Majestic Hide", qty = 1 },
-            [251665] = { name = "Silverleaf Thread", qty = 10 },
+            [238518] = { name = "Void-Tempered Hide", qty = 4 },
             [238525] = { name = "Fantastic Fur", qty = 5 },
-            [256963] = { name = "Thalassian Lumber", qty = 16 },
+            [251665] = { name = "Silverleaf Thread", qty = 10 },
+            [256963] = { name = "Thalassian Lumber", qty = 4 },
         },
         recipeSource = {
             type = "drop",
@@ -4862,12 +5099,12 @@ HDGR_DecorDB = {
         expansion = "Midnight Leatherworking",
         expansionID = 2915,
         reagents = {
+            [236950] = { name = "Mote of Primal Energy", qty = 20 },
+            [238522] = { name = "Peerless Plumage", qty = 5 },
             [238529] = { name = "Majestic Hide", qty = 2 },
             [238530] = { name = "Majestic Fin", qty = 1 },
-            [236950] = { name = "Mote of Primal Energy", qty = 40 },
             [251665] = { name = "Silverleaf Thread", qty = 20 },
-            [238522] = { name = "Peerless Plumage", qty = 5 },
-            [256963] = { name = "Thalassian Lumber", qty = 46 },
+            [256963] = { name = "Thalassian Lumber", qty = 22 },
         },
         recipeSource = {
             type = "drop",
@@ -4887,12 +5124,10 @@ HDGR_DecorDB = {
         expansion = "Midnight Leatherworking",
         expansionID = 2915,
         reagents = {
-            [238529] = { name = "Majestic Hide", qty = 1 },
-            [238528] = { name = "Majestic Claw", qty = 1 },
-            [251665] = { name = "Silverleaf Thread", qty = 10 },
             [238525] = { name = "Fantastic Fur", qty = 2 },
-            [238523] = { name = "Carving Canine", qty = 2 },
-            [256963] = { name = "Thalassian Lumber", qty = 20 },
+            [238528] = { name = "Majestic Claw", qty = 1 },
+            [251665] = { name = "Silverleaf Thread", qty = 2 },
+            [256963] = { name = "Thalassian Lumber", qty = 6 },
         },
         recipeSource = {
             type = "vendor",
@@ -4913,10 +5148,10 @@ HDGR_DecorDB = {
         expansion = "Midnight Leatherworking",
         expansionID = 2915,
         reagents = {
-            [238529] = { name = "Majestic Hide", qty = 1 },
-            [238528] = { name = "Majestic Claw", qty = 1 },
             [238523] = { name = "Carving Canine", qty = 5 },
-            [256963] = { name = "Thalassian Lumber", qty = 24 },
+            [238525] = { name = "Fantastic Fur", qty = 5 },
+            [238528] = { name = "Majestic Claw", qty = 1 },
+            [256963] = { name = "Thalassian Lumber", qty = 8 },
         },
         recipeSource = {
             type = "trainer",
@@ -4937,11 +5172,11 @@ HDGR_DecorDB = {
         expansion = "Midnight Leatherworking",
         expansionID = 2915,
         reagents = {
-            [238529] = { name = "Majestic Hide", qty = 2 },
-            [236950] = { name = "Mote of Primal Energy", qty = 40 },
+            [236950] = { name = "Mote of Primal Energy", qty = 20 },
             [238525] = { name = "Fantastic Fur", qty = 5 },
-            [256963] = { name = "Thalassian Lumber", qty = 18 },
-            [244631] = { name = "Scalewoven Hide", qty = 1 },
+            [238530] = { name = "Majestic Fin", qty = 1 },
+            [244631] = { name = "Scalewoven Hide", qty = 2 },
+            [256963] = { name = "Thalassian Lumber", qty = 8 },
         },
         recipeSource = {
             type = "vendor",
@@ -4949,6 +5184,53 @@ HDGR_DecorDB = {
             vendors = {
                 { npcID = 240407, cost = { {3263, 150}, {3316, 1500} }, factionID = 2704, minRep = 13 },
             },
+        },
+    },
+    [1296511] = { -- Mounted Moby
+        name = "Mounted Moby",
+        spellID = 1296511,
+        itemID = 279348,
+        decorID = 26363,
+        profession = "Leatherworking",
+        category = "House Decor",
+        expansion = "Midnight Leatherworking",
+        expansionID = 2915,
+        reagents = {
+            [244631] = { name = "Scalewoven Hide", qty = 6 },
+            [256963] = { name = "Thalassian Lumber", qty = 8 },
+            [274589] = { qty = 1 },   -- name resolved at runtime
+        },
+    },
+    [1296510] = { -- Stretched Snakeskin Rack
+        name = "Stretched Snakeskin Rack",
+        spellID = 1296510,
+        itemID = 279346,
+        decorID = 26378,
+        profession = "Leatherworking",
+        category = "House Decor",
+        expansion = "Midnight Leatherworking",
+        expansionID = 2915,
+        reagents = {
+            [238525] = { name = "Fantastic Fur", qty = 5 },
+            [244631] = { name = "Scalewoven Hide", qty = 2 },
+            [251665] = { name = "Silverleaf Thread", qty = 20 },
+            [256963] = { name = "Thalassian Lumber", qty = 24 },
+        },
+    },
+    [1296509] = { -- Flat Snakeskin Canopy
+        name = "Flat Snakeskin Canopy",
+        spellID = 1296509,
+        itemID = 266170,
+        decorID = 17800,
+        profession = "Leatherworking",
+        category = "House Decor",
+        expansion = "Midnight Leatherworking",
+        expansionID = 2915,
+        reagents = {
+            [244631] = { name = "Scalewoven Hide", qty = 8 },
+            [251665] = { name = "Silverleaf Thread", qty = 20 },
+            [256963] = { name = "Thalassian Lumber", qty = 16 },
+            [274777] = { name = "Neutralized Venom Clot", qty = 8 },
         },
     },
 
@@ -5384,10 +5666,10 @@ HDGR_DecorDB = {
         expansion = "Midnight Tailoring",
         expansionID = 2918,
         reagents = {
+            [239198] = { name = "Arcanoweave Bolt", qty = 4 },
+            [239201] = { name = "Sunfire Silk Bolt", qty = 4 },
             [251665] = { name = "Silverleaf Thread", qty = 3 },
-            [256963] = { name = "Thalassian Lumber", qty = 18 },
-            [239198] = { name = "Arcanoweave Bolt", qty = 8 },
-            [239201] = { name = "Sunfire Silk Bolt", qty = 8 },
+            [256963] = { name = "Thalassian Lumber", qty = 8 },
         },
         recipeSource = {
             type = "vendor",
@@ -5407,10 +5689,9 @@ HDGR_DecorDB = {
         expansion = "Midnight Tailoring",
         expansionID = 2918,
         reagents = {
+            [239201] = { name = "Sunfire Silk Bolt", qty = 4 },
             [251665] = { name = "Silverleaf Thread", qty = 3 },
-            [256963] = { name = "Thalassian Lumber", qty = 12 },
-            [239198] = { name = "Arcanoweave Bolt", qty = 8 },
-            [239201] = { name = "Sunfire Silk Bolt", qty = 8 },
+            [256963] = { name = "Thalassian Lumber", qty = 6 },
         },
         recipeSource = {
             type = "drop",
@@ -5429,10 +5710,10 @@ HDGR_DecorDB = {
         expansion = "Midnight Tailoring",
         expansionID = 2918,
         reagents = {
-            [251665] = { name = "Silverleaf Thread", qty = 3 },
-            [256963] = { name = "Thalassian Lumber", qty = 46 },
             [239198] = { name = "Arcanoweave Bolt", qty = 8 },
             [239201] = { name = "Sunfire Silk Bolt", qty = 8 },
+            [251665] = { name = "Silverleaf Thread", qty = 3 },
+            [256963] = { name = "Thalassian Lumber", qty = 22 },
         },
         recipeSource = {
             type = "vendor",
@@ -5453,10 +5734,9 @@ HDGR_DecorDB = {
         expansion = "Midnight Tailoring",
         expansionID = 2918,
         reagents = {
+            [239198] = { name = "Arcanoweave Bolt", qty = 4 },
             [251665] = { name = "Silverleaf Thread", qty = 3 },
-            [256963] = { name = "Thalassian Lumber", qty = 8 },
-            [239198] = { name = "Arcanoweave Bolt", qty = 8 },
-            [239201] = { name = "Sunfire Silk Bolt", qty = 8 },
+            [256963] = { name = "Thalassian Lumber", qty = 4 },
         },
         recipeSource = {
             type = "vendor",
@@ -5477,10 +5757,9 @@ HDGR_DecorDB = {
         expansion = "Midnight Tailoring",
         expansionID = 2918,
         reagents = {
+            [239702] = { qty = 4 },   -- name resolved at runtime
             [251665] = { name = "Silverleaf Thread", qty = 3 },
-            [256963] = { name = "Thalassian Lumber", qty = 24 },
-            [239198] = { name = "Arcanoweave Bolt", qty = 8 },
-            [239201] = { name = "Sunfire Silk Bolt", qty = 8 },
+            [256963] = { name = "Thalassian Lumber", qty = 6 },
         },
         recipeSource = {
             type = "quest",
@@ -5500,16 +5779,45 @@ HDGR_DecorDB = {
         expansion = "Midnight Tailoring",
         expansionID = 2918,
         reagents = {
+            [239702] = { qty = 4 },   -- name resolved at runtime
             [251665] = { name = "Silverleaf Thread", qty = 3 },
-            [256963] = { name = "Thalassian Lumber", qty = 16 },
-            [239198] = { name = "Arcanoweave Bolt", qty = 8 },
-            [239201] = { name = "Sunfire Silk Bolt", qty = 8 },
+            [256963] = { name = "Thalassian Lumber", qty = 8 },
         },
         recipeSource = {
             type = "drop",
             source = "Victorious Stormarion Pinnacle Cache",
             zone = "Stormarion Pinnacle",
             skill = 50,
+        },
+    },
+    [1296514] = { -- Tortollan Slingsack
+        name = "Tortollan Slingsack",
+        spellID = 1296514,
+        itemID = 279353,
+        decorID = 26366,
+        profession = "Tailoring",
+        category = "House Decor",
+        expansion = "Midnight Tailoring",
+        expansionID = 2918,
+        reagents = {
+            [239702] = { qty = 4 },   -- name resolved at runtime
+            [251665] = { name = "Silverleaf Thread", qty = 3 },
+            [256963] = { name = "Thalassian Lumber", qty = 8 },
+        },
+    },
+    [1296512] = { -- Twilight's Blade Bedroll
+        name = "Twilight's Blade Bedroll",
+        spellID = 1296512,
+        itemID = 279350,
+        decorID = 26495,
+        profession = "Tailoring",
+        category = "House Decor",
+        expansion = "Midnight Tailoring",
+        expansionID = 2918,
+        reagents = {
+            [239702] = { qty = 8 },   -- name resolved at runtime
+            [251665] = { name = "Silverleaf Thread", qty = 3 },
+            [256963] = { name = "Thalassian Lumber", qty = 8 },
         },
     },
 }
