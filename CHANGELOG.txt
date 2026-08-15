@@ -1,3 +1,40 @@
+## [3.22.0] - 2026-08-15 (August 2026)
+
+### Added
+- **Two filters for decor you can just go and buy.** Under Acquire, a second
+  row of buttons sits below Achieve/Rep/Endeavor/Quest, on both Shop by Vendor
+  and Find Decor.
+
+  **Neighborhood** shows decor sold by the merchants standing in Founder's
+  Point and Razorwind Shores -- the Endeavor vendors among them, so coupon
+  decor is in there too. Nothing there is locked behind reputation, a quest or
+  an achievement, because you are already where the merchant is.
+
+  **Gold, no unlocks** is wider: decor any vendor sells for gold that needs no
+  reputation, quest or achievement first. It reads the requirement off the
+  catalog, so a vendor you have to unlock before you can reach them can still
+  appear -- Neighborhood is the one to trust when you want certainty.
+  (Asked for by ReganB.)
+
+### Changed
+- **The Gold Only filter is gone, replaced by the two above.** It answered a
+  question about price rather than about access, so it listed promotional and
+  in-game shop decor that happens to cost gold, and things sold behind a
+  questline. That was rarely what anyone wanted from it.
+
+### Fixed
+- **Three Brawl'gar Arena decor items no longer look freely buyable.**
+  Brawler's Barricade, the Brawler's Guild Punching Bag and the Champion
+  Brawler's Gloves all require an arena rank, which the game's own decor
+  catalog does not mention anywhere -- so they read as ordinary gold purchases.
+
+- **Aegis can send a blueprint's missing pieces straight to a shopping list.**
+  If you run Aegis, its guild blueprint library now has a button that hands
+  over what a build needs and what you are short of; Housing Decor Guide works
+  out where each piece comes from and builds a list named after the build.
+  Sending the same build again refreshes that list rather than making a second
+  one. Nothing changes if you do not run Aegis. (12.1)
+
 ## [3.21.1] - 2026-08-14 (August 2026)
 
 ### Added

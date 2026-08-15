@@ -409,9 +409,9 @@ end
 -- Curried filter: returns a function (envRow) -> bool. Caller composes
 -- into acq.items. Source-type presets walk row.sourceTags membership via
 -- the catalog row (canonical signal -- covers catalog + ItemAugment + recipe-
--- derived). missing/endeavor/gold resolve cost flags by itemID (so both modes
--- share them) -- they're not source kinds.
-local function _presetMatchesFlag(flag)
+-- derived). missing/endeavor resolve cost flags by itemID (so both modes share
+-- them) -- they're not source kinds.
+local function _matchesFlag(flag)
     return function(envRow)
         if not envRow.itemID then return false end
         local catRow = HDG.HousingCatalogObserver:GetRow(envRow.itemID)
@@ -428,6 +428,63 @@ local _PRESET_TO_FLAG = {
     reputation  = "REP",
     crafted     = "CRAFT",
 }
+-- SOLD IN A HOUSING NEIGHBORHOOD. row.vendors already carries mapID -- the
+-- vendor resolver stamps it off VendorAugment alongside npcID -- so this is a
+-- direct read rather than a name join.
+local function _matchesNeighborhood(envRow)
+    if not envRow.itemID then return false end
+    local catRow = HDG.HousingCatalogObserver:GetRow(envRow.itemID)
+    if not catRow then return false end  -- exception(nullable): itemID outside the catalog
+    -- No `or {}`: _bakeVendors always stamps row.vendors, empty list included,
+    -- precisely so downstream walks need no guard.
+    for _, v in ipairs(catRow.vendors) do
+        if v.mapID and HDG.Constants.NEIGHBORHOOD_MAP_IDS[v.mapID] then
+            return true
+        end
+    end
+    return false
+end
+
+-- NOTHING BETWEEN YOU AND BUYING IT: a vendor sells it, the price is gold, and
+-- no reputation, quest or achievement stands in the way.
+--
+-- THE EXCLUSIONS ARE THE POINT. A gold price alone already had a filter and it
+-- was not what anyone wanted -- promotional and shop decor carries gold prices
+-- too. Requiring VENDOR and then refusing every gating kind is what turns "you
+-- can pay for this" into "you can go and get this".
+--
+-- KNOWN LIMIT: this reads gating on the ITEM. A vendor who only appears after
+-- a questline is not modelled anywhere in the data, so their gold stock still
+-- passes. The `neighborhood` filter has no such hole, which is why both ship --
+-- one is exact and narrow, this one is broad and honest about its edge.
+-- A SET, and walked ONCE. The first cut called _matchesFlag(kind) per blocker
+-- per row -- but that is a FACTORY, built once at selector-build time the way
+-- acq.matchesSource uses it. Called per row it allocated six closures and did
+-- eight catalog lookups for every item, ~2000 items per evaluation. One row
+-- fetch and one pass over sourceTags answers all six questions.
+local UNGATED_BLOCKERS = { REP = true, QUEST = true, ACH = true,
+                           PROMO = true, SHOP = true }
+
+local function _matchesUngated(envRow)
+    if not envRow.itemID then return false end
+    local catRow = HDG.HousingCatalogObserver:GetRow(envRow.itemID)
+    if not catRow then return false end  -- exception(nullable): itemID outside the catalog
+    -- The vendor's OWN standing requirement, which is not an item source tag:
+    -- an item with no source gate can still sit behind a revered-only merchant.
+    if catRow.factionGate then return false end
+    -- No source signal at all is not "ungated" -- it is "unknown", and the
+    -- UNKN kind exists precisely so those surface rather than defaulting.
+    if not catRow.sourceTags then return false end
+    local _, gold = _itemCostFlags(envRow.itemID)
+    if not gold then return false end
+    local vendor = false
+    for _, t in ipairs(catRow.sourceTags) do
+        if UNGATED_BLOCKERS[t.kind] then return false end
+        if t.kind == "VENDOR" then vendor = true end
+    end
+    return vendor
+end
+
 Selectors:Register("acq.matchesPreset", {
     -- SOURCE axis only. "missing" moved to acq.matchesMissing (orthogonal).
     reads = {"session.resolvers.catalog.tick"},
@@ -436,12 +493,17 @@ Selectors:Register("acq.matchesPreset", {
         local preset = Selectors:Call("acq.preset", state, ctx)
         if preset == nil then return function() return true end end
         local flag = _PRESET_TO_FLAG[preset]
-        if flag then return _presetMatchesFlag(flag) end
+        if flag then return _matchesFlag(flag) end
         if preset == "endeavor" then
             -- Endeavor = items costing Community Coupons (3363), read from the
             -- catalog row's baked costEntries by itemID (works in both modes).
             return function(row) return (_itemCostFlags(row.itemID)) == true end
         end
+        -- SHARED with the source dropdown, not reimplemented. Both axes ask the
+        -- same question of a row; two copies is how the chip and the dropdown
+        -- quietly start disagreeing about what "ungated" means.
+        if preset == "neighborhood" then return _matchesNeighborhood end
+        if preset == "ungated" then return _matchesUngated end
         -- "recipes" is a VENDOR-level filter (recipeCount), applied in acq.vendors;
         -- it doesn't constrain ITEMS, so pass-all here so it composes cleanly.
         if preset == "recipes" then return function() return true end end
@@ -504,20 +566,8 @@ Selectors:Register("acq.hasSourceFilter", {
 -- Source dropdown filter. Reads CANONICAL row.sourceTags via the SOURCE_KINDS
 -- master table: SOURCE_KIND_BY_FILTER[v].key -> the kind string to check.
 -- One lookup, one source of truth.
-local function _matchesFlag(flag)
-    return function(envRow)
-        if not envRow.itemID then return false end
-        local catRow = HDG.HousingCatalogObserver:GetRow(envRow.itemID)
-        if not catRow or not catRow.sourceTags then return false end
-        for _, t in ipairs(catRow.sourceTags) do
-            if t.kind == flag then return true end
-        end
-        return false
-    end
-end
-
 Selectors:Register("acq.matchesSource", {
-    -- sweepGeneration: the gold/endeavor branches + _matchesFlag read the
+    -- sweepGeneration: endeavor/neighborhood/ungated + _matchesFlag read the
     -- catalog row (costEntries / sourceTags) by itemID -- re-resolve on re-sweep.
     reads = {"session.resolvers.catalog.tick"},
     calls = {"acq.sourceFilter"},
@@ -531,10 +581,12 @@ Selectors:Register("acq.matchesSource", {
             local kind = HDG.Constants.SOURCE_KIND_BY_FILTER[v]
             if kind then
                 matchers[#matchers + 1] = _matchesFlag(kind.key)
-            elseif v == "gold" then
-                matchers[#matchers + 1] = function(row) local _, gold = _itemCostFlags(row.itemID); return gold end
             elseif v == "endeavor" then
                 matchers[#matchers + 1] = function(row) return (_itemCostFlags(row.itemID)) == true end
+            elseif v == "neighborhood" then
+                matchers[#matchers + 1] = _matchesNeighborhood
+            elseif v == "ungated" then
+                matchers[#matchers + 1] = _matchesUngated
             end
         end
         if #matchers == 0 then return function() return false end end

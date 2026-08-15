@@ -204,6 +204,9 @@ R.AcqPreset_reputation  = { title = "locale:TIP_ACQ_PRESET_REP_TITLE",  body = "
 R.AcqPreset_endeavor    = { title = "locale:TIP_ACQ_PRESET_END_TITLE",  body = "locale:TIP_ACQ_PRESET_END_BODY",  anchor = "ANCHOR_BOTTOM" }
 R.AcqPreset_quest       = { title = "locale:TIP_ACQ_PRESET_QST_TITLE",  body = "locale:TIP_ACQ_PRESET_QST_BODY",  anchor = "ANCHOR_BOTTOM" }
 R.AcqPreset_recipes     = { title = "locale:TIP_ACQ_PRESET_REC_TITLE",  body = "locale:TIP_ACQ_PRESET_REC_BODY",  anchor = "ANCHOR_BOTTOM" }
+-- Row 2: nothing to earn first.
+R.AcqPreset_neighborhood = { title = "locale:TIP_ACQ_PRESET_NBH_TITLE", body = "locale:TIP_ACQ_PRESET_NBH_BODY", anchor = "ANCHOR_BOTTOM" }
+R.AcqPreset_ungated      = { title = "locale:TIP_ACQ_PRESET_UNG_TITLE", body = "locale:TIP_ACQ_PRESET_UNG_BODY", anchor = "ANCHOR_BOTTOM" }
 R.AcqMissingToggle      = { title = "locale:TIP_ACQ_MISSING_TITLE",     body = "locale:TIP_ACQ_MISSING_BODY",     anchor = "ANCHOR_BOTTOM" }
 
 -- ===== Decor browser controls ===============================================

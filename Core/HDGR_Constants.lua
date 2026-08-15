@@ -283,12 +283,19 @@ HDG.Constants = {
 
     -- Acquire-tab preset chips. SSoT for Selectors, LayoutConfig, Controller, and the reducer.
     -- Single-select source axis; missingOnly is an orthogonal toggle that ANDs with any preset.
+    -- Row 1 is HOW you earn it; row 2 is WHAT YOU CAN JUST GO AND BUY. The two
+    -- rows are deliberately different questions -- the second exists because a
+    -- new player asking "what can I decorate with today" got no useful answer
+    -- from a list of achievement and reputation rewards (ReganB, 2026-08-14).
+    -- `row = 2` is read by the LayoutConfig chip generator; see acq.presetStrip2.
     ACQ_PRESETS = {
-        { value = "achievement", label = "Achieve"     },
-        { value = "reputation",  label = "Rep"         },
-        { value = "endeavor",    label = "Endeavor"    },
-        { value = "quest",       label = "Quest"       },
-        { value = "recipes",     label = "Recipes"     },  -- vendor-level: sells >=1 recipe
+        { value = "achievement",  label = "Achieve"          },
+        { value = "reputation",   label = "Rep"              },
+        { value = "endeavor",     label = "Endeavor"         },
+        { value = "quest",        label = "Quest"            },
+        { value = "recipes",      label = "Recipes"          },  -- vendor-level: sells >=1 recipe
+        { value = "neighborhood", label = "Neighborhood",     row = 2 },
+        { value = "ungated",      label = "Gold, no unlocks", row = 2 },
     },
 
     -- ACQ_SOURCES (Advanced Filters > Source dropdown) is DERIVED from SOURCE_KINDS.
@@ -917,7 +924,38 @@ for _, k in ipairs(HDG.Constants.SOURCE_KINDS) do
     end
 end
 HDG.Constants.ACQ_SOURCES[#HDG.Constants.ACQ_SOURCES + 1] = { value = "endeavor", label = "Endeavor"  }
-HDG.Constants.ACQ_SOURCES[#HDG.Constants.ACQ_SOURCES + 1] = { value = "gold",     label = "Gold Only" }
+-- WHAT A NEW PLAYER CAN ACTUALLY BUY (asked for by ReganB, 2026-08-14).
+--
+-- THESE REPLACE "Gold Only", which is gone rather than kept alongside. It
+-- answered a question about COST -- has a price, all of it gold -- and said
+-- nothing about whether you can REACH the thing, so it listed promotional and
+-- in-game-shop decor that happens to be priced in gold, and stock behind a
+-- questline. Nobody wanted the answer to the question it was actually
+-- answering, and two filters differing by an invisible axis is worse than one.
+--
+-- Both of these are about REACH. They sit in the sources dropdown because
+-- that is where a player looks for "how do I get this", even though neither is
+-- strictly a source -- the precedent Gold Only set is the one thing worth
+-- keeping from it.
+HDG.Constants.ACQ_SOURCES[#HDG.Constants.ACQ_SOURCES + 1] =
+    { value = "neighborhood", label = "Neighborhood" }
+HDG.Constants.ACQ_SOURCES[#HDG.Constants.ACQ_SOURCES + 1] =
+    { value = "ungated",      label = "Gold, no unlocks" }
+
+-- THE TWO HOUSING NEIGHBORHOODS, by mapID.
+--
+-- BY ID, NEVER BY NAME. VendorAugment carries both, and the zone STRING is
+-- localised -- matching "Razorwind Shores" returns nothing at all on a French
+-- client, silently, which is the worst way for a filter to fail. The ID is the
+-- same everywhere.
+--
+-- Vendors standing here are ungated by construction: you are in your own
+-- neighborhood, so there is no questline between you and the merchant. That is
+-- what makes the `neighborhood` filter exact rather than a good guess.
+HDG.Constants.NEIGHBORHOOD_MAP_IDS = {
+    [2352] = true,   -- Founder's Point (Alliance)
+    [2351] = true,   -- Razorwind Shores (Horde)
+}
 
 -- Gold has no Blizzard currency ID; CURRENCY_GOLD sentinel lets cost-entry tables iterate uniformly.
 HDG.Constants.COIN_ATLAS    = "|A:auctionhouse-icon-coin-gold:14:14|a"

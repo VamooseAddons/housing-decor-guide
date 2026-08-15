@@ -75,6 +75,18 @@ LC.sections["acq.presetStrip"] = {
     gap = "sm",
     order = 7,
 }
+-- SECOND CHIP ROW: the "what can I just go and buy" axis, kept off row 1 rather
+-- than appended to it. Row 1 already carries five chips, a divider and the
+-- Missing checkbox and has no room; and the two rows ask different questions --
+-- row 1 is how you EARN a thing, row 2 is what needs nothing earned at all.
+-- A sibling section, not anchors: the panel owns the flow (cookbook 14).
+LC.sections["acq.presetStrip2"] = {
+    ["in"] = "acq.listBody",
+    layout = "horizontal",
+    height = 22,
+    gap = "sm",
+    order = 8,
+}
 LC.sections["acq.filterBar"] = {
     ["in"] = "acq.listBody",
     layout = "horizontal",
@@ -693,10 +705,12 @@ end
 LC._activeFilterTags = ACTIVE_FILTER_TAGS
 
 -- Acquire preset chips: single-select. Generated from ACQ_PRESETS -- add/remove = one-line edit there.
+-- `p.row` picks the strip; absent means row 1, so existing entries are untouched.
 for i, p in ipairs(HDG.Constants.ACQ_PRESETS or {}) do
     LC.widgets["acquisitionListPanel.preset_" .. p.value] = {
         tooltip = { recipe = "AcqPreset_" .. p.value },
-        kind = "button", ["in"] = "acq.presetStrip", font = "button",
+        kind = "button", font = "button",
+        ["in"] = (p.row == 2) and "acq.presetStrip2" or "acq.presetStrip",
         text = p.label, width = "auto", height = 22, order = 10 + i, variant = "tertiary",
         binding = { active = "acq.preset.active_" .. p.value },
     }

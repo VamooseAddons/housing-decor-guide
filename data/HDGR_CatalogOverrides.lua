@@ -23,6 +23,29 @@
 -- applies inside BuildRow so downstream sees the corrected row directly.
 
 HDGR_CatalogOverrides = {
+    -- ===== Brawl'gar Arena rank gates ======================================
+    -- The item tooltips carry a red "Requires Brawl'gar Arena - Rank N", and
+    -- the catalog sourceText does NOT: costdump on 263026 shows only Vendor:,
+    -- Zone: and Cost:, with no Faction: line at all. So nothing in the catalog
+    -- says these are gated, and every filter that asks "can I just go and buy
+    -- this" answered yes -- they are plain gold prices from a normal-looking
+    -- vendor (verified 2026-08-15: the earlier "it must be a currency misread"
+    -- theory was wrong; the gold is real, the GATE is what was missing).
+    --
+    -- Recorded as factionGate because that is the field meaning "you need
+    -- standing with X before this is yours", which is what a Brawler's rank is.
+    -- The catalog has no vocabulary for ranks, and inventing one to model three
+    -- items would be a schema for a special case.
+    --
+    -- CURATION IS THE STOPGAP, NOT THE ANSWER. Enum.TooltipDataLineType
+    -- .UsageRequirement (43) marks these lines structurally, so the whole class
+    -- is detectable without hand-listing it -- see the tooltip-gate scanner in
+    -- TODO_HousingDecorGuide.md. These three entries stay useful even then:
+    -- an override is still the right answer for anything the scan cannot see.
+    [263026] = { factionGate = { factionName = "Brawl'gar Arena", standing = "Rank 2" } },  -- Brawler's Barricade
+    [259071] = { factionGate = { factionName = "Brawl'gar Arena", standing = "Rank 5" } },  -- Brawler's Guild Punching Bag
+    [255840] = { factionGate = { factionName = "Brawl'gar Arena", standing = "Rank 7" } },  -- Champion Brawler's Gloves
+
     -- Wooden Mug
     [239162] = { sources = { { type = 5, name = 'Peter', detail = 'Lunarfall', cost = { gold = 500000, currencies = { { id = 824, amount = 100 } } } }, { type = 5, name = 'Vora Strongarm', detail = 'Frostwall' } } },
     -- Elodor Barrel

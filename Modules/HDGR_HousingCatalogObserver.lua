@@ -1338,6 +1338,32 @@ function R:GetRow(itemID)
     return R.byItemID[itemID]
 end
 
+-- THE ITEM A BLUEPRINT MANIFEST ENTRY REFERS TO, or nil when it is not a thing
+-- you can go and get. Blueprint contents name their pieces by `recordID`, and
+-- what that ID MEANS depends on the entry's contentType -- which is the join
+-- the catalog owns, so it belongs here rather than in each caller.
+--
+--   Dye (4)     the recordID IS the item ID (verified in-game 68629), and it
+--               is the one shopping needs even when the catalog has no dye row
+--   Decor (3)   the recordID is a decor ID; byDecorID carries the join
+--   1 / 2 / 5   house type, room, fixture -- structural, nothing to acquire
+--
+-- Two callers now: the blueprints inspector's acquisition chips, and the
+-- public API another Vamoose addon routes a shopping list through. Having them
+-- resolve it separately is how the two quietly disagree.
+-- Built from this observer's own two accessors rather than reaching into
+-- byDecorID: it keeps the method short enough to be obviously right, and it is
+-- the pair every caller and test already has to hand.
+function R:ItemIDForEntry(entry)
+    local ct = entry.contentType
+    if ct == 4 then
+        local row = self:GetRow(entry.recordID)  -- exception(nullable): dyes may not be catalog rows
+        return row and row.itemID or entry.recordID
+    end
+    if ct ~= 3 then return nil end               -- structural: nothing to buy
+    return self:GetItemIDByDecorID(entry.recordID)  -- exception(nullable): a miss resolves at the vendor at runtime
+end
+
 -- GetVariantDyes: 0/1/2-channel dye map for a dyed variant; nil for base or non-dyed.
 -- Drives model preview SetGradientMaskWithDyes from the baked row.dyedVariants.
 function R:GetVariantDyes(itemID, variantKey)

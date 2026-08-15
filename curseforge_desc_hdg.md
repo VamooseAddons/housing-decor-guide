@@ -12,15 +12,16 @@
 
 ---
 
-## What's New in v3.21.1
+## What's New in v3.22.0
 
-The recipe costs that ship with the addon are now patch 12.1's, twenty 12.1 recipes are listed for the first time, and four more decor vendors can be mapped to.
+Two new filters under Acquire answer the question a new decorator actually asks: what can I furnish with today, without earning anything first.
 
-- **Recipe costs match patch 12.1.** Most decor recipes were re-costed in 12.1: Thalassian Lumber roughly halved across the board, and several recipes gained or lost a material outright. Until now only players who had run a profession scan saw the new figures. Fifty-eight recipes are corrected, so the Recipes tab, the queue and the shopping list start from the right numbers whether you have scanned or not.
-- **Twenty decor recipes added in patch 12.1 are listed for the first time.** Blacksmithing, Leatherworking, Enchanting, Engineering, Jewelcrafting, Inscription, Tailoring and Alchemy each gained decor the addon had never heard of, so it was missing from the Recipes tab entirely.
-- **Four more 12.1 decor vendors have map positions.** Firetender Zab'ni and Jan'sari the Watchful on The Coiled Isle, the Skull of Er'inye in the Vaults of Atal'Utek, and Unquestionably Griftah in the neighbourhood now get a pin and a waypoint instead of only a name. The rest of the 12.1 sellers are still listed without a pin.
-- **Recipe tooltips quote the same amounts as the Materials panel.** A profession scan picked up 12.1's costs, but the tooltip still read the amounts that shipped with the addon, so hovering a recipe and reading the panel beside it gave two different answers.
-- **The Mogul price refresh was reading that same stale list,** so a reagent a recipe only needs since 12.1 could go unpriced.
+- **Neighborhood** lists decor sold by the merchants standing in Founder's Point and Razorwind Shores, including the Endeavor vendors, so coupon decor is in there too. Nothing it shows is locked behind reputation, a quest or an achievement, because you are already where the merchant is.
+- **Gold, no unlocks** is the wider version: decor any vendor sells for gold that needs no reputation, quest or achievement first. It reads requirements from the in-game catalog, so a vendor you must unlock before you can reach them can still appear; Neighborhood is the one to use when you want certainty.
+- Both sit on a second row of buttons below Achieve, Rep, Endeavor and Quest, on Shop by Vendor and on Find Decor.
+- **The Gold Only filter has been replaced by those two.** It answered a question about price rather than access, so it listed promotional and in-game shop decor that happens to cost gold, along with items sold behind a questline.
+- **Three Brawl'gar Arena pieces no longer look freely buyable.** Brawler's Barricade, the Brawler's Guild Punching Bag and the Champion Brawler's Gloves each require an arena rank that the game's decor catalog does not record, so they read as ordinary gold purchases.
+- **Aegis can send a blueprint's missing pieces to a shopping list.** If you run Vamoose's Aegis GuildOS, its guild blueprint library can hand over what a build needs; Housing Decor Guide works out where each piece comes from and builds a list named after the build. Nothing changes if you do not run Aegis.
 
 ---
 
@@ -111,7 +112,7 @@ A companion window injects into Blizzard's House Editor so you can **place decor
 ---
 
 **Author:** Vamoose
-**Version:** 3.21.1
+**Version:** 3.22.0
 **Game Version:** 12.1.0 (Midnight)
 **Source / Issues:** https://github.com/VamooseAddons/housing-decor-guide
 **Discord:** https://discord.gg/RWZaxJaHFP

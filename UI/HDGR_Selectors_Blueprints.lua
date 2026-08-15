@@ -21,22 +21,24 @@ local CT_LABEL = { [1] = "House", [2] = "Room", [3] = "Decor", [4] = "Dye", [5] 
 -- access is the sanctioned live-facade pattern (ADR-003a); reactivity comes
 -- from the session.resolvers.catalog.tick read on the registered selector.
 -- Returns: itemID?, srcKind? (SOURCE_KINDS key for Format.SourceChip), srcName?
+-- The recordID -> itemID join lives on the CATALOG (ItemIDForEntry), because a
+-- second caller appeared for it -- the public API another Vamoose addon routes
+-- a shopping list through. Two copies of a join is how the two quietly start
+-- disagreeing about what a manifest entry means.
+--
+-- What stays here is the part the chips need and the API does not: which SOURCE
+-- the row came from, and what to call it.
 local function _resolveAcq(entry)
-    if entry.contentType == 1 or entry.contentType == 2 or entry.contentType == 5 then
-        return nil, nil, nil                                 -- structural: house/room/fixture, no chip in v1
-    end
-    local row
-    if entry.contentType == 4 then
-        -- Dye recordIDs ARE item IDs (verified in-game 68629); the itemID is
-        -- what shopping routing needs even when the catalog has no dye row.
-        row = HDG.HousingCatalogObserver:GetRow(entry.recordID)  -- exception(nullable): dyes may not be catalog rows
-        if not row then return entry.recordID, nil, nil end
-    else
-        row = HDG.HousingCatalogObserver.byDecorID[entry.recordID]  -- exception(nullable): catalog lookup can miss
-        if not row then return nil, nil, nil end             -- resolves at vendor at runtime
-    end
+    local itemID = HDG.HousingCatalogObserver:ItemIDForEntry(entry)  -- exception(nullable): structural entry, or a catalog miss
+    if not itemID then return nil, nil, nil end
+    local row = entry.contentType == 4
+        and HDG.HousingCatalogObserver:GetRow(entry.recordID)     -- exception(nullable): dyes may not be catalog rows
+        or HDG.HousingCatalogObserver.byDecorID[entry.recordID]   -- exception(nullable): catalog lookup can miss
+    -- A dye with no catalog row still routes -- its recordID IS the item ID --
+    -- but there is nothing to hang a source chip on.
+    if not row then return itemID, nil, nil end
     local kind = HDG.Constants.SOURCE_KIND_BY_DONOR[row.sourceType]  -- exception(nullable): source may be unbaked
-    return row.itemID, kind and kind.key or nil, row.sourceName
+    return itemID, kind and kind.key or nil, row.sourceName
 end
 
 -- The inspector envelope: manifest -> rendered groups with acquisition joins.
