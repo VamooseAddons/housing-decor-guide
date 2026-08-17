@@ -261,6 +261,10 @@ SlashCmdList["HDG"] = function(msg)
         D:CostDump(rest)
     elseif first == "dumpdecor" then
         D:DumpDecor(rest)
+    elseif first == "tipdump" then
+        D:TipDump(rest)
+    elseif lower == "petscale" then
+        D:PetScale()
     elseif first == "sl" then
         HDG.SelectorCallLog:Command(rest)   -- was /hdgrsl
     elseif first == "perf" then

@@ -635,6 +635,13 @@ LC.widgets["mogulPanel.goblinHaveLumber"] = {
     text = "Have lumber", width = "auto", height = 20, order = 45, variant = "tertiary",
     binding = { active = "goblin.haveLumberActive" },
 }
+-- Export sits after the filters and before the slack absorber, so it lands at
+-- the right-hand end of the controls the way the donor's did.
+LC.widgets["mogulPanel.goblinExport"] = {
+    tooltip = { recipe = "GoblinExport" },
+    kind = "button", ["in"] = "mogul.goblinFilterRow", font = "small",
+    text = "locale:COMMON_EXPORT", width = "auto", height = 20, order = 50, variant = "tertiary",
+}
 LC.widgets["mogulPanel.goblinList"] = {
     tooltip = false,
     kind = "scrollbox", ["in"] = "mogul.goblinList",

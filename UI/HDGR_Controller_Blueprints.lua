@@ -1,9 +1,8 @@
 -- HDGR_Controller_Blueprints.lua
 -- ============================================================================
--- Thin glue for the Blueprints tab (12.1): Wire() attaches behavior to the
+-- Thin glue for the Blueprints tab: Wire() attaches behavior to the
 -- LayoutConfig-declared frames; row factories render the collection + content
--- scrollboxes. No chrome creation here. 12.1-only: dormant on live.
-if not HDG.Constants.IS_121 then return end  -- exception(boundary): 12.1-only view
+-- scrollboxes. No chrome creation here.
 
 HDG = HDG or {}
 HDG.Controller_Blueprints = HDG.Controller_Blueprints or {}

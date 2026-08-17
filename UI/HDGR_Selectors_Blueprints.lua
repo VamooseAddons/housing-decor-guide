@@ -1,18 +1,14 @@
 -- HDGR_Selectors_Blueprints.lua
 -- ============================================================================
--- Pure selectors for the Blueprints tab (12.1). This file loads on ALL builds:
--- NAV_TREE's `gatedBy = "blueprints.available"` is evaluated on live too, so
--- the gate selector must exist there. The 12.1-only RUNTIME files (observer,
--- LayoutConfig, controller) are file-top gated on IS_121 instead.
+-- Pure selectors for the Blueprints tab.
+--
+-- NOTE the near-collision: `session.blueprints.available` is a SERVER-derived
+-- fact (BLUEPRINT_AVAILABLE_SET) about whether the blueprint system is usable.
+-- The retired `blueprints.available` SELECTOR was something else entirely -- a
+-- client-build capability gate for the nav child, which HDG no longer needs now
+-- that the TOC is 12.1-only. Do not resurrect the name for either job.
 
 local Selectors = HDG.Selectors
-
--- Capability gate: true only on a 12.1 client. NAV_TREE omits the Blueprints
--- child when false (same mechanism as the Debug leaf's config.debug gate).
-Selectors:Register("blueprints.available", {
-    reads = {},  -- constant per session; IS_121 is stamped at file load
-    fn = function() return HDG.Constants.IS_121 end,
-})
 
 local CT_LABEL = { [1] = "House", [2] = "Room", [3] = "Decor", [4] = "Dye", [5] = "Fixture" }
 

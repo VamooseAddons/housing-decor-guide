@@ -1,3 +1,30 @@
+## [3.23.0] - 2026-08-18 (August 2026)
+
+### Added
+- **A Pets filter in the Decor browser, for the pets you can place in a house.**
+  12.1 lets some pets sit on certain decor -- pet beds, plinths, a dog house --
+  and a Pets button at the end of the filter row lists the ones in your own
+  collection that can. The list runs smallest to largest, because size is the
+  thing no in-game window will tell you: each row carries the pet's height and a
+  bar measuring it against your own character, so you can pick something that
+  suits a windowsill rather than a courtyard. The Tags row becomes the ten pet
+  families, the search box searches your pets by name, and the panel on the
+  right shows the pet at full size with a Summon or Dismiss button beneath it.
+
+  Heights are measured from each pet's model, because the game does not report
+  one. Eleven pets have models that cannot be measured; those show no height and
+  sort to the end of the list rather than showing a number that would be wrong.
+
+- **The Mogul table exports to CSV again.** An Export button sits with the
+  filters; it opens a window with the table as comma-separated text, ready to
+  paste into a spreadsheet or send to somebody. What you get is what you are
+  looking at -- the same filters, the same sort order -- so narrowing to one
+  profession and exporting gives you that list and nothing else. The columns
+  are the ones the old export had, in the same order, so a spreadsheet built
+  against it still lines up; the five columns the table has gained since
+  (TSM minimum, TSM market, sale rate, sold per day, and quantity on the
+  auction house) follow on the end. Thanks to armaniko for asking for it back.
+
 ## [3.22.0] - 2026-08-15 (August 2026)
 
 ### Added

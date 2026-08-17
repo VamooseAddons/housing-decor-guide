@@ -1,14 +1,9 @@
 -- HDGR_LayoutConfig_Blueprints.lua
 -- ============================================================================
--- Blueprints tab (Projects child, 12.1): master-detail. Left = paste field +
+-- Blueprints tab (Projects child): master-detail. Left = paste field +
 -- collection browser; right = inspector (name/code header, house picker,
 -- budget meters, fit verdict, missing filter, content groups, action row,
 -- guidance strip). Mirrors the projectsLayouts master-detail idiom.
---
--- 12.1-only: with the whole file gated, the view/panels/widgets simply don't
--- exist on live -- matching the conditional TABS/nav insert in Constants, so a
--- persisted account.ui.view can never land on a dead panel.
-if not HDG.Constants.IS_121 then return end  -- exception(boundary): 12.1-only view
 
 local LC = HDG.LayoutConfig
 

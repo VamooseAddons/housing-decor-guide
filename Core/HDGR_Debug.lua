@@ -31,6 +31,10 @@ function D:Help()
     _cmd("/hdgr house",            "dump the HouseTab dashboard runtime state (widget/data chain)")
     _cmd("/hdgr costdump <id>",    "dump a catalog row's parsed cost + sourceTags for an itemID")
     _cmd("/hdgr dumpdecor <ids>",  "emit AllDecorDB-ready Lua rows for decorIDs (copy-paste)")
+    _cmd("/hdgr tipdump [ids]",    "dump C_TooltipInfo line types for itemIDs (finds gates the catalog omits)")
+    _cmd("/hdgr tipdump bags",     "  same, sweeping carried items -- control for 'can we see gates at all'")
+    _cmd("/hdgr tipdump merch [n]","  the OPEN vendor: all slots, or one slot in full")
+    _cmd("/hdgr tipdump gt",       "  arm, hover anything, re-run: rendered lines VS readable data")
     _cmd("/hdgr sl <cmd>",         "selector call-count profiler: start / stop / dump / clear")
     _cmd("/hdgr perf [on/off/reset]", "performance profiler (bare opens the window)")
     _cmd("/hdgr doors",            "door audit for the OPEN Architect canvas (ShapeAtlas verify)")
@@ -231,4 +235,399 @@ function D:DumpDecor(rest)
         end
     end
     _G.print("|cff666666(sourceType=12 = Shop is the default guess; adjust per item if it came from elsewhere.)|r")
+end
+
+-- ===== Tooltip gate probe ===================================================
+-- The housing catalog omits some gates outright: the Brawl'gar rank items carry
+-- a red "Requires Brawl'gar Arena - Rank N" on the tooltip and NOTHING in
+-- sourceText, so every filter that asks "can I just go and buy this" says yes.
+-- Enum.TooltipDataLineType.UsageRequirement (43) marks those lines structurally
+-- and lineData.requirementType names why (Reputation / Achievement / Level / ...),
+-- which would make the gate readable without matching localized text.
+-- This dumps raw line types so that claim can be checked against real items
+-- before anything is built on it.
+
+local TIPDUMP_DEFAULT_IDS = { 263026, 259071, 255840, 248337 }  -- 3 Brawl'gar rank-gated + 1 plain gold control (Round-Top Boulder)
+local USAGE_REQUIREMENT = 43   -- Enum.TooltipDataLineType.UsageRequirement
+
+local _enumNames = {}   -- [enumTable] = { [value] = name }, built on first use
+local function _enumName(enumTable, value)
+    if value == nil then return "-" end
+    local byValue = _enumNames[enumTable]
+    if not byValue then
+        byValue = {}
+        for name, v in pairs(enumTable) do byValue[v] = name end
+        _enumNames[enumTable] = byValue
+    end
+    return ("%s(%s)"):format(byValue[value] or "?", tostring(value))
+end
+
+-- exception(boundary): C_TooltipInfo hands back secret-string-backed tables under
+-- taint and indexing them throws, so structure and text are probed in SEPARATE
+-- pcalls -- the numeric type/requirementType fields survive a secret leftText,
+-- and they are the signal we actually want.
+local function _probeLines(getter)
+    local ok, result = pcall(function()
+        local data = getter()
+        if not (data and data.lines) then return nil end
+        local out = {}
+        for i, line in ipairs(data.lines) do
+            out[i] = { lineType = line.type, reqType = line.requirementType, raw = line }
+        end
+        return out
+    end)
+    if not ok then return nil, tostring(result) end
+    return result, nil
+end
+
+-- Requirement-type names for every UsageRequirement line present, in order.
+local function _gateNames(lines)
+    local names = {}
+    for _, e in ipairs(lines or {}) do   -- exception(nullable): a getter with no data returns nil lines
+        if e.lineType == USAGE_REQUIREMENT then
+            names[#names + 1] = _enumName(_G.Enum.TooltipDataUsageRequirementType, e.reqType)
+        end
+    end
+    return names
+end
+
+local function _gateSuffix(lines)
+    local names = _gateNames(lines)
+    if #names == 0 then return "" end
+    return (" |cffe06c75GATE [%s]|r"):format(table.concat(names, ", "))
+end
+
+-- exception(boundary): same secret-string hazard, isolated per line so one tainted
+-- string does not cost us the whole dump.
+local function _safeLeftText(line)
+    local ok, shown = pcall(function()
+        local text = line.leftText
+        if text == nil then return "" end
+        return (text:gsub("|", "||"))
+    end)
+    return ok and shown or "|cffe06c75<secret string -- unreadable>|r"
+end
+
+local function _safeRightText(line)
+    local ok, shown = pcall(function()
+        local text = line.rightText
+        if text == nil then return "" end
+        return (" |cff888888// " .. text:gsub("|", "||") .. "|r")
+    end)
+    return ok and shown or " |cffe06c75<secret rightText>|r"
+end
+
+-- TooltipDataArg carries the structured payload behind a line. If a requirement
+-- rides along as data rather than as a line type, it is in here.
+local function _argValue(a)
+    if a.stringVal ~= nil then return a.stringVal end
+    if a.intVal    ~= nil then return a.intVal end
+    if a.floatVal  ~= nil then return a.floatVal end
+    if a.boolVal   ~= nil then return a.boolVal end
+    if a.guidVal   ~= nil then return a.guidVal end
+    return nil
+end
+
+local function _argsStr(line)
+    local ok, shown = pcall(function()
+        if not line.args then return "" end
+        local parts = {}
+        for _, a in ipairs(line.args) do
+            parts[#parts + 1] = ("%s=%s"):format(tostring(a.field), tostring(_argValue(a)))
+        end
+        if #parts == 0 then return "" end
+        return "\n        args{ " .. table.concat(parts, " | ") .. " }"
+    end)
+    return ok and shown or "\n        args{<unreadable>}"
+end
+
+local function _printLines(lines)
+    for i, e in ipairs(lines) do
+        local isGate = (e.lineType == USAGE_REQUIREMENT)
+        _G.print(("   %s[%2d] %-28s req=%-24s %s%s%s"):format(
+            isGate and "|cffe06c75>>|r " or "   ", i,
+            _enumName(_G.Enum.TooltipDataLineType, e.lineType),
+            _enumName(_G.Enum.TooltipDataUsageRequirementType, e.reqType),
+            _safeLeftText(e.raw), _safeRightText(e.raw), _argsStr(e.raw)))
+    end
+end
+
+-- GetItemByID renders a context-free tooltip; the hyperlink and owned-item paths
+-- can carry player-conditional lines it drops. Probing all three separates
+-- "this item has no gate" from "this getter cannot see gates".
+local function _tipDumpOne(itemID)
+    C_Item.RequestLoadItemDataByID(itemID)   -- idempotent; a cold item needs a second run
+    local getters = {
+        { name = "GetItemByID",      fn = function() return C_TooltipInfo.GetItemByID(itemID) end },
+        { name = "GetHyperlink",     fn = function() return C_TooltipInfo.GetHyperlink("item:" .. itemID) end },
+        { name = "GetOwnedItemByID", fn = function() return C_TooltipInfo.GetOwnedItemByID(itemID) end },
+    }
+    _print(("item %d"):format(itemID))
+    local richest = nil
+    for _, g in ipairs(getters) do
+        local lines, err = _probeLines(g.fn)
+        if err then
+            _G.print(("  |cffe06c75%-18s threw -- %s|r"):format(g.name, err))
+        else
+            _G.print(("  %-18s %d lines%s"):format(g.name, lines and #lines or 0, _gateSuffix(lines)))
+            if lines and (not richest or #lines > #richest) then richest = lines end
+        end
+    end
+    if not richest or #richest <= 1 then
+        _G.print("  |cffe5c07b(no usable lines -- item data cold, run the command again)|r")
+        return
+    end
+    _printLines(richest)
+end
+
+-- Sweep the player's own bags. This is the CONTROL: if nothing the player carries
+-- produces a UsageRequirement line either, the line type is not readable from
+-- addon code at all and the whole approach is dead -- not just for decor.
+local function _tipDumpBags()
+    local scanned, gated = 0, 0
+    for bag = 0, 5 do
+        for slot = 1, (C_Container.GetContainerNumSlots(bag) or 0) do   -- exception(boundary): nil for a bag the player has not equipped
+            local lines = _probeLines(function() return C_TooltipInfo.GetBagItem(bag, slot) end)
+            if lines and #lines > 0 then
+                scanned = scanned + 1
+                if #_gateNames(lines) > 0 then
+                    gated = gated + 1
+                    _G.print(("  |cffcdd6f4bag %d slot %d|r %s%s"):format(
+                        bag, slot, _safeLeftText(lines[1].raw), _gateSuffix(lines)))
+                end
+            end
+        end
+    end
+    _print(("bags: %d items scanned, %d carrying a UsageRequirement line"):format(scanned, gated))
+end
+
+-- MerchantItemInfo is the structured vendor-side state MerchantFrame itself uses
+-- (MerchantFrame.lua:362 tints the button on `not info.isPurchasable`).
+local function _merchantStateStr(slot)
+    local ok, s = pcall(function()
+        local info = _G.C_MerchantFrame.GetItemInfo(slot)
+        if not info then return " (no MerchantItemInfo)" end
+        return (" purchasable=%s usable=%s avail=%s extCost=%s"):format(
+            tostring(info.isPurchasable), tostring(info.isUsable),
+            tostring(info.numAvailable), tostring(info.hasExtendedCost))
+    end)
+    return ok and s or " (MerchantItemInfo threw)"
+end
+
+-- Sweep the OPEN merchant window. Bare = one summary row per slot; with a slot
+-- number = every line of that slot in full.
+local function _tipDumpMerchant(slotArg)
+    local count = _G.GetMerchantNumItems() or 0   -- exception(boundary): nil with no merchant open
+    if count == 0 then
+        _print("merchant: no merchant open (walk to the vendor, then run this)")
+        return
+    end
+    local first, last = 1, count
+    if slotArg then first, last = slotArg, slotArg end
+    _print(("merchant: %d slots%s"):format(count, slotArg and (", dumping slot " .. slotArg) or ""))
+    for slot = first, last do
+        local lines = _probeLines(function() return C_TooltipInfo.GetMerchantItem(slot) end)
+        _G.print(("  |cffcdd6f4[%2d]|r %-40s %d lines%s%s"):format(
+            slot, lines and lines[1] and _safeLeftText(lines[1].raw) or "?",
+            lines and #lines or 0, _gateSuffix(lines), _merchantStateStr(slot)))
+        if lines and (slotArg or #_gateNames(lines) > 0) then _printLines(lines) end
+    end
+end
+
+-- ===== Rendered-vs-data dump ================================================
+-- The only honest comparison: the SAME tooltip instance, read both ways --
+-- the rendered FontStrings (what the player sees, Blizzard's own
+-- TooltipUtil.DebugCopyGameTooltip path) beside GameTooltip:GetTooltipData()
+-- (what addon code can read). Any line present in one and absent in the other
+-- is the answer, and it is observed rather than inferred from a line count.
+
+local _gtArmed, _gtSnapshot, _gtHooked = false, nil, false
+
+local function _safeFontText(fs)
+    local ok, shown = pcall(function()
+        local text = fs:GetText()
+        if text == nil then return "" end
+        return (text:gsub("|", "||"))
+    end)
+    return ok and shown or "|cffe06c75<secret>|r"
+end
+
+-- Capture at Show: every Lua post-call (ours included) has already run by then,
+-- so the FontStrings hold the finished tooltip.
+local function _captureGameTooltip()
+    if not _gtArmed or _gtSnapshot then return end   -- first tooltip after arming wins
+    local gt = _G.GameTooltip
+    local snap = { rendered = {}, data = nil }
+    local ok = pcall(function()
+        for i = 1, (gt:NumLines() or 0) do
+            local l, r = _G["GameTooltipTextLeft" .. i], _G["GameTooltipTextRight" .. i]
+            snap.rendered[i] = {
+                left  = l and _safeFontText(l) or "",
+                right = r and _safeFontText(r) or "",
+            }
+        end
+        snap.data = gt:GetTooltipData()
+    end)
+    if not ok or #snap.rendered == 0 then return end
+    _gtSnapshot = snap
+end
+
+local function _printSnapshotRendered(snap)
+    _G.print(("  |cff98c379RENDERED (%d lines -- what you see)|r"):format(#snap.rendered))
+    for i, l in ipairs(snap.rendered) do
+        _G.print(("   [%2d] %s%s"):format(i, l.left,
+            l.right ~= "" and (" |cff888888// " .. l.right .. "|r") or ""))
+    end
+end
+
+local function _printSnapshotData(snap)
+    local lines = _probeLines(function() return snap.data end)
+    _G.print(("  |cff98c379TOOLTIPDATA (%d lines -- what addon code can read)|r")
+        :format(lines and #lines or 0))
+    if lines then _printLines(lines) end
+end
+
+local function _tipDumpGameTooltip()
+    if not _gtHooked then
+        hooksecurefunc(_G.GameTooltip, "Show", _captureGameTooltip)
+        _gtHooked = true
+    end
+    if not _gtArmed then
+        _gtArmed, _gtSnapshot = true, nil
+        _print("gt ARMED -- hover the thing you want dumped (the FIRST tooltip is captured),")
+        _G.print("      then run |cffcdd6f4/hdgr tipdump gt|r again to print it.")
+        return
+    end
+    _gtArmed = false
+    if not _gtSnapshot then
+        _print("gt: nothing captured (no tooltip shown while armed)")
+        return
+    end
+    _print("gt: same tooltip, both ways --")
+    _printSnapshotRendered(_gtSnapshot)
+    _printSnapshotData(_gtSnapshot)
+end
+
+-- Dump C_TooltipInfo line types. Bare = the Brawl'gar set + a control; "bags" =
+-- control sweep of carried items; "merchant [slot]" = the open vendor;
+-- "gt" = arm, hover, re-run to compare rendered vs data on one tooltip.
+function D:TipDump(rest)
+    rest = rest or ""
+    local mode = rest:match("^%s*(%a+)")
+    if mode == "bags" then return _tipDumpBags() end
+    if mode == "gt" then return _tipDumpGameTooltip() end
+    if mode == "merchant" then return _tipDumpMerchant(tonumber(rest:match("%d+"))) end
+    local ids = {}
+    for s in rest:gmatch("%d+") do ids[#ids + 1] = tonumber(s) end
+    if #ids == 0 then
+        ids = TIPDUMP_DEFAULT_IDS
+        _print("tipdump (no ids) -- 3 Brawl'gar rank-gated items + 1 plain gold control")
+    end
+    for _, id in ipairs(ids) do _tipDumpOne(id) end
+end
+
+-- ===== petscale: does the legacy Model frame know the world scale? ===========
+-- Chasing the ~73 species whose mesh measures absurdly tall (Merriment 28.143 on
+-- a creature that stands ankle-high beside a 2.242 player). Eleven candidates
+-- eliminated -- see the RESIDUAL section in vpp-tools/build_sizedb.py.
+--
+-- THIS probe tries the one surface never looked at: the LEGACY Model frame. All
+-- the earlier work went through ModelScene, the modern API. SimpleModel carries
+-- two getters ModelScene has no equivalent for:
+--
+--     Model:GetWorldScale()   -- and there is NO SetWorldScale
+--     Model:GetModelScale()
+--
+-- A getter with no matching setter is engine-computed, not a value we handed it,
+-- which is exactly the shape of the number we are missing. Paired with
+-- CharacterModelBase:SetDisplayInfo(displayID) it can be asked per species.
+--
+-- If GetWorldScale returns ~0.025 for Merriment and ~1.0 for the hares, that is
+-- the missing factor and it is readable at runtime -- which would mean shipping
+-- the raw mesh extent and multiplying by this instead of guessing at DB2 columns.
+local PETSCALE_PROBE = {
+    -- sid, what we currently ship (nil = dropped as implausible), the DB2 CMS
+    { sid = 4733, ship = "dropped", cms = 1.00 },  -- Merriment      mesh 28.143
+    { sid = 2591, ship = "dropped", cms = 1.00 },  -- Happiness      mesh 28.143 (ShaPet)
+    { sid = 2815, ship = "dropped", cms = 1.00 },  -- Rampage        mesh 20.306 (GorillaBossDead)
+    { sid = 3217, ship = "dropped", cms = 1.00 },  -- Aurelid Floater mesh 9.542
+    { sid = 1364, ship = "0.795",   cms = 0.65 },  -- Murkalot       (MurlocCrusader, GeoBox-clamped)
+    { sid =  730, ship = "0.289",   cms = 0.50 },  -- Tolai Hare Pup (correct)
+    { sid =  641, ship = "0.578",   cms = 1.00 },  -- Arctic Hare    (correct)
+    { sid =  441, ship = "0.722",   cms = 1.25 },  -- Alpine Hare    (correct)
+    { sid = 4257, ship = "1.111",   cms = 0.70 },  -- Gill'dan       (correct)
+}
+
+local _petScaleModel
+local _petScaleBusy = false
+
+local function _petScaleFrame()
+    if _petScaleModel then return _petScaleModel end
+    local f = _G.CreateFrame("PlayerModel", nil, _G.UIParent)
+    f:SetSize(200, 200)
+    f:SetPoint("CENTER")
+    _petScaleModel = f
+    return f
+end
+
+-- Sequential with a settle delay: SetDisplayInfo loads asynchronously and the
+-- legacy Model frame has no load callback, so the scale is not meaningful on the
+-- same frame. A dev probe may use a timer; UI code may not.
+local function _petScaleStep(f, i, acc, done)
+    if i > #PETSCALE_PROBE then return done(acc) end
+    local e = PETSCALE_PROBE[i]
+    local info = _G.C_PetJournal.GetPetInfoTableBySpeciesID(e.sid)
+    if not (info and info.displayID) then
+        acc[i] = { name = ("sid %d (not owned)"):format(e.sid) }
+        return _petScaleStep(f, i + 1, acc, done)
+    end
+    f:ClearModel()
+    f:SetDisplayInfo(info.displayID)
+    _G.C_Timer.After(0.35, function()
+        acc[i] = {
+            name  = info.name,
+            sid   = e.sid,
+            ship  = e.ship,
+            cms   = e.cms,
+            disp  = info.displayID,
+            world = f.GetWorldScale and f:GetWorldScale() or nil,
+            model = f.GetModelScale and f:GetModelScale() or nil,
+            fid   = f.GetModelFileID and f:GetModelFileID() or nil,
+        }
+        _petScaleStep(f, i + 1, acc, done)
+    end)
+end
+
+-- /hdgr petscale
+function D:PetScale()
+    if _petScaleBusy then return _print("petscale: already running") end
+    if not _G.C_PetJournal then return _print("petscale: C_PetJournal unavailable") end
+    _petScaleBusy = true
+    local f = _petScaleFrame()
+    f:Show()
+    _petScaleStep(f, 1, {}, function(acc)
+        local out = {
+            "Model:GetWorldScale / GetModelScale per pet display.",
+            "GetWorldScale has NO setter, so it is engine-computed -- if it varies",
+            "with true pet size, it is the factor 11 other candidates did not explain.",
+            "",
+            "name                 sid  ships    DB2cms  worldScale  modelScale  displayID  fileID",
+        }
+        for _, r in ipairs(acc) do
+            if r and r.sid then
+                out[#out + 1] = ("%-18s %5d  %-8s %6.2f  %10s  %10s  %9s  %s"):format(
+                    tostring(r.name), r.sid, r.ship, r.cms,
+                    tostring(r.world), tostring(r.model), tostring(r.disp), tostring(r.fid))
+            elseif r then
+                out[#out + 1] = r.name
+            end
+        end
+        out[#out + 1] = ""
+        out[#out + 1] = "READ IT: the four 'dropped' rows are the unexplained ones. If their"
+        out[#out + 1] = "worldScale is far below the hares' and Gill'dan's, we have the answer."
+        local dialog = HDG.UI and HDG.UI.CopyDialog and HDG.UI:CopyDialog()
+        if dialog and dialog.Open then dialog:Open("petscale", table.concat(out, "\n"))
+        else for _, l in ipairs(out) do _print(l) end end
+        _petScaleBusy = false
+    end)
 end

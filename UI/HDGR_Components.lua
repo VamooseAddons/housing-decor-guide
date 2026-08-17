@@ -1259,6 +1259,15 @@ local function buildModelPreview(parent, spec)
         _installInvertedPitchHook(camera)
     end
 
+    -- Pet path. A pet card scene has no "decor" actor, and a pet has no asset
+    -- fileID -- its model comes from a creature displayID. Same two calls
+    -- Blizzard's own housing pet grid makes.
+    local function _pointActorAtPet(displayID)
+        local actor = modelScene.GetActorByTag and modelScene:GetActorByTag("unwrapped")
+        if not actor then return end   -- exception(boundary): scene shape is Blizzard's
+        actor:SetModelByCreatureDisplayID(displayID, true)
+    end
+
     local function _pointActorAtAsset(asset, dyes)
         local actor = modelScene.GetActorByTag and modelScene:GetActorByTag("decor")
         if not actor then return end
@@ -1288,7 +1297,11 @@ local function buildModelPreview(parent, spec)
             return false
         end
         _enable3DCameraPitch()
-        _pointActorAtAsset(info.asset, dyes)
+        if info.petDisplayID then
+            _pointActorAtPet(info.petDisplayID)
+        else
+            _pointActorAtAsset(info.asset, dyes)
+        end
         modelScene:Show()
         if frame.controls then frame.controls:Show() end
         return true
@@ -1330,7 +1343,9 @@ local function buildModelPreview(parent, spec)
             placeholder:Show()
             return
         end
-        if info.asset and _try3DLoad(info, dyes) then return end
+        -- A pet has no `asset` fileID -- its model comes from a creature displayID
+        -- -- so either key admits the 3D path.
+        if (info.asset or info.petDisplayID) and _try3DLoad(info, dyes) then return end
         _show2DFallback(info)
     end
 
@@ -1350,6 +1365,12 @@ local function dispatchModelPreview(widget, values)
     local dyes = nil
     if itemID and values.variantKey and HDG.HousingCatalogObserver and HDG.HousingCatalogObserver.GetVariantDyes then  -- exception(boundary): optional module / not yet built; resolved at widget seam for selector purity
         dyes = HDG.HousingCatalogObserver:GetVariantDyes(itemID, values.variantKey)
+    end
+    -- Pets browser: binds speciesID instead of itemID. Resolved at the widget seam
+    -- via PetObserver for the same reason itemID is -- the live read stays behind a
+    -- module boundary so the selector supplying speciesID stays pure.
+    if not info and values.speciesID then
+        info = HDG.PetObserver:Resolve(values.speciesID)  -- exception(nullable): unowned / non-attachable species
     end
     -- Configurable preview background (decor-browser dropdown): apply the chosen
     -- atlas over the dark bgTile; "default"/nil hides the override so the tile shows.
@@ -1385,7 +1406,11 @@ end
 
 HDG.WidgetTypes:Register("modelPreview", {
     build    = function(parent, spec) return buildModelPreview(parent, spec) end,
-    dispatch = { fields = { "itemID", "variantKey", "bg" }, push = dispatchModelPreview },
+    -- speciesID: the Pets browser's binding. Everything else (registered-scene
+    -- transition, orbit camera, inverted pitch, backgrounds, 2D fallback) is shared
+    -- with decor -- the pet path differs in three calls, so it branches rather than
+    -- cloning the widget.
+    dispatch = { fields = { "itemID", "variantKey", "bg", "speciesID" }, push = dispatchModelPreview },
     -- No skin: atlas bg owns the chrome; theme tinting would fight catalog-list atlas.
     requiresFont = function() return false end,
     destroy = destroyWidget,

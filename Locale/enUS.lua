@@ -52,6 +52,22 @@ HDG.Locale:Register("enUS", {
     DECOR_ERROR_HEADLINE   = "Catalog not loaded",
     DECOR_ERROR_SUB        = "Open the Housing Catalog in-game to scan.",
     DECOR_BLANK            = "No decor matches your filters.",
+
+    -- ===== Pets browser (the Pets top-filter mode of the Decor tab) =====
+    PETS_BROWSER_TITLE     = "Placeable Pets",
+    PETS_BLANK             = "No placeable pets match those filters.",
+    PETS_SEARCH_PLACEHOLDER = "Search your pets by name...",
+    PETS_CLICK_A_PET       = "Click a pet",
+    PETS_PREVIEW_PLACEHOLDER = "Click a pet to preview",
+    PETS_SUMMON            = "Summon",
+    PETS_DISMISS           = "Dismiss",
+    -- %d = how many are shown
+    PETS_COUNT             = "%d placeable pets",
+    -- %d shown, %d owned in total
+    PETS_COUNT_FILTERED    = "%d of %d placeable pets",
+    -- %.2f the pet's height, %.2f the player's, in the shipped model units
+    PETS_HEIGHT            = "Height %.2f  (you are %.2f)",
+    PETS_HEIGHT_UNKNOWN    = "Size not measured",
     -- Browser header click hints
     DECOR_HINT_LEFT        = "Select a decor item",
     DECOR_HINT_RIGHT       = "Favorite or unfavorite",
@@ -188,6 +204,12 @@ HDG.Locale:Register("enUS", {
     MOG_QUEUE_PLACEHOLDER       = "Queue: ...",
     MOG_QUEUE_PREFIX            = "Queue: ",
     MOG_AUCTIONS                = "Your Auctions",
+    -- CSV export. Wording carried over from HDG classic so the feature reads
+    -- the same to players who used it before.
+    MOG_EXPORT_TITLE            = "Goblin Export (%d items)",
+    MOG_EXPORT_EMPTY            = "No data to export. Adjust filters or scan prices first.",
+    TIP_EXPORT_CSV              = "Export to CSV",
+    TIP_EXPORT_CSV_DESC         = "Click to export profit data to CSV format",
     MOG_DETAIL_COL_QTY          = "Qty",
     MOG_DETAIL_COL_OWNED        = "Owned",
     MOG_DETAIL_COL_COST         = "Cost",

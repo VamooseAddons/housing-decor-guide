@@ -1,0 +1,265 @@
+-- HDGR_Selectors_Pets.lua
+-- ============================================================================
+-- Pure selectors for the Pets browser -- a top-filter MODE of the Decor tab, not
+-- a view of its own. So its selection lives in the decor session bucket
+-- (session.ui.decor.selectedSpeciesID, invariant 16) and its panels borrow the
+-- decor view's `body` and `detail` cells rather than declaring a view.
+--
+-- Every selector that reaches PetObserver declares
+--   reads = { "session.resolvers.pets.tick" }
+-- That tick is the re-pull signal for the observer's module-local index of
+-- decor-attachable pets (Species-A facade-poll, HDGR_Resolvers.lua). The
+-- semantic sweep's resolver-facade rule cross-checks facade against required
+-- reads, so dropping the tick fails the gate rather than going stale in silence.
+
+local Selectors = HDG.Selectors
+
+-- Pets mode is the "pets" top filter -- ONE source of truth for it, composed by
+-- both browser gates and every pets selector.
+Selectors:Register("pets.isMode", {
+    calls = { "decor.topFilter" },
+    fn = function(state, ctx)
+        return Selectors:Call("decor.topFilter", state, ctx) == "pets"
+    end,
+})
+
+Selectors:Register("pets.selectedSpeciesID", {
+    memoized = true,
+    reads = { "session.ui.decor.selectedSpeciesID" },
+    fn = function(state, ctx)
+        return state.session.ui.decor.selectedSpeciesID
+    end,
+})
+
+-- Two decimals is the shipped precision. A nil height renders EMPTY rather than
+-- "0.00" or "?": the bind-pose measurement either exists for a species or it
+-- does not, and there is nothing honest to put in its place.
+local HEIGHT_FMT = "%.2f"
+
+-- The bar's axis. From Constants because the row factory places the player's
+-- reference mark on this same scale, and a second copy of the denominator is one
+-- edit away from disagreeing with this one.
+local BAR_MAX = HDG.Constants.PET_BAR_MAX
+
+local function _barFraction(height)
+    if not height then return 0 end
+    local f = height / BAR_MAX
+    if f > 1 then return 1 end   -- a pet taller than the player pins at full width
+    return f
+end
+
+-- One index entry -> row envelope. Everything the row factory paints is stamped
+-- HERE so it never dives into state or the observer mid-paint (cookbook 03).
+local function _petRow(entry, families, selectedID)
+    return {
+        speciesID   = entry.speciesID,
+        petID       = entry.petID,
+        name        = entry.name,
+        customName  = entry.customName,
+        displayName = entry.customName or entry.name,
+        icon        = entry.icon,
+        familyLabel = families[entry.petType],   -- exception(nullable): an unknown petType has no family string
+        height      = entry.height,
+        heightLabel = entry.height and HEIGHT_FMT:format(entry.height) or "",
+        barFraction = _barFraction(entry.height),
+        selected    = entry.speciesID == selectedID,
+    }
+end
+
+-- The pet list. The observer already sorted by height, so this does NOT re-sort:
+-- search narrows on the displayed name, the active tag narrows by family.
+Selectors:Register("pets.items", {
+    memoized = true,
+    reads = { "session.resolvers.pets.tick", "session.ui.decor.searchQuery" },
+    calls = { "pets.selectedSpeciesID", "decor.activeTag" },
+    fn = function(state, ctx)
+        local entries    = HDG.PetObserver:GetAttachable()
+        local families   = HDG.PetObserver:GetFamilies()
+        local selectedID = Selectors:Call("pets.selectedSpeciesID", state, ctx)
+        local activeTag  = Selectors:Call("decor.activeTag", state, ctx)
+        local q          = state.session.ui.decor.searchQuery
+        local needle     = q ~= "" and q:lower() or nil
+
+        local out = {}
+        for i = 1, #entries do
+            local row = _petRow(entries[i], families, selectedID)
+            local nameOk   = not needle or row.displayName:lower():find(needle, 1, true) ~= nil
+            local familyOk = not activeTag or row.familyLabel == activeTag
+            if nameOk and familyOk then out[#out + 1] = row end
+        end
+        return out
+    end,
+})
+
+Selectors:Register("pets.hasItems", {
+    calls = { "pets.items" },
+    fn = function(state, ctx)
+        return #Selectors:Call("pets.items", state, ctx) > 0
+    end,
+})
+
+-- Blank state: pets mode is on but search / family matched nothing.
+Selectors:Register("pets.isBlank", {
+    calls = { "pets.isMode", "pets.hasItems" },
+    fn = function(state, ctx)
+        return Selectors:Call("pets.isMode", state, ctx)
+           and not Selectors:Call("pets.hasItems", state, ctx)
+    end,
+})
+
+Selectors:Register("pets.headerLabel", {
+    memoized = true,
+    reads = { "session.resolvers.pets.tick" },
+    calls = { "pets.items" },
+    fn = function(state, ctx)
+        local shown = #Selectors:Call("pets.items", state, ctx)
+        local total = #HDG.PetObserver:GetAttachable()
+        if shown == total then return HDG.Locale:Get("PETS_COUNT"):format(total) end
+        return HDG.Locale:Get("PETS_COUNT_FILTERED"):format(shown, total)
+    end,
+})
+
+-- ===== Browser gates ========================================================
+-- The decor body cell holds both list panels; exactly one may be visible. Composed
+-- here rather than inline because a panel's `visible` takes a single selector
+-- name, and because decor.hasItems must keep meaning "the decor list is non-empty"
+-- rather than quietly absorbing a mode.
+Selectors:Register("decor.showPetBrowser", {
+    calls = { "pets.isMode", "pets.hasItems" },
+    fn = function(state, ctx)
+        return Selectors:Call("pets.isMode", state, ctx)
+           and Selectors:Call("pets.hasItems", state, ctx)
+    end,
+})
+
+-- Short-circuits on mode BEFORE asking decor.hasItems, so switching to Pets does
+-- not depend on catalog state -- the decor browser goes away even mid-sweep.
+Selectors:Register("decor.showDecorBrowser", {
+    calls = { "pets.isMode", "decor.hasItems" },
+    fn = function(state, ctx)
+        if Selectors:Call("pets.isMode", state, ctx) then return false end
+        return Selectors:Call("decor.hasItems", state, ctx)
+    end,
+})
+
+-- The DETAIL column's gate is mode alone, deliberately NOT showDecorBrowser: the
+-- decor detail pane must keep standing when the decor list is empty (that is what
+-- its "Click an item" placeholder is for). Only pets mode takes the cell away.
+Selectors:Register("decor.showDecorDetail", {
+    calls = { "pets.isMode" },
+    fn = function(state, ctx)
+        return not Selectors:Call("pets.isMode", state, ctx)
+    end,
+})
+
+-- ===== Detail pane ==========================================================
+-- Thin projections over the selected species; each returns the finished display
+-- string (ADR-022), so no widget formats anything.
+Selectors:Register("pets.selectedPet", {
+    memoized = true,
+    reads = { "session.resolvers.pets.tick" },
+    calls = { "pets.selectedSpeciesID" },
+    fn = function(state, ctx)
+        local id = Selectors:Call("pets.selectedSpeciesID", state, ctx)
+        if not id then return nil end
+        return HDG.PetObserver:GetBySpecies(id)   -- exception(nullable): a caged pet can vanish between paints
+    end,
+})
+
+Selectors:Register("pets.selectedPet.name", {
+    calls = { "pets.selectedPet" },
+    fn = function(state, ctx)
+        local p = Selectors:Call("pets.selectedPet", state, ctx)
+        if not p then return HDG.Locale:Get("PETS_CLICK_A_PET") end
+        return p.customName or p.name
+    end,
+})
+
+Selectors:Register("pets.selectedPet.familyLabel", {
+    memoized = true,
+    reads = { "session.resolvers.pets.tick" },
+    calls = { "pets.selectedPet" },
+    fn = function(state, ctx)
+        local p = Selectors:Call("pets.selectedPet", state, ctx)
+        if not p then return "" end
+        return HDG.PetObserver:GetFamilies()[p.petType] or ""  -- exception(nullable): unknown petType has no family string
+    end,
+})
+
+-- The size line. States the height against the one reference every player has an
+-- eye for -- their own character. No verb and no ratio: these are bind-pose
+-- heights, so a reared eel renders taller than its number and any comparison word
+-- would be claiming precision the measurement does not have.
+Selectors:Register("pets.selectedPet.sizeLabel", {
+    calls = { "pets.selectedPet" },
+    fn = function(state, ctx)
+        local p = Selectors:Call("pets.selectedPet", state, ctx)
+        if not p then return "" end
+        if not p.height then return HDG.Locale:Get("PETS_HEIGHT_UNKNOWN") end
+        return HDG.Locale:Get("PETS_HEIGHT")
+            :format(p.height, HDG.Constants.PET_CHARACTER_HEIGHT)
+    end,
+})
+
+-- ===== Summon / Dismiss =====================================================
+-- Ported from VPP, whose comments record what it cost to get right. Four rules,
+-- each one a bug that shipped there first:
+--
+--   1. The LABEL comes from the LATCHED guid, never a live GetSummonedPetGUID --
+--      that API reads nil for up to 1.5s after a summon, so a paint driven by the
+--      click reads the window instead of the result.
+--   2. The controller does NOT repaint after clicking. COMPANION_UPDATE fires in
+--      the same frame with the new state (measured, not assumed), and repainting
+--      on click would read the state being left.
+--   3. Dismiss is SummonPetByGUID(sameGUID) -- a toggle, not a second API.
+--   4. Summonability is ASKED. The client refuses in a pet battle, on a vehicle,
+--      or in a restricted area.
+
+-- Which owned copy the button acts on. The exemplar petID for the selected
+-- species -- the same copy the row shows, so the button and the row agree.
+Selectors:Register("pets.selectedPetID", {
+    calls = { "pets.selectedPet" },
+    fn = function(state, ctx)
+        local p = Selectors:Call("pets.selectedPet", state, ctx)
+        return p and p.petID or nil
+    end,
+})
+
+Selectors:Register("pets.isSelectedSummoned", {
+    memoized = true,
+    reads = { "session.resolvers.pets.tick" },
+    calls = { "pets.selectedPetID" },
+    fn = function(state, ctx)
+        local petID = Selectors:Call("pets.selectedPetID", state, ctx)
+        if not petID then return false end
+        return HDG.PetObserver:GetSummonedGUID() == petID
+    end,
+})
+
+Selectors:Register("pets.summonLabel", {
+    calls = { "pets.isSelectedSummoned" },
+    fn = function(state, ctx)
+        return HDG.Locale:Get(Selectors:Call("pets.isSelectedSummoned", state, ctx)
+               and "PETS_DISMISS" or "PETS_SUMMON")
+    end,
+})
+
+-- Already-out always allows Dismiss; otherwise the client decides. Live read
+-- behind the facade, gated by the tick (ADR-031, as AchievementObserver:IsEarned).
+Selectors:Register("pets.summonEnabled", {
+    reads = { "session.resolvers.pets.tick" },
+    calls = { "pets.selectedPetID", "pets.isSelectedSummoned" },
+    fn = function(state, ctx)
+        local petID = Selectors:Call("pets.selectedPetID", state, ctx)
+        if not petID then return false end
+        if Selectors:Call("pets.isSelectedSummoned", state, ctx) then return true end
+        return HDG.PetObserver:IsSummonable(petID)
+    end,
+})
+
+Selectors:Register("pets.hasSelection", {
+    calls = { "pets.selectedPetID" },
+    fn = function(state, ctx)
+        return Selectors:Call("pets.selectedPetID", state, ctx) ~= nil
+    end,
+})

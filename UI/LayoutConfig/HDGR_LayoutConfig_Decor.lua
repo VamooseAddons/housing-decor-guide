@@ -46,8 +46,9 @@ LC.panels.decorPanel = {
     kind = "panel",
     cell = { decor = "body" },
     visibleInViews = { "decor" },
-    -- Visible when ready AND non-empty; sibling overlays own loading/error/blank states.
-    visible = "decor.hasItems",
+    -- Visible when ready AND non-empty AND not in Pets mode; sibling overlays own
+    -- loading/error/blank, and petPanel owns the body cell in pets mode.
+    visible = "decor.showDecorBrowser",
     slots = {
         header = {
             height = 34, layout = "horizontal", gap = "md",
@@ -86,6 +87,10 @@ LC.panels.decorDetailPanel = {
     kind = "panel",
     cell = { decor = "detail" },
     visibleInViews = { "decor" },
+    -- Mode alone, NOT showDecorBrowser: this pane keeps standing when the decor
+    -- list is empty (its "Click an item" placeholder is the point). Only pets
+    -- mode takes the cell away, and petDetailPanel takes it.
+    visible = "decor.showDecorDetail",
     slots = {
         header = {
             height = 34, layout = "horizontal", gap = "md",
@@ -379,6 +384,9 @@ LC.widgets["decorPanel.search"] = {
     height = 22, width = 240, order = 10,
     multiline = false,
     placeholder = "locale:DECOR_SEARCH_PLACEHOLDER",
+    -- Its placeholder names decor, so pets mode swaps in petPanel.search instead.
+    -- Both write session.ui.decor.searchQuery, so the query survives the switch.
+    visible = "decor.showDecorDetail",
 }
 -- Persistent filter reset: always visible. Wired in Controller_Decor -> UI_FILTER_RESET{tab="decor"}.
 LC.widgets["decorPanel.resetFilters"] = {
@@ -601,4 +609,7 @@ LC.widgets["decorPanel.onlyStoredToggle"] = {
     textTone = "error",
     binding = { active = "decor.onlyStored" },
     toggle = "onlyStored",
+    -- Lives in the SHARED filter row, so it needs its own gate: destroying has no
+    -- meaning for pets, which are collection entries rather than stored copies.
+    visible = "decor.showDecorBrowser",
 }

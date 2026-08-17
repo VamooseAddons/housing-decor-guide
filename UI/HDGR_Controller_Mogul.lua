@@ -82,6 +82,30 @@ function MogulController:_wireQueueAll(rootFrame)
     end)
 end
 
+-- Export: the table as it is currently filtered and sorted, as CSV, in the
+-- shared copy dialog. Restores the HDG classic Goblin-tab export.
+function MogulController:_wireGoblinExport(rootFrame)
+    HDG.UI.OnClick(rootFrame, "mogulPanel.goblinExport", function()
+        -- Hoisted rather than inlined twice: both selectors below must see the
+        -- same state, or the count in the title could disagree with the body.
+        local state = HDG.Store:GetState()  -- exception(false-positive): top-level controller method (not a row factory)
+        local rows  = HDG.Selectors:Call("goblin.rows", state, {})
+        if #rows == 0 then
+            -- Notify, not Warn: this is command feedback the player asked for,
+            -- so it belongs in chat rather than only the Debug tab.
+            HDG.Log:Notify("warn", HDG.Locale:Get("MOG_EXPORT_EMPTY"))
+            return
+        end
+        local csv = HDG.Selectors:Call("goblin.csv", state, {})
+        HDG.UI:CopyDialog():Open(
+            HDG.Locale:Get("MOG_EXPORT_TITLE"):format(#rows), csv)
+        -- mogul_action, not a new "export" tag: Wire() registers the tab's tags
+        -- up front and this is a Mogul-tab action, the same as the price scan.
+        HDG.Log:Success("mogul_action", ("Exported %d row%s to CSV"):format(
+            #rows, #rows == 1 and "" or "s"))
+    end)
+end
+
 -- Send to Auctionator: plan.shoppingList (deficit-to-buy) via shared helper.
 function MogulController:_wireSendToAH(rootFrame)
     HDG.UI.OnClick(rootFrame, "mogulPanel.sendToAH", function()
@@ -154,6 +178,7 @@ function MogulController:Wire(rootFrame)
     self:_wireGoblinSource(rootFrame)    -- header price-source pills + Refresh from AH
     self:_wireQueueAll(rootFrame)        -- Queue All -> Recipes-tab craft queue
     self:_wireSendToAH(rootFrame)        -- Send reagents to Auctionator
+    self:_wireGoblinExport(rootFrame)    -- Goblin table -> CSV in the copy dialog
 end
 
 function MogulController:Refresh(rootFrame, ctx)

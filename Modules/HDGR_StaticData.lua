@@ -18,6 +18,7 @@
 --   HDGR_ReagentsDB            -> Reagents:Get / GetAll
 --   HDGR_FacetDB               -> Facets:Get / GetAll
 --   HDGR_FacetVocab            -> Facets:GetVocab
+--   HDGR_PetSizeDB             -> PetSizes:Get  (sparse; nil = never measured)
 --   HDGR_StyleDefinitions      -> Styles:GetDefinitions
 --   HDGR_CollectionDefinitions -> Collections:GetDefinitions
 --   HDGR_TrainersDB            -> Trainers:GetAll / GetByProfession / GetByProfessionAndExpansion
@@ -381,6 +382,25 @@ end
 
 function S.Facets:GetVocab()
     return _table("HDGR_FacetVocab")
+end
+
+-- ============================================================================
+-- PetSizes  (HDGR_PetSizeDB)
+-- ============================================================================
+-- Rendered pet height, for the Decor tab's Pets browser. The runtime has no
+-- height to offer: GetActiveBoundingBox and CreatureModelData.GeoBox are the
+-- same number and union over ANIMATION TRAVEL, so a jumping model reports the
+-- volume it moves through. These come from the M2 vertex array instead.
+
+---@class HDG.StaticData.PetSizes
+S.PetSizes = S.PetSizes or {}
+
+-- nil for a species that was never measured. A miss is a VALID answer -- callers
+-- render the row without a height rather than substituting one, because there is
+-- nothing honest to substitute.
+function S.PetSizes:Get(speciesID)
+    if not speciesID then return nil end
+    return _table("HDGR_PetSizeDB")[speciesID]
 end
 
 -- ============================================================================

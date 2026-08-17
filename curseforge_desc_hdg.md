@@ -12,16 +12,17 @@
 
 ---
 
-## What's New in v3.22.0
+## What's New in v3.23.0
 
-Two new filters under Acquire answer the question a new decorator actually asks: what can I furnish with today, without earning anything first.
+A Pets filter in the Decor browser, for the pets that can be placed in a house.
 
-- **Neighborhood** lists decor sold by the merchants standing in Founder's Point and Razorwind Shores, including the Endeavor vendors, so coupon decor is in there too. Nothing it shows is locked behind reputation, a quest or an achievement, because you are already where the merchant is.
-- **Gold, no unlocks** is the wider version: decor any vendor sells for gold that needs no reputation, quest or achievement first. It reads requirements from the in-game catalog, so a vendor you must unlock before you can reach them can still appear; Neighborhood is the one to use when you want certainty.
-- Both sit on a second row of buttons below Achieve, Rep, Endeavor and Quest, on Shop by Vendor and on Find Decor.
-- **The Gold Only filter has been replaced by those two.** It answered a question about price rather than access, so it listed promotional and in-game shop decor that happens to cost gold, along with items sold behind a questline.
-- **Three Brawl'gar Arena pieces no longer look freely buyable.** Brawler's Barricade, the Brawler's Guild Punching Bag and the Champion Brawler's Gloves each require an arena rank that the game's decor catalog does not record, so they read as ordinary gold purchases.
-- **Aegis can send a blueprint's missing pieces to a shopping list.** If you run Vamoose's Aegis GuildOS, its guild blueprint library can hand over what a build needs; Housing Decor Guide works out where each piece comes from and builds a list named after the build. Nothing changes if you do not run Aegis.
+- **The Pets button at the end of the filter row lists the pets in your collection that can sit on decor.** 12.1 lets some pets be placed on certain pieces, such as pet beds, plinths and a dog house, and this shows which of yours qualify.
+- **The list runs smallest to largest, and each row shows the pet's height beside a bar measuring it against your own character.** Size is the thing no in-game window reports, so this is the part worth having: it lets you pick something suited to a windowsill rather than a courtyard.
+- **The Tags row becomes the ten pet families**, so you can narrow to Critter or Mechanical, and the search box searches your pets by name.
+- **The panel on the right shows the pet at full size, with a Summon or Dismiss button beneath it.** The button reads Summon when the pet is not out and Dismiss when it is, and it greys out where the game will not allow a summon, such as during a pet battle.
+- Heights are measured from each pet's model, because the game does not report one. Eleven pets have models that cannot be measured; those show no height and sort to the end of the list rather than showing a figure that would be wrong.
+
+**The Mogul table exports to CSV again.** An Export button sits with the filters and opens a window holding the table as comma-separated text. What you get matches what you are looking at, so narrowing to one profession and exporting gives you that list only.
 
 ---
 
@@ -34,6 +35,8 @@ Two new filters under Acquire answer the question a new decorator actually asks:
 - **3D model preview** of any piece -- rotate, zoom, swap the backdrop, and preview specific dye variants.
 - **Rich detail card**: category breadcrumb, size, source, owned/stored/placed counts, first-acquisition House XP bonus, and style/faction tags.
 - **Private notes** per item and a one-click **+ Wishlist** that adds to your active shopping list.
+
+- **Placeable pets** -- a Pets filter listing the pets in your collection that can be placed on decor, ordered by size, with each pet's height shown against your own character, family filters, a full-size preview, and Summon or Dismiss.
 
 ## Acquire -- where every piece comes from
 
@@ -112,7 +115,7 @@ A companion window injects into Blizzard's House Editor so you can **place decor
 ---
 
 **Author:** Vamoose
-**Version:** 3.22.0
+**Version:** 3.23.0
 **Game Version:** 12.1.0 (Midnight)
 **Source / Issues:** https://github.com/VamooseAddons/housing-decor-guide
 **Discord:** https://discord.gg/RWZaxJaHFP

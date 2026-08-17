@@ -13,13 +13,17 @@ HDG.Constants = {
     -- v7 = Furnishings model: crates -> sets, version.rooms -> account.rooms +
     --      layout placements (docs/crate-redesign/10-FINAL-MODEL.md).
     SCHEMA_VERSION = 8,
-    -- 12.1 "Midnight" housing-blueprint APIs (C_HousingBlueprint) exist only on
-    -- build >= 120100. Everything blueprint-related gates on this; false on live
-    -- 12.0.7 so the observer/view/controller declare nothing and the nav child hides.
-    IS_121 = (select(4, GetBuildInfo())) >= 120100,  -- exception(boundary): client build read at file load
     -- Standard icon crop (trims the baked border off square item icons).
     -- Consumed via SetTexCoord(unpack(HDG.Constants.ICON_CROP)) (hygiene A6).
     ICON_CROP = { 0.08, 0.92, 0.08, 0.92 },
+    -- Pet size bar (Pets browser). PET_CHARACTER_HEIGHT is the player character
+    -- measured in HDGR_PetSizeDB's units and is the bar's reference mark;
+    -- PET_BAR_MAX runs a little past it so a pet taller than the player pins at
+    -- full width. Both live here because the row-list selector computes the
+    -- fraction and the row factory places the mark -- two files on one axis, and
+    -- a second copy of either number is one edit away from disagreeing.
+    PET_CHARACTER_HEIGHT = 2.242,
+    PET_BAR_MAX          = 2.6,
     -- Generic bullet/blip dot glyph (tone varies per site; the atlas never does).
     BULLET_DOT_ATLAS = "PlayerPartyBlip",
     BLUEPRINT_SLOT_MAX = 50,  -- HousingConsts: 50 blueprints per Bnet account
@@ -226,6 +230,11 @@ HDG.Constants = {
         { value = "expansions", label = "Expansions" },
         { value = "other",      label = "Other"      },
         { value = "sources",    label = "Sources"    },
+        -- Pets is a MODE, not a narrowing filter: it swaps the browser list from
+        -- decor to the player's decor-attachable pets. One row here generates the
+        -- chip widget (LayoutConfig_Decor's loop) and decor.topFilter.active_pets
+        -- (Selectors_Decor's loop), so there is nothing else to wire.
+        { value = "pets",       label = "Pets"       },
     },
 
     -- Crafting history ring-buffer cap. ~110KB worst case in SV.
@@ -345,6 +354,7 @@ HDG.Constants = {
         { view = "projectsArchitect", label = "Architect" },
         { view = "projectsLayouts",   label = "Layouts" },
         { view = "removalist",        label = "Move Planner" },
+        { view = "projectsBlueprints", label = "Blueprints" },
         { view = "projectsPicker",    label = "Add Decor" },       -- opened via "+ Add decor"; not in NAV_TREE
         { view = "data",         label = "Your Data" },
         { view = "debug",        label = "Debug" },
@@ -355,7 +365,12 @@ HDG.Constants = {
     -- Node kinds: home | parent | header | launcher | config | divider.
     -- Child leaf kinds: mode-leaf (dispatches an action, activePath drives highlight) | view-leaf (plain view switch).
     NAV_TREE = {
-        { kind = "home",   view = "houseTab", label = "House", icon = "housing-map-plot-player-house" },
+        -- Blueprints is sub-nav UNDER House, the headline housing feature.
+        -- test_nav_tree cross-checks every nav view against TABS, so this child
+        -- and the TABS entry above travel together.
+        { kind = "home",   view = "houseTab", label = "House", icon = "housing-map-plot-player-house", children = {
+            { label = "Blueprints", view = "projectsBlueprints" },
+        }},
         { kind = "divider" },
         { kind = "parent", view = "decor",    label = "Decor", icon = "house-decor-budget-icon" },
         { kind = "parent", view = "acquisition", label = "Acquire", icon = "housing-decor-vendor_32", children = {
@@ -435,6 +450,12 @@ HDG.Constants = {
         MAIN_WINDOW_TOGGLE  = "HDGR_MAIN_WINDOW_TOGGLE",  -- flips account.ui.mainWindowShown
         NAV_TOGGLE_GROUP    = "HDGR_NAV_TOGGLE_GROUP",     -- payload: { view }; flips account.ui.nav.collapsedGroups[view]
         SESSION_END         = "HDGR_SESSION_END",          -- PLAYER_LOGOUT; reducer closes window
+        -- Pet journal collection/list changed. Bumps session.resolvers.pets.tick;
+        -- PetObserver's module index is the data, this is only the re-pull signal.
+        PETS_LIST_CHANGED   = "HDGR_PETS_LIST_CHANGED",
+        -- COMPANION_UPDATE: what is out has changed. Separate from the LIST
+        -- action because the collection has not changed, only the summon state.
+        PETS_SUMMONED_CHANGED = "HDGR_PETS_SUMMONED_CHANGED",
 
         -- Combat lifecycle (driven by CombatMiddleware via PLAYER_REGEN_*).
         COMBAT_ENTER        = "HDGR_COMBAT_ENTER",
@@ -829,28 +850,6 @@ HDG.Constants = {
     },
 }
 
--- 12.1-only Blueprints tab: insert into TABS only on a 12.1 client. A TABS
--- entry generates a chrome-strip button AND makes the view resolvable via
--- persisted account.ui.view -- neither may exist on live, or a PTR tester's
--- saved nav state strands them on a dead panel after logging into 12.0.7.
-if HDG.Constants.IS_121 then
-    for i, tab in ipairs(HDG.Constants.TABS) do
-        if tab.view == "removalist" then
-            table.insert(HDG.Constants.TABS, i + 1, { view = "projectsBlueprints", label = "Blueprints" })
-            break
-        end
-    end
-    -- Matching nav child: Blueprints is sub-nav UNDER the House home node (the
-    -- 12.1 headline housing feature). test_nav_tree cross-checks every nav view
-    -- against TABS, so the TABS entry above and this child insert together or not at all.
-    for _, node in ipairs(HDG.Constants.NAV_TREE) do
-        if node.view == "houseTab" then
-            node.children = node.children or {}
-            node.children[#node.children + 1] = { label = "Blueprints", view = "projectsBlueprints", gatedBy = "blueprints.available" }
-            break
-        end
-    end
-end
 
 -- ===== Source-kind master table =====
 -- Canonical source-of-truth for source/gate kinds. Priority-ordered (most-binding first).

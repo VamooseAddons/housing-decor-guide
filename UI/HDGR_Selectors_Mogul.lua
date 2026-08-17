@@ -604,6 +604,115 @@ Selectors:Register("goblin.rows", {
     end,
 })
 
+-- ===== CSV export ===========================================================
+-- Restores the export HDG classic shipped on the Goblin tab (armaniko,
+-- CurseForge 2026-08-12). Donor: archive/HousingDecorGuide_v2.45/UI/Tabs/
+-- HDG_GoblinTab.lua GenerateCSV(). The donor's 18 columns keep their names and
+-- their order so a sheet built against the old export still lines up; the five
+-- columns the rewrite's table gained since are appended AFTER them.
+
+-- Copper -> "g.ss.cc". Deliberately not HDG.Format.Gold: that bakes |cff colour
+-- codes, which a spreadsheet imports as literal text.
+local function _csvGold(copper)
+    if not copper then return "" end  -- exception(nullable): no price known for this item
+    return ("%d.%02d.%02d"):format(
+        math.floor(copper / 10000), math.floor((copper % 10000) / 100), copper % 100)
+end
+
+local function _csvPct(v)
+    if not v then return "" end  -- exception(nullable): margin needs a sell price
+    return ("%.1f"):format(v)
+end
+
+-- TSM ships saleRate per-mille (rate x1000); the Rate column divides by 10 to
+-- show a percent. Export the percent, so a value in the sheet means the same
+-- thing as the value on screen.
+local function _csvSaleRate(v)
+    if not v then return "" end  -- exception(nullable): needs TSM loaded
+    return ("%.1f"):format(v / 10)
+end
+
+-- Quote only when the value contains something that would break a field.
+-- The donor quoted on comma alone, which emitted malformed CSV for a name
+-- carrying a doubled quote; widening it changes nothing for ordinary names.
+local function _csvText(s)
+    s = tostring(s):gsub('"', '""')
+    if s:find('[,"\n]') then return '"' .. s .. '"' end
+    return s
+end
+
+local _lumberNameByID
+local function _lumberName(id)
+    if not id then return "" end  -- exception(nullable): recipe uses no lumber
+    if not _lumberNameByID then
+        _lumberNameByID = {}
+        for _, l in ipairs(HDG.Constants.LUMBER_DATA) do _lumberNameByID[l.id] = l.name end
+    end
+    -- Strict: row.lumberType is only ever set from this same table (Goblin's
+    -- _lumberSet), so a miss here is drift we want to see.
+    return _lumberNameByID[id]
+end
+
+local CSV_HEADER = table.concat({
+    "Name", "ItemID", "Profession", "Expansion", "Quality", "LumberType",
+    "LumberQty", "LumberValuePer", "LumberValueTotal", "MaterialCost",
+    "SellPrice", "Profit", "Margin%", "RegionAvg", "TSMMargin%",
+    "KnownByPlayer", "KnownByAlts", "PriceSource",
+    -- Added since the donor; the table shows these today.
+    "TSMMin", "TSMMarket", "SaleRate", "SoldPerDay", "AHQty",
+}, ",")
+
+-- Exports exactly what the table is showing -- filtered and sorted -- because
+-- "send this list to someone" is the whole point of the feature.
+Selectors:Register("goblin.csv", {
+    calls = { "goblin.rows" },
+    reads = { "account.recipes" },   -- KnownByPlayer / KnownByAlts
+    fn = function(state, ctx)
+        local rows    = Selectors:Call("goblin.rows", state, ctx)
+        local recipes = state.account.recipes
+        local out     = { CSV_HEADER }
+        for i = 1, #rows do
+            local r   = rows[i]
+            local rec = recipes[r.itemID]  -- exception(nullable): unscanned recipe has no knowledge row
+            local lumberTotal = ""
+            if r.lumberValue and r.lumberQty then
+                lumberTotal = _csvGold(r.lumberValue * r.lumberQty)
+            end
+            out[#out + 1] = table.concat({
+                _csvText(r.name),
+                r.itemID,
+                _csvText(r.profession),
+                _csvText(r.expansion),
+                -- Quality: the rewrite carries no quality for a crafted recipe --
+                -- not on the row, not in HDGR_DecorDB, not resolved anywhere. The
+                -- column holds its place rather than shipping an invented value.
+                "",
+                _csvText(_lumberName(r.lumberType)),
+                r.lumberQty,
+                _csvGold(r.lumberValue),
+                lumberTotal,
+                _csvGold(r.materialCost),
+                _csvGold(r.sellPrice),
+                _csvGold(r.profit),
+                _csvPct(r.margin),
+                _csvGold(r.tsmRegion),
+                _csvPct(r.tsmPct),
+                (rec and rec.selfKnown) and "Yes" or "No",
+                (rec and rec.altKnown) and "Yes" or "No",
+                _csvText(r.priceSource or ""),  -- exception(nullable): no price -> no source
+                _csvGold(r.tsmMin),
+                _csvGold(r.tsmMarket),
+                _csvSaleRate(r.saleRate),
+                -- Raw units/realm/day: the column compacts big numbers for
+                -- width ("1.2k"), which a spreadsheet cannot add up.
+                r.soldPerDay or "",  -- exception(nullable): needs TSM loaded
+                r.ahQty or "",  -- exception(nullable): no Direct scan for this item
+            }, ",")
+        end
+        return table.concat(out, "\n") .. "\n"
+    end,
+})
+
 -- Per-profession active-state selectors for pill `active` bindings.
 do
     local function activeProf(target)

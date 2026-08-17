@@ -940,7 +940,10 @@ local function _isNewTag(tag)
     return type(tag) == "string" and tag:find("^New in ") ~= nil
 end
 Selectors:Register("decor.tagsForFilter", {
-    reads    = {"session.resolvers.catalog.tick", "account.catalogVintage"},
+    -- pets.tick: the 'pets' arm reads PetObserver's family list behind its facade
+    -- tick, same contract as any other resolver read.
+    reads    = {"session.resolvers.catalog.tick", "account.catalogVintage",
+                "session.resolvers.pets.tick"},
     calls    = {"decor.topFilter"},
     memoized = true,
     fn = function(state, ctx)
@@ -967,6 +970,14 @@ Selectors:Register("decor.tagsForFilter", {
             local out = {}
             for i, p in ipairs(profs) do out[i] = p end
             return out
+        end
+        -- 'pets': the battle-pet families, from PetObserver's per-rebuild snapshot.
+        -- Read through the observer rather than _G.BATTLE_PET_NAME_* directly --
+        -- a selector may not touch FrameXML globals (invariant 1). The same
+        -- activeTag the decor browser uses then narrows the pet list by family,
+        -- so the tags row is reused rather than duplicated.
+        if top == "pets" then
+            return HDG.PetObserver:GetFamilies()
         end
         -- 'sources': derive distinct kind keys from catalog sourceTags.
         if top == "sources" then

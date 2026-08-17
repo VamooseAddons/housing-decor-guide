@@ -2,9 +2,7 @@
 -- ============================================================================
 -- Sole owner of C_HousingBlueprint (one-namespace-per-module). Requests + sync
 -- wrappers out, events in as plain-data dispatches, plus the pending-elapsed
--- ticker (timers live at the module layer, never in UI). 12.1-only: on live
--- the whole file is dormant -- nothing declares, no events register.
-if not HDG.Constants.IS_121 then return end  -- exception(boundary): C_HousingBlueprint absent pre-12.1
+-- ticker (timers live at the module layer, never in UI).
 
 HDG = HDG or {}
 HDG.BlueprintObserver = HDG.BlueprintObserver or {}

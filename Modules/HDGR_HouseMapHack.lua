@@ -469,10 +469,10 @@ function H:Render()
         return
     end
     local snap = _snapshot()
-    -- 12.1 sampling runs whether or not auto-cal has been clicked: the samples
-    -- have to exist BEFORE any solve, and walking around is what collects them.
+    -- Sampling runs whether or not auto-cal has been clicked: the samples have to
+    -- exist BEFORE any solve, and walking around is what collects them.
     f.nativeSlot, f.nativeGUID = nil, nil
-    if snap and HDG.Constants.IS_121 then
+    if snap then
         f.nativeSlot, f.nativeGUID = _nativeRoom(state)
         if f.nativeSlot then _collectSample(f.nativeSlot, snap) end
     end
@@ -679,9 +679,7 @@ local function _buildFooter(f)
     hint:SetPoint("RIGHT", f, "RIGHT", -CONFIG.PAD, 0)
     hint:SetJustifyH("LEFT")
     hint:SetWordWrap(true)
-    hint:SetText((HDG.Constants.IS_121
-            and "Walk through 2+ rooms, then Solve -- 12.1 tags rooms automatically."
-            or "Best: stand in a room, click it, Add Point. Repeat in a 2nd room. Then Solve -- it works out origin AND rotation.")
+    hint:SetText("Walk through 2+ rooms, then Solve -- the client tags rooms automatically."
         .. "\nFallback: click your room -> Set Origin -> Rotate until the dot tracks you."
         .. "\nFloor follows the Projects tab. Calibration is memory-only -- a /reload clears it.")
 end

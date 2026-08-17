@@ -163,6 +163,9 @@ local function NewDecorSessionUI()
     return {
         searchQuery     = "",
         selectedItemID  = nil,
+        -- Pets browser selection. Lives in the DECOR bucket because Pets is a
+        -- top-filter mode of the decor view, not a view of its own (invariant 16).
+        selectedSpeciesID = nil,
         filters         = NewDecorFilters(),
     }
 end
@@ -5305,6 +5308,19 @@ HDG.Resolver:Register{ name = "rep", facade = "RepObserver",
     actions = {
         { name = "REP_PROGRESS_TICK",
           noisy = true },  -- UPDATE_FACTION fires in bursts (debounced, but still chatty)
+    } }
+
+-- Decor-attachable pets. Data lives in HDG.PetObserver's module index, rebuilt
+-- from C_PetJournal.GetOwnedPetIDs -- the filter-free enumeration. noisy because
+-- PET_JOURNAL_LIST_UPDATE arrives in bursts at login and on every cage/learn;
+-- the observer debounces, this just keeps the log quiet about it.
+HDG.Resolver:Register{ name = "pets", facade = "PetObserver",
+    actions = {
+        { name = "PETS_LIST_CHANGED", noisy = true },
+        -- Same resolver: the summon state and the pet list are both read through
+        -- PetObserver, so one tick covers both. Re-running the row list on a
+        -- summon is cheap and keeps a single re-pull signal for the facade.
+        { name = "PETS_SUMMONED_CHANGED" },
     } }
 
 -- Housing catalog. Data lives in HDG.HousingCatalogObserver's module index
