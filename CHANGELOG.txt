@@ -1,3 +1,36 @@
+## [3.24.0] - 2026-08-19 (August 2026)
+
+### Added
+- **Nael Silvertongue now has a waypoint.** The Silvermoon City vendor who sells
+  the Ornate Sin'dorei Sconce was in the guide but had no location, so there was
+  nothing to navigate to. Thanks to ReganB for spotting it and sending the
+  coordinates.
+
+- **Material hovers now show which of your characters is holding the mats.**
+  Hover a material on the Warehouse or Recipes list and you get one list of
+  every character with some, highest first, with the shared Warband Bank on its
+  own line at the bottom. The game will not let an addon read another
+  character's bags, so each character's figures are recorded while you are
+  playing it and the hover says so -- alt counts are from that character's last
+  login. Bank figures only refresh on characters where you have actually opened
+  a bank, so a character you have never banked on keeps its last known number
+  instead of quietly reading as empty. Thanks to TMcGee92102 for asking.
+
+- **The Lumber Stock table's hover now lists your other characters too.** The
+  table's own columns already show what the character you are playing is
+  carrying and what is in the Warband Bank, so the hover adds the part it
+  cannot: which of your other characters are sitting on that lumber, and how
+  much. It appears under the harvesting milestone, and only when somebody else
+  actually has some.
+
+- **Full item tooltips on material rows, if you want them** (Settings >
+  Helpers > Tooltips). Material rows deliberately show HDG's own compact
+  breakdown rather than the game's item tooltip, which is why other addons have
+  had nothing to attach to there. Turn this on and the game's item tooltip
+  renders above HDG's breakdown, which also gives addons like Altoholic and the
+  auction addons somewhere to add their own lines. Off by default -- it makes
+  every material hover considerably taller.
+
 ## [3.23.0] - 2026-08-18 (August 2026)
 
 ### Added

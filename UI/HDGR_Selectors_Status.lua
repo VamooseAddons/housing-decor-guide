@@ -299,6 +299,72 @@ Selectors:Register("chrome.essenceBadge", {
 })
 
 -- ============================================================================
+-- Cross-character decor reagent stock
+-- ============================================================================
+-- Folds every character's persisted reagentStock into one itemID -> roster map.
+-- A MAP rather than a per-item lookup because `memoized` caches a single value
+-- and ignores ctx (see Selectors:Call) -- a ctx-keyed variant could not memoize
+-- and would rebuild on every tooltip hover.
+--
+-- Deliberately ignores char.hidden, the same ruling chrome.essenceBadge carries:
+-- the Alts eye means "keep this char out of my professions grid", not "exclude
+-- it from account-wide totals".
+--
+-- Warband is absent by construction -- it is a shared stash read live from
+-- BagObserver at the render site, and a selector must not call a Blizzard API.
+
+-- One character's contribution to the map: fold its bag + bank maps into `acc`.
+local function _foldCharacterStock(acc, charKey, c, currentKey)
+    local stock = c.reagentStock   -- exception(nullable): unset until this char is first swept
+    if not stock then return end
+    local perItem = {}
+    for itemID, n in pairs(stock.bag or {}) do    -- exception(nullable): bag map absent until the first bag sweep
+        perItem[itemID] = (perItem[itemID] or 0) + n
+    end
+    for itemID, n in pairs(stock.bank or {}) do   -- exception(nullable): bank map absent until the bank is first opened
+        perItem[itemID] = (perItem[itemID] or 0) + n
+    end
+    for itemID, count in pairs(perItem) do
+        local e = acc[itemID] or { total = 0, perChar = {} }
+        e.total = e.total + count
+        e.perChar[#e.perChar + 1] = {
+            name      = c.name or charKey,   -- exception(nullable): legacy record may predate name capture
+            classFile = c.classFile,
+            count     = count,
+            bag       = (stock.bag and stock.bag[itemID]) or 0,
+            bank      = (stock.bank and stock.bank[itemID]) or 0,
+            bagAt     = stock.bagAt,
+            bankAt    = stock.bankAt,
+            isCurrent = charKey == currentKey,
+        }
+        acc[itemID] = e
+    end
+end
+
+-- Current character first (its numbers are live), then count-desc, then name.
+local function _rosterOrder(a, b)
+    if a.isCurrent ~= b.isCurrent then return a.isCurrent end
+    if a.count ~= b.count then return a.count > b.count end
+    return a.name < b.name
+end
+
+Selectors:Register("characters.reagentStock", {
+    reads    = {"account.characters", "session.identity.charKey"},
+    memoized = true,
+    fn = function(state)
+        local currentKey = state.session.identity.charKey
+        local out = {}
+        for charKey, c in pairs(state.account.characters) do
+            _foldCharacterStock(out, charKey, c, currentKey)
+        end
+        for _, entry in pairs(out) do
+            table.sort(entry.perChar, _rosterOrder)
+        end
+        return out
+    end,
+})
+
+-- ============================================================================
 -- Sidebar nav selectors
 -- ============================================================================
 -- Parent highlight: one per view, aliasing chrome.activeTab equality.

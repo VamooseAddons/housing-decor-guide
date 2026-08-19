@@ -12,17 +12,18 @@
 
 ---
 
-## What's New in v3.23.0
+## What's New in v3.24.0
 
-A Pets filter in the Decor browser, for the pets that can be placed in a house.
+Material hovers now show which of your characters is holding the mats.
 
-- **The Pets button at the end of the filter row lists the pets in your collection that can sit on decor.** 12.1 lets some pets be placed on certain pieces, such as pet beds, plinths and a dog house, and this shows which of yours qualify.
-- **The list runs smallest to largest, and each row shows the pet's height beside a bar measuring it against your own character.** Size is the thing no in-game window reports, so this is the part worth having: it lets you pick something suited to a windowsill rather than a courtyard.
-- **The Tags row becomes the ten pet families**, so you can narrow to Critter or Mechanical, and the search box searches your pets by name.
-- **The panel on the right shows the pet at full size, with a Summon or Dismiss button beneath it.** The button reads Summon when the pet is not out and Dismiss when it is, and it greys out where the game will not allow a summon, such as during a pet battle.
-- Heights are measured from each pet's model, because the game does not report one. Eleven pets have models that cannot be measured; those show no height and sort to the end of the list rather than showing a figure that would be wrong.
+- **Hover a material on the Warehouse or Recipes list and you get one list of every character who has some**, highest first, with the shared Warband Bank on its own line at the bottom.
+- **The game does not let an addon read another character's bags.** Each character's figures are recorded while you are playing it, and the hover says so: alt counts are from that character's last login.
+- **Bank figures only refresh on characters where you have opened a bank.** A character you have never banked on keeps its last known number instead of reading as empty.
+- **The Lumber Stock table's hover lists your other characters too.** Its columns already show the character you are playing and the Warband Bank, so the hover adds the part they cannot: which of your other characters are sitting on that lumber.
 
-**The Mogul table exports to CSV again.** An Export button sits with the filters and opens a window holding the table as comma-separated text. What you get matches what you are looking at, so narrowing to one profession and exporting gives you that list only.
+**Full item tooltips on material rows, if you want them** (Settings > Helpers > Tooltips). Material rows show HDG's own compact breakdown rather than the game's item tooltip. Turn this on and the game's tooltip renders above it, which also gives other addons somewhere to add their own lines. Off by default, because it makes every material hover considerably taller.
+
+**Nael Silvertongue now has a waypoint.** The Silvermoon City vendor who sells the Ornate Sin'dorei Sconce was in the guide but had no location, so there was nothing to navigate to. Thanks to ReganB for reporting it.
 
 ---
 
@@ -47,7 +48,7 @@ A Pets filter in the Decor browser, for the pets that can be placed in a house.
 ## Crafting
 
 - **Recipes** -- browse craftable decor across professions and expansions. Filter by **Known / Ready / Unknown** -- "Ready" buckets recipes by how much of the materials you already hold, and "Unknown" finds recipes *nobody on your account* has yet. Queue crafts, preview the result in 3D, and see a materials panel (totals or per-recipe, direct or fully raw, bucketed by source) with an AH cost estimate.
-- **Warehouse** -- track lumber and every reagent (bag / bank / warband bank, separately), how much you need for your queue *and* for all uncollected recipes, and a "Used In" cross-reference so you know what's worth farming. Lumber tracker auto-pops when you harvest lumber. A title-bar badge tracks your account-wide Essence of Lumber, with a per-character mouseover.
+- **Warehouse** -- track lumber and every reagent (bag / bank / warband bank, separately), how much you need for your queue *and* for all uncollected recipes, and a "Used In" cross-reference so you know what's worth farming. Lumber tracker auto-pops when you harvest lumber. Hovering any material lists every character holding some, so you know where your stock actually is. A title-bar badge tracks your account-wide Essence of Lumber, with a per-character mouseover.
 - **Trainers** -- a profession trainer directory by expansion and faction, each with location, coordinates, and a one-click waypoint, plus a dedicated **Midnight Recipe Sources** table.
 - **Alts** -- an account-wide grid of your best skill in every profession across every expansion, with per-character detail and decor-recipe completeness so you always know which alt to log in.
 
@@ -115,7 +116,7 @@ A companion window injects into Blizzard's House Editor so you can **place decor
 ---
 
 **Author:** Vamoose
-**Version:** 3.23.0
+**Version:** 3.24.0
 **Game Version:** 12.1.0 (Midnight)
 **Source / Issues:** https://github.com/VamooseAddons/housing-decor-guide
 **Discord:** https://discord.gg/RWZaxJaHFP

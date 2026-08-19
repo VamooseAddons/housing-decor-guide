@@ -27,20 +27,9 @@ local LUMBER_COLS = {
 }
 local LUMBER_COL_GAP = 2
 
--- Tooltip def for a lumber stock row: the expansion's lumber-farming milestone
--- achievement (gold title) + criteria progress. Dynamic -- reads row._achieveID
--- live at hover (stamped per-paint). nil -> the TooltipEngine shows nothing.
-local function _lumberRowTooltipDef(row)
-    local achID = row._achieveID
-    if not achID then return nil end
-    local lines = { { text = HDG.AchievementObserver:GetName(achID) or "Lumber Milestone",
-                      r = 1, g = 0.82, b = 0 } }   -- achievement gold
-    local prog = HDG.AchievementObserver:GetCriteria(achID)
-    if prog then
-        lines[#lines + 1] = { text = ("Progress: %d / %d"):format(prog.qty, prog.reqQty) }
-    end
-    return { extraLines = lines }
-end
+-- The lumber row hover (milestone achievement + the other characters holding this
+-- lumber) is HDG.TooltipRecipes.LumberStock, alongside its MaterialStock sibling.
+-- It reads the stamped _tip* fields live, so the def is pool-safe.
 
 local function _layoutLumberStockRow(row)
     row._cols = {}
@@ -54,11 +43,11 @@ local function _layoutLumberStockRow(row)
         row._cols[col.key] = fs
         x = x + col.width + LUMBER_COL_GAP
     end
-    -- Hover -> the lumber-farming milestone achievement, via the TooltipEngine
-    -- (dynamic def reads row._achieveID live; stamped per-paint). EnableMouse so
-    -- the static stock row receives hover; Attach is pool-safe (re-attach guard).
+    -- Hover -> milestone achievement + other characters' stock (shared recipe,
+    -- reads the stamped _tip* fields live). EnableMouse so the static stock row
+    -- receives hover; Attach is pool-safe (re-attach guard).
     row:EnableMouse(true)
-    HDG.TooltipEngine:Attach(row, _lumberRowTooltipDef)
+    HDG.TooltipEngine:Attach(row, HDG.TooltipRecipes.LumberStock)
 end
 
 local function _paintLumberStockRow(row, ed)
@@ -67,10 +56,13 @@ local function _paintLumberStockRow(row, ed)
     row._cols.name:SetText(exHex and (exHex .. (ed.name or "?") .. "|r") or (ed.name or "?"))
     -- Expansion acronym goes GOLD (TextWarning) once the lumber-farming milestone
     -- achievement is earned, dim otherwise -- completed expansions pop. The row
-    -- tooltip (OnEnter) carries the achievement name + progress.
+    -- tooltip (OnEnter) carries the achievement name + progress, then the other
+    -- characters holding this lumber.
     row._cols.exp:SetText(ed.expansionShort or "")
     HDG.Theme:Register(row._cols.exp, ed.achEarned and "TextWarning" or "TextDim")
-    row._achieveID = ed.achieveID
+    -- Stamps the hover recipe reads (TooltipRecipes.LumberStock).
+    row._tipAchieveID = ed.achieveID
+    row._tipItemID    = ed.itemID
     row._cols.bag:SetText(tostring(ed.bag))
     row._cols.bank:SetText(tostring(ed.bank))
     row._cols.warband:SetText(tostring(ed.warband))
@@ -178,9 +170,10 @@ local function _paintWarehouseMatRow(row, ed)
         row._chipWarband:Hide()
     end
     -- Stamp fields the hover tooltip reads (the chips above show presence only).
+    -- bag/bank are NOT stamped: the chips read ed.bag/ed.bank directly, and the
+    -- tooltip now shows a per-character roster instead of this char's stash split.
     row._tipName    = ed.name
-    row._tipBag     = bag
-    row._tipBank    = bank
+    row._tipItemID  = ed.itemID
     row._tipWarband = warband
     row._tipNeed    = ed.need
 end

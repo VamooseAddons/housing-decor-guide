@@ -357,7 +357,8 @@ end
 local function _paintMatSubHeader(row, ed)
     row._nameFs:SetText(HDG.Theme:ColorCode("semantic.accent") .. (ed.label or "") .. "|r")
     row._qtyFs:SetText("")
-    row._tipName = nil   -- section header: no stock tooltip
+    row._tipName   = nil   -- section header: no stock tooltip
+    row._tipItemID = nil   -- pooled row: a stale itemID would render a stray item tooltip
 end
 
 -- matRow: name (left) + have/need, green when covered, red when short.
@@ -367,10 +368,9 @@ local function _paintMatRow(row, ed)
     local have = ed.have  -- recipes.materialRows stamps have (counts or 0)
     local color = HDG.Theme:GetTextStateColorToken(ed.covered and "success" or "error")
     row._qtyFs:SetText(string.format("%s%d / %d|r", color, have, need))
-    -- Stamp the hover tooltip's per-stash fields (read live by TooltipRecipes.MaterialStock).
+    -- Stamp the hover tooltip's fields (read live by TooltipRecipes.MaterialStock).
     row._tipName    = ed.name
-    row._tipBag     = ed.bag
-    row._tipBank    = ed.bank
+    row._tipItemID  = ed.itemID
     row._tipWarband = ed.warband
     row._tipNeed    = need
 end

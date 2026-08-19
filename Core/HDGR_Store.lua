@@ -79,6 +79,11 @@ local function NewConfig()
         -- merchantQtyPicker: right-click decor at a vendor -> quantity picker (Helpers > Vendors).
         -- Ships OFF (opt-in): the picker changes right-click behaviour on every vendor decor row.
         merchantQtyPicker      = false,
+        -- materialTooltipItemData: render Blizzard's item tooltip above HDG's stock
+        -- roster on material rows, which also lets other addons' item-data processors
+        -- add their lines there. Ships OFF -- it makes every material hover much
+        -- taller, the reason those rows were title-only to begin with.
+        materialTooltipItemData = false,
         -- catalogDecorOverlay: red plus on uncollected decor in Blizzard's catalog (Helpers > Catalog).
         catalogDecorOverlay    = true,
         -- autoDepositLumber: on a banker open with Warband Bank access, move all
@@ -818,6 +823,12 @@ end
 -- "Name-Realm"):
 --   { name, realm, class, classFile, hidden, lastSeen,
 --     essenceStock = { bag, bank },   -- Essence of Lumber snapshot (soulbound; no warband)
+--     reagentStock = { bag = {[itemID]=n}, bank = {[itemID]=n}, bagAt, bankAt },
+--                                     -- decor reagents; sparse, nonzero only.
+--                                     -- NO warband slot: shared stash, counted
+--                                     -- once live rather than per character.
+--                                     -- bagAt/bankAt are separate because bank
+--                                     -- counts only refresh once a bank opens.
 --     professions = { [profName] = {          -- keyed by LOCALIZED name (back-compat)
 --         professionID = <TradeSkillLineID>,  -- stable, locale-invariant join key
 --         skillLines   = { [expName] = { current, max } },
@@ -2418,6 +2429,31 @@ HDG.Actions:Register{ name = "RECIPE_HARVEST_PROGRESS",
         h.name   = payload.name or ""   -- exception(optional): phase-dependent payload
     end }
 
+-- Upsert the roster record for a character-scoped snapshot action and return it.
+-- Every such action carries the same identity fields, so the create-then-refresh
+-- block lives here once instead of being copied per action. Identity is refreshed
+-- on every call because a rename or a faction-change class swap has to land
+-- somewhere, and the scan that notices it is whichever one runs first.
+local function _upsertCharacter(state, payload)
+    local chars = state.account.characters
+    chars[payload.charKey] = chars[payload.charKey] or {
+        name        = payload.name,
+        realm       = payload.realm,
+        class       = payload.class,
+        classFile   = payload.classFile,
+        hidden      = false,
+        lastSeen    = 0,
+        professions = {},
+    }
+    local c = chars[payload.charKey]
+    c.name      = payload.name      or c.name
+    c.realm     = payload.realm     or c.realm
+    c.class     = payload.class     or c.class
+    c.classFile = payload.classFile or c.classFile
+    c.lastSeen  = (_G.time and _G.time()) or c.lastSeen or 0  -- exception(boundary): time() absent in headless tests
+    return c
+end
+
 HDG.Actions:Register{ name = "CHARACTER_PROFESSION_UPDATED",
     persists = true, combatUnsafe = false,
             invalidates = function(action) return { HDG.Paths.Join("account.characters", action.payload and action.payload.charKey) } end,
@@ -2426,26 +2462,8 @@ HDG.Actions:Register{ name = "CHARACTER_PROFESSION_UPDATED",
         -- in full (skill ladder + known recipes). Other professions on the
         -- same char survive untouched -- each profession scan only carries
         -- its own data.
-        local chars = state.account.characters
-        local key   = payload.charKey
-        if key then
-            chars[key] = chars[key] or {
-                name        = payload.name,
-                realm       = payload.realm,
-                class       = payload.class,
-                classFile   = payload.classFile,
-                hidden      = false,
-                lastSeen    = 0,
-                professions = {},
-            }
-            local c = chars[key]
-            -- Refresh identity fields on each scan (rename, class change
-            -- via faction change service, etc.).
-            c.name      = payload.name      or c.name
-            c.realm     = payload.realm     or c.realm
-            c.class     = payload.class     or c.class
-            c.classFile = payload.classFile or c.classFile
-            c.lastSeen  = (_G.time and _G.time()) or c.lastSeen or 0
+        if payload.charKey then
+            local c = _upsertCharacter(state, payload)
             -- Char-level knowsFindLumber: scanner captures via C_SpellBook
             -- on every prof scan. Tracks per-char awareness of Find Lumber
             -- (the achievement-gated find-spell), surfaced as a cyan
@@ -2471,26 +2489,43 @@ HDG.Actions:Register{ name = "CHARACTER_ESSENCE_UPDATED",
     persists = true, combatUnsafe = false,
             invalidates = function(action) return { HDG.Paths.Join("account.characters", action.payload and action.payload.charKey) } end,
     reduce = function(state, payload)
-        local key = payload.charKey
-        if key then
-            local chars = state.account.characters
-            chars[key] = chars[key] or {
-                name        = payload.name,
-                realm       = payload.realm,
-                class       = payload.class,
-                classFile   = payload.classFile,
-                hidden      = false,
-                lastSeen    = 0,
-                professions = {},
-            }
-            local c = chars[key]
-            c.name         = payload.name      or c.name
-            c.realm        = payload.realm     or c.realm
-            c.class        = payload.class     or c.class
-            c.classFile    = payload.classFile or c.classFile
-            c.lastSeen     = (_G.time and _G.time()) or c.lastSeen or 0
-            c.essenceStock = { bag = payload.bag or 0, bank = payload.bank or 0 }
+        if payload.charKey then
+            _upsertCharacter(state, payload).essenceStock =
+                { bag = payload.bag or 0, bank = payload.bank or 0 }
         end
+    end }
+
+-- Decor-reagent stock, per character, per stash. `counts` REPLACES the slot
+-- wholesale so an item spent to zero disappears instead of lingering at its old
+-- figure. Only the logged-in character is ever live; alts sit at their last-login
+-- snapshot, because WoW cannot read another character's bags.
+--
+-- No warband slot, deliberately: that stash is shared across the account, so a
+-- per-character copy would report one pile once per character.
+local function _reduceReagentStock(state, payload, slot, stamp)
+    if not payload.charKey then return end
+    local c = _upsertCharacter(state, payload)
+    c.reagentStock = c.reagentStock or {}   -- exception(nullable): absent on every record predating this feature
+    c.reagentStock[slot]  = payload.counts
+    c.reagentStock[stamp] = payload.at
+end
+
+HDG.Actions:Register{ name = "CHARACTER_REAGENT_BAGS_UPDATED",
+    persists = true, combatUnsafe = false,
+            invalidates = function(action) return { HDG.Paths.Join("account.characters", action.payload and action.payload.charKey) } end,
+    reduce = function(state, payload)
+        _reduceReagentStock(state, payload, "bag", "bagAt")
+    end }
+
+-- Dispatched ONLY after a BANKFRAME_OPENED this session -- see
+-- Modules/HDGR_ReagentStockObserver.lua. Blizzard's bank counts come from a cache
+-- that is empty until the bank frame opens, so an ungated sweep would overwrite a
+-- good bank map with zeros every time an alt logged in without visiting a bank.
+HDG.Actions:Register{ name = "CHARACTER_REAGENT_BANK_UPDATED",
+    persists = true, combatUnsafe = false,
+            invalidates = function(action) return { HDG.Paths.Join("account.characters", action.payload and action.payload.charKey) } end,
+    reduce = function(state, payload)
+        _reduceReagentStock(state, payload, "bank", "bankAt")
     end }
 
 HDG.Actions:Register{ name = "CHARACTER_DELETED",

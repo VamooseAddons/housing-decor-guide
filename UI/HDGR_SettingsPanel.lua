@@ -68,7 +68,8 @@ local SCALE_MAX  = 1.5
 -- Keep in sync with settings registered below. Values pulled from GetDefaultConfig().
 local RESETTABLE_KEYS = {
     "showMinimapButton", "showCompartment", "showProfessionButtons", "tooltipDecorTag",
-    "catalogTooltip", "bagBadge", "merchantDecorOverlay", "merchantQtyPicker", "catalogDecorOverlay", "autoDepositLumber", "hideInCombat", "waypointProvider", "scale",
+    "catalogTooltip", "bagBadge", "materialTooltipItemData",
+    "merchantDecorOverlay", "merchantQtyPicker", "catalogDecorOverlay", "autoDepositLumber", "hideInCombat", "waypointProvider", "scale",
     "debug", "mockTSM", "locale", "fontFamily",
     "zoneScannerEnabled", "zoneScannerPopup", "zoneScannerPopupShopping",
     "zoneScannerChat", "zoneScannerSound",
@@ -81,6 +82,7 @@ local SEARCH_TAGS = {
     showProfessionButtons  = { "profession", "trade skill", "filter" },
     tooltipDecorTag        = { "tooltip", "reagent", "decor", "crafting", "recipe", "bag" },
     catalogTooltip         = { "tooltip", "decor", "source", "cost", "catalog", "helper" },
+    materialTooltipItemData = { "tooltip", "item", "material", "reagent", "warehouse", "altoholic", "auction" },
     bagBadge               = { "bag", "badge", "icon", "reagent", "decor", "marker", "helper" },
     merchantDecorOverlay   = { "vendor", "merchant", "decor", "collected", "marker", "helper" },
     merchantQtyPicker      = { "vendor", "merchant", "buy", "quantity", "picker", "bulk", "purchase" },
@@ -343,6 +345,11 @@ local function _buildHelpersSubcategory(category)
         "On a reagent's tooltip, show how many decor recipes use it -- flags useful mats "
         .. "before you've learned the recipe. Also tags decor items in your bags (e.g. dropped "
         .. "decor you haven't learned yet) with their source.")
+    BindProxyBool(sub, layout, "materialTooltipItemData", "Full item tooltips on material rows",
+        "On the Warehouse and Recipes material lists, show the game's own item tooltip above "
+        .. "HDG's stock breakdown. Other addons can then add their lines there too -- "
+        .. "per-character counts, auction prices, and so on. Off by default because it makes "
+        .. "every material hover considerably taller.")
 
     layout:AddInitializer(CreateSettingsListSectionHeaderInitializer("Bags"))
     BindProxyBool(sub, layout, "bagBadge", "Mark decor reagents in bags",

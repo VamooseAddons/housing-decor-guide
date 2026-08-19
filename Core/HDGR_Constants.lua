@@ -536,6 +536,14 @@ HDG.Constants = {
         -- Per-char Essence of Lumber snapshot (chrome badge + alts hover).
         -- payload: { charKey, name, realm, class, classFile, bag, bank }
         CHARACTER_ESSENCE_UPDATED    = "HDGR_CHARACTER_ESSENCE_UPDATED",
+        -- Per-char decor-reagent snapshots (cross-character stock in the
+        -- MaterialStock hover). Bags and bank are separate actions because bank
+        -- counts are unreadable until BANKFRAME_OPENED -- one action would let a
+        -- bags sweep on a bank-less alt zero a good bank map.
+        -- payload: { charKey, name, realm, class, classFile,
+        --            counts = {[itemID]=n}, at = time() }
+        CHARACTER_REAGENT_BAGS_UPDATED = "HDGR_CHARACTER_REAGENT_BAGS_UPDATED",
+        CHARACTER_REAGENT_BANK_UPDATED = "HDGR_CHARACTER_REAGENT_BANK_UPDATED",
 
         -- Pure signal; gated modules (CollectionReconciler, BagObserver) catch up after sleeping.
         MAIN_WINDOW_OPENING          = "HDGR_MAIN_WINDOW_OPENING",
