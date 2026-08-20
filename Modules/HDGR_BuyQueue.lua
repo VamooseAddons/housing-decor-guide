@@ -71,6 +71,7 @@ function Q:Enqueue(rows)
         end
     end
     self._flat, self._total, self._done, self._running = flat, total, 0, true
+    self._landed = 0   -- units CONFIRMED in storage; _done is units INITIATED
     _dispatchProgress(total, 0)
     if HDG.Constants.MERCHANT_BUY_TICK_SECS > 0 then
         self._ticker = C_Timer.NewTicker(HDG.Constants.MERCHANT_BUY_TICK_SECS, function() Q:_TimerTick() end)
@@ -89,7 +90,11 @@ function Q:_BuyNext()
     self._done = self._done + 1
     self._awaitingLand = true
     BuyMerchantItem(self._flat[self._done].index, 1)
-    _dispatchProgress(self._total, self._done)
+    -- No progress dispatch here. _done is the unit now IN FLIGHT, not a finished
+    -- one, and reporting it as done told the picker "1 of 1" the instant a single
+    -- buy was fired: the wheels hit 0 remaining while the button still said Stop,
+    -- and a stall or a user Stop then satisfied done >= total and was reported as
+    -- a completed purchase. Progress is dispatched from _OnLanded, on confirmation.
     -- Stall watchdog: if NOTHING lands for this long, STOP (never advance -- advancing
     -- with a buy still in flight is what strands items in bags).
     self._timeout = C_Timer.NewTimer(HDG.Constants.MERCHANT_BUY_TIMEOUT_SECS, function()
@@ -107,8 +112,10 @@ function Q:_OnLanded()
     self._awaitingLand = false
     if self._timeout then self._timeout:Cancel(); self._timeout = nil end
     local landed = self._flat[self._done]   -- the unit whose storage-arrival this confirms
+    self._landed = self._landed + 1
     C_Timer.After(0, function()
         Q:_ReflectToList(landed)
+        _dispatchProgress(self._total, self._landed)
         Q:_BuyNext()
     end)
 end
@@ -143,8 +150,10 @@ function Q:_TimerTick()
         BuyMerchantItem(self._flat[self._done].index, 1)
         Q:_ReflectToList(self._flat[self._done])
     end
+    -- Legacy path gets no landed signal, so initiated is the only count it has.
+    self._landed = self._done
     if self._done >= self._total then Q:_Finish()
-    else _dispatchProgress(self._total, self._done) end
+    else _dispatchProgress(self._total, self._landed) end
 end
 
 -- Drive event-driven pacing off the decor-landed dispatch. React to the ACTION --

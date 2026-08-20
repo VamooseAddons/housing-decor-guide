@@ -12,7 +12,7 @@
 
 ---
 
-## What's New in v3.24.0
+## What's New in v3.24.1
 
 Material hovers now show which of your characters is holding the mats.
 
@@ -116,7 +116,7 @@ A companion window injects into Blizzard's House Editor so you can **place decor
 ---
 
 **Author:** Vamoose
-**Version:** 3.24.0
+**Version:** 3.24.1
 **Game Version:** 12.1.0 (Midnight)
 **Source / Issues:** https://github.com/VamooseAddons/housing-decor-guide
 **Discord:** https://discord.gg/RWZaxJaHFP

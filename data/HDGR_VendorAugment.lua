@@ -24,7 +24,7 @@ HDGR_VendorAugment = {
     [-1035] = { name = "Fizz Alechux", zone = "Razorwind Shores", mapID = 2351, faction = "N", exp = "Midnight" },
     [-1033] = { name = "Faarden the Builder", zone = "Razorwind Shores", mapID = 2351, faction = "N", exp = "Midnight" },
     [-1031] = { name = "Cursed Keepsake", zone = "Razorwind Shores", mapID = 2351, faction = "N", exp = "Midnight" },
-    [-1030] = { name = "Cousin Shortkaf", zone = "Razorwind Shores", mapID = 2351, faction = "N", exp = "Midnight" },
+    [-1030] = { name = "Cousin Shortkaf", zone = "Razorwind Shores", mapID = 2351, x = 55.2, y = 62.0, faction = "N", exp = "Midnight" },
     [-1029] = { name = "Brother Dovetail", zone = "Razorwind Shores", mapID = 2351, faction = "N", exp = "Midnight" },
     [-1026] = { name = "Agratha", zone = "Razorwind Shores", mapID = 2351, faction = "N", exp = "Midnight" },
     [-1025] = { name = "Aeeshna", zone = "Razorwind Shores", mapID = 2351, faction = "N", exp = "Midnight" },

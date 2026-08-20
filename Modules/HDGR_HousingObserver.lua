@@ -944,6 +944,49 @@ end
 -- Module registration
 -- =============================================================================
 
+-- ===== Blizzard Housing Dashboard repair ===================================
+-- Blizzard's dashboard caches the player house list on its DROPDOWN and
+-- re-broadcasts "HouseDropdown.HouseListUpdated" only when the list CHANGES,
+-- while HouseInfoContent gets its only copy from that broadcast. So ANY addon
+-- calling C_Housing.GetPlayerOwnedHouses() before that pane has registered leaves
+-- it permanently blank: the guard sees an unchanged list and swallows the event.
+-- The dropdown still shows the house name from its own copy, which is what the
+-- bug reports looked like.
+--
+-- A 12.1 regression -- before the split, guard and consumer were the same object,
+-- so reaching the guard proved the consumer had been fed. Confirmed by absence as
+-- well: Aegis does heavy housing work, never calls GetPlayerOwnedHouses, and never
+-- trips it; HDG, VE and VN all call it and all did.
+--
+-- Fix: nil the stale cache when the dashboard OPENS, so Blizzard's own
+-- OnShow -> LoadHouses reply lands on nil, passes the guard, fires the event, and
+-- the pane fills through Blizzard's normal path with every frame laid out.
+--
+-- The install MUST come from Blizzard_HousingDashboard's ADDON_LOADED: it is
+-- LoadOnDemand, so HousingDashboardFrame does not exist until the player opens it,
+-- and by then OnShow has already run. An earlier VE attempt hooked only when the
+-- frame already existed and therefore never installed at all.
+--
+-- Do NOT instead call HouseInfoContent:OnHouseListUpdated -- it forwards to
+-- HouseUpgradeFrame, whose reward track may not be laid out, and its scroll maths
+-- then dies on a nil `offset` (RewardTrackTemplates.lua:210).
+local _dashHooked = false
+function HO:_HookDashboardCache()
+    if _dashHooked then return end
+    local dash = _G.HousingDashboardFrame          -- exception(boundary): Blizzard LoD frame
+    if not dash or not dash.HookScript then return end
+    _dashHooked = true
+    local function clear()
+        -- Bracket-indexed on purpose: HouseDropdown is a 12.1 parentKey and the
+        -- wowlua-ls stubs are pinned at 12.0.7, so dot access reports a phantom
+        -- undefined-field. The key is real -- Blizzard_HousingDashboard.xml:11.
+        local dd = dash["HouseDropdown"]           -- exception(boundary): parentKey could be renamed by a patch
+        if dd then dd.playerHouseList = nil end
+    end
+    dash:HookScript("OnShow", clear)
+    clear()                                        -- may already be open and stale
+end
+
 HDG.Modules:Declare({
     name = "HousingObserver",
     dependencies = {},
@@ -1081,6 +1124,13 @@ HDG.Modules:Declare({
     end,
 
     onEnable = function(self)
+        -- Repair hook for Blizzard's dashboard (see _HookDashboardCache). LISTEN
+        -- ONLY -- nothing is requested from here.
+        HDG.BlizzardEvents:_internalSubscribe("ADDON_LOADED", function(name)
+            if name == "Blizzard_HousingDashboard" then HO:_HookDashboardCache() end
+        end)
+        HO:_HookDashboardCache()   -- already loaded (e.g. /reload with it open)
+
         -- Defer to MAIN_WINDOW_OPENING: housing C_* null-derefs -> CTD on cold client
         -- at PLAYER_LOGIN. Steady-state events still arrive via blizzardEvents.
         -- See docs/COLD_CLIENT_CTD_INVESTIGATION.md.
@@ -1092,6 +1142,10 @@ HDG.Modules:Declare({
                     -- Kick: GetPlayerOwnedHouses -> PLAYER_HOUSE_LIST_UPDATED. Favor fetch
                     -- downstream is view-gated (OnHouseList loop) so it only fires when a
                     -- house-level view is the one being opened onto.
+                    --
+                    -- This call BREAKS Blizzard's Housing Dashboard on its own -- see
+                    -- _HookDashboardCache below, which is what makes it safe. Do not
+                    -- move it earlier (never to login) and do not add another one.
                     if C_Housing and C_Housing.GetPlayerOwnedHouses then
                         C_Housing.GetPlayerOwnedHouses()
                     end

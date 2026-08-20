@@ -1,3 +1,20 @@
+## [3.24.1] - 2026-08-20 (August 2026)
+
+### Fixed
+- Blizzard's Housing Dashboard no longer opens blank after using HDG. Asking the
+  game for your house list, which the House tab does, left the dashboard's own
+  panel waiting on a message it had already missed, so it opened empty while still
+  showing your house name in the dropdown. HDG now repairs that when the dashboard
+  opens.
+
+### Fixed
+- Buying a single item from the vendor quantity picker now finishes cleanly. The
+  picker counted an item as bought the moment the purchase was sent rather than
+  when it arrived in decor storage, so a purchase of one showed nothing left to
+  buy while the button still read Stop, and a purchase that was stopped or that
+  never arrived was reported as if it had succeeded. Larger purchases counted one
+  ahead the whole way for the same reason.
+
 ## [3.24.0] - 2026-08-19 (August 2026)
 
 ### Added
