@@ -12,18 +12,21 @@
 
 ---
 
-## What's New in v3.24.1
+## What's New in v3.25.0
 
-Material hovers now show which of your characters is holding the mats.
+**A blueprint now tells you what it will cost you.** The band that says whether a build fits your house also carries the price of everything you are still missing, so you can judge a share code before committing to it. Housing decor is not bought with gold alone, so each currency is counted separately; hover for the breakdown. Decor with no listed price is called out rather than left out of the total.
 
-- **Hover a material on the Warehouse or Recipes list and you get one list of every character who has some**, highest first, with the shared Warband Bank on its own line at the bottom.
-- **The game does not let an addon read another character's bags.** Each character's figures are recorded while you are playing it, and the hover says so: alt counts are from that character's last login.
-- **Bank figures only refresh on characters where you have opened a bank.** A character you have never banked on keeps its last known number instead of reading as empty.
-- **The Lumber Stock table's hover lists your other characters too.** Its columns already show the character you are playing and the Warband Bank, so the hover adds the part they cannot: which of your other characters are sitting on that lumber.
+**Copy list, on the Blueprints tab.** Next to the share code you hand out, there is a plain readable list of everything the build is made of: rooms, decor, dyes and fixtures, with where each piece of decor comes from. Paste it under your post on Discord, Reddit or a comment thread. Decor a pet can be placed on gets its own heading. The list describes the blueprint rather than your collection, so the counts read the same for whoever picks it up.
 
-**Full item tooltips on material rows, if you want them** (Settings > Helpers > Tooltips). Material rows show HDG's own compact breakdown rather than the game's item tooltip. Turn this on and the game's tooltip renders above it, which also gives other addons somewhere to add their own lines. Off by default, because it makes every material hover considerably taller.
+**Every themed room can now be placed in the Architect.** The Stormwind, Silvermoon, Bel'ameth and Orgrimmar rooms, both Westfall barns and the Orgrimmar Council and Stone Pit rooms were missing from the room palette. They arrive with their real sizes, their own artwork and Blizzard's own names and ordering, and the two-floor rooms take two floors.
 
-**Nael Silvertongue now has a waypoint.** The Silvermoon City vendor who sells the Ornate Sin'dorei Sconce was in the guide but had no location, so there was nothing to navigate to. Thanks to ReganB for reporting it.
+**A blueprint's contents are listed alphabetically.** They used to arrive in whatever order the game sent them, so the dyes on a large build read Purple, Red, Blue, Black, White, Brown, Green, and a two-hundred-piece decor list was hard to search by eye.
+
+**Buying in bulk works at coupon vendors.** Right-clicking a decor item at a vendor opens the quantity picker, but it only did that for items priced in gold, which left out most of what the neighbourhood vendors sell. The picker counts your coupons the same way it counts your gold and tells you when a stack costs more than you have. The window can also be moved, and closed with the X if you would rather buy the ordinary way.
+
+**Materials reach the Auction House search bar again.** Shift-click a material in the Warehouse list or in a recipe's materials and it lands in the auction house search box. It moved to shift because a plain click now selects the material and shows what it is used in.
+
+**The Lumber Tracker no longer stops tracking after a trip to the bank.** Visiting a mailbox, vendor, bank or trade window could leave the tracker giving up for the rest of the session: it stopped following the lumber you were farming, and its numbers sat still until you opened the main window. It now checks whether one of those windows is actually open rather than waiting to be told it closed.
 
 ---
 
@@ -116,7 +119,7 @@ A companion window injects into Blizzard's House Editor so you can **place decor
 ---
 
 **Author:** Vamoose
-**Version:** 3.24.1
+**Version:** 3.25.0
 **Game Version:** 12.1.0 (Midnight)
 **Source / Issues:** https://github.com/VamooseAddons/housing-decor-guide
 **Discord:** https://discord.gg/RWZaxJaHFP

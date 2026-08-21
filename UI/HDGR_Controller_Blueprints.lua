@@ -447,6 +447,7 @@ function C:Wire(root)
     HDG.UI.OnClick(root, "blueprintsDetailPanel.setBtn", function() C:_ImportAsSet() end)
     HDG.UI.OnClick(root, "blueprintsDetailPanel.architectBtn", function(btn) C:_OpenInArchitect(btn) end)
     HDG.UI.OnClick(root, "blueprintsListPanel.saveBtn", function(btn) C:_SaveBlueprint(btn) end)
+    HDG.UI.OnClick(root, "blueprintsDetailPanel.copyReqsBtn", function() C:_CopyRequirements() end)
 
     if not self._popupsRegistered then
         self._popupsRegistered = true
@@ -745,6 +746,21 @@ function C:_CommitName(box)
 end
 
 -- Link in chat (mirrors ChatFrameUtil.LinkItem's active-editbox / open-chat split).
+-- Copy requirements: the manifest as publishable plain text, in the shared copy
+-- dialog. WoW addons cannot write files, so "export" here means the player
+-- copies and saves it themselves -- which is why the button says Copy, not
+-- Export, and nobody goes hunting on disk for a file that was never written.
+function C:_CopyRequirements()
+    -- Hoisted: the title's name and the body must come from the same state, or
+    -- the dialog could be headed with a different blueprint than it lists.
+    local state = HDG.Store:GetState()  -- exception(false-positive): top-level controller method (not a row factory)
+    local text  = HDG.Selectors:Call("blueprints.manifestText", state, {})
+    if not text then return end  -- exception(nullable): button is gated on hasManifest; a race gets a no-op
+    local name = HDG.Selectors:Call("blueprints.displayName", state, {})
+    HDG.UI:CopyDialog():Open(HDG.Locale:Get("BP_COPY_REQS_TITLE"):format(name), text)
+    HDG.Log:Success("blueprints", ("Copied requirements for %q"):format(name))
+end
+
 function C:_LinkInChat()
     local code = _selectedCode()
     if not code then return end

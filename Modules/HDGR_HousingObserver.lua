@@ -369,6 +369,27 @@ local NAME_TO_SHAPE = {
     ["Stairwell (Left)"]        = "staircase",
     ["Stairwell (Right)"]       = "staircase_mirror",
     ["Stairwell Room (Empty)"]  = "tall_room",
+    -- Themed rooms (12.1). Same cold-catalog safety net as above: English only,
+    -- the live catalog is the locale-correct primary. Geometry + the one-door
+    -- model live in Core/HDGR_ProjectsShapeAtlas.lua; floor spans are unverified.
+    ["Orgrimmar Stone Pit Room"]  = "org_stonepitroom",
+    ["Stormwind Kitchen"]         = "stormwind_kitchen",
+    ["Stormwind Display Room"]    = "stormwind_displayroom",
+    ["Silvermoon Display Room"]   = "silvermoon_displayroom",
+    ["Bel'ameth Theater"]         = "belameth_theater",
+    ["Bel'ameth Nestled Bedroom"] = "belameth_bedroom",
+    ["Orgrimmar Display Room"]    = "org_displayroom",
+    ["Silvermoon Small Study"]    = "silvermoon_smallstudy",
+    ["Stormwind Armory"]          = "stormwind_armory",
+    ["Silvermoon Armory"]         = "silvermoon_armory",
+    ["Bel'ameth Meeting Room"]    = "belameth_meetingroom",
+    ["Orgrimmar Theater"]         = "org_theaterroom",
+    ["Orgrimmar Council Room"]    = "org_councilroom",
+    ["Stormwind Grand Hall"]      = "stormwind_grandhall",
+    ["Silvermoon Lofty Study"]    = "silvermoon_loftystudy",
+    ["Bel'ameth Temple Room"]     = "belameth_templeroom",
+    ["Autumnal Westfall Barn"]    = "westfall_barn_autumnal",
+    ["Springtime Westfall Barn"]  = "westfall_barn_springtime",
 }
 
 -- Entry = the base room. pin:CanRemove() reports the IsBaseRoom restriction for it (and

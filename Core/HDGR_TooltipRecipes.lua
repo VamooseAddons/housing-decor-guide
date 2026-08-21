@@ -172,6 +172,31 @@ R.BlueprintArchitect   = { title = "locale:TIP_BP_ARCHITECT_TITLE",   body = "lo
 R.BlueprintSave        = { title = "locale:TIP_BP_SAVE_TITLE",        body = "locale:TIP_BP_SAVE_BODY",        anchor = "ANCHOR_TOP" }
 R.BlueprintLink        = { title = "locale:TIP_BP_LINK_TITLE",        body = "locale:TIP_BP_LINK_BODY",        anchor = "ANCHOR_TOP" }
 R.BlueprintImportHouse = { title = "locale:TIP_BP_IMPORT_HOUSE_TITLE", body = "locale:TIP_BP_IMPORT_HOUSE_BODY", anchor = "ANCHOR_TOP" }
+R.BlueprintCopyReqs    = { title = "locale:TIP_BP_COPY_REQS_TITLE",   body = "locale:TIP_BP_COPY_REQS_BODY",   anchor = "ANCHOR_TOP" }
+
+-- Cost-to-build badge. One line per currency, gold as just another line (owner
+-- ruling 2026-08-04) -- housing decor is not a gold-only economy, and a single
+-- gold figure would be a different, wrong answer on most builds.
+--
+-- The unpriced count is stated rather than hidden. Some decor has no catalog
+-- cost at all, and a total that quietly omits it looks authoritative while being
+-- short -- worse than a total that admits what it could not price.
+R.BlueprintCost = function()
+    local cost = HDG.Selectors:Call("blueprints.acquisitionCost", HDG.Store:GetState(), {})
+    local dim  = HDG.Theme:ColorCode("text.dim")
+    local lines = {}
+    for _, c in ipairs(cost.currencies) do
+        lines[#lines + 1] = { text = HDG.Format.FormatCurrency(c.total, c.currencyID, c.icon) }
+    end
+    if cost.unpricedCount > 0 then
+        lines[#lines + 1] = { text = " " }
+        lines[#lines + 1] = { text = dim .. ("%d of %d missing items have no listed price|r")
+            :format(cost.unpricedCount, cost.missingCount), r = 0.75, g = 0.75, b = 0.75 }
+    end
+    lines[#lines + 1] = { text = dim .. "What you still need, at missing quantities.|r",
+                          r = 0.6, g = 0.6, b = 0.6 }
+    return { title = "Cost to build", anchor = "ANCHOR_TOP", extraLines = lines }
+end
 
 -- Recipes title: guild recipe scan.
 R.RecipesScanGuild = { title = "locale:TIP_REC_SCAN_GUILD_TITLE", body = "locale:TIP_REC_SCAN_GUILD_BODY" }
@@ -573,6 +598,11 @@ local function _appendStalenessNote(lines, roster)
     end
 end
 
+-- Shown on both materials lists (Warehouse and the Recipes pane share this
+-- recipe). The gesture has no row affordance -- nothing on the row says it is
+-- clickable -- so the hover is the only place a player can find it.
+local MATERIAL_ROW_HINTS = { shiftText = "locale:HINT_SHIFT_AH_SEARCH" }
+
 function R.MaterialStock(self)
     local name = self._tipName
     if not name then return nil end
@@ -595,6 +625,7 @@ function R.MaterialStock(self)
                               r = 0.75, g = 0.75, b = 0.75, rr = 0.95, rg = 0.55, rb = 0.45 }
     end
     _appendStalenessNote(lines, roster)
+    HDG.TooltipEngine.AppendClickHints(lines, MATERIAL_ROW_HINTS)
     return {
         title      = name,
         -- Opt-in: SetItemByID pulls in Blizzard's whole item block plus every

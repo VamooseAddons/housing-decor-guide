@@ -1,3 +1,66 @@
+## [3.25.0] - 2026-08-21 (August 2026)
+
+### Added
+- **The bulk-buy window can be moved, and dismissed for a vendor.** Drag it out of
+  the way of the merchant behind it, and close it with the X if you would rather
+  buy the ordinary way -- right-clicking goes back to Blizzard's one-at-a-time
+  purchase for the rest of that visit. Walk away and come back and the window is
+  offered again, so turning it down once is not a decision you have to undo.
+- **A blueprint now tells you what it will cost you.** The band that says whether
+  a build fits your house now also carries the price of everything you are still
+  missing, so you can judge a share code before committing to it rather than
+  after. Housing decor is not bought with gold alone, so each currency is counted
+  separately -- hover for the breakdown. Decor with no listed price is called out
+  rather than quietly left out of the total. Asked for by Madailein Hatter.
+- **Copy list, on the Blueprints tab.** Next to the share code you hand
+  out, there is now a plain readable list of everything the build is made of --
+  rooms, decor, dyes and fixtures, with where each piece of decor comes from --
+  ready to paste under your post on Discord, Reddit or a comment thread. Decor a
+  pet can be placed on gets its own heading. The list describes the blueprint
+  rather than your collection, so it reads the same for whoever picks it up: the
+  counts are what the build uses, not what you happen to be short of. Asked for
+  by madaileinhatter, who was typing one out by hand to make a blueprint card.
+
+### Changed
+- **Every themed room Blizzard has shipped can now be placed in the Architect.**
+  The Stormwind, Silvermoon, Bel'ameth and Orgrimmar rooms, both Westfall barns
+  and the Orgrimmar Council and Stone Pit rooms were all missing from the room
+  palette -- the Architect only knew the plain squares, octagons and hallways.
+  They arrive in the room palette with their real sizes, their own artwork and
+  Blizzard's own names and ordering, and the two-floor rooms correctly take two
+  floors. Thanks to reganart for asking where they were.
+
+- **A blueprint's contents are now listed alphabetically.** They used to arrive in
+  whatever order the game sent them, so the dyes on a big build read Purple, Red,
+  Blue, Black, White, Brown, Green and a two-hundred-piece decor list was hopeless
+  to search by eye. Each group is now in name order, on screen and in the copied
+  list alike. Thanks to madaileinhatter for pointing it out.
+
+### Fixed
+- **Buying in bulk now works at coupon vendors.** Right-clicking a decor item at
+  a vendor opens the quantity picker, but it only ever did that for things priced
+  in gold -- anything bought with Community Coupons was left out, which is most of
+  what the neighbourhood vendors sell. The picker now counts your coupons the same
+  way it counts your gold, tells you when a stack costs more than you have, and
+  counts each purchase as it actually arrives -- coupon decor lands in your bags
+  rather than straight into decor storage, so it had nothing to count before.
+  Thanks to madaileinhatter for asking.
+- **Materials reach the Auction House search bar again.** Shift-click a material
+  -- in the Warehouse list or in a recipe's materials -- and it lands in the
+  auction house search box, which is what clicking one used to do. It moved to
+  shift because a plain click now picks the material and shows what it is used
+  in, and the two were quietly fighting over the same click. The hover tells you
+  about it, since nothing on the row does. Thanks to JodouKast for reporting it.
+
+- **The Lumber Tracker no longer stops tracking after a trip to the bank.** Visit
+  a mailbox, vendor, bank or trade window and, if the game did not tell the addon
+  the window had closed again, the tracker quietly gave up for the rest of the
+  session: it stopped following the lumber you were farming, and its numbers sat
+  still until you opened the main window. A reload was the only way back. It now
+  checks whether one of those windows is actually open instead of waiting to be
+  told it closed, so there is nothing left to get stuck. Thanks to pxspin for
+  reporting it.
+
 ## [3.24.1] - 2026-08-20 (August 2026)
 
 ### Fixed

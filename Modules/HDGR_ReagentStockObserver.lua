@@ -57,13 +57,6 @@ end
 
 -- ===== Sweeps ===============================================================
 
--- Returns nil during the boot window before SessionIdentity has dispatched.
-local function _identity()
-    local id = HDG.Store:GetState().session.identity
-    if id.charKey == "" then return nil end
-    return id
-end
-
 -- Two sparse maps are equal when they hold the same keys at the same counts.
 local function _sameCounts(a, b)
     if not a then return false end
@@ -92,7 +85,7 @@ end
 -- BAG_UPDATE fires on every slot change, and an unchanged sweep must not reach
 -- the store or a decor craft would spam it.
 function RS:_sweep(stashKey, actionType, read)
-    local ident = _identity()
+    local ident = HDG.SessionIdentity.GetIdentity(HDG.Store:GetState())
     if not ident then return end
     local counts = {}
     for _, itemID in ipairs(self:ReagentIDs()) do

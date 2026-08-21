@@ -178,8 +178,15 @@ local function _paintWarehouseMatRow(row, ed)
     row._tipNeed    = ed.need
 end
 
+-- Shift-click links the material -- which lands in the Auction House search bar
+-- when the AH is open. A plain click selects it and drives the Used-in-recipes
+-- pane, so the AH gesture takes the modifier rather than the other way around.
 local function _wireWarehouseMatRow(row, ed)
     row:SetScript("OnClick", function()
+        if IsShiftKeyDown() then
+            HDG.UI.LinkMaterial(ed.itemID, ed.name)
+            return
+        end
         HDG.Store:Dispatch({
             type    = A.RECIPES_SELECT_MATERIAL,
             payload = { itemID = ed.itemID },

@@ -10,8 +10,12 @@ local PC = HDG.ProjectsController
 local A = HDG.Constants.ACTIONS
 
 -- ===== helpers =============================================================
+-- Projects-scoped shorthand over the shared setter -- 20 call sites earn the
+-- alias. It used to dispatch UI_SET_TRANSIENT itself, as did the Layouts
+-- controller, which is how two views of one tab start disagreeing about the
+-- payload shape.
 local function _dispatchTransient(key, value)
-    HDG.Store:Dispatch({ type = A.UI_SET_TRANSIENT, payload = { view = "projects", key = key, value = value } })
+    HDG.ControllerHelpers.Mechanics.SetUITransientView("projects", key, value)
 end
 -- Switch the rendered top-level view. Uses UI_SET_PERSISTENT (same as NavController.setView).
 -- UI_SET_VIEW writes session.ui.view which the window does NOT render.

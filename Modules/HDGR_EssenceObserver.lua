@@ -21,14 +21,9 @@ HDG.EssenceObserver = HDG.EssenceObserver or {}
 local EO = HDG.EssenceObserver
 
 -- Returns nil during the boot window before SessionIdentity has dispatched.
-local function getCharIdentity(state)
-    local id = state.session.identity
-    if id.charKey == "" then return nil end
-    return id
-end
 
 function EO:Scan()
-    local ident = getCharIdentity(HDG.Store:GetState())
+    local ident = HDG.SessionIdentity.GetIdentity(HDG.Store:GetState())
     if not ident then return end
     local bag, bank = HDG.BagObserver:GetSplit(HDG.Constants.ESSENCE_OF_LUMBER_ITEMID)
     -- Dedup on the current char's last snapshot: skip an unchanged split.

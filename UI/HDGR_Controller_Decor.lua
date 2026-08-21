@@ -160,8 +160,7 @@ local function _wireDecorClicks(row, ed)
                 return
             end
             if IsShiftKeyDown() then
-                local _, link = C_Item.GetItemInfo(itemID)  -- exception(boundary): itemLink nil on cold item cache
-                if link then _G.ChatFrameUtil.InsertLink(link) end
+                HDG.UI.LinkItem(itemID)
                 return
             end
             -- selectedItemID drives the detail pane (base item data); the

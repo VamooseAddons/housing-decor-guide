@@ -79,8 +79,7 @@ local function _wireItemRow(row, ed)
         -- Shift-click links the item in chat (active editbox, or opens chat);
         -- mirrors the Decor browser row. A plain click selects.
         if IsShiftKeyDown() then
-            local _, link = C_Item.GetItemInfo(itemID)  -- exception(boundary): itemLink nil on cold item cache
-            if link then _G.ChatFrameUtil.InsertLink(link) end
+            HDG.UI.LinkItem(itemID)
             return
         end
         CH.Mechanics.SetUITransientView("acquisition", "selectedItemID", itemID)

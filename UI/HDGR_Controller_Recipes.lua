@@ -375,18 +375,31 @@ local function _paintMatRow(row, ed)
     row._tipNeed    = need
 end
 
+-- Shift-click links the material, which the Auction House picks up as a search
+-- when it is open -- the same gesture as the Warehouse materials list. A plain
+-- click is a no-op here: this pane is driven by the recipe selection above it.
+local function _wireMatRow(row, ed)
+    row:SetScript("OnClick", function()
+        if IsShiftKeyDown() then HDG.UI.LinkMaterial(ed.itemID, ed.name) end
+    end)
+end
+
 local function _matRowFactory(template)
     return {
         Configure = function(row, ed)
             if not row._matLaidOut then _layoutMatRow(row) end
             if ed.kind == "matSubHeader" then
                 _paintMatSubHeader(row, ed)
+                row:SetScript("OnClick", nil)   -- a section header has no item to link
             else
                 _paintMatRow(row, ed)
+                row:RegisterForClicks("LeftButtonUp")
+                _wireMatRow(row, ed)
             end
             row:SetHeight(template.height)
         end,
         Reset = function(row)
+            row:SetScript("OnClick", nil)
             HDG.UI.ClearRowText(row, "_nameFs")
             if row._qtyFs  then row._qtyFs:SetText("")  end
             row._tipName = nil   -- no tooltip on a pooled-but-unpainted row

@@ -11,7 +11,7 @@
 --      delta -> harvest event(s); negative delta -> consumed (no event,
 --      just refresh the cache). SUPPRESSED while a transfer UI (mail /
 --      bank / merchant / trade) is open -- lumber gained that way is not a
---      harvest. See the source gate in Scan + the _suspended flag.
+--      harvest. See the transfer gate above Scan.
 --   2. Session bookkeeping (auto-start)
 --      First harvest in N_IDLE_SECONDS dispatches LUMBER_SESSION_START so
 --      the per-char session record is created with the bag total at
@@ -55,7 +55,6 @@ L._initialized   = L._initialized   or false
 L._lumberIDSet   = L._lumberIDSet   or nil  -- built lazily from Constants.LUMBER_DATA
 L._gcTicker      = L._gcTicker      or nil   -- C_Timer handle; nil when no blips to sweep (self-terminating)
 L._liveTicker    = L._liveTicker    or nil   -- C_Timer handle; nil when no active farming session
-L._suspended     = L._suspended     or false -- true while a transfer UI (mail/bank/merchant/trade) is open
 L._autoDepositDone = L._autoDepositDone or false -- guard: auto-deposit runs once per bank-open
 
 -- Build + cache the lumber-ID set (avoids iterating LUMBER_DATA every BAG_UPDATE).
@@ -87,6 +86,35 @@ local function _getPlayerCoords()
 end
 L._GetPlayerCoords = _getPlayerCoords  -- exported for tests
 
+-- ===== Transfer gate =========================================================
+-- Lumber gained at a vendor, mailbox, bank or trade window is a TRANSFER, not a
+-- harvest. This asks whether one of those is open right now.
+--
+-- It used to REMEMBER instead: a `_suspended` flag latched by MAIL_SHOW /
+-- MERCHANT_SHOW / TRADE_SHOW / BANKFRAME_OPENED and cleared by the matching
+-- close event. A close that never arrived -- a disconnect at a mailbox, zoning
+-- with the banker up, a handler that errored before the clear -- left it latched
+-- for the rest of the session. Scan is the only thing that both detects
+-- harvests AND kicks the tracker's bag rescan, so one missed event stopped the
+-- tracker focusing the lumber being farmed and froze its numbers until the main
+-- window was opened. Reported by pxspin 2026-08-21; /reload was the only cure.
+--
+-- A question cannot get stuck the way a flag can.
+local TRANSFER_INTERACTIONS = {
+    "Merchant", "MailInfo", "Banker", "AccountBanker", "CharacterBanker", "GuildBanker",
+}
+
+local function _transferUIOpen()
+    local PIT = _G.Enum.PlayerInteractionType
+    for _, name in ipairs(TRANSFER_INTERACTIONS) do
+        if _G.C_PlayerInteractionManager.IsInteractingWithNpcOfType(PIT[name]) then return true end
+    end
+    -- Trade is the one source with no PlayerInteractionType member, so its frame
+    -- is the only thing that can answer. Nil = its UI never loaded = not open.
+    local trade = _G.TradeFrame  -- exception(boundary): Blizzard frame, nil until the Trade UI loads
+    return trade ~= nil and trade:IsShown() == true
+end
+
 -- ===== Harvest detection =====================================================
 -- Diff current bag total against last-known. First scan is warm-up (records totals, no HARVESTED).
 local function _now()
@@ -96,9 +124,12 @@ end
 function L:Scan()
     local Bag = HDG.BagObserver
     if not Bag then return end
-    -- Source gate: lumber gained via mail/bank/merchant/trade is NOT a harvest.
-    -- Baseline re-snapped on transfer-UI close; post-close scan sees no phantom delta.
-    if self._suspended then return end
+    -- Source gate. Note this does NOT return: the loop below keeps the baseline
+    -- moving while a transfer UI is open, so the purchase or withdrawal is
+    -- absorbed as it happens. An early return would leave a stale baseline, and
+    -- the first scan after the window closed would read the whole transfer as
+    -- one enormous harvest.
+    local transferring = _transferUIOpen()
     local lumberSet = _ensureLumberIDSet()
     local firstPass = not self._initialized
     self._initialized = true
@@ -110,7 +141,7 @@ function L:Scan()
         local prevAll = self._lastTotalsAll[lumberID] or curAll
         self._lastTotals[lumberID]    = cur
         self._lastTotalsAll[lumberID] = curAll
-        if not firstPass and cur > prev then
+        if not firstPass and not transferring and cur > prev then
             -- A harvest raises the player's TOTAL holdings (new lumber from the
             -- world). A Warband-bank WITHDRAW raises bags but only MOVES it from
             -- storage, so total is flat -- count only what the total grew by, so
@@ -131,18 +162,6 @@ function L:Scan()
     if HDG.Store:GetState().account.lumber.config.windowVisible == true then
         Bag:Scan()
     end
-end
-
--- Snap baseline without firing harvests. Called on transfer-UI close so
--- lumber gained while suspended doesn't register as a harvest.
-function L:_RefreshBaseline()
-    local Bag = HDG.BagObserver
-    if not Bag then return end
-    for lumberID in pairs(_ensureLumberIDSet()) do
-        self._lastTotals[lumberID]    = Bag:GetBagCount(lumberID)
-        self._lastTotalsAll[lumberID] = Bag:GetTotal(lumberID)
-    end
-    self._initialized = true  -- we now hold a known-good baseline
 end
 
 -- Single harvest event: maybe auto-start a session, dispatch HARVESTED.
@@ -368,18 +387,13 @@ end
 HDG.Modules:Declare({
     name = "LumberObserver",
     dependencies = { "BagObserver" },  -- we delegate item-count lookups
-    ownsBlizzardNamespaces = { "C_Map.GetPlayerMapPosition" },
+    ownsBlizzardNamespaces = { "C_Map.GetPlayerMapPosition", "C_PlayerInteractionManager" },
     blizzardEvents = {
         -- BAG_UPDATE debounced: 5-slot stack split fires 5 events; collapse to one scan.
         BAG_UPDATE = { handler = "OnBagUpdate", debounce = 0.2 },
-        -- Source gate: transfer UIs open = bag gains are transfers, not harvests.
-        MAIL_SHOW        = { handler = "OnTransferUIOpen"  },
-        MERCHANT_SHOW    = { handler = "OnTransferUIOpen"  },
-        TRADE_SHOW       = { handler = "OnTransferUIOpen"  },
+        -- The transfer gate is a QUESTION asked in Scan, not an event latch, so
+        -- the only bank events left here are the auto-deposit hooks.
         BANKFRAME_OPENED = { handler = "OnBankFrameOpen"   },
-        MAIL_CLOSED      = { handler = "OnTransferUIClose" },
-        MERCHANT_CLOSED  = { handler = "OnTransferUIClose" },
-        TRADE_CLOSED     = { handler = "OnTransferUIClose" },
         BANKFRAME_CLOSED = { handler = "OnTransferUIClose" },
         -- Warband/portable banker fires PLAYER_INTERACTION_MANAGER events, not BANKFRAME_*.
         PLAYER_INTERACTION_MANAGER_FRAME_SHOW = { handler = "OnInteractionOpen"  },
@@ -388,29 +402,18 @@ HDG.Modules:Declare({
     OnBagUpdate = function()
         L:Scan()  -- the GC + live tickers self-arm from the harvest path now
     end,
-    OnTransferUIOpen  = function() L._suspended = true end,
-    OnBankFrameOpen   = function()
-        L._suspended = true
-        L:_MaybeAutoDepositLumber()
-    end,
-    OnTransferUIClose = function()
-        L._suspended = false
-        L._autoDepositDone = false
-        L:_RefreshBaseline()  -- items gained while suspended become the baseline
-    end,
+    OnBankFrameOpen   = function() L:_MaybeAutoDepositLumber() end,
+    OnTransferUIClose = function() L._autoDepositDone = false end,
     OnInteractionOpen = function(_, interactionType)
         local PI = _G.Enum.PlayerInteractionType
         if interactionType == PI.Banker or interactionType == PI.AccountBanker then
-            L._suspended = true
             L:_MaybeAutoDepositLumber()
         end
     end,
     OnInteractionClose = function(_, interactionType)
         local PI = _G.Enum.PlayerInteractionType
         if interactionType == PI.Banker or interactionType == PI.AccountBanker then
-            L._suspended = false
             L._autoDepositDone = false
-            L:_RefreshBaseline()
         end
     end,
 })

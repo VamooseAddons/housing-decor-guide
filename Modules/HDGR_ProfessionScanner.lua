@@ -34,11 +34,6 @@ local function sameSkillLines(a, b)
 end
 
 -- Returns nil if SessionIdentity hasn't dispatched yet (boot window).
-local function getCharIdentity(state)
-    local id = state.session.identity
-    if id.charKey == "" then return nil end
-    return id
-end
 
 -- True if the player PERSONALLY OWNS this profession -- its skillLineID is one of
 -- their GetProfessions() slots. The ownership gate for Scan: without it, opening a
@@ -367,7 +362,7 @@ function PS:Scan()
     -- actually owns. Skips guild/linked/inspected profession windows -- otherwise
     -- viewing someone else's profession records it against the player at skill 0.
     if not playerOwnsProfession(base.professionID) then return end
-    local ident = getCharIdentity(HDG.Store:GetState())
+    local ident = HDG.SessionIdentity.GetIdentity(HDG.Store:GetState())
     if not ident then return end
     -- Find Lumber awareness stamped here (profession-window context) to avoid
     -- a dedicated SPELLS_CHANGED listener for a single spell. Stale until the

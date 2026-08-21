@@ -149,6 +149,38 @@ function UI.ShowMenu(owner, items, opts)
     end)
 end
 
+-- ===== Item links ========================================================
+
+-- Shift-click an item row: hand the link to Blizzard's own link chain.
+--
+-- ChatFrameUtil.InsertLink walks its listeners in order -- a focused macro
+-- editor, the professions search, a Communities chat box, the active chat
+-- window -- and ends at AuctionHouseFrame:SetSearchText when the AH is open on
+-- a Buy tab. That last hop is how a material row searches the auction house.
+-- HDG never touches the search box itself, so the gesture keeps working when
+-- Blizzard moves it (HDG classic poked SearchBar.SearchBox directly).
+--
+-- Returns false when the item has no link yet OR nothing was listening, so a
+-- caller whose whole point is the auction house can say so instead of looking
+-- broken. The AH is not a Vamoose surface: a no-op there is indistinguishable
+-- from a dead button.
+function UI.LinkItem(itemID)
+    local _, link = C_Item.GetItemInfo(itemID)  -- exception(boundary): itemLink nil on cold item cache
+    if not link then return false end
+    return _G.ChatFrameUtil.InsertLink(link) and true or false
+end
+
+-- The material-list flavour: same link, plus the notice when it goes nowhere.
+-- Both materials lists (Warehouse and Recipes) use this so the gesture reads
+-- the same in either place. Named for the surface, not the mechanism -- decor
+-- and acquisition rows link too, but silently, because linking a piece of
+-- decor to chat is the point there and the auction house rarely is.
+function UI.LinkMaterial(itemID, name)
+    if UI.LinkItem(itemID) then return true end
+    HDG.Log:Notify("warn", HDG.Locale:Get("MAT_LINK_NO_TARGET"):format(name or "this material"))
+    return false
+end
+
 -- ===== Row factory builders ==============================================
 
 -- Create + theme a row FontString in one call (create-role-register triple).

@@ -150,6 +150,15 @@ LC.widgets["blueprintsDetailPanel.verdict"] = {
     tooltip = false, kind = "label", ["in"] = "blueprintsDetailPanel.verdictBand",
     binding = "blueprints.fitVerdict", font = "body", height = 16, width = "fill", order = 5,
 }
+-- Cost to build, trailing the verdict: "does it fit?" and "can I afford it?" are
+-- the same decision, so they share a band. width="auto" so it takes only what the
+-- currencies need and the verdict keeps the slack; hidden when nothing is left to
+-- buy, since a "0" next to "you have everything" reads as a price.
+LC.widgets["blueprintsDetailPanel.costBadge"] = {
+    tooltip = { recipe = "BlueprintCost" }, kind = "label", ["in"] = "blueprintsDetailPanel.verdictBand",
+    binding = "blueprints.costBadge", font = "body", height = 16, width = "auto", order = 10,
+    visible = "blueprints.hasCostBadge",
+}
 
 -- Budget meters: three text+bar pairs on one row.
 LC.sections["blueprintsDetailPanel.meters"] = {
@@ -280,14 +289,29 @@ LC.widgets["blueprintsDetailPanel.architectBtn"] = {
     font = "body", text = "locale:BP_OPEN_ARCHITECT", width = 84, height = 22, order = 15,
     visible = "blueprints.selectedIsArchitectable",  -- interior room layout: House/Interior only
 }
+-- Rightmost, past the slack absorber: Apply to House is the one button here
+-- that changes the player's house, so it sits apart from the four that only
+-- read the blueprint.
 LC.widgets["blueprintsDetailPanel.importBtn"] = {
     tooltip = { recipe = "BlueprintImportHouse" }, kind = "button", ["in"] = "blueprintsDetailPanel.actions",
-    font = "body", text = "locale:BP_IMPORT_HOUSE", width = 108, height = 22, order = 22,
+    font = "body", text = "locale:BP_IMPORT_HOUSE", width = 108, height = 22, order = 30,
     binding = { enabled = "blueprints.hasSelection" },
 }
 LC.widgets["blueprintsDetailPanel.actionsSpacer"] = {
     tooltip = false, kind = "spacer", ["in"] = "blueprintsDetailPanel.actions",
     width = "fill", height = 14, order = 25,
+}
+-- Gated on hasManifest rather than hasSelection -- there is nothing to copy
+-- until the contents arrive.
+--
+-- Width is load-bearing: at 128 ("Copy requirements") the five buttons needed
+-- 560px in a 544px row and the last one hung off the panel whenever Architect
+-- was visible. The row has ~36px of slack at this width, which is the margin a
+-- longer locale needs.
+LC.widgets["blueprintsDetailPanel.copyReqsBtn"] = {
+    tooltip = { recipe = "BlueprintCopyReqs" }, kind = "button", ["in"] = "blueprintsDetailPanel.actions",
+    font = "body", text = "locale:BP_COPY_REQS", width = 84, height = 22, order = 20,
+    binding = { enabled = "blueprints.hasManifest" },
 }
 
 -- Guidance strip: ABOVE the action row so the save-after-apply reminder is

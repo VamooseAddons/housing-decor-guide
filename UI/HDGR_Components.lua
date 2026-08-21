@@ -1819,9 +1819,15 @@ local function buildCloseButton(parent, spec)
     return button
 end
 
--- (Legacy `closebutton` kind retired in #10.6 -- use kind="button" with
---  options.close = true. The HDG.UI:CloseButton constructor stays as an
---  internal helper called by the unified `button` WidgetTypes entry.)
+-- (Legacy `closebutton` kind retired in #10.6 -- LayoutConfig panels use
+--  kind="button" with options.close = true.)
+
+-- Public constructor, for the hand-built dialogs that have no LayoutConfig entry
+-- to declare `close = true` on (the quantity picker). Same widget the declarative
+-- path builds, so every X in the addon is the one atlas at one tint.
+function HDG.UI:CloseButton(parent, size, iconSize)
+    return buildCloseButton(parent, { size = size or 22, iconSize = iconSize or 12 })
+end
 
 -- ===== IconButton: 3-state Blizzard atlas button (HDG MakeIconButton pattern)
 -- Use for header tab toggles where an icon reads cleaner than a text label.
@@ -2796,13 +2802,19 @@ HDG.WidgetTypes:Register("filmstrip", {
     build = function(parent, spec)
         local scroll  = CreateFrame("ScrollFrame", nil, parent)
         local content = CreateFrame("Frame", nil, scroll)
-        content:SetSize(1, spec.cellSize or 60)  -- exception(optional): spec field default (validator-guarded)
+        -- Strict: every filmstrip in LayoutConfig declares both, so the old
+        -- `or 60` / `or 5` defaults had never once been reached. They were
+        -- annotated as validator-guarded optionals, which asserted a risk that
+        -- did not exist -- a filmstrip that omits either should fail loudly
+        -- here, not silently render at a size nobody chose.
+        local cellSize, cellSpacing = spec.cellSize, spec.cellSpacing
+        content:SetSize(1, cellSize)
         scroll:SetScrollChild(content)
         scroll._filmContent  = content
         scroll._filmCells    = {}
         scroll._filmCellKind = spec.cellKind
-        scroll._filmCfg      = { cellSize = spec.cellSize or 60, cellSpacing = spec.cellSpacing or 5 }  -- exception(optional): spec field default (validator-guarded)
-        local step = (spec.cellSize or 60) + (spec.cellSpacing or 5)  -- exception(optional): spec field default (validator-guarded)
+        scroll._filmCfg      = { cellSize = cellSize, cellSpacing = cellSpacing }
+        local step = cellSize + cellSpacing
 
         -- Thin auto-hiding horizontal scrollbar along the bottom: a track + a
         -- draggable thumb (width = viewport/content ratio). Hidden when nothing

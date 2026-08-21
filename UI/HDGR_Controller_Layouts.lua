@@ -23,13 +23,8 @@ local _deleteBtn
 
 -- ===== helpers =============================================================
 
-local function _dispatchTransient(key, value)
-    HDG.Store:Dispatch({ type = A.UI_SET_TRANSIENT,
-        payload = { view = "projects", key = key, value = value } })
-end
-
 local function _selectVersion(vid)
-    _dispatchTransient("layoutSelectedVersionID", vid)
+    HDG.ControllerHelpers.Mechanics.SetUITransientView("projects", "layoutSelectedVersionID", vid)
 end
 
 -- Find the live default version: the first isLive row in the sorted group list.

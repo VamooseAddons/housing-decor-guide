@@ -978,6 +978,11 @@ HDG.Constants.PLACEHOLDER_ICON = 134400
 -- inside one tick) left 7 of 10 in bags -- the burst IS the rapid path. So buy
 -- exactly ONE per tick (genuine one-at-a-time = the straight-to-storage path).
 -- Functional throttle, NOT a UI transition (outside the no-C_Timer-in-UI rule).
+-- Community Coupons: the Midnight neighbourhood-endeavor currency, and the only
+-- non-gold cost decor vendors charge. Named here because it was a bare 3363 in
+-- the acquisition selectors and is now also the merchant buy path's one
+-- recognised currency.
+HDG.Constants.COUPON_CURRENCY_ID     = 3363
 HDG.Constants.MERCHANT_BUY_TICK_QTY  = 1     -- fixed-timer fallback: BuyMerchantItem calls per tick
 -- 0 = EVENT-DRIVEN pacing (buy one, wait for the HOUSING_STORAGE_ENTRY_UPDATED
 -- "landed in storage" signal, buy the next -- as fast as the server confirms,
@@ -1064,3 +1069,30 @@ for id, e in pairs(HDG.Constants.REP_FACTIONS) do
     HDG.Constants.REP_FACTION_BY_NAME[e.name] = id
     HDG.Constants.REP_FACTION_BY_NAME[string.lower(e.name)] = id
 end
+
+-- ===== Pet decor =============================================================
+-- Decor a PET can be placed on -- beds, plinths, cages, nests. It is furniture,
+-- not a placed pet, so these are ordinary contentType 3 (Decor) catalog rows.
+--
+-- Keyed by decorID, which is what a blueprint manifest entry carries directly
+-- (entry.recordID for contentType 3) -- so the split survives a catalog miss.
+--
+-- Source: HouseDecor.db2 `Flags & 0x800` (2048), the bit Blizzard sets for
+-- pet-accepting decor. Exactly these 10 of 2911 rows carry it on 12.1.0.69382,
+-- with no false positives (Rutaani Bird Perch and Perch of the Dawnfire Phoenix
+-- are perch-shaped scenery and correctly unflagged). The runtime catalog API
+-- does NOT expose the flag, which is why the list is baked here rather than
+-- read live. Regenerate by re-filtering HouseDecor.csv when a patch adds pet
+-- furniture; at 10 rows a constant beats a generated table.
+HDG.Constants.PET_DECOR_BY_DECOR_ID = {
+    [12245] = true,  -- Paw Pal Bed and Blanket
+    [12246] = true,  -- Paw Pal Bed
+    [15290] = true,  -- Cherished Pet's Rug
+    [25101] = true,  -- Westfall Pet Cage
+    [25102] = true,  -- Crossroads Pet Cage
+    [25103] = true,  -- Crude Pet Cage
+    [25105] = true,  -- Silvermoon Dragonhawk Incubator
+    [25106] = true,  -- Cozy Lightbloom Lilypad
+    [25121] = true,  -- Cozy Bird Nest
+    [25122] = true,  -- Loyal Companion's Plinth
+}

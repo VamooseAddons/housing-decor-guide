@@ -37,6 +37,27 @@ local function _resolveAcq(entry)
     return itemID, kind and kind.key or nil, row.sourceName
 end
 
+-- Manifest entries arrive in SERVER order, which on a 201-decor blueprint is
+-- unscannable -- the dye group alone reads Purple, Red, Blue, Black, White,
+-- Brown, Green. Sorted by name for reading (asked for by madaileinhatter,
+-- 2026-08-20).
+--
+-- recordID breaks ties so the order is TOTAL: table.sort is not stable, and two
+-- entries can share a name (dyed variants), so without the tie-break their
+-- relative order could differ between repaints and churn the scrollbox keys.
+--
+-- Returns a COPY. Sorting m.raw.contentGroups in place would have a selector
+-- mutating stored state.
+local function _byName(entries)
+    local out = {}
+    for i = 1, #entries do out[i] = entries[i] end
+    table.sort(out, function(a, b)
+        if a.name ~= b.name then return a.name < b.name end
+        return a.recordID < b.recordID
+    end)
+    return out
+end
+
 -- The inspector envelope: manifest -> rendered groups with acquisition joins.
 -- nil when nothing is selected; a groupless envelope while pending/failed.
 -- missingCount counts ACQUIRABLE entries (Decor=3/Dye=4) with numMissing>0 --
@@ -59,7 +80,7 @@ Selectors:Register("blueprints.inspector", {
         local groups, missing = {}, 0
         for _, g in ipairs(m.raw.contentGroups) do
             local items = {}
-            for _, e in ipairs(g.entries) do
+            for _, e in ipairs(_byName(g.entries)) do
                 if e.numMissing > 0 and (g.contentType == 3 or g.contentType == 4) then missing = missing + 1 end
                 if not ui.missingOnly or e.numMissing > 0 then
                     local itemID, srcKind, srcName = _resolveAcq(e)
@@ -80,6 +101,100 @@ Selectors:Register("blueprints.inspector", {
         end
         return { shareCode = code, status = "received", groups = groups,
                  missingCount = missing, shownMissingOnly = ui.missingOnly }
+    end,
+})
+
+-- ===== Cost to build =========================================================
+-- "Can I afford this blueprint?", beside "does it fit?". Asked for by
+-- Madailein Hatter (Discord 2026-08-04): people pass up a share code because the
+-- commitment is invisible until they are already committed.
+--
+-- Prices the ACQUISITION GAP, not the whole build -- what you still need, at
+-- numMissing each. Only Decor(3)/Dye(4) can be bought; rooms and fixtures are
+-- structural, which is the same set blueprints.inspector counts as missing.
+--
+-- A CURRENCY summary, not a gold total (owner ruling): housing decor is sold for
+-- several currencies, so each keeps its own running total and gold is just
+-- another line. Costs come from the catalog's baked row.costEntries
+-- ({currencyID, amount, icon}) -- no vendor-DB join needed.
+--
+-- unpricedCount is carried, not swallowed. A total that silently drops the
+-- entries it could not price reads as authoritative while being wrong; one that
+-- says "12 of 47 unpriced" is honest about what it knows.
+--
+-- KNOWN LIMIT: row.costEntries is the FIRST vendor block's cost. Components
+-- within it are ANDed (100g + 5 coupons) and summing them is right, but where an
+-- item is sold "30 coupons OR 500g" the alternatives live in separate vendor
+-- blocks (row.costVariants) and this counts whichever vendor is listed first.
+-- So the badge is "a price to build", not "the cheapest price to build".
+local ACQUIRABLE_CT = { [3] = true, [4] = true }
+
+Selectors:Register("blueprints.acquisitionCost", {
+    calls = { "blueprints.inspector" },
+    reads = { "session.resolvers.catalog.tick" },
+    fn = function(state, ctx)
+        local insp = Selectors:Call("blueprints.inspector", state, ctx)
+        local out = { currencies = {}, pricedCount = 0, unpricedCount = 0, missingCount = 0 }
+        if not insp or insp.status ~= "received" then return out end  -- exception(nullable): nothing inspected yet
+        local byCurrency, order = {}, {}
+        for _, g in ipairs(insp.groups) do
+            if ACQUIRABLE_CT[g.ct] then
+                for _, it in ipairs(g.items) do
+                    if it.numMissing > 0 then
+                        out.missingCount = out.missingCount + 1
+                        local row = it.itemID and HDG.HousingCatalogObserver:GetRow(it.itemID)  -- exception(nullable): uncatalogued entry
+                        local entries = row and row.costEntries
+                        if entries and #entries > 0 then
+                            out.pricedCount = out.pricedCount + 1
+                            for _, e in ipairs(entries) do
+                                local cur = byCurrency[e.currencyID]
+                                if not cur then
+                                    cur = { currencyID = e.currencyID, total = 0, icon = e.icon }
+                                    byCurrency[e.currencyID] = cur
+                                    order[#order + 1] = cur
+                                end
+                                cur.total = cur.total + (e.amount or 0) * it.numMissing  -- exception(boundary): baked catalog cost may omit an amount
+                            end
+                        else
+                            out.unpricedCount = out.unpricedCount + 1
+                        end
+                    end
+                end
+            end
+        end
+        -- Gold first, then by currencyID. NOT by magnitude: 4,200 of a token and
+        -- 1,550 gold are different units, so ranking them against each other
+        -- implies a comparison that does not exist -- and it put a token above
+        -- gold purely for having a bigger number. Sorting by ID instead is
+        -- arbitrary but honest, and it is total, so the badge cannot reshuffle
+        -- between repaints. CURRENCY_GOLD is the -1 sentinel, so it sorts first
+        -- on its own.
+        table.sort(order, function(a, b) return a.currencyID < b.currencyID end)
+        out.currencies = order
+        return out
+    end,
+})
+
+-- Badge text: every currency, gold first. Empty when there is nothing left to
+-- buy -- the band already says "you have everything" and a "0" badge beside it
+-- reads like a price, not an absence.
+Selectors:Register("blueprints.costBadge", {
+    calls = { "blueprints.acquisitionCost" },
+    fn = function(state, ctx)
+        local cost = Selectors:Call("blueprints.acquisitionCost", state, ctx)
+        if #cost.currencies == 0 then return "" end
+        local parts = {}
+        for _, c in ipairs(cost.currencies) do
+            parts[#parts + 1] = HDG.Format.FormatCurrency(c.total, c.currencyID, c.icon)
+        end
+        return table.concat(parts, "  ")
+    end,
+})
+
+Selectors:Register("blueprints.hasCostBadge", {
+    calls = { "blueprints.costBadge" },
+    fn = function(state, ctx)
+        return Selectors:Call("blueprints.costBadge", state, ctx) ~= ""
     end,
 })
 
@@ -513,6 +628,17 @@ Selectors:Register("blueprints.hasSelection", {
     reads = { "session.blueprints.selectedCode" },
     fn = function(state) return state.session.blueprints.selectedCode ~= nil end,
 })
+-- Enable gate for actions that need CONTENTS, not just a selection: Copy
+-- requirements has nothing to render until the server answers, and a live
+-- button that copies an empty string reads as a broken button.
+Selectors:Register("blueprints.hasManifest", {
+    reads = { "session.blueprints.selectedCode", "session.blueprints.manifests" },
+    fn = function(state)
+        local sb = state.session.blueprints
+        local m = sb.selectedCode and sb.manifests[sb.selectedCode]
+        return m ~= nil and m.status == "received"
+    end,
+})
 Selectors:Register("blueprints.blankDetail", {
     reads = { "session.blueprints.selectedCode" },
     fn = function(state) return state.session.blueprints.selectedCode == nil end,
@@ -573,5 +699,108 @@ Selectors:Register("blueprints.slotsText", {
         local s = state.session.blueprints.slots
         if s.max <= 0 then return "" end
         return ("Blueprint slots  %d / %d"):format(s.used, s.max)
+    end,
+})
+
+-- ===== Plain-text manifest ===================================================
+-- A readable requirements list to publish ALONGSIDE the share code -- a Reddit
+-- post, a Discord drop, a Wowhead comment. The audience is the READER of
+-- someone else's post, which is why nothing here reflects the exporter's own
+-- collection: counts are `total`, never numMissing, and there are no budgets
+-- and no progress. That is what makes the output publishable rather than
+-- personal -- the author owns everything, so their missing count is zero and
+-- the reader's is different.
+--
+-- Spec: docs/HDGR_PLAINTEXT_EXPORT_SPEC_2026-08-20.md
+--
+-- Deliberately NOT built on blueprints.inspector: that envelope applies the
+-- player's missing-only filter, which would silently drop lines from a
+-- published list. This reads the manifest.
+
+-- Plural headings are an explicit map, not CT_LABEL .. "S" -- "DECOR" is a mass
+-- noun and "DECORS" is not a word.
+local CT_HEADING  = { [1] = "HOUSE", [2] = "ROOMS", [3] = "DECOR", [4] = "DYES", [5] = "FIXTURES" }
+local PET_HEADING = "PET DECOR"
+
+local EXPORT_FOOTER = "Generated by Vamoose's Housing Decor Guide\n"
+    .. "https://www.curseforge.com/wow/addons/housing-decor-guide"
+
+-- " -- " separates the entry from its source: a single hyphen would read as a
+-- second bullet beside the leading "- ", and an em-dash is not ASCII.
+-- Decor lines carry a source; every other group is name and count. Dyes are
+-- crafted or bought at auction, so a source tells the reader nothing, and
+-- rooms / fixtures / house types have no acquisition join at all.
+local function _textLine(entry, withSource)
+    local line = ("- %s x%d"):format(entry.name, entry.total)
+    if not withSource then return line end
+    local _, srcKind, srcName = _resolveAcq(entry)
+    -- UNKN is the honest "no signal" fallback the on-screen chip wants so data
+    -- gaps surface. A published list is the wrong place for it: it would stamp
+    -- "Unknown" on every unbaked line. Bare is better.
+    if not (srcKind and srcName) or srcKind == "UNKN" then return line end
+    return ("%s -- %s: %s"):format(line, HDG.Constants.SOURCE_KIND_BY_KEY[srcKind].label, srcName)
+end
+
+-- No column alignment anywhere: Reddit, Discord, forums and Wowhead comments do
+-- not all preserve whitespace, but "- name xN" survives every one of them.
+-- The header count is the sum of totals, so ROOMS (3) matches x1 + x2 below it.
+local function _blockText(heading, entries, withSource)
+    if #entries == 0 then return nil end
+    local total, lines = 0, {}
+    for _, e in ipairs(entries) do
+        total = total + e.total
+        lines[#lines + 1] = _textLine(e, withSource)
+    end
+    return ("%s (%d)\n%s"):format(heading, total, table.concat(lines, "\n"))
+end
+
+-- Pet decor is decor a pet can be placed ON -- beds, plinths, nests. It is
+-- furniture, so these are ordinary contentType 3 entries and this is a
+-- presentation split, which is why the block renders next to DECOR rather than
+-- somewhere else in manifest order.
+local function _splitPetDecor(entries)
+    local plain, pets = {}, {}
+    for _, e in ipairs(entries) do
+        local bucket = HDG.Constants.PET_DECOR_BY_DECOR_ID[e.recordID] and pets or plain
+        bucket[#bucket + 1] = e
+    end
+    return plain, pets
+end
+
+local function _headerText(state, ctx, code)
+    local name = Selectors:Call("blueprints.displayName", state, ctx)
+    local typeLabel = BP_TYPE_LABEL[_codeType(state, code)]  -- exception(nullable): a pasted code may have no type stamp
+    return ("%s\nShare code: %s"):format(
+        typeLabel and ("%s - %s blueprint"):format(name, typeLabel) or name, code)
+end
+
+-- Every content type, not only the acquirable ones: someone building this needs
+-- to know it wants three rooms, not only the furniture inside them. (The
+-- Decor/Dye-only filter on blueprints.inspector's missingCount is correct for a
+-- shopping list, and a manifest is not a shopping list.)
+-- Group order follows the manifest's own contentType order, not an invented one.
+Selectors:Register("blueprints.manifestText", {
+    calls = { "blueprints.displayName" },
+    reads = { "session.blueprints.selectedCode", "session.blueprints.manifests",
+              "session.blueprints.groups", "account.blueprints.pastedTypes",
+              "session.resolvers.catalog.tick" },
+    fn = function(state, ctx)
+        local sb = state.session.blueprints
+        local code = sb.selectedCode
+        if not code then return nil end  -- exception(nullable): nothing selected
+        local m = sb.manifests[code]
+        if not m or m.status ~= "received" then return nil end  -- exception(nullable): no contents to publish yet
+        local blocks = { _headerText(state, ctx, code) }
+        for _, g in ipairs(m.raw.contentGroups) do
+            if g.contentType == 3 then
+                local plain, pets = _splitPetDecor(_byName(g.entries))
+                blocks[#blocks + 1] = _blockText(CT_HEADING[3], plain, true)
+                blocks[#blocks + 1] = _blockText(PET_HEADING, pets, true)
+            else
+                blocks[#blocks + 1] = _blockText(CT_HEADING[g.contentType], _byName(g.entries), false)
+            end
+        end
+        blocks[#blocks + 1] = EXPORT_FOOTER
+        return table.concat(blocks, "\n\n")
     end,
 })

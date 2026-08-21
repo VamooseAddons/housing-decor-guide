@@ -19,6 +19,17 @@ function HDG.SessionIdentity.GetCharKey(state)
     return key
 end
 
+-- The whole record, same boot-window contract. Added because three observers
+-- had each grown a private copy of exactly this -- EssenceObserver and
+-- ProfessionScanner byte-for-byte, ReagentStockObserver reading the Store
+-- itself. They existed because the SSoT published the key and nothing else,
+-- which is how a single source of truth quietly stops being one.
+function HDG.SessionIdentity.GetIdentity(state)
+    local id = state.session.identity
+    if id.charKey == "" then return nil end
+    return id
+end
+
 HDG.Modules:Declare({
     name = "SessionIdentity",
     dependencies = {},

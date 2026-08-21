@@ -62,6 +62,50 @@ local SHAPES = {
     staircase_mirror = { atlas = "Layout_Staircase_Mirrored_S_Icon",      dims = {23,23,15}, cells = {4, 4}, doors = {"E"},              budget = 7 },
     circle_evening   = { atlas = "Full_Layout_Artisinal_Garden_Evening",  dims = {48,50,64}, cells = {8, 8}, doors = {"N"},              budget = 8, circle = true, floors = 3 },
     circle_daylight  = { atlas = "Full_Layout_Artisinal_Garden_Daylight", dims = {48,50,64}, cells = {8, 8}, doors = {"N"},              budget = 8, circle = true, floors = 3 },
+    -- ===== Themed rooms (12.1) ==========================================
+    -- Generated from DB2, not typed: HouseRoom.RoomWmoDataID -> RoomWmoData
+    -- BoundingBox/Height for dims, cells = round(yards/6), budget = WeightCost,
+    -- atlas = UiTextureAtlasElement.Name. The same derivation reproduces every
+    -- shape above to the yard. Full tables + method:
+    -- docs/HDGR_ROOM_CATALOG_GAP_2026-08-21.md
+    --
+    -- ONE DOOR EACH, and the room rotates to whatever door you connect it to
+    -- (owner, in-game 2026-08-21) -- the same model as the circle gardens above.
+    -- This is why they are separate entries rather than aliases of square_s/m/l:
+    -- those carry four doors, and each themed room has its own real height, which
+    -- the palette tooltip prints.
+    --
+    -- floors: a storey is ~21yd, CONFIRMED in-game 2026-08-21 -- the five rooms
+    -- carrying floors = 2 below (22/27/27/31/33yd) are the ones the owner saw
+    -- spanning two floors, and no others. That also rules out the 11yd-per-storey
+    -- reading, which would have made ten more rooms multi-floor and the circle
+    -- gardens six. Everything at or under one storey omits the field (= 1).
+    org_stonepitroom         = { atlas = "org_stonepitRoom",                   dims = {24,23,18},  cells = {4, 4}, doors = {"N"}, budget = 5   },  -- 151 Orgrimmar Stone Pit Room
+    stormwind_kitchen        = { atlas = "stormwind_kitchen",                  dims = {24,23,10},  cells = {4, 4}, doors = {"N"}, budget = 5   },  -- 277 Stormwind Kitchen
+    stormwind_displayroom    = { atlas = "stormwind_displayroom",              dims = {24,23,7},  cells = {4, 4}, doors = {"N"}, budget = 5   },  -- 281 Stormwind Display Room
+    silvermoon_displayroom   = { atlas = "silvermoon_displayroom",             dims = {25,23,14},  cells = {4, 4}, doors = {"N"}, budget = 5   },  -- 286 Silvermoon Display Room
+    belameth_theater         = { atlas = "belameth_theater",                   dims = {24,23,17},  cells = {4, 4}, doors = {"N"}, budget = 5   },  -- 289 Bel'ameth Theater
+    belameth_bedroom         = { atlas = "belameth_bedroom",                   dims = {25,24,14},  cells = {4, 4}, doors = {"N"}, budget = 5   },  -- 290 Bel'ameth Nestled Bedroom
+    org_displayroom          = { atlas = "org_displayroom",                    dims = {23,23,16},  cells = {4, 4}, doors = {"N"}, budget = 5   },  -- 294 Orgrimmar Display Room
+    silvermoon_smallstudy    = { atlas = "silvermoon_smallstudy",              dims = {24,23,13},  cells = {4, 4}, doors = {"N"}, budget = 5   },  -- 307 Silvermoon Small Study
+    stormwind_armory         = { atlas = "stormwind_armory",                   dims = {36,37,12},  cells = {6, 6}, doors = {"N"}, budget = 12  },  -- 273 Stormwind Armory
+    silvermoon_armory        = { atlas = "silvermoon_armory",                  dims = {36,34,13},  cells = {6, 6}, doors = {"N"}, budget = 12  },  -- 283 Silvermoon Armory
+    belameth_meetingroom     = { atlas = "belameth_meetingroom",               dims = {36,34,18},  cells = {6, 6}, doors = {"N"}, budget = 12  },  -- 288 Bel'ameth Meeting Room
+    org_theaterroom          = { atlas = "org_theaterRoom",                    dims = {37,37,19},  cells = {6, 6}, doors = {"N"}, budget = 12  },  -- 292 Orgrimmar Theater
+    org_councilroom          = { atlas = "org_councilroom",                    dims = {48,48,33},  cells = {8, 8}, doors = {"N"}, budget = 20, floors = 2 },  -- 132 Orgrimmar Council Room
+    stormwind_grandhall      = { atlas = "stormwind_grandhall",                dims = {47,45,11},  cells = {8, 8}, doors = {"N"}, budget = 20  },  -- 282 Stormwind Grand Hall
+    silvermoon_loftystudy    = { atlas = "silvermoon_loftystudy",              dims = {49,48,31},  cells = {8, 8}, doors = {"N"}, budget = 20, floors = 2 },  -- 285 Silvermoon Lofty Study
+    belameth_templeroom      = { atlas = "belameth_templeroom",                dims = {49,47,22},  cells = {8, 8}, doors = {"N"}, budget = 20, floors = 2 },  -- 287 Bel'ameth Temple Room
+    -- The two barns are the SAME layout and height, only the theme differs
+    -- (owner, in-game 2026-08-21) -- so they share geometry, and stay two entries
+    -- because a player picks between them by theme. DB2 disagrees with itself by
+    -- one yard on width (45 vs 44), which straddles the cell boundary (7.5 vs
+    -- 7.33) and would otherwise have given identical rooms 8x7 and 7x7. Both take
+    -- the larger measurement: a footprint that under-reserves overlaps its
+    -- neighbour, which is not something a player can drag straight.
+    westfall_barn_autumnal   = { atlas = "Full_Layout_Fall_Prefab_L01",        dims = {45,43,27},  cells = {8, 7}, doors = {"N"}, budget = 18, floors = 2 },  -- 400 Autumnal Westfall Barn
+    westfall_barn_springtime = { atlas = "Full_Layout_Fall_Prefab_L02",        dims = {45,43,27},  cells = {8, 7}, doors = {"N"}, budget = 18, floors = 2 },  -- 401 Springtime Westfall Barn
+
     -- Entry is the structural anchor -- no placement budget. 2x1 like the closet.
     entry            = { atlas = "Layout_Closet_XS_Icon",                 dims = {5,11,7},   cells = {2, 1}, doors = {"N"},              budget = 0  },
 }
@@ -216,6 +260,34 @@ local PALETTE_ORDER = {
     "hallway", "tall_room",
     "staircase", "staircase_mirror",
     "circle_evening", "circle_daylight",
+    -- Themed rooms, in Blizzard's own HouseRoom.SortPriority order so the palette
+    -- reads the way the in-game catalog does. Being absent here is why they could
+    -- only ever arrive via a capture -- projects.paletteShapes walks ListShapes,
+    -- so a player had no way to PLACE one.
+    -- Autumnal
+    "westfall_barn_autumnal",
+    -- Springtime
+    "westfall_barn_springtime",
+    -- Orgrimmar
+    "org_displayroom",
+    "org_stonepitroom",
+    "org_theaterroom",
+    "org_councilroom",
+    -- Stormwind
+    "stormwind_displayroom",
+    "stormwind_kitchen",
+    "stormwind_armory",
+    "stormwind_grandhall",
+    -- Silvermoon
+    "silvermoon_displayroom",
+    "silvermoon_smallstudy",
+    "silvermoon_armory",
+    "silvermoon_loftystudy",
+    -- Bel'ameth
+    "belameth_bedroom",
+    "belameth_theater",
+    "belameth_meetingroom",
+    "belameth_templeroom",
 }
 function M.ListShapes() return PALETTE_ORDER end
 
@@ -227,15 +299,36 @@ local NAME_OVERRIDES = {
     t_shape = "T-Shape", cross_shape = "Cross", hallway = "Hallway",
     tall_room = "Stairwell Room (Empty)", staircase = "Stairwell (Left)", staircase_mirror = "Stairwell (Right)",
     circle_evening = "Garden (Eve)", circle_daylight = "Garden (Day)",
+    -- Themed rooms: Blizzard's own names, verbatim from HouseRoom.Name_lang.
+    -- Without an entry here GetLabel falls through to the shapeID, and a slug is
+    -- one unbroken token -- so the canvas truncated "belameth_bedr..." where a
+    -- real name would simply wrap, the way "Stairwell Room (Empty)" does.
+    westfall_barn_autumnal   = "Autumnal Westfall Barn",
+    westfall_barn_springtime = "Springtime Westfall Barn",
+    org_displayroom          = "Orgrimmar Display Room",
+    org_stonepitroom         = "Orgrimmar Stone Pit Room",
+    org_theaterroom          = "Orgrimmar Theater",
+    org_councilroom          = "Orgrimmar Council Room",
+    stormwind_displayroom    = "Stormwind Display Room",
+    stormwind_kitchen        = "Stormwind Kitchen",
+    stormwind_armory         = "Stormwind Armory",
+    stormwind_grandhall      = "Stormwind Grand Hall",
+    silvermoon_displayroom   = "Silvermoon Display Room",
+    silvermoon_smallstudy    = "Silvermoon Small Study",
+    silvermoon_armory        = "Silvermoon Armory",
+    silvermoon_loftystudy    = "Silvermoon Lofty Study",
+    belameth_bedroom         = "Bel'ameth Nestled Bedroom",
+    belameth_theater         = "Bel'ameth Theater",
+    belameth_meetingroom     = "Bel'ameth Meeting Room",
+    belameth_templeroom      = "Bel'ameth Temple Room",
 }
 function M.GetLabel(shapeID) return NAME_OVERRIDES[shapeID] or shapeID end
 
 -- Live catalog recordID (DB2 HouseRoom id) -> ShapeAtlas shapeID. The Layout-mode
 -- catalog searcher returns rooms keyed by recordID; this bridges them to the geometry
--- here (geometry stays in ShapeAtlas; the catalog supplies live name/icon/stock/cost).
--- The 20 placeable rooms -- Entry is the structural anchor, NOT a catalog entry. The 3
--- prefab rooms (113/132/151) have no ShapeAtlas geometry -> nil (the catalog's own
--- iconAtlas is the render fallback). recordIDs are stable DB2 ids.
+-- here (geometry stays in ShapeAtlas; the catalog supplies live name/icon/stock/cost --
+-- which is why a themed room needs no atlas entry of its own, only a mapping).
+-- Entry is the structural anchor, NOT a catalog entry. recordIDs are stable DB2 ids.
 local RECORD_TO_SHAPE = {
     [1]   = "square_s",        [2]   = "hallway",          [3]   = "closet_xs",
     [6]   = "t_shape",         [7]   = "square_xs",        [8]   = "l_shape",
@@ -246,5 +339,50 @@ local RECORD_TO_SHAPE = {
     -- Entry is not a catalog room, but it DOES carry a HouseRoom recordID in its
     -- roomGUID (Housing-2-46-0, verified live 2026-08-10 via the capture tap).
     [46]  = "entry",
+
+    -- ===== Themed rooms (12.1) ==========================================
+    -- Added 2026-08-21 after reganart asked why they were missing from the
+    -- Architect. Analysis + DB2 tables: docs/HDGR_ROOM_CATALOG_GAP_2026-08-21.md
+    --
+    -- `HouseRoom.Field_12_0_0_63967_001` is a ROOM CLASS and answers "is this a
+    -- room at all" from data rather than from a hand-kept skip list:
+    --   1 = standard modular room, 3 = themed room, 0 = whole-house layout.
+    -- Worth re-reading it when a patch adds rooms -- class 3 is the set below.
+    --
+    -- !! FLOORS ARE UNVERIFIED. Every entry defaults to a 1-floor span, but the
+    -- heights say some of these are taller: 22yd (Bel'ameth Temple), 27 (both
+    -- barns), 31 (Silvermoon Lofty Study), 33 (Orgrimmar Council) against 11 for
+    -- a standard square. DB2 has no floor-span column -- the class field is not
+    -- one (it reads 3 for a 7yd room) -- and the two candidate rules disagree:
+    -- height/11 makes the circle gardens 6 floors when they are known to be 3,
+    -- height/21 fits the gardens exactly. One in-game look settles it. Left at 1
+    -- meanwhile because under-reserving lets a player drag a bad placement
+    -- straight, while over-reserving makes valid layouts impossible to express.
+    [151] = "org_stonepitroom",         -- Orgrimmar Stone Pit Room
+    [277] = "stormwind_kitchen",        -- Stormwind Kitchen
+    [281] = "stormwind_displayroom",    -- Stormwind Display Room
+    [286] = "silvermoon_displayroom",   -- Silvermoon Display Room
+    [289] = "belameth_theater",         -- Bel'ameth Theater
+    [290] = "belameth_bedroom",         -- Bel'ameth Nestled Bedroom
+    [294] = "org_displayroom",          -- Orgrimmar Display Room
+    [307] = "silvermoon_smallstudy",    -- Silvermoon Small Study
+    [273] = "stormwind_armory",         -- Stormwind Armory
+    [283] = "silvermoon_armory",        -- Silvermoon Armory
+    [288] = "belameth_meetingroom",     -- Bel'ameth Meeting Room
+    [292] = "org_theaterroom",              -- Orgrimmar Theater
+    [132] = "org_councilroom",          -- Orgrimmar Council Room
+    [282] = "stormwind_grandhall",      -- Stormwind Grand Hall
+    [285] = "silvermoon_loftystudy",    -- Silvermoon Lofty Study
+    [287] = "belameth_templeroom",      -- Bel'ameth Temple Room
+    [400] = "westfall_barn_autumnal",   -- Autumnal Westfall Barn
+    [401] = "westfall_barn_springtime", -- Springtime Westfall Barn
+
+    -- DELIBERATELY UNMAPPED, do not "fix" these by adding geometry:
+    --   113 Full_Layout_Prefab_S  / 291 Full_Layout_Rugged_Prn -- WeightCost 100.
+    --     That is a whole-house layout, not a room; it does not belong in the
+    --     room palette. Ruling still open.
+    --   296 Sky Blue Riverside Room / 297 Verdant Riverside Room -- WeightCost 20
+    --     but NO RoomWmoDataID and NO atlas element in DB2. Unreleased, or a data
+    --     gap. Nothing to derive from, so nothing is invented.
 }
 function M.ShapeForRecordID(recordID) return RECORD_TO_SHAPE[recordID] end

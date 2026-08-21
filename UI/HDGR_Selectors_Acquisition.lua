@@ -386,7 +386,7 @@ for _, entry in ipairs(HDG.Constants.ACQ_PRESETS or {}) do
 end
 
 -- Endeavor currency = Community Coupons (Constants HOUSING_DECOR_CURRENCY_DATA).
-local ENDEAVOR_CURRENCY = 3363
+local ENDEAVOR_CURRENCY = HDG.Constants.COUPON_CURRENCY_ID
 -- Cost-based flags from the catalog row's baked costEntries -- keyed by itemID
 -- so BOTH view modes share one path (item mode: item.itemID; vendor mode: the
 -- raw itemID via the shared item predicate). Returns (costsEndeavor, isGoldOnly):
