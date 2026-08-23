@@ -102,7 +102,22 @@ L._GetPlayerCoords = _getPlayerCoords  -- exported for tests
 -- A question cannot get stuck the way a flag can.
 local TRANSFER_INTERACTIONS = {
     "Merchant", "MailInfo", "Banker", "AccountBanker", "CharacterBanker", "GuildBanker",
+    -- Auctioneer: commodity buys land straight in the bags with the AH open, so
+    -- without this a 200-lumber purchase was recorded as a harvest, blip and all.
+    "Auctioneer",
 }
+
+-- Trade settles ASYNCHRONOUSLY relative to the frame. Blizzard hides TradeFrame on
+-- TRADE_CLOSED while BAG_UPDATE is debounced 0.2s behind it, so by the time Scan runs
+-- the question "is a trade open?" answers false and 40 traded Ashwood read as a harvest,
+-- blip and all (review 2026-08-23). A short grace window after TRADE_CLOSED absorbs
+-- whatever lands, and -- unlike the latch the "ask, don't remember" rewrite removed --
+-- it cannot get stuck, because it expires on a clock rather than on an event arriving.
+local function _now()
+    return _G.GetTime and _G.GetTime() or 0  -- exception(boundary): GetTime/time absent in headless harness
+end
+
+local TRADE_SETTLE_GRACE = 3   -- seconds
 
 local function _transferUIOpen()
     local PIT = _G.Enum.PlayerInteractionType
@@ -112,14 +127,14 @@ local function _transferUIOpen()
     -- Trade is the one source with no PlayerInteractionType member, so its frame
     -- is the only thing that can answer. Nil = its UI never loaded = not open.
     local trade = _G.TradeFrame  -- exception(boundary): Blizzard frame, nil until the Trade UI loads
-    return trade ~= nil and trade:IsShown() == true
+    if trade ~= nil and trade:IsShown() == true then return true end
+    -- ...and for TRADE_SETTLE_GRACE seconds after it closed.
+    local until_ = L._tradeSettleUntil
+    return until_ ~= nil and _now() < until_
 end
 
 -- ===== Harvest detection =====================================================
 -- Diff current bag total against last-known. First scan is warm-up (records totals, no HARVESTED).
-local function _now()
-    return _G.GetTime and _G.GetTime() or 0  -- exception(boundary): GetTime/time absent in headless harness
-end
 
 function L:Scan()
     local Bag = HDG.BagObserver
@@ -393,6 +408,8 @@ HDG.Modules:Declare({
         BAG_UPDATE = { handler = "OnBagUpdate", debounce = 0.2 },
         -- The transfer gate is a QUESTION asked in Scan, not an event latch, so
         -- the only bank events left here are the auto-deposit hooks.
+        -- TRADE_CLOSED opens the settle window; the frame is already hidden by then.
+        TRADE_CLOSED = { handler = "OnTradeClosed" },
         BANKFRAME_OPENED = { handler = "OnBankFrameOpen"   },
         BANKFRAME_CLOSED = { handler = "OnTransferUIClose" },
         -- Warband/portable banker fires PLAYER_INTERACTION_MANAGER events, not BANKFRAME_*.
@@ -402,6 +419,7 @@ HDG.Modules:Declare({
     OnBagUpdate = function()
         L:Scan()  -- the GC + live tickers self-arm from the harvest path now
     end,
+    OnTradeClosed     = function() L._tradeSettleUntil = _now() + TRADE_SETTLE_GRACE end,
     OnBankFrameOpen   = function() L:_MaybeAutoDepositLumber() end,
     OnTransferUIClose = function() L._autoDepositDone = false end,
     OnInteractionOpen = function(_, interactionType)

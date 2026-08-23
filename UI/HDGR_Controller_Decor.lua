@@ -584,7 +584,8 @@ local TAG_TOOLTIP_RECIPE = { Redeemable = "RedeemableTag" }
 local function _makeTagTooltipDef(slot)
     return function()
         -- exception(false-positive): top-level controller def fn (not a row factory)
-        local tags = HDG.Selectors:Call("decor.tagsForFilter", HDG.Store:GetState(), {}) or {}
+        -- Strict: decor.tagsForFilter returns a table on every branch.
+        local tags = HDG.Selectors:Call("decor.tagsForFilter", HDG.Store:GetState(), {})
         local name = tags[slot] and TAG_TOOLTIP_RECIPE[tags[slot]]
         return name and { recipe = name } or nil
     end

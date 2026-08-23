@@ -456,6 +456,19 @@ local function forceShowAllRecipes()
     CT.ClearRecipeSourceTypeFilter()
 end
 
+-- The snapshot has to outlive the session. These flags PERSIST across sessions and are
+-- inherited by the guild view, so a /reload or logout mid-harvest used to leave the
+-- player's own profession window permanently forced to show-everything with their
+-- filters cleared, and nothing would ever put it back (review 2026-08-23).
+-- Parked on account.ui through the generic persisted setter rather than minting an
+-- action for one recovery latch; it is read back on the next profession window open.
+local FILTER_RESTORE_KEY = "professionFilterRestore"
+
+local function parkFilterSnapshot(snap)
+    HDG.Store:Dispatch({ type = HDG.Constants.ACTIONS.UI_SET_PERSISTENT,
+                         payload = { key = FILTER_RESTORE_KEY, value = snap } })
+end
+
 local function restoreRecipeFilters(snap)
     if not snap then return end  -- exception(nullable): no snapshot when harvest never started
     local CT = _G.C_TradeSkillUI
@@ -493,6 +506,7 @@ local function harvestTeardown()
     h.token = h.token + 1   -- invalidate every pending timer closure
     restoreProfessionsFrame()
     restoreRecipeFilters(h.filterSnapshot)
+    parkFilterSnapshot(nil)   -- clean teardown: nothing left to recover
     h.filterSnapshot = nil
     h.active = false
     h.loadingProfession = nil
@@ -532,6 +546,36 @@ end
 -- Chain to the next queued profession (or finish). ViewGuildRecipes opens the
 -- guild view; the standing TRADE_SKILL_LIST_UPDATE debounce fires Scan() ->
 -- capture -> _HarvestOnListUpdate below chains onward.
+-- Hide OUR guild-opened window (SetAlpha, never Hide -- Hide tears down tradeskill
+-- state). The provenance check keeps a player's OWN crafting window visible even if
+-- they open it mid-harvest (VGC 1.4.2 bug class).
+function PS:_HideOurGuildWindow()
+    if PS._harvest.openedTradeSkill and _G.ProfessionsFrame
+        and isForeignTradeSkill(_G.C_TradeSkillUI) then
+        _G.ProfessionsFrame:SetAlpha(0)
+    end
+end
+
+-- A harvest that died mid-flight (reload, logout, disconnect) never ran its teardown,
+-- so the player's filters are still forced open. Put them back the next time a
+-- profession window appears, then clear the latch. Never runs during a live harvest --
+-- teardown owns the restore there.
+function PS:_RecoverParkedFilters()
+    if PS._harvest.active then return end
+    local parked = HDG.Store:GetState().account.ui[FILTER_RESTORE_KEY]
+    if not parked then return end  -- exception(nullable): no interrupted harvest to recover
+    restoreRecipeFilters(parked)
+    parkFilterSnapshot(nil)
+    HDG.Log:Debug("recipe_capture", "restored profession filters parked by an interrupted guild scan")
+end
+
+-- Idempotent: ADDON_LOADED and the onEnable catch-up both call it.
+function PS:_InstallProfessionsFrameHook()
+    if PS._pfHooked or not _G.ProfessionsFrame then return end  -- exception(boundary): LoD frame
+    PS._pfHooked = true
+    _G.ProfessionsFrame:HookScript("OnShow", function() PS:_HideOurGuildWindow() end)
+end
+
 local function harvestLoadNext()
     local h = PS._harvest
     -- Combat abort at the chain boundary (PLAYER_REGEN_DISABLED is CombatMiddleware-owned,
@@ -546,6 +590,17 @@ local function harvestLoadNext()
     local prof = h.queue[h.queueIndex]
     if not prof then
         harvestFinish()
+        return
+    end
+    -- Blizzard gates its own "All Recipes" button on CanViewGuildRecipes. Without the
+    -- same check a rank that cannot view simply never opens a window, and the chain
+    -- waits out the full per-profession timeout instead -- twelve professions of that
+    -- is two minutes of nothing, reported as success.
+    if _G.CanViewGuildRecipes and not _G.CanViewGuildRecipes(prof.id) then  -- exception(boundary): bare FrameXML global
+        HDG.Log:Debug("recipe_capture", "Guild scan: rank cannot view " .. tostring(prof.name) .. ", skipping")
+        -- Advance immediately: nothing was opened, so there is nothing to wait for or
+        -- restore. Bounded by the queue length (one pass per profession), not recursion depth.
+        harvestLoadNext()
         return
     end
     h.loadingProfession = prof.id
@@ -636,6 +691,7 @@ function PS:StartGuildHarvest()
     h.headersReceived = false
     h.startCount = captureStoreCount()
     h.filterSnapshot = snapshotRecipeFilters()
+    parkFilterSnapshot(h.filterSnapshot)
     forceShowAllRecipes()
     harvestProgress({ phase = "headers" })
     -- Timeout: guild data never arrived.
@@ -677,6 +733,18 @@ HDG.Modules:Declare({
         PS._HarvestOnListUpdate()
     end,
     onEnable = function(self)
+        -- ProfessionsFrame OnShow is the RELIABLE hook. TRADE_SKILL_SHOW alone was not:
+        -- Blizzard_Professions is load-on-demand and is loaded BY that event, so on the
+        -- first guild profession of a session `_G.ProfessionsFrame` was still nil when we
+        -- looked, the alpha never applied, and the window opened full-size over the screen.
+        -- The sibling ProfessionButtons module already uses this ADDON_LOADED shape.
+        HDG.BlizzardEvents:_internalSubscribe("ADDON_LOADED", function(name)
+            if name ~= "Blizzard_Professions" then return end
+            PS:_InstallProfessionsFrameHook()
+        end)
+        -- Covers the case where Blizzard_Professions loaded before onEnable ran.
+        PS:_InstallProfessionsFrameHook()
+
         -- Catalog warmed after a capture skipped cold (RequestLoad above): re-scan
         -- while the profession window is still open so the capture actually lands.
         self._storeToken = HDG.Store:Subscribe(function(actionType)
@@ -698,12 +766,7 @@ HDG.Modules:Declare({
         PS._HarvestOnHeaders()
     end,
     OnTradeSkillShow = function(self)
-        -- Hide OUR guild-opened window (SetAlpha, never Hide -- Hide tears down
-        -- tradeskill state). The provenance check keeps a player's OWN crafting
-        -- window visible even if they open it mid-harvest (VGC 1.4.2 bug class).
-        if PS._harvest.openedTradeSkill and _G.ProfessionsFrame
-            and isForeignTradeSkill(_G.C_TradeSkillUI) then
-            _G.ProfessionsFrame:SetAlpha(0)
-        end
+        PS:_HideOurGuildWindow()
+        PS:_RecoverParkedFilters()
     end,
 })

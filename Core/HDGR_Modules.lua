@@ -65,6 +65,9 @@ end
 --     onEnable     = function(self) end,     -- lifecycle 2: cross-module wiring
 --     onShutdown   = function(self) end,     -- lifecycle 3 (optional, v0.7): teardown on PLAYER_LOGOUT
 -- }
+-- The three lifecycle hook names, exactly as Phase1/Phase2/Shutdown call them.
+local LIFECYCLE_KEYS = { "onInitialize", "onEnable", "onShutdown" }
+
 function M:Declare(def)
     if type(def) ~= "table" then
         error("HDG.Modules:Declare expected a table, got " .. type(def), 2)
@@ -82,6 +85,21 @@ function M:Declare(def)
     end
     if def.dependencies ~= nil and type(def.dependencies) ~= "table" then
         error(("HDG.Modules:Declare(%q): dependencies must be a list"):format(def.name), 2)
+    end
+    -- Case-variant lifecycle keys. The schema is deliberately OPEN -- BlizzardEvents
+    -- resolves handler names off this same table, so they cannot be whitelisted -- which
+    -- means a mis-cased `OnEnable` is accepted in silence and its hook simply never runs.
+    -- PetObserver shipped that way and lost its whole boot seed (review 2026-08-23).
+    -- Only case-variants of the three lifecycle names are rejected, so real handlers
+    -- (OnListUpdate, OnCollectionReceived, ...) are untouched.
+    for key in pairs(def) do
+        local lowered = key:lower()
+        for _, life in ipairs(LIFECYCLE_KEYS) do
+            if lowered == life:lower() and key ~= life then
+                error(("HDG.Modules:Declare(%q): key %q is a mis-cased %q -- the lifecycle hook would never run")
+                      :format(def.name, key, life), 2)
+            end
+        end
     end
     self._registry[def.name] = def
 end

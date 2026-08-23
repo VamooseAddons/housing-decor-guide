@@ -243,16 +243,11 @@ Selectors:Register("decor.selectedItem", {
         if not id then return nil end
         local row = HDG.HousingCatalogObserver:GetRow(id)
         if not row then return nil end  -- catalog cold or item not in catalog
-        -- Vendor-first priority for sourceType: the detail panel surfaces vendor
-        -- name/zone via sourceName/sourceDetail (distinct from _bakeSourceTypes'
-        -- quest-first priority). Per-surface composition at the selector level.
+        -- Primary vendor -- the map/waypoint target and the source-line hyperlink.
+        -- NOT a source-priority decision any more: this panel used to recompute
+        -- its own vendor-first sourceType while the bake ran quest-first, so the
+        -- detail panel and the tooltip for one piece could name different sources.
         local firstVendor = row.vendors and row.vendors[1]
-        local sourceType =
-              (firstVendor and 5)                                 -- VENDOR (highest priority for this surface)
-           or (row.achievement and 1)                             -- ACHIEVEMENT
-           or (row.quest and 2)                                   -- QUEST
-           or (row.recipe and 6)                                  -- CRAFTED (recipe DB canonical)
-           or 0                                                   -- truly unknown
 
         -- Destroy identity: base stack = the undyed (vid=0) variant. row.entryID is already
         -- the vid=0 entry, and its destroyable count is the undyed numStored (real per-variant),
@@ -275,9 +270,9 @@ Selectors:Register("decor.selectedItem", {
             name          = row.name or "Unknown",
             profession    = (row.recipe and row.recipe.profession) or "?",
             expansion     = row.expansion or "?",
-            sourceType    = sourceType,
-            sourceName    = (firstVendor and firstVendor.name) or "",
-            sourceDetail  = (firstVendor and firstVendor.zone) or "",
+            sourceType    = row.sourceType,   -- baked vendor-first (_bakeSourceTypes)
+            sourceName    = row.sourceName,
+            sourceDetail  = row.sourceDetail,  -- exception(nullable): vendor zone only; non-vendor sources have no detail
             sourceNpcID   = firstVendor and firstVendor.npcID or nil,  -- exception(nullable): non-vendor sources have no npc; drives the source-line vendor hyperlink
             -- Primary vendor's location for the detail-panel Show on Map / Waypoint buttons
             -- (same shape Shop-by-Vendor feeds HDG.Waypoints). nil => no mappable vendor.
@@ -1130,7 +1125,7 @@ Selectors:Register("decor.matchesTag", {
         end
 
         -- ===== Crafted: items whose canonical source IS the recipe (sourceType==6) =====
-        -- row.sourceType is baked by _bakeSourceTypes (priority Quest>Ach>Vendor>Crafted),
+        -- row.sourceType is baked by _bakeSourceTypes (priority Vendor>Quest>Ach>Crafted),
         -- so 6 = recipe-backed with no higher source -- the row's craft star. Matches the
         -- curated recipe DB, NOT the player's known recipes. No profession sub-tag selected
         -- -> all crafted; else narrow to that recipe's profession.

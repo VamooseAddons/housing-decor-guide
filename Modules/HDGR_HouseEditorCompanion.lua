@@ -395,9 +395,10 @@ local function _installPlacementHook()
         hooksecurefunc(_G.C_HousingBasicMode, "StartPlacingNewDecor", stashPending)  -- exception(boundary): housing C_API nil off-house-context
         H._placeHookInstalled = true
     end
-    if _G.C_HousingExpertMode and _G.C_HousingExpertMode.StartPlacingNewDecor then
-        hooksecurefunc(_G.C_HousingExpertMode, "StartPlacingNewDecor", stashPending)  -- exception(boundary): housing C_API nil off-house-context
-    end
+    -- No expert-mode hook: C_HousingExpertMode has no StartPlacing* function at all.
+    -- Blizzard starts placement only through C_HousingBasicMode.StartPlacingNewDecor,
+    -- in expert mode too, so the hook above IS the expert path. The old branch here
+    -- tested a function that cannot exist and read as though expert mode had its own.
 end
 
 -- Editor became visible. Trigger the load-on-demand catalog sweep (the main window

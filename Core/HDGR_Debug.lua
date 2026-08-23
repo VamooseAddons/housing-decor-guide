@@ -576,6 +576,10 @@ end
 local function _petScaleStep(f, i, acc, done)
     if i > #PETSCALE_PROBE then return done(acc) end
     local e = PETSCALE_PROBE[i]
+    -- exception(false-positive): dev surface. PetObserver declares sole ownership of
+    -- C_PetJournal for the PRODUCTION path; /hdg petscale is a probe that wants raw
+    -- species data the observer deliberately does not expose, and adding an observer
+    -- method for one debug command would be the worse trade.
     local info = _G.C_PetJournal.GetPetInfoTableBySpeciesID(e.sid)
     if not (info and info.displayID) then
         acc[i] = { name = ("sid %d (not owned)"):format(e.sid) }
@@ -628,6 +632,10 @@ function D:PetScale()
         local dialog = HDG.UI and HDG.UI.CopyDialog and HDG.UI:CopyDialog()
         if dialog and dialog.Open then dialog:Open("petscale", table.concat(out, "\n"))
         else for _, l in ipairs(out) do _print(l) end end
+        -- Hide the probe model. It is a 200x200 PlayerModel anchored to the centre of
+        -- UIParent, so leaving it shown parked the last probed pet over the world for
+        -- the rest of the session with /reload the only cure.
+        f:Hide()
         _petScaleBusy = false
     end)
 end

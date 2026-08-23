@@ -627,7 +627,7 @@ function R:BuildRow(info)
     R:_bakeCost(row)         -- row.costEntries (unified) + row.costLine
     R:_bakeRecipe(row)       -- row.recipe + row.recipeLabel (MUST precede _bakeSourceTypes,
                              -- which reads row.recipe to assign sourceType=6 / CRAFTED)
-    R:_bakeSourceTypes(row)  -- row.sourceType / sourceName / altSourceType / altSourceName
+    R:_bakeSourceTypes(row)  -- row.sourceType / sourceName / sourceDetail (vendor-first)
     R:_bakeBonusXp(row)      -- row.bonusXpLabel (first-acquisition reward chip)
     R:_bakeVariantDyes(row)  -- row.dyedVariants[] (per-owned-variant dye derivation)
     -- Single canonical source/gate bake. Produces row.sourceTags[] in
@@ -838,6 +838,18 @@ end
 -- + bake costLine. row.costEntries for structured access; row.costLine for direct render.
 
 -- gold(copper) + currency list -> normalized {currencyID, amount} entries.
+-- Override-sourced costs carry no icon of their own. Resolve it HERE, at the observer
+-- bake, rather than leaving it to the renderer: an icon-less entry made Format.FormatCurrency
+-- fall through to a live C_CurrencyInfo call, and blueprints.costBadge is a pure selector
+-- with no resolver tick to re-derive it (review 2026-08-23). Format.lua's own header scopes
+-- that fallback to "observer bake, not selector" -- this is the bake.
+local function _currencyIcon(currencyID)
+    local CI = _G.C_CurrencyInfo  -- exception(boundary): absent in headless tests
+    if not (CI and CI.GetCurrencyInfo) then return nil end
+    local info = CI.GetCurrencyInfo(currencyID)
+    return info and info.iconFileID  -- exception(boundary): nil for an unknown currencyID
+end
+
 local function _entriesFromCostSpec(cost, GOLD)
     local entries = {}
     if cost.gold and cost.gold > 0 then
@@ -845,7 +857,7 @@ local function _entriesFromCostSpec(cost, GOLD)
     end
     if cost.currencies then
         for _, c in ipairs(cost.currencies) do
-            entries[#entries + 1] = { currencyID = c.id, amount = c.amount }
+            entries[#entries + 1] = { currencyID = c.id, amount = c.amount, icon = _currencyIcon(c.id) }
         end
     end
     return entries
@@ -997,20 +1009,31 @@ end
 
 -- _composeRepProgressSuffix lives in HDG.Format (live progress via detail-panel selector + RepObserver).
 
--- _bakeSourceTypes: detail-panel "Source: X" label. Priority: Quest > Ach > Vendor > Crafted.
--- Distinct from _bakeSourceTags (binding-strength priority for House donut buckets).
+-- _bakeSourceTypes: the "Source: X" label -- one concrete answer to "where do I
+-- get this?". Priority: Vendor > Quest > Ach > Crafted.
+--
+-- Vendor leads because it is the only one of the four that is still true for the
+-- reader. A quest or achievement a piece once came from is spent the moment it
+-- is done, and for anyone reading a published blueprint list it may never have
+-- been available at all -- but the vendor is standing in a zone they can fly to
+-- today. This is the same concrete-primary convention the curated master keeps
+-- (HDG_AllDecorDB: vendor primary, quest/ach demoted to `alt`), so the live-
+-- catalog bake and the master now agree.
+--
+-- Distinct from _bakeSourceTags, which stays binding-strength ordered (REP >
+-- CRAFT > QUEST > ...) -- gate chips answer "what stops me", not "where is it".
 function R:_bakeSourceTypes(row)
     local firstVendor = row.vendors and row.vendors[1]
-    if row.quest then
-        row.sourceType, row.sourceName = 2, row.quest
-    elseif row.achievement then
-        row.sourceType, row.sourceName = 1, row.achievement
-    elseif firstVendor then
+    if firstVendor then
         -- Vendor: surface the first vendor's name (Hesta Forlath) and zone
         -- (Silvermoon City) in the label. Detail-panel renders as
         --   [VEND] Hesta Forlath (Silvermoon City)
         row.sourceType, row.sourceName = 5, firstVendor.name or ""
         row.sourceDetail              = firstVendor.zone or ""
+    elseif row.quest then
+        row.sourceType, row.sourceName = 2, row.quest
+    elseif row.achievement then
+        row.sourceType, row.sourceName = 1, row.achievement
     elseif row.recipe then
         row.sourceType, row.sourceName = 6, row.recipe.expansion or ""
     else
@@ -1221,6 +1244,35 @@ local function _extractCostEntries(raw)
     return entries
 end
 
+-- A vendor block can carry SEVERAL Zone: lines. Blizzard reports ONE Vendor with every
+-- zone that vendor stands in:
+--     Vendor: Unquestionably Griftah / Zone: Razorwind Shores / Zone: Founder's Point
+--     Vendor: Second Chair Pawdo     / Zone: Stormwind City   / Zone: Dornogal
+-- Assigning current.zone per line kept only the LAST and silently dropped the rest --
+-- 74 of 986 vendor blocks in the recorded catalog, every one of them losing a zone.
+-- That is what made a vendor standing in Razorwind Shores list as Founder's Point.
+--
+-- Emit one vendor record PER zone: byVendor is already keyed (name, zone), and
+-- acq.allVendors already emits a UI row per key, so the whole chain wants this shape.
+local function _flushVendor(vendors, v)
+    if not v then return end
+    local zones = v.zones
+    v.zones = nil
+    if not zones or #zones == 0 then
+        vendors[#vendors + 1] = v
+        return
+    end
+    for i = 1, #zones do
+        local rec = v
+        if i > 1 then                       -- shallow copy per extra zone
+            rec = {}
+            for k, val in pairs(v) do rec[k] = val end
+        end
+        rec.zone = zones[i]
+        vendors[#vendors + 1] = rec
+    end
+end
+
 function R:_ParseSourceText(sourceText, row)
     -- Always stamp row.vendors = {} so downstream ipairs(row.vendors) is safe.
     -- exception(boundary): quest-only items have empty sourceText -> row.vendors was nil, exploding consumers.
@@ -1253,8 +1305,8 @@ function R:_ParseSourceText(sourceText, row)
         -- (e.g. a stray "Profession") are not in the table -> nil -> ignored.
         local bareKind = SOURCE_TOKENS[line]
         if vName then
-            if current then table.insert(vendors, current) end
-            current = { name = vName, zone = "", cost = "", faction = "", standing = "" }
+            _flushVendor(vendors, current)
+            current = { name = vName, zone = "", zones = {}, cost = "", faction = "", standing = "" }
             pendingZoneTarget = nil
         elseif drop then
             -- "Drop: <Source>" optional "Zone:" follows via pendingZoneTarget.
@@ -1276,7 +1328,8 @@ function R:_ParseSourceText(sourceText, row)
             row.promo = true
             pendingZoneTarget = nil
         elseif zone and current then
-            current.zone = zone
+            current.zones[#current.zones + 1] = zone
+            current.zone = zone   -- last-seen; _flushVendor overwrites per emitted record
         elseif zone and pendingZoneTarget then
             pendingZoneTarget.zone = zone
             pendingZoneTarget = nil
@@ -1315,7 +1368,7 @@ function R:_ParseSourceText(sourceText, row)
             if next(entries) then current.costEntries = entries end
         end
     end
-    if current then table.insert(vendors, current) end
+    _flushVendor(vendors, current)
     row.vendors = vendors
 end
 

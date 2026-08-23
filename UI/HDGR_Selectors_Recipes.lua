@@ -44,6 +44,19 @@ end
 -- did :Get(itemID) index this by the same key. (GetAll's raw table is keyed by the
 -- DecorDB synthetic build-ID instead, so we re-key here; iteration consumers read
 -- entry.itemID either way.)
+-- The scanner captures C_TradeSkillUI.GetBaseProfessionInfo().professionName, which is
+-- LOCALIZED ("Alchemie" on deDE). Stamping that over the seed's English value breaks
+-- every join against the curated English data -- HDGR_Profession.lua's own header calls
+-- this out and names captured recipes specifically. Map it back through the alias index
+-- here rather than at capture, so SavedVariables already written by a non-enUS client are
+-- repaired on read too. An unmapped name is kept as-is: that means PROFESSION_DATA is
+-- missing an alias, which is a data gap to fix, not something to silently drop.
+local function _canonProfession(name)
+    if not name then return nil end   -- exception(nullable): pre-walk captures have no profession yet
+    local entry = HDG.Profession.GetByName(name)
+    return entry and entry.name or name
+end
+
 Selectors:Register("recipes.db", {
     reads    = { "account.recipeCapture", "session.resolvers.staticData.tick" },  -- staticData.tick: ADR-003c GetAll facade contract
     memoized = true,
@@ -57,7 +70,7 @@ Selectors:Register("recipes.db", {
                 if ov then
                     local m = {}
                     for k, v in pairs(entry) do m[k] = v end
-                    m.profession = ov.profession
+                    m.profession = _canonProfession(ov.profession)
                     m.reagents   = _overlayReagents(ov.reagents, entry.reagents)
                     merged[entry.itemID] = m
                 else
@@ -75,7 +88,7 @@ Selectors:Register("recipes.db", {
                 merged[itemID] = {
                     itemID     = itemID,
                     spellID    = ov.spellID,
-                    profession = ov.profession,
+                    profession = _canonProfession(ov.profession),
                     category   = "House Decor",
                     expansion  = ov.expansion,
                     name       = ov.name,
@@ -106,10 +119,17 @@ Selectors:Register("recipes.craftGraph", {
         end
         local function overlay(store)
             for itemID, rec in pairs(store) do
+                -- Sort by itemID. rec.reagents is an {id=qty} MAP, and pairs() order is
+                -- not deterministic under LuaJIT -- but this array replaces the seed's
+                -- fixed-order slots, and GetRecipeShortage picks worstShortageItem with a
+                -- strict `>`, so on a TIE whichever slot happened to be visited first won.
+                -- Ties are the normal case for decor recipes (8/8/8/1), which made the
+                -- "you're missing X" reagent flip between logins with no state change.
                 local slots = {}
                 for rid, qty in pairs(rec.reagents) do
                     slots[#slots + 1] = { type = "basic", qty = qty, itemID = rid }
                 end
+                table.sort(slots, function(a, b) return a.itemID < b.itemID end)
                 local seed = graph[itemID]  -- exception(nullable): captured recipe may be absent from seed
                 graph[itemID] = {
                     itemID       = itemID,
@@ -990,6 +1010,10 @@ Selectors:Register("recipes.queueTitleLabel", {
 -- queueLumberHeaderLabel: queue footer caption with total lumber needed.
 Selectors:Register("recipes.queueLumberHeaderLabel", {
     reads = {"account.craft.queue", "account.collection.ownedDecorIDs"},
+    -- buildLumberQueueNeed calls recipes.db, so its closure (account.recipeCapture +
+    -- the staticData tick) has to be declared here too -- the sibling warehouse.lumberRows
+    -- already does. Without it the footer kept a stale lumber total after a capture.
+    calls = {"recipes.db"},
     fn = function(state)
         local need = buildLumberQueueNeed(state)
         local total = 0

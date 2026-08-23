@@ -1,3 +1,63 @@
+## [3.26.0] - 2026-08-24 (August 2026)
+
+### Fixed
+- **Vendors who trade in more than one place now show up in each of them.** A vendor
+  standing in both housing neighbourhoods -- or in Stormwind and Dornogal, or Darnassus
+  and the Ruins of Gilneas -- was only ever listed in one, because the addon kept just the
+  last place the game named and quietly dropped the rest. Around 30 vendor listings come
+  back, each with its own location. Some of the restored ones have no map coordinates yet,
+  so they list without a pin until someone walks them. Found by Vamoose, who kept pointing
+  at a vendor standing in Razorwind Shores that the addon insisted was in Founder's Point.
+- **The Pets tab could come up empty, and offer to summon a pet already standing
+  next to you.** After a reload it waited for the game to volunteer a pet-journal
+  update before building its list, which on a quiet login never came -- so the tab
+  said you had no pets, and a companion already out was offered a "Summon" button
+  that did nothing when clicked. It now reads your collection at startup like every
+  other part of the addon.
+- **The Goblin export wrote nonsense for anything sold at a loss.** A negative
+  profit came out as "-13.65.44" instead of "-12.34.56" -- so the rows the export
+  exists to help you find were the rows you could not read.
+- **A pet with no preview showed you nothing at all.** Rather than falling back to
+  the icon and saying "Preview unavailable", the panel went completely blank until
+  you clicked a different pet. It could also frame a pet with the camera meant for
+  furniture.
+- **Profession filters went wrong on non-English clients.** A scanned recipe stored
+  your profession's translated name over the addon's own, so the Alchemy filter
+  found nothing and the Recipes tab counted zero beside a phantom second bucket.
+- **Clicking an achievement link in combat blamed the addon.** The red "interface
+  action failed" message named Housing Decor Guide; the link now waits, as the map
+  buttons beside it already did.
+- **Being traded lumber counted as farming it.** A guildmate handing you 40 Ashwood
+  started a farming session and dropped a harvest marker where you stood. Buying
+  lumber on the auction house did the same.
+- **A guild scan left your profession window rearranged.** It borrows your filters
+  while it reads the guild's recipes and puts them back when it finishes -- but a
+  reload or logout partway through meant it never got to, and those settings persist,
+  so the window stayed that way for good. It now restores them the next time you open
+  a profession. A scan also no longer stalls ten seconds per profession your guild
+  rank cannot view, and the guild's window no longer flashes up full-size on the first
+  profession of a session.
+- **Capture Floors worked while you were standing in someone else's house**, filing
+  their layout under a house of yours. It now asks for a house you own.
+- **Moving a piece of decor could be recorded as placing a new one**, and a piece you
+  picked up and then cancelled stayed pending until something else was placed.
+- **The room-search box in the house editor** left a piece highlighted in the world
+  when you filtered it out from under the cursor, and kept working in the background
+  after you closed the editor.
+
+### Changed
+- **Decor that a vendor sells now says so, even when a quest or achievement also
+  gives it.** Hundreds of pieces are both -- and the source line used to name the
+  quest, which is true exactly once and no help at all to the person reading your
+  blueprint list who never had that quest offered to them. The vendor is standing
+  in a zone they can fly to today, so that is what gets named now, with the zone
+  beside it. The quest or achievement has not gone anywhere: it still shows on the
+  chips, so a piece you can earn as well as buy still says both. This runs
+  everywhere one source has to be named -- the Blueprints copy list, the decor
+  tooltip, and the item's detail panel -- so the three finally agree with each
+  other. The tooltip goes further and lists every vendor that stocks the piece,
+  which it could not do while a quest held the line.
+
 ## [3.25.0] - 2026-08-21 (August 2026)
 
 ### Added

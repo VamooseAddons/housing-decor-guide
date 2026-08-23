@@ -229,7 +229,10 @@ local function addSubscription(modDef, event, sub)
                     BE._frame:RegisterEvent(event)
                     BE._registeredEvents[event] = true
                 else
-                    HDG.Log:Debug("blizzard_events", "skipped event not valid on this client: " .. event)
+                    -- Warn, not Debug: the `blizzard_events` tag is debug-level and never
+                    -- prints, so a renamed event silently left its handler in _subs to never
+                    -- fire. A skipped registration is a real capability loss -- say so.
+                    HDG.Log:Warn("blizzard_events", "skipped event not valid on this client: " .. event)
                 end
             end
         end

@@ -162,7 +162,11 @@ function P:Dismiss()
     return true
 end
 
-function P:OnCompanionUpdate()
+-- companionType is "CRITTER" / "MOUNT" / ... -- Blizzard's own pet collection filters
+-- on it. Without the filter, mounting up re-ran every pets.* selector for a summoned
+-- GUID that had not changed.
+function P:OnCompanionUpdate(companionType)
+    if companionType and companionType ~= "CRITTER" then return end  -- exception(boundary): arg absent on some fires
     self._summonedGUID = _G.C_PetJournal.GetSummonedPetGUID()
     HDG.Store:Dispatch({ type = HDG.Constants.ACTIONS.PETS_SUMMONED_CHANGED, payload = {} })
 end
@@ -207,22 +211,23 @@ end
 
 HDG.Modules:Declare({
     name = "PetObserver",
+    -- Sole owner for the production path. Core/HDGR_Debug.lua's /hdg petscale probe
+    -- reads the namespace directly and is the one annotated carve-out.
     ownsBlizzardNamespaces = { "C_PetJournal" },
     dependencies = {},
     blizzardEvents = {
         PET_JOURNAL_LIST_UPDATE = { handler = "OnListUpdate" },
         COMPANION_UPDATE        = { handler = "OnCompanionUpdate" },
     },
-    OnEnable = function()
+    onEnable = function()
         P:Rebuild()
         -- Seed it: a pet already out at login must paint "Dismiss" before any
         -- COMPANION_UPDATE arrives.
         P._summonedGUID = _G.C_PetJournal.GetSummonedPetGUID()
     end,
-    OnListUpdate = function()
-        P:OnListUpdate()
-    end,
-    OnCompanionUpdate = function()
-        P:OnCompanionUpdate()
-    end,
+    -- BlizzardEvents resolves handlers on this def table (module = the def), so the
+    -- first arg is the def and the event payload follows. Forward it: COMPANION_UPDATE's
+    -- companionType is the whole point of the filter in P:OnCompanionUpdate.
+    OnListUpdate      = function(_, ...) P:OnListUpdate(...) end,
+    OnCompanionUpdate = function(_, ...) P:OnCompanionUpdate(...) end,
 })

@@ -115,8 +115,10 @@ end
 local function _resetPetRow(row)
     row._speciesID = nil
     row._tipName, row._tipFamily, row._tipHeight = nil, nil, nil
-    if row._iconTex then row._iconTex:SetTexture(nil) end
-    if row._barFill then row._barFill:Hide() end
+    -- Strict: _layoutPetRow creates both unconditionally and every row reaching Reset
+    -- has been through it. Guarding here would swallow a rename instead of surfacing it.
+    row._iconTex:SetTexture(nil)
+    row._barFill:Hide()
 end
 
 HDG.Rows:Register("petRow", {

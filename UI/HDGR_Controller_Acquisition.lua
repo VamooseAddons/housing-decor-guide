@@ -514,6 +514,9 @@ function AcquisitionController:_wireAchievementHyperlinks(rootFrame)
     hyperHost:SetScript("OnHyperlinkClick", function(_, link)
         local achID = _achievementForItem(_parseAchLink(link))
         if not achID then return end
+        -- ShowUIPanel refuses insecure callers in combat (CheckProtectedFunctionsAllowed)
+        -- and blames the addon by name in the red error. Same guard the mapAllBtn uses.
+        if InCombatLockdown() then return end
         ShowAchievementFrameForAchievement(achID)  -- canonical Blizzard path (same as SetItemRef)
     end)
     hyperHost:SetScript("OnHyperlinkEnter", function(self, link)

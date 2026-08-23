@@ -1227,10 +1227,14 @@ local function buildModelPreview(parent, spec)
     -- Default scene ID -- Blizzard's HOUSING_CATALOG_DECOR_MODELSCENEID_DEFAULT
     -- is 859 in current builds. Constants.HousingCatalogConsts is the
     -- forward-compatible source.
+    -- The spec is the ONLY source. Every decor-side widget declares
+    -- `defaultSceneID = 859` outright; the pets widget omits it deliberately, and
+    -- omission has to MEAN "there is no fallback". This used to answer with the
+    -- housing decor constant first, so a pet with no scene of its own was framed by
+    -- the decor camera -- exactly what our own recorded gotcha for
+    -- GetPetModelSceneInfoBySpeciesID forbids (review 2026-08-23). nil is an answer.
     local function GetDefaultSceneID()
-        -- exception(boundary): Blizzard has form for renaming Constants.* between expansions
-        return Constants.HousingCatalogConsts.HOUSING_CATALOG_DECOR_MODELSCENEID_DEFAULT
-            or spec.defaultSceneID
+        return spec.defaultSceneID  -- exception(optional): declared in specFields; nil = no fallback
     end
 
     -- Invert pitch so drag-UP tilts UP (PanningModelScene default is reversed).
@@ -1262,10 +1266,14 @@ local function buildModelPreview(parent, spec)
     -- Pet path. A pet card scene has no "decor" actor, and a pet has no asset
     -- fileID -- its model comes from a creature displayID. Same two calls
     -- Blizzard's own housing pet grid makes.
+    -- Returns false when the scene has no pet actor, so the caller can drop to the
+    -- 2D fallback instead of showing an empty stage. Silently returning left the
+    -- pane blank -- no model, no icon, no "Preview unavailable".
     local function _pointActorAtPet(displayID)
         local actor = modelScene.GetActorByTag and modelScene:GetActorByTag("unwrapped")
-        if not actor then return end   -- exception(boundary): scene shape is Blizzard's
+        if not actor then return false end   -- exception(boundary): scene shape is Blizzard's
         actor:SetModelByCreatureDisplayID(displayID, true)
+        return true
     end
 
     local function _pointActorAtAsset(asset, dyes)
@@ -1284,6 +1292,9 @@ local function buildModelPreview(parent, spec)
     -- failure (caller drops to 2D fallback).
     local function _try3DLoad(info, dyes)
         local sceneID = info.uiModelSceneID or GetDefaultSceneID()
+        -- No scene and no declared fallback is a real state (a species Blizzard has
+        -- no card scene for), not an error -- hand it to the 2D path unremarked.
+        if not sceneID then return false end
         local sceneOk, sceneErr = pcall(function()
             modelScene:TransitionToModelSceneID(
                 sceneID,
@@ -1298,7 +1309,7 @@ local function buildModelPreview(parent, spec)
         end
         _enable3DCameraPitch()
         if info.petDisplayID then
-            _pointActorAtPet(info.petDisplayID)
+            if not _pointActorAtPet(info.petDisplayID) then return false end
         else
             _pointActorAtAsset(info.asset, dyes)
         end

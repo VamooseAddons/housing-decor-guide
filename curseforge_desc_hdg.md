@@ -12,21 +12,25 @@
 
 ---
 
-## What's New in v3.25.0
+## What's New in v3.26.0
 
-**A blueprint now tells you what it will cost you.** The band that says whether a build fits your house also carries the price of everything you are still missing, so you can judge a share code before committing to it. Housing decor is not bought with gold alone, so each currency is counted separately; hover for the breakdown. Decor with no listed price is called out rather than left out of the total.
+**Vendors who trade in more than one place now appear in each of them.** A vendor standing in both housing neighbourhoods, or in Stormwind and Dornogal, was only ever listed in one of them. Around 30 vendor listings return, each with its own map location. A few of the restored ones have no coordinates recorded yet, so they list without a pin until someone walks them.
 
-**Copy list, on the Blueprints tab.** Next to the share code you hand out, there is a plain readable list of everything the build is made of: rooms, decor, dyes and fixtures, with where each piece of decor comes from. Paste it under your post on Discord, Reddit or a comment thread. Decor a pet can be placed on gets its own heading. The list describes the blueprint rather than your collection, so the counts read the same for whoever picks it up.
+**Decor sold by a vendor now names the vendor, not a quest.** Where a piece is both a quest or achievement reward and stocked by a vendor, the source line used to name the quest. That is true once, and no help to someone reading a blueprint list who was never offered it. The vendor is named instead, with the zone beside it, and the quest or achievement still shows on the chips. This applies on the Blueprints copy list, the decor tooltip and the item detail panel. The tooltip also lists every vendor that stocks the piece.
 
-**Every themed room can now be placed in the Architect.** The Stormwind, Silvermoon, Bel'ameth and Orgrimmar rooms, both Westfall barns and the Orgrimmar Council and Stone Pit rooms were missing from the room palette. They arrive with their real sizes, their own artwork and Blizzard's own names and ordering, and the two-floor rooms take two floors.
+**Vendors who only exist in one neighbourhood say so.** Six vendors are in Founder's Point or Razorwind Shores but not both. Their entry now states which neighbourhood does not have them, so a search in the wrong one gives an answer rather than nothing.
 
-**A blueprint's contents are listed alphabetically.** They used to arrive in whatever order the game sent them, so the dyes on a large build read Purple, Red, Blue, Black, White, Brown, Green, and a two-hundred-piece decor list was hard to search by eye.
+**The Pets tab no longer opens empty.** After a reload it waited for the game to volunteer a pet-journal update before building its list, which on a quiet login never arrived. A companion already summoned was also offered a Summon button that did nothing.
 
-**Buying in bulk works at coupon vendors.** Right-clicking a decor item at a vendor opens the quantity picker, but it only did that for items priced in gold, which left out most of what the neighbourhood vendors sell. The picker counts your coupons the same way it counts your gold and tells you when a stack costs more than you have. The window can also be moved, and closed with the X if you would rather buy the ordinary way.
+**A pet with no preview shows its icon instead of a blank panel.** The panel could also frame a pet with the camera intended for furniture.
 
-**Materials reach the Auction House search bar again.** Shift-click a material in the Warehouse list or in a recipe's materials and it lands in the auction house search box. It moved to shift because a plain click now selects the material and shows what it is used in.
+**Profession filters work on non-English clients.** A scanned recipe stored the translated profession name over the addon's own, so the Alchemy filter found nothing and the Recipes tab counted zero beside a second, empty bucket.
 
-**The Lumber Tracker no longer stops tracking after a trip to the bank.** Visiting a mailbox, vendor, bank or trade window could leave the tracker giving up for the rest of the session: it stopped following the lumber you were farming, and its numbers sat still until you opened the main window. It now checks whether one of those windows is actually open rather than waiting to be told it closed.
+**Being traded lumber no longer counts as farming it.** A guildmate handing over 40 Ashwood started a farming session and dropped a harvest marker where you stood. Buying lumber at the auction house did the same.
+
+**A guild recipe scan puts your profession filters back.** The scan borrows them while it reads the guild's recipes and restores them when it finishes, but a reload partway through meant it never got to, and those settings persist between sessions. They are now restored the next time you open a profession window. A scan also no longer waits ten seconds per profession your guild rank cannot view.
+
+**The Goblin export no longer garbles losses.** Anything sold at a loss exported a scrambled number, so the rows the export exists to surface were the ones you could not read.
 
 ---
 
@@ -119,7 +123,7 @@ A companion window injects into Blizzard's House Editor so you can **place decor
 ---
 
 **Author:** Vamoose
-**Version:** 3.25.0
+**Version:** 3.26.0
 **Game Version:** 12.1.0 (Midnight)
 **Source / Issues:** https://github.com/VamooseAddons/housing-decor-guide
 **Discord:** https://discord.gg/RWZaxJaHFP

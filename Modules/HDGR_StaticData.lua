@@ -89,14 +89,17 @@ function S.VendorAugment:_EnsureIndexes()
     table.sort(ids)
     for _, npcID in ipairs(ids) do
         local v = t[npcID]
-        -- Name index: first occurrence wins for unqualified name; later
-        -- collisions become zone-suffixed.
-        if byName[v.name] then
-            byName[v.name .. "/" .. v.zone] = npcID
-            byName[v.name .. " (" .. v.zone .. ")"] = npcID
-        else
-            byName[v.name] = npcID
-        end
+        -- Name index. EVERY row gets its zone-qualified keys, not just collisions --
+        -- the first row used to get the bare name alone, so ResolveName(name, zone)
+        -- MISSED for it and fell through to the unqualified fallback, quietly answering
+        -- with whichever npcID sorted lowest. With a vendor in both housing
+        -- neighborhoods that meant the pane showed the wrong zone AND the wrong coords
+        -- to a player standing next to the right one (2026-08-24).
+        -- First occurrence still wins the bare name, so the zone-less fallback is
+        -- unchanged for the single-zone majority.
+        byName[v.name .. "/" .. v.zone]         = byName[v.name .. "/" .. v.zone] or npcID
+        byName[v.name .. " (" .. v.zone .. ")"] = byName[v.name .. " (" .. v.zone .. ")"] or npcID
+        if not byName[v.name] then byName[v.name] = npcID end
         -- Base-name index: curator names use "Name (Zone)" but the housing
         -- catalog reports the bare in-game name. Key base name by zone so a
         -- bare catalog name resolves to the right npcID (additive, never

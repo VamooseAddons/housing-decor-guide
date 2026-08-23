@@ -615,8 +615,15 @@ Selectors:Register("goblin.rows", {
 -- codes, which a spreadsheet imports as literal text.
 local function _csvGold(copper)
     if not copper then return "" end  -- exception(nullable): no price known for this item
-    return ("%d.%02d.%02d"):format(
-        math.floor(copper / 10000), math.floor((copper % 10000) / 100), copper % 100)
+    -- Split the sign off first. Lua's % takes the sign of the DIVISOR, so on a
+    -- negative the floor and the remainder disagree and -123456 formatted as
+    -- "-13.65.44" instead of "-12.34.56". profit = sellPrice - materialCost is
+    -- unclamped, so every loss-making row -- the ones this export exists to
+    -- surface -- was wrong (review 2026-08-23).
+    local sign = copper < 0 and "-" or ""
+    local c    = math.abs(copper)
+    return sign .. ("%d.%02d.%02d"):format(
+        math.floor(c / 10000), math.floor((c % 10000) / 100), c % 100)
 end
 
 local function _csvPct(v)
