@@ -257,6 +257,14 @@ SlashCmdList["HDG"] = function(msg)
         D:Log(rest)
     elseif lower == "house" then
         D:House()
+    elseif lower == "petscene" then
+        D:PetScene()
+    elseif lower == "dashtaint" then
+        D:DashTaint()
+    elseif lower == "dashdump" then
+        D:DashDump()
+    elseif lower == "dashsync" then
+        D:DashSync()
     elseif first == "costdump" then
         D:CostDump(rest)
     elseif first == "dumpdecor" then

@@ -118,23 +118,19 @@ local function _applyDim()
             local matches = _query == ""
                 or (name and name:lower():find(_query, 1, true) ~= nil)
             row:SetAlpha(matches and 1 or DIM_ALPHA)
-            -- Clear the in-world highlight BEFORE taking the mouse away. A frame that
-            -- stops accepting mouse input while the cursor is over it does not reliably
-            -- fire OnLeave, and Blizzard's OnLeave is the ONLY caller that turns the
-            -- highlight off -- so filtering out the row you were hovering could leave a
-            -- piece lit up in the world until you hovered another (review 2026-08-23).
-            -- Correct whether or not OnLeave fires: clearing an already-clear hover is a
-            -- no-op, and we only do it on the transition to dimmed.
-            -- row.decorGUID + the isSelected skip mirror Blizzard's own OnEnter/OnLeave
-            -- in Blizzard_HouseEditorPlacedDecorList.lua:253-269 -- a selected row owns
-            -- its highlight and must not be cleared here.
-            if not matches and row:IsMouseEnabled() and not row.isSelected then
-                local CD = _G.C_HousingDecor  -- exception(boundary): absent outside the editor
-                if row.decorGUID and CD and CD.SetPlacedDecorEntryHovered then
-                    CD.SetPlacedDecorEntryHovered(row.decorGUID, false)
-                end
+            -- The in-world highlight must clear through Blizzard's OWN OnLeave:
+            -- SetPlacedDecorEntryHovered is HasRestrictions=true (recorded gotcha,
+            -- re-verified live 2026-08-25 -- ADDON_ACTION_FORBIDDEN, user report).
+            -- But EnableMouse(false) on the row under the cursor skips OnLeave and
+            -- leaves the piece lit in the world (review 2026-08-23). So: a dimmed
+            -- row that is still HOVERED keeps its mouse until the cursor leaves --
+            -- Blizzard's OnLeave then clears the highlight -- and the 10 Hz poller
+            -- disables it on a later tick once IsMouseOver() is false.
+            if matches then
+                row:EnableMouse(true)
+            elseif not (row:IsMouseEnabled() and row:IsMouseOver()) then
+                row:EnableMouse(false)
             end
-            row:EnableMouse(matches and true or false)
         end
     end
 end

@@ -1025,54 +1025,21 @@ end
 -- Module registration
 -- =============================================================================
 
--- ===== Blizzard Housing Dashboard repair ===================================
--- Blizzard's dashboard caches the player house list on its DROPDOWN and
--- re-broadcasts "HouseDropdown.HouseListUpdated" only when the list CHANGES,
--- while HouseInfoContent gets its only copy from that broadcast. So ANY addon
--- calling C_Housing.GetPlayerOwnedHouses() before that pane has registered leaves
--- it permanently blank: the guard sees an unchanged list and swallows the event.
--- The dropdown still shows the house name from its own copy, which is what the
--- bug reports looked like.
+-- ===== Blizzard Housing Dashboard: DO NOT TOUCH ITS TABLES ==================
+-- A repair hook used to live here that wrote HouseDropdown.playerHouseList = {}
+-- on dashboard OnShow, to un-strand the House Info pane (Blizzard's forwarder
+-- calls InitiativesFrame:OnHouseListUpdated before HouseUpgradeFrame's; the
+-- 12.1 InitiativesFrame nil-throw kills the second call, then the dropdown's
+-- tCompare guard swallows every identical reply and the pane stays blank).
 --
--- A 12.1 regression -- before the split, guard and consumer were the same object,
--- so reaching the guard proved the consumer had been fed. Confirmed by absence as
--- well: Aegis does heavy housing work, never calls GetPlayerOwnedHouses, and never
--- trips it; HDG, VE and VN all call it and all did.
---
--- Fix: nil the stale cache when the dashboard OPENS, so Blizzard's own
--- OnShow -> LoadHouses reply lands on nil, passes the guard, fires the event, and
--- the pane fills through Blizzard's normal path with every frame laid out.
---
--- The install MUST come from Blizzard_HousingDashboard's ADDON_LOADED: it is
--- LoadOnDemand, so HousingDashboardFrame does not exist until the player opens it,
--- and by then OnShow has already run. An earlier VE attempt hooked only when the
--- frame already existed and therefore never installed at all.
---
--- Do NOT instead call HouseInfoContent:OnHouseListUpdated -- it forwards to
--- HouseUpgradeFrame, whose reward track may not be laid out, and its scroll maths
--- then dies on a nil `offset` (RewardTrackTemplates.lua:210).
-local _dashHooked = false
-function HO:_HookDashboardCache()
-    if _dashHooked then return end
-    local dash = _G.HousingDashboardFrame          -- exception(boundary): Blizzard LoD frame
-    if not dash or not dash.HookScript then return end
-    _dashHooked = true
-    local function clear()
-        -- Bracket-indexed on purpose: HouseDropdown is a 12.1 parentKey and the
-        -- wowlua-ls stubs are pinned at 12.0.7, so dot access reports a phantom
-        -- undefined-field. The key is real -- Blizzard_HousingDashboard.xml:11.
-        -- EMPTY TABLE, not nil. Blizzard's own OnHouseSelected does
-        -- `self.selectedHouseInfo = self.playerHouseList[houseInfoID]`, so during the
-        -- LoadHouses round-trip this opens, a player who picked a house indexed nil and
-        -- threw from Blizzard's file (review 2026-08-23). {} defeats the tCompare guard
-        -- exactly as nil did -- an empty list never matches a populated one, so the event
-        -- still fires -- while an index into it is simply a miss.
-        local dd = dash["HouseDropdown"]           -- exception(boundary): parentKey could be renamed by a patch
-        if dd then dd.playerHouseList = {} end
-    end
-    dash:HookScript("OnShow", clear)
-    clear()                                        -- may already be open and stale
-end
+-- REMOVED 2026-08-25: the write is a TAINT BOMB. Blizzard's handler reads the
+-- tainted table in tCompare, its execution goes tainted, the reassigned list
+-- and every houseInfo derived from it carry the taint, and the dashboard's
+-- Teleport Home / Return buttons die in ADDON_ACTION_FORBIDDEN blamed on HDG
+-- (replicated on both OnClick branches, owner, 2026-08-25 -- with the "disable
+-- this addon" dialog). A sometimes-blank pane is Blizzard's bug and recoverable;
+-- a dead protected teleport is not. There is NO taint-free write into Blizzard
+-- UI state -- do not reintroduce this in any form.
 
 HDG.Modules:Declare({
     name = "HousingObserver",
@@ -1222,13 +1189,6 @@ HDG.Modules:Declare({
     end,
 
     onEnable = function(self)
-        -- Repair hook for Blizzard's dashboard (see _HookDashboardCache). LISTEN
-        -- ONLY -- nothing is requested from here.
-        HDG.BlizzardEvents:_internalSubscribe("ADDON_LOADED", function(name)
-            if name == "Blizzard_HousingDashboard" then HO:_HookDashboardCache() end
-        end)
-        HO:_HookDashboardCache()   -- already loaded (e.g. /reload with it open)
-
         -- Defer to MAIN_WINDOW_OPENING: housing C_* null-derefs -> CTD on cold client
         -- at PLAYER_LOGIN. Steady-state events still arrive via blizzardEvents.
         -- See docs/COLD_CLIENT_CTD_INVESTIGATION.md.
@@ -1241,9 +1201,18 @@ HDG.Modules:Declare({
                     -- downstream is view-gated (OnHouseList loop) so it only fires when a
                     -- house-level view is the one being opened onto.
                     --
-                    -- This call BREAKS Blizzard's Housing Dashboard on its own -- see
-                    -- _HookDashboardCache below, which is what makes it safe. Do not
-                    -- move it earlier (never to login) and do not add another one.
+                    -- LOAD THE DASHBOARD FIRST: any housing request made while
+                    -- Blizzard_HousingDashboard is unloaded warms the client house
+                    -- cache, and the dashboard's own eventual first load then gets
+                    -- a SYNCHRONOUS reply mid-OnLoad -- its broadcast fires before
+                    -- the House Info pane registers and the dashboard strands
+                    -- blank for the session (proven via registry dump 2026-08-25).
+                    -- Loading it here (first housing touch, post-login, warm
+                    -- client) makes its own request run on a cold cache instead.
+                    -- Blizzard-signed code runs secure regardless of load caller.
+                    if not C_AddOns.IsAddOnLoaded("Blizzard_HousingDashboard") then
+                        C_AddOns.LoadAddOn("Blizzard_HousingDashboard")
+                    end
                     if C_Housing and C_Housing.GetPlayerOwnedHouses then
                         C_Housing.GetPlayerOwnedHouses()
                     end

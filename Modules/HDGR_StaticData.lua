@@ -505,3 +505,106 @@ end
 function S.Schemes:Get(name)
     return _table("HDGR_SchemeConstants")[name]
 end
+
+-- ============================================================================
+-- PetFacts  (HDGR_PetTaxonomyDB / PetVoiceDB / PetAnimDB / PetSceneDecorDB / PetSizeDB)
+-- ============================================================================
+-- The Menagerie's data facade (HDGR_MENAGERIE_LATTICE_PLAN_2026-08-24 section 1). The
+-- raw _G.HDGR_Pet*DB tables are read NOWHERE else; reverse indexes (kind counts,
+-- clade counts, voice sharing) build lazily once and rebuild only if the DB
+-- table reference changes (test seam -- same idiom as Recipes above).
+
+---@class HDG.StaticData.PetFacts
+S.PetFacts = S.PetFacts or {}
+
+local _pfKinds, _pfClades, _pfVoiceShare, _pfSource
+
+local function _ensurePetIndexes()
+    local db = _table("HDGR_PetTaxonomyDB")
+    if _pfSource == db then return end
+    _pfKinds, _pfClades, _pfVoiceShare = {}, {}, {}
+    for _, row in pairs(db) do
+        local kind, clade = row[1], row[2]
+        local k = _pfKinds[kind]
+        if not k then
+            k = { count = 0, clade = clade }
+            _pfKinds[kind] = k
+        end
+        k.count = k.count + 1
+        _pfClades[clade] = (_pfClades[clade] or 0) + 1
+    end
+    for _, e in pairs(_table("HDGR_PetVoiceDB").species) do
+        _pfVoiceShare[e.v] = (_pfVoiceShare[e.v] or 0) + 1
+    end
+    _pfSource = db
+end
+
+-- kind, clade for a species. nil, nil = species not in the taxonomy (a NEW pet
+-- since the last data build) -- a real state the UI shows as "?", never a guess.
+function S.PetFacts:Taxonomy(speciesID)
+    local row = _table("HDGR_PetTaxonomyDB")[speciesID]  -- exception(nullable): post-build species miss
+    if not row then return nil, nil end
+    return row[1], row[2]
+end
+
+-- nil = no idle sound recorded (NOT proven-silent; see build_pet_sound.py header).
+function S.PetFacts:Voice(speciesID)
+    local e = _table("HDGR_PetVoiceDB").species[speciesID]  -- exception(nullable): absence means quiet
+    if not e then return nil end
+    _ensurePetIndexes()
+    local v = _table("HDGR_PetVoiceDB").voices[e.v]
+    return { word = v.word, kits = v.kits, index = e.v,
+             delayMin = e.d1, delayMax = e.d2,
+             sharedWith = _pfVoiceShare[e.v] - 1 }
+end
+
+-- The model's behaviour record: { idle = {{animID, variation, pct, ms},...},
+-- also = {animID,...}, glow = {lights, particles, additive}, labels? }.
+-- SHARED reference -- callers read, never mutate. nil = model unparsed (6 of 967).
+function S.PetFacts:AnimProfile(speciesID)
+    local db = _table("HDGR_PetAnimDB")
+    local fdid = db.species[speciesID]  -- exception(nullable): species without a model join
+    if not fdid then return nil end
+    local m = db.models[fdid]           -- exception(nullable): parseError models are not emitted
+    return m
+end
+
+function S.PetFacts:Height(speciesID)
+    return _table("HDGR_PetSizeDB")[speciesID]  -- exception(nullable): PetSizeDB miss for a post-build species
+end
+
+function S.PetFacts:SceneScale(speciesID)
+    -- SizeDB height / vertex extent: a ModelScene actor renders the RAW vertex
+    -- mesh (no DB2 scale factor applies), so this is what SetRequestedScale
+    -- needs for the actor to render at the pet's true world height.
+    local row = _table("HDGR_PetSceneScaleDB")[speciesID]
+    return row and row[1] or 1.0  -- exception(optional): unmeasured mesh; emit convention
+end
+
+function S.PetFacts:SceneGirth(speciesID)
+    -- Larger horizontal mesh span, world units: the camera frames on
+    -- max(height, girth) so long bodies (snakes) are not cropped.
+    local row = _table("HDGR_PetSceneScaleDB")[speciesID]
+    return row and row[3] or 0  -- exception(optional): unmeasured mesh; emit convention
+end
+
+function S.PetFacts:SceneLift(speciesID)
+    -- -meshLowestZ x sceneScale: added to the seat Z it drops a hovering
+    -- mesh's bottom onto the seat (fliers are authored above their origin).
+    local row = _table("HDGR_PetSceneScaleDB")[speciesID]
+    return row and row[2] or 0  -- exception(optional): unmeasured mesh; emit convention
+end
+
+function S.PetFacts:KindIndex()
+    _ensurePetIndexes()
+    return _pfKinds
+end
+
+function S.PetFacts:CladeIndex()
+    _ensurePetIndexes()
+    return _pfClades
+end
+
+function S.PetFacts:SceneDecor()
+    return _table("HDGR_PetSceneDecorDB")
+end

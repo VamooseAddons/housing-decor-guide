@@ -29,6 +29,10 @@ function D:Help()
     _cmd("/hdgr trace [tag/off]",  "list active traces / toggle a log-tag trace / disable all")
     _cmd("/hdgr log [tag/clear]",  "last 10 log entries (opt. filtered by tag) / clear the log")
     _cmd("/hdgr house",            "dump the HouseTab dashboard runtime state (widget/data chain)")
+    _cmd("/hdgr petscene",         "dump the Menagerie stage runtime state (camera/actor/keys)")
+    _cmd("/hdgr dashtaint",        "audit WHO tainted the Blizzard dashboard's teleport chain")
+    _cmd("/hdgr dashdump",         "visibility + data state of the stranded dashboard, layer by layer")
+    _cmd("/hdgr dashsync",         "test whether a warm house-list request replies synchronously")
     _cmd("/hdgr costdump <id>",    "dump a catalog row's parsed cost + sourceTags for an itemID")
     _cmd("/hdgr dumpdecor <ids>",  "emit AllDecorDB-ready Lua rows for decorIDs (copy-paste)")
     _cmd("/hdgr tipdump [ids]",    "dump C_TooltipInfo line types for itemIDs (finds gates the catalog omits)")
@@ -125,6 +129,124 @@ function D:Log(rest)
 end
 
 -- Dump dashboard runtime state (selector empty? widget not built? data not pushed?).
+function D:PetScene()
+    local root = HDG.mainFrame
+    local w = root and root.widgets and root.widgets["menagerieDetailPanel.stage"]
+    if not w then _print("no stage widget built") return end
+    _print("petscene diagnostic dump:")
+    local cx, cy, cz = w._scene:GetCameraPosition()
+    _G.print(("  camera:      %.2f, %.2f, %.2f  (build default = 6, 0, 1.2)"):format(cx, cy, cz))
+    _G.print(("  decorTopZ:   %s"):format(tostring(w._decorTopZ)))
+    local k = w._sceneKeys or {}
+    _G.print(("  keys:        decor=%s pet=%s you=%s"):format(tostring(k.decor), tostring(k.pet), tostring(k.you)))
+    local spec = w._sceneSpec
+    if spec then
+        _G.print(("  spec:        sid=%s display=%s h=%s scale=%s lift=%s you=%s"):format(
+            tostring(spec.speciesID), tostring(spec.petDisplayID), tostring(spec.petHeight),
+            tostring(spec.petScale), tostring(spec.petLift), tostring(spec.withYou)))
+    else
+        _G.print("  spec:        nil")
+    end
+    local pet = w._petActor
+    if pet then
+        local px, py, pz = pet:GetPosition()
+        _G.print(("  pet actor:   loaded=%s scale=%.4f requested=%s pos=%.2f,%.2f,%.2f"):format(
+            tostring(pet:IsLoaded()), pet:GetScale(), tostring(pet:GetRequestedScale()), px, py, pz))
+    else
+        _G.print("  pet actor:   nil")
+    end
+    _G.print(("  scene shown: %s  widget %dx%d"):format(
+        tostring(w._scene:IsVisible()), w:GetWidth(), w:GetHeight()))  -- exception(boundary): debug print, WoW API
+end
+
+function D:DashTaint()
+    -- issecurevariable(tbl, key) -> secure, taintingAddon: names WHO tainted each
+    -- link of the dashboard's house-list -> teleport chain. Ground truth for the
+    -- ADDON_ACTION_FORBIDDEN TeleportHome blame.
+    local dash = _G.HousingDashboardFrame
+    if not dash then _print("dashboard not loaded") return end
+    local function probe(label, tbl, key)
+        if not tbl then _G.print(("  %s: FRAME MISSING"):format(label)) return end
+        local secure, tainter = _G.issecurevariable(tbl, key)
+        _G.print(("  %s.%s: %s%s  (value: %s)"):format(label, key,
+            secure and "SECURE" or "TAINTED",
+            tainter and (" by " .. tostring(tainter)) or "",
+            tostring(tbl[key])))
+    end
+    _print("dashboard taint audit:")
+    -- Bracket-indexed: HouseDropdown is a 12.1 parentKey; wowlua-ls stubs are 12.0.7.
+    local dd = dash["HouseDropdown"]
+    probe("HouseDropdown", dd, "playerHouseList")
+    probe("HouseDropdown", dd, "selectedHouseInfo")
+    local info = dash.HouseInfoFrame or dash.HouseInfoContent  -- exception(boundary): parentKey name per Blizzard XML
+    local content = info and info.ContentFrame
+    local upg = content and content.HouseUpgradeFrame
+    probe("HouseUpgradeFrame", upg, "houseList")
+    probe("HouseUpgradeFrame", upg, "houseInfo")
+    local tp = upg and upg.TeleportToHouseButton
+    probe("TeleportToHouseButton", tp, "houseInfo")
+    probe("TeleportToHouseButton", tp, "teleportToPlot")
+end
+
+function D:DashDump()
+    -- Visibility + data-chain state of every layer of the stranded dashboard.
+    local dash = _G.HousingDashboardFrame
+    if not dash then _print("dashboard not loaded") return end
+    local function line(label, v) _G.print(("  %s: %s"):format(label, tostring(v))) end
+    local function shown(label, f) line(label, f and (f:IsShown() and "SHOWN" or "hidden") or "MISSING") end
+    _print("dashboard state dump:")
+    local info = dash["HouseInfoContent"]
+    shown("HouseInfoContent", info)
+    if not info then return end
+    shown("LoadingSpinner", info["LoadingSpinner"])
+    shown("DashboardNoHousesFrame", info["DashboardNoHousesFrame"])
+    shown("HouseFinderButton", info["HouseFinderButton"])
+    local content = info["ContentFrame"]
+    shown("ContentFrame", content)
+    if content then
+        line("tabsInitialized", content["tabsInitialized"])
+        shown("HouseUpgradeFrame", content["HouseUpgradeFrame"])
+        shown("InitiativesFrame", content["InitiativesFrame"])
+        local init = content["InitiativesFrame"]
+        line("InitiativesFrame.playerHouseList", init and init.playerHouseList and ("table n=" .. #init.playerHouseList))
+        local upg = content["HouseUpgradeFrame"]
+        line("HouseUpgradeFrame.houseList", upg and upg.houseList and ("table n=" .. #upg.houseList))
+        line("HouseUpgradeFrame.houseInfo", upg and tostring(upg["houseInfo"]))
+    end
+    local dd = dash["HouseDropdown"]
+    line("HouseDropdown.playerHouseList", dd and dd.playerHouseList and ("table n=" .. #dd.playerHouseList))
+    -- Who is actually registered on the EventRegistry for the dropdown's
+    -- broadcasts? Read-only walk of callbackTables[type][event][owner].
+    for _, ev in ipairs({ "HouseDropdown.HouseListUpdated", "HouseDropdown.HouseListLoading",
+                          "HouseDropdown.HouseSelected" }) do
+        local n, paneIn = 0, false
+        for _, byEvent in pairs(_G.EventRegistry:GetCallbackTables()) do
+            local owners = byEvent[ev]
+            if owners then
+                for owner in pairs(owners) do
+                    n = n + 1
+                    if owner == info then paneIn = true end
+                end
+            end
+        end
+        line(ev, ("%d registered%s"):format(n, paneIn and " (PANE REGISTERED)" or "  -- PANE MISSING"))
+    end
+end
+
+function D:DashSync()
+    -- Does C_Housing.GetPlayerOwnedHouses reply SYNCHRONOUSLY when the client
+    -- cache is warm? If yes, the dashboard's dropdown broadcasts its house list
+    -- DURING its own OnLoad -- before the House Info pane exists -- and the pane
+    -- strands deaf for the session (the /reload blank-dashboard bug).
+    local f = _G.CreateFrame("Frame")
+    f:RegisterEvent("PLAYER_HOUSE_LIST_UPDATED")
+    local fired = false
+    f:SetScript("OnEvent", function() fired = true end)
+    _G.C_Housing.GetPlayerOwnedHouses()
+    f:UnregisterAllEvents()
+    _print(("PLAYER_HOUSE_LIST_UPDATED fired synchronously inside the call: %s"):format(tostring(fired)))
+end
+
 function D:House()
     local root = HDG.mainFrame
     _print("house diagnostic dump:")

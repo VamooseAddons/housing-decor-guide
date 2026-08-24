@@ -581,6 +581,21 @@ local function NewBlueprintsSession()
     }
 end
 
+-- The Menagerie (House > Pets). ALL transient; UI_SET_TRANSIENT(view="menagerie")
+-- is the only writer -- zero feature-specific actions by design
+-- (HDGR_MENAGERIE_LATTICE_PLAN_2026-08-24 section 3). roomQuery is a SNAPSHOT the
+-- controller captures on click (imperative moment 1), never live-tracked.
+local function NewMenagerieSessionUI()
+    return {
+        mode = "byPet",                -- "byPet" | "bySpot"
+        axis = "kind", axval = "all",  -- the two-row identity filter
+        spot = { surface = "any", size = "any", wants = {} },
+        roomQuery = nil,               -- { label, motifs = {..}, capturedAt } | nil
+        scene = { decorID = nil, withYou = false },
+        selectedSpeciesID = nil,
+    }
+end
+
 local function NewBlueprintsSessionUI()
     return { missingOnly = false, collapsedGroups = {}, pasteError = false }
 end
@@ -604,6 +619,7 @@ local function NewSessionUI()
         data         = NewDataSessionUI(),         -- Your Data tab: achievement-group collapse
         catalogIntro = { phase = "hidden" },        -- initial-load overlay: "hidden"|"loading"|"success"
         blueprints   = NewBlueprintsSessionUI(),    -- Blueprints tab transients (12.1)
+        menagerie    = NewMenagerieSessionUI(),     -- House > Pets (the Menagerie)
     }
 end
 
@@ -1197,6 +1213,7 @@ local function EnsureSession(state)
         or { phase = "idle", active = false, done = 0, total = 0, name = "" }
     state.session.blueprints    = state.session.blueprints    or NewBlueprintsSession()
     state.session.ui.blueprints = state.session.ui.blueprints or NewBlueprintsSessionUI()
+    state.session.ui.menagerie  = state.session.ui.menagerie  or NewMenagerieSessionUI()
     -- session.house + session.daily are seeded by NewDefaultSession; EnsureSession
     -- does not need or-guards for them (strict reads from here forward).
 end

@@ -2,7 +2,7 @@
 ## Title: Vamoose's Housing Decor Guide
 ## Notes: Track, craft, preview, and acquire housing decorations across all professions
 ## Author: Vamoose
-## Version: 3.26.0
+## Version: 3.27.0
 ## SavedVariables: HDG_DB
 ## SavedVariablesPerCharacter: HDG_DB_CURRENT_PROFILE
 ## IconTexture: Interface\AddOns\HousingDecorGuide\textures\Vamoose_HDG_400_trans
@@ -90,6 +90,7 @@ UI\HDGR_LayoutConfig.lua
 UI\HDGR_Window.lua
 UI\LayoutConfig\HDGR_LayoutConfig_Decor.lua
 UI\LayoutConfig\HDGR_LayoutConfig_Pets.lua
+UI\LayoutConfig\HDGR_LayoutConfig_Menagerie.lua
 UI\LayoutConfig\HDGR_LayoutConfig_Acquisition.lua
 UI\LayoutConfig\HDGR_LayoutConfig_Recipes.lua
 UI\LayoutConfig\HDGR_LayoutConfig_Warehouse.lua
@@ -141,6 +142,7 @@ UI\HDGR_Selectors_Removalist.lua
 UI\HDGR_Selectors_Projects.lua
 UI\HDGR_Selectors_Blueprints.lua
 UI\HDGR_Selectors_Pets.lua
+UI\HDGR_Selectors_Menagerie.lua
 UI\HDGR_Controllers.lua
 UI\HDGR_Controller_Helpers_Mechanics.lua
 UI\HDGR_Controller_Helpers_UI.lua
@@ -165,6 +167,11 @@ data\HDGR_CollectionDefinitions.lua
 # Pet heights for the Decor tab's Pets browser. speciesID -> rendered height,
 # measured from the M2 vertex array; the runtime has no height to offer.
 data\HDGR_PetSizeDB.lua
+data\HDGR_PetTaxonomyDB.lua
+data\HDGR_PetVoiceDB.lua
+data\HDGR_PetAnimDB.lua
+data\HDGR_PetSceneDecorDB.lua
+data\HDGR_PetSceneScaleDB.lua
 
 # ===== Modules (logic ports / resolvers) =====
 # UI primitive libraries -- LOAD BEFORE any module that registers cell kinds
@@ -244,6 +251,7 @@ UI\HDGR_Controller_Nav.lua
 UI\HDGR_Controller_CatalogIntro.lua
 UI\HDGR_Controller_Decor.lua
 UI\HDGR_Controller_Pets.lua
+UI\HDGR_Controller_Menagerie.lua
 UI\HDGR_Controller_Acquisition.lua
 UI\HDGR_AcqMapWidget.lua
 UI\HDGR_QuantityPicker.lua

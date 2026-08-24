@@ -62,6 +62,11 @@ local function _entryFor(petID)
         -- nil for a species that was never measured. NOT defaulted: see
         -- StaticData.PetSizes -- there is nothing honest to substitute.
         height     = HDG.StaticData.PetSizes:Get(info.speciesID),
+        -- Menagerie taxonomy baked at row build (_bakeSourceTypes for pets --
+        -- plan section 2): selectors strict-read these, no per-paint joins.
+        -- nil,nil = a species newer than the last data build; the card shows "?".
+        kind       = HDG.StaticData.PetFacts:Taxonomy(info.speciesID),
+        clade      = select(2, HDG.StaticData.PetFacts:Taxonomy(info.speciesID)),
     }
 end
 
@@ -198,6 +203,37 @@ function P:Resolve(speciesID)
     }
 end
 
+-- Widget-seam resolve for petScene: the animation kit the species' authored
+-- card scene drives its actor with. A raw created actor loops sequence 0 by
+-- restarting it, which re-fires one-shot particle emitters -- a pet whose idle
+-- is one short sequence (Mote of Nasz'uro: 334ms Stand) strobes ~3x/sec.
+-- PlayAnimationKit(kit) is what stops it (isolated via /papro reg/regscene/kit,
+-- 2026-08-24: the C_ModelInfo registrations changed nothing; the kit did).
+-- Memoized: authored data, stable for the session.
+function P:CardAnimKit(speciesID)
+    if not speciesID then return nil end
+    local memo = self._kitBySpecies
+    if not memo then memo = {}; self._kitBySpecies = memo end
+    if memo[speciesID] ~= nil then
+        return memo[speciesID] or nil   -- false memoizes "no kit"
+    end
+    local kit = false
+    local sceneID = _G.C_PetJournal.GetPetModelSceneInfoBySpeciesID(speciesID)
+    if sceneID then
+        local _, _, actorIDs = _G.C_ModelInfo.GetModelSceneInfoByID(sceneID)
+        for _, aid in ipairs(actorIDs or {}) do
+            local info = _G.C_ModelInfo.GetModelSceneActorInfoByID(aid)
+            if info and info.scriptTag == "unwrapped" and info.modelActorDisplayID then
+                local disp = _G.C_ModelInfo.GetModelSceneActorDisplayInfoByID(info.modelActorDisplayID)
+                kit = (disp and disp.animationKitID) or false
+                break
+            end
+        end
+    end
+    memo[speciesID] = kit
+    return kit or nil
+end
+
 -- PET_JOURNAL_LIST_UPDATE -> debounced rebuild + tick bump.
 function P:OnListUpdate()
     if self._pending then return end
@@ -213,7 +249,7 @@ HDG.Modules:Declare({
     name = "PetObserver",
     -- Sole owner for the production path. Core/HDGR_Debug.lua's /hdg petscale probe
     -- reads the namespace directly and is the one annotated carve-out.
-    ownsBlizzardNamespaces = { "C_PetJournal" },
+    ownsBlizzardNamespaces = { "C_PetJournal", "C_ModelInfo" },
     dependencies = {},
     blizzardEvents = {
         PET_JOURNAL_LIST_UPDATE = { handler = "OnListUpdate" },

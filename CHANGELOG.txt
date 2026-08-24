@@ -1,3 +1,40 @@
+## [Unreleased]
+
+## [3.27.0] - 2026-08-25 (August 2026)
+
+### Added
+- **The Pets tab grew into a Menagerie.** House > Pets is a new view for the whole
+  collection, built around one question: where does this pet belong in your home?
+  Browse by kind, by family, by size, or by the deeper family tree -- every rat,
+  every firefly, every construct -- or flip it around and start from the spot:
+  "a shelf", "somewhere that glows", "stays quiet", and see which pets fit. Every
+  pet gets a live stage. On its own it fills the frame like a portrait; seat it on
+  the Paw Pal Bed or the Loyal Companion's Plinth, or stand your own character
+  beside it, and everything renders at true size -- a hand-sized firefly really is
+  a speck against your boots, and the facts line tells you exactly how tall it
+  stands next to you. Under the stage, a small flowchart shows what the pet does
+  when left alone: how it idles, which rare flourishes it breaks into, whether it
+  makes noise and how often -- and every node is clickable, playing that animation
+  or sound on the stage. A row of chips plays the other tricks it knows: dances,
+  sleeps, waves, the chicken dance.
+
+### Fixed
+- **Filtering the Placed Decor search no longer trips a red "blocked from an
+  action" error.** When your search dimmed the row your mouse happened to be on,
+  the addon reached for a Blizzard-only call to switch off that piece's in-world
+  glow, and the game blocked it -- once per unlucky hover. The row now simply
+  keeps listening until your cursor leaves it, so Blizzard's own code turns the
+  glow off, the way it always does. Reported by a player -- thank you.
+- **Opening HDG no longer breaks Blizzard's Housing Dashboard.** Two faults, one
+  root. Asking the game for your house list before the dashboard had ever opened
+  left its panel blank for the whole session -- your house name in the dropdown
+  over an empty grey page. And the earlier repair for that blank panel had a worse
+  side effect: the dashboard's own Teleport Home button could fail with the red
+  "blocked from an action only available to the Blizzard UI" error, the kind that
+  offers to disable the addon. The repair is gone. Instead, HDG now wakes the
+  dashboard up before asking the game for anything housing-shaped, so it always
+  hears its own answers and fills itself the normal way.
+
 ## [3.26.0] - 2026-08-24 (August 2026)
 
 ### Fixed

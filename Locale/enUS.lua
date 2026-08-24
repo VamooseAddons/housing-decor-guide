@@ -54,6 +54,13 @@ HDG.Locale:Register("enUS", {
     DECOR_BLANK            = "No decor matches your filters.",
 
     -- ===== Pets browser (the Pets top-filter mode of the Decor tab) =====
+    -- Menagerie (House > Pets)
+    MENAGERIE_TITLE         = "Your Pets",
+    MENAGERIE_DETAIL_TITLE  = "Pick a pet",
+    MENAGERIE_PICK_A_PET    = "Pick a pet from the list",
+    MENAGERIE_FLOW_HEADER   = "On its own it will",
+    MENAGERIE_SCENE_LABEL   = "Scene",
+    MENAGERIE_ALSO_LABEL    = "Also knows",
     PETS_BROWSER_TITLE     = "Placeable Pets",
     PETS_BLANK             = "No placeable pets match those filters.",
     PETS_SEARCH_PLACEHOLDER = "Search your pets by name...",

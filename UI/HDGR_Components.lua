@@ -1429,6 +1429,219 @@ HDG.WidgetTypes:Register("modelPreview", {
                    "sceneInsets", "placeholder", "defaultSceneID", "configurableBg" },
 })
 
+-- ============================================================================
+-- petScene: the Menagerie's composed preview (spec rulings 11/12; probe Phase D).
+-- DELIBERATELY simpler than modelPreview: fixed camera set once, actors CREATED,
+-- TransitionToModelSceneID never called -- which is exactly what sidesteps both
+-- recorded camera traps (MAINTAIN compounding; per-species authored framing).
+-- Up to three actors: decor by fileID (bbox-top seats the pet -- decor is static,
+-- so unlike a creature's its bbox is trustworthy), pet by displayID, the player
+-- via SetModelByUnit. Actors persist for the widget's life and only re-point
+-- when their model key changes; async loads all funnel into _seatAndFrame,
+-- which reads current state -- so paint is idempotent and racing loads converge.
+-- ============================================================================
+local SCENE_SEAT_LIFT = 0    -- Phase C seat-point data replaces this per-decor
+
+local function _sceneCamera(widget, topZ, spec)
+    -- Frame the tallest thing in shot: the seated pet (decor top + its TRUE
+    -- height) or the You actor. petHeight is a framing input only -- the pet's
+    -- rendered size comes from SetRequestedScale in the paint.
+    local content = (topZ or 0) + (spec.petHeight or 0.9)  -- exception(nullable): SizeDB miss; median pet frames fine
+    if spec.withYou then content = math.max(content, 2.6) end
+    -- Aim at 42% of the stack, not 55: aiming high pushed floor pets to the
+    -- bottom edge (cut off under the strip when You raised the content height).
+    -- Distance frames the larger of height and girth -- snakes are 0.1 tall
+    -- and 3 long -- with headroom for hover ANIMATIONS, which translate the
+    -- model without touching the mesh (Driftling, the batdemons).
+    local dist = math.max(content * 2.6, (spec.petGirth or 0) * 0.8, 1.5)  -- exception(nullable): SizeDB miss ships no girth
+    widget._scene:SetCameraPosition(dist, 0, content * 0.42)
+end
+
+-- Seat + frame from CURRENT widget state; every async load funnels here and the
+-- last one wins, so out-of-order streaming converges without tokens. A nil
+-- _decorTopZ means the decor is still streaming -- its own load callback
+-- re-enters when the box is readable.
+-- Alone = PORTRAIT, composed = TRUE SCALE. The portrait uses Blizzard's own
+-- card normalization (NormalizedScale=1 on the pet card's actor, UiModelSceneActor
+-- row 5): the mixin measures the RUNTIME bounding box -- which sees animation
+-- travel and hover, everything offline mesh data cannot -- and fills the frame
+-- identically for every species. True scale (our photo-verified chain) belongs
+-- to the decor/You compositions, where relative size is the point (ruling 13);
+-- the facts line and the You actor are our banana.
+local function _sceneIsPortrait(spec)
+    return not spec.decor and not spec.withYou
+end
+
+local PORTRAIT_CONTENT = 2.118   -- the mixin's reference human-male height
+
+local function _seatAndFrame(widget)
+    local spec = widget._sceneSpec
+    if not spec then return end        -- exception(nullable): late load callback after deselect
+    local topZ = widget._decorTopZ
+    if not topZ then return end
+    if _sceneIsPortrait(spec) then
+        if widget._petActor then widget._petActor:SetPosition(0, 0, 0) end
+        widget._scene:SetCameraPosition(PORTRAIT_CONTENT * 1.6, 0, PORTRAIT_CONTENT * 0.42)
+        return
+    end
+    if widget._petActor then
+        -- petLift grounds hovering meshes: fliers are authored above their
+        -- origin and render out of frame without it (Amberglow Stinger).
+        widget._petActor:SetPosition(0, 0, topZ + spec.petLift + SCENE_SEAT_LIFT)
+    end
+    _sceneCamera(widget, topZ, spec)
+end
+
+-- The three actors are created ONCE per widget and re-pointed thereafter (the
+-- modelPreview pattern): a repaint with an unchanged model touches nothing, so
+-- reconciliation pushes never reload models or restart their particle effects.
+-- Load callbacks are installed once and read current widget state only.
+local function _sceneActor(widget, slot, onLoaded)
+    local a = widget[slot]
+    if not a then
+        a = widget._scene:CreateActor(nil, "ModelSceneActorTemplate")
+        a:SetOnModelLoadedCallback(onLoaded)
+        widget[slot] = a
+    end
+    return a
+end
+
+local function dispatchPetScene(widget, values)
+    local scene = values.scene
+    widget._sceneSpec = scene
+    local keys = widget._sceneKeys
+    if not scene then
+        if keys.decor or keys.pet or keys.you then
+            keys.decor, keys.pet, keys.you = nil, nil, nil
+            for _, k in ipairs({ "_decorActor", "_petActor", "_youActor" }) do
+                if widget[k] then widget[k]:ClearModel() end
+            end
+        end
+        widget._scene:Hide()
+        widget._placeholderFs:Show()
+        return
+    end
+    widget._placeholderFs:Hide()
+    widget._scene:Show()
+
+    local decorFile = scene.decor and scene.decor.file
+    if not decorFile then
+        -- OUTSIDE the key-change branch: on the widget's very first paint
+        -- keys.decor and decorFile are both nil, the branch below is skipped,
+        -- and an uninitialized _decorTopZ left _seatAndFrame bailing -- the
+        -- first-selected pet painted unseated under the build-time camera.
+        widget._decorTopZ = 0
+    end
+    if keys.decor ~= decorFile then
+        keys.decor = decorFile
+        if decorFile then
+            widget._decorTopZ = nil        -- unknown until the load callback reads the box
+            _sceneActor(widget, "_decorActor", function(actor)
+                if widget._sceneKeys.decor then
+                    local ok, _, _, _, _, _, maxZ = pcall(actor.GetActiveBoundingBox, actor)  -- exception(boundary): nil until streamed
+                    widget._decorTopZ = (ok and maxZ) or 0.5
+                    _seatAndFrame(widget)
+                end
+            end):SetModelByFileID(decorFile)
+        elseif widget._decorActor then
+            widget._decorActor:ClearModel()
+        end
+    end
+
+    if keys.pet ~= scene.petDisplayID then
+        keys.pet = scene.petDisplayID
+        if scene.petDisplayID then
+            -- Blend None: a REUSED actor lerps between models, so stepping the
+            -- list morphs one species into the next (VPP DetailView's finding).
+            local pet = _sceneActor(widget, "_petActor", function(actor)
+                _seatAndFrame(widget)
+                -- The authored card kit, not raw sequence-0 looping: a created
+                -- actor restarts its idle each cycle, re-firing one-shot
+                -- emitters -- short-idle pets (334ms mote) strobe without this.
+                local spec = widget._sceneSpec
+                local kit = spec and HDG.PetObserver:CardAnimKit(spec.speciesID)
+                if kit then actor:PlayAnimationKit(kit) end  -- exception(nullable): species without a card kit keeps the default loop
+            end)
+            pet:SetAnimationBlendOperation(Enum.ModelBlendOperation.None)
+            pet:SetModelByCreatureDisplayID(scene.petDisplayID)
+            -- NO arg2: the battle-pet display path renders at CARD scale, not
+            -- world scale (Carnivorous Lasher: 0.96 in world, ~2x the player on
+            -- the card path -- and VPP's banana exists because cards do not
+            -- convey true size). Raw load + SceneScaleDB is the verified
+            -- world-scale chain; the card KIT, not arg2, is what stops the
+            -- short-idle strobe.
+        elseif widget._petActor then
+            widget._petActor:ClearModel()
+        end
+    end
+    if widget._petActor and scene.petDisplayID then
+        -- Template-correct scale: the actor mixin applies requestedScale on load
+        -- and on change; raw SetScale fights its OnUpdate machinery. Both knobs
+        -- are dirty-checked, so flipping composition re-applies WITHOUT reload.
+        if _sceneIsPortrait(scene) then
+            widget._petActor:SetRequestedScale(1)
+            widget._petActor:SetNormalizedScaleAggressiveness(1)
+        else
+            widget._petActor:SetRequestedScale(scene.petScale)
+            widget._petActor:SetNormalizedScaleAggressiveness(0)
+        end
+    end
+
+    local youOn = scene.withYou or nil
+    if keys.you ~= youOn then
+        keys.you = youOn
+        if youOn then
+            _sceneActor(widget, "_youActor", function(actor)
+                actor:SetPosition(0, 1.3, 0)   -- 1.6 cropped at the frame edge
+            end):SetModelByUnit("player")   -- verified on a created actor (probe /papro you)
+        elseif widget._youActor then
+            widget._youActor:ClearModel()
+        end
+    end
+
+    _seatAndFrame(widget)
+end
+
+local function buildPetScene(parent, spec)
+    local widget = CreateFrame("Frame", nil, parent)
+    widget._camDistance = spec.camDistance or 6
+    widget._sceneKeys = {}
+    local scene = CreateFrame("ModelScene", nil, widget, "NoCameraControlModelSceneMixinTemplate")
+    scene:SetAllPoints(widget)
+    scene:EnableMouse(true)   -- opaque to the world: without this, hovering the stage tooltips units BEHIND the window
+    scene:SetCameraPosition(widget._camDistance, 0, 1.2)
+    scene:SetCameraOrientationByYawPitchRoll(math.pi, 0, 0)
+    scene:SetCameraFieldOfView(0.75)
+    scene:SetLightDiffuseColor(0.8, 0.8, 0.8)
+    scene:SetLightAmbientColor(0.6, 0.6, 0.6)
+    scene:SetLightPosition(1, 0, 1)
+    scene:SetLightDirection(-1, 0, -1)
+    widget._scene = scene
+    local ph = widget:CreateFontString(nil, "OVERLAY")
+    applyFontRole(ph, "body")
+    ph:SetPoint("CENTER")
+    ph:SetText(HDG.Locale:Get("MENAGERIE_PICK_A_PET"))
+    HDG.Theme:Register(ph, "TextDim")
+    widget._placeholderFs = ph
+
+    -- The controller's imperative surface (plays are NOT state):
+    function widget:PlayPhase(animID, variation)
+        if self._petActor then
+            self._petActor:StopAnimationKit()   -- the card kit owns the idle; a clicked phase takes over
+            pcall(self._petActor.SetAnimation, self._petActor, animID, variation)  -- exception(boundary): Blizzard API, variation arg tolerated
+        end
+    end
+    return widget
+end
+
+HDG.WidgetTypes:Register("petScene", {
+    build    = function(parent, spec) return buildPetScene(parent, spec) end,
+    dispatch = { fields = { "scene" }, push = dispatchPetScene },
+    requiresFont = function() return false end,
+    destroy  = destroyWidget,
+    specFields = { "camDistance" },
+})
+
 HDG.WidgetTypes:Register("dropdown", {
     build = buildDropdown,
     -- Both fields trigger GenerateMenu so the open popup repaints on external state change.

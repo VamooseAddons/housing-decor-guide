@@ -220,6 +220,58 @@ HDG.Constants = {
         { id = 3393, name = "Illusionary Coin",     icon = 1717106, expansion = "Midnight"            },
     },
 
+    -- ===== Menagerie (House > Pets) =====
+    -- Namespaced "menagerie" (selectors, session.ui bucket, view) because the shipped
+    -- Decor-tab pets mode already owns the pets.* selector names; the two surfaces
+    -- converge at plan phase 5. Player-facing label stays "Pets".
+    MENAGERIE = {
+        -- Height (PetSizeDB units, player = 2.242) -> furniture-language bucket.
+        SIZE_BUCKETS = {
+            { max = 0.45, key = "shelf", label = "Shelf-sized" },
+            { max = 0.95, key = "table", label = "Table-sized" },
+            { max = 99,   key = "floor", label = "Floor-sized" },
+        },
+        -- Per-clade placement meta: what the card's "It needs" line says, and the
+        -- motif join key the clade contributes (spec section 5 rules, v1 subset).
+        CLADE_META = {
+            beast     = { needs = "open floor",             motif = "nature" },
+            rodent    = { needs = "a shelf or branch",      motif = "nature" },
+            bird      = { needs = "a perch or rafter",      motif = "nature" },
+            aquatic   = { needs = "water, or a pond edge",  motif = "water" },
+            reptile   = { needs = "a warm flat spot",       motif = "nature" },
+            insect    = { needs = "a corner to explore",    motif = "nature" },
+            construct = { needs = "a workbench or plinth",  motif = "mechanical" },
+            elemental = { needs = "space -- it hovers",     motif = "arcane" },
+            undead    = { needs = "somewhere dim",          motif = "gothic" },
+            demon     = { needs = "somewhere dim",          motif = "fel" },
+            void      = { needs = "somewhere dim",          motif = "void" },
+            humanoid  = { needs = "open floor",             motif = "cultural" },
+            plant     = { needs = "a planter or garden",    motif = "nature" },
+            oddity    = { needs = "wherever it is funniest", motif = "novelty" },
+        },
+        -- Battle family (petType index) -> extra motif, where the family genuinely
+        -- adds one beyond the clade (the Mechanical Squirrel two-facts case).
+        FAMILY_MOTIF = { [9] = "mechanical", [8] = "arcane", [6] = "gothic", [2] = "reptilian" },
+        -- Identity axes for the By Pet two-row filter (ruling 14).
+        AXES = { { value = "kind", label = "Kind" }, { value = "clade", label = "Clade" },
+                 { value = "family", label = "Family" }, { value = "size", label = "Size" } },
+        KIND_CHIP_MAX = 12,   -- top-N kinds by count shown as chips; rest reachable via clade
+        -- "Also knows" whitelist: anim id -> player verb. Only ids a PLAYER would
+        -- click for fun belong here -- combat/movement ids are repertoire noise
+        -- (Pandaren Monk carries ~40; unfiltered chips overflowed the window).
+        -- Ids from the Emotes.db2-adjudicated ANIM_NAMES set.
+        -- The scene strip's curated decor (ruled 2026-08-25): one bed, one
+        -- plinth. All 10 attachables stay in SceneDecorDB; these are the chips.
+        SCENE_CHIP_DECOR = { 12246, 25122 },   -- Paw Pal Bed, Loyal Companion's Plinth
+        SHOWABLE_ANIMS = {
+            [4] = "walks", [5] = "runs", [38] = "jumps", [42] = "swims",
+            [60] = "talks", [61] = "eats", [66] = "bows", [67] = "waves",
+            [68] = "cheers", [69] = "dances", [70] = "laughs", [71] = "sleeps",
+            [74] = "roars", [78] = "chicken dance", [80] = "applauds",
+            [82] = "flexes", [96] = "sits down", [100] = "sleeps",
+        },
+    },
+
     -- Top-row filter chip values. SSoT for Selectors, LayoutConfig, Controller_Decor, and the reducer.
     -- Adding or removing a bucket is one edit here.
     TOP_FILTERS = {
@@ -355,6 +407,7 @@ HDG.Constants = {
         { view = "projectsLayouts",   label = "Layouts" },
         { view = "removalist",        label = "Move Planner" },
         { view = "projectsBlueprints", label = "Blueprints" },
+        { view = "menagerie",     label = "Pets" },
         { view = "projectsPicker",    label = "Add Decor" },       -- opened via "+ Add decor"; not in NAV_TREE
         { view = "data",         label = "Your Data" },
         { view = "debug",        label = "Debug" },
@@ -370,6 +423,9 @@ HDG.Constants = {
         -- and the TABS entry above travel together.
         { kind = "home",   view = "houseTab", label = "House", icon = "housing-map-plot-player-house", children = {
             { label = "Blueprints", view = "projectsBlueprints" },
+            -- The Menagerie (spec ruling 4): the established slot for a headline
+            -- housing feature that does not spend a top-level nav entry.
+            { label = "Pets",       view = "menagerie" },
         }},
         { kind = "divider" },
         { kind = "parent", view = "decor",    label = "Decor", icon = "house-decor-budget-icon" },
