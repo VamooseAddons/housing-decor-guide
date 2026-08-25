@@ -34,19 +34,6 @@ Selectors:Register("pets.selectedSpeciesID", {
 -- Two decimals is the shipped precision. A nil height renders EMPTY rather than
 -- "0.00" or "?": the bind-pose measurement either exists for a species or it
 -- does not, and there is nothing honest to put in its place.
-local HEIGHT_FMT = "%.2f"
-
--- The bar's axis. From Constants because the row factory places the player's
--- reference mark on this same scale, and a second copy of the denominator is one
--- edit away from disagreeing with this one.
-local BAR_MAX = HDG.Constants.PET_BAR_MAX
-
-local function _barFraction(height)
-    if not height then return 0 end
-    local f = height / BAR_MAX
-    if f > 1 then return 1 end   -- a pet taller than the player pins at full width
-    return f
-end
 
 -- One index entry -> row envelope. Everything the row factory paints is stamped
 -- HERE so it never dives into state or the observer mid-paint (cookbook 03).
@@ -56,12 +43,10 @@ local function _petRow(entry, families, selectedID)
         petID       = entry.petID,
         name        = entry.name,
         customName  = entry.customName,
-        displayName = entry.customName or entry.name,
+        displayName = entry.displayName,
         icon        = entry.icon,
         familyLabel = families[entry.petType],   -- exception(nullable): an unknown petType has no family string
         height      = entry.height,
-        heightLabel = entry.height and HEIGHT_FMT:format(entry.height) or "",
-        barFraction = _barFraction(entry.height),
         selected    = entry.speciesID == selectedID,
     }
 end
@@ -166,40 +151,10 @@ Selectors:Register("pets.selectedPet", {
     end,
 })
 
-Selectors:Register("pets.selectedPet.name", {
-    calls = { "pets.selectedPet" },
-    fn = function(state, ctx)
-        local p = Selectors:Call("pets.selectedPet", state, ctx)
-        if not p then return HDG.Locale:Get("PETS_CLICK_A_PET") end
-        return p.customName or p.name
-    end,
-})
-
-Selectors:Register("pets.selectedPet.familyLabel", {
-    memoized = true,
-    reads = { "session.resolvers.pets.tick" },
-    calls = { "pets.selectedPet" },
-    fn = function(state, ctx)
-        local p = Selectors:Call("pets.selectedPet", state, ctx)
-        if not p then return "" end
-        return HDG.PetObserver:GetFamilies()[p.petType] or ""  -- exception(nullable): unknown petType has no family string
-    end,
-})
-
--- The size line. States the height against the one reference every player has an
--- eye for -- their own character. No verb and no ratio: these are bind-pose
--- heights, so a reared eel renders taller than its number and any comparison word
--- would be claiming precision the measurement does not have.
-Selectors:Register("pets.selectedPet.sizeLabel", {
-    calls = { "pets.selectedPet" },
-    fn = function(state, ctx)
-        local p = Selectors:Call("pets.selectedPet", state, ctx)
-        if not p then return "" end
-        if not p.height then return HDG.Locale:Get("PETS_HEIGHT_UNKNOWN") end
-        return HDG.Locale:Get("PETS_HEIGHT")
-            :format(p.height, HDG.Constants.PET_CHARACTER_HEIGHT)
-    end,
-})
+-- The name and family lines are NOT registered here. Both hosts of the shared
+-- card read them off the card family (HDGR_Selectors_Menagerie, RegisterCardFamily)
+-- so the two panes cannot drift apart a word at a time. `pets.selectedPet` is
+-- what this file contributes to that family -- the selection, not its rendering.
 
 -- ===== Summon / Dismiss =====================================================
 -- Ported from VPP, whose comments record what it cost to get right. Four rules,

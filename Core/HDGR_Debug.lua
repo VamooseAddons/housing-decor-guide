@@ -29,7 +29,8 @@ function D:Help()
     _cmd("/hdgr trace [tag/off]",  "list active traces / toggle a log-tag trace / disable all")
     _cmd("/hdgr log [tag/clear]",  "last 10 log entries (opt. filtered by tag) / clear the log")
     _cmd("/hdgr house",            "dump the HouseTab dashboard runtime state (widget/data chain)")
-    _cmd("/hdgr petscene",         "dump the Menagerie stage runtime state (camera/actor/keys)")
+    _cmd("/hdgr petscene",         "dump the ACTIVE pet stage's runtime state (camera/actors/keys)")
+    _cmd("/hdgr petseat <z>",      "eyeball a scene decor's seat height, to bake into SCENE_SEAT_Z")
     _cmd("/hdgr dashtaint",        "audit WHO tainted the Blizzard dashboard's teleport chain")
     _cmd("/hdgr dashdump",         "visibility + data state of the stranded dashboard, layer by layer")
     _cmd("/hdgr dashsync",         "test whether a warm house-list request replies synchronously")
@@ -129,9 +130,48 @@ function D:Log(rest)
 end
 
 -- Dump dashboard runtime state (selector empty? widget not built? data not pushed?).
+-- Eyeball a decor's seat height live. A bounding box cannot say where a bed's
+-- cushion is, so the two scene decors get their seat measured by eye, ONCE, and
+-- written into Constants.MENAGERIE.SCENE_SEAT_Z. This is that measuring stick:
+-- nudge until the pet sits right, then read the number back and bake it.
+--
+-- The override is widget-local and dies with a /reload -- it calibrates, it does
+-- not persist. Baking the value is a deliberate second step.
+function D:PetSeat(rest)
+    local w = HDG.UI:PetStage()
+    if not w then _print("no stage widget built -- open the pet card first") return end
+    local spec = w._sceneSpec
+    if not (spec and spec.decor) then
+        _print("no decor on the stage -- click a scene chip (bed / plinth) first")
+        return
+    end
+    local arg = rest and rest:match("^%s*(%S+)")
+    if not arg then
+        _print(("seat for decor %d (%s):"):format(spec.decor.decorID, spec.decor.name))
+        _G.print(("  bbox top:   %.4f   (the fallback -- right only if flat-topped)"):format(w._decorTopZ))
+        _G.print(("  baked:      %s"):format(tostring(spec.decor.seatZ)))
+        _G.print(("  override:   %s"):format(tostring(w._seatOverride)))
+        _G.print("  usage: /hdg petseat <z>   |   /hdg petseat clear")
+        return
+    end
+    if arg == "clear" then
+        w._seatOverride = nil
+        _print("seat override cleared")
+    else
+        local z = tonumber(arg)
+        if not z then _print("seat must be a number, or 'clear'") return end
+        w._seatOverride = z
+        _print(("seat override %.4f on decor %d (%s) -- bake it into SCENE_SEAT_Z when it looks right")
+            :format(z, spec.decor.decorID, spec.decor.name))
+    end
+    w:Reframe()
+end
+
 function D:PetScene()
-    local root = HDG.mainFrame
-    local w = root and root.widgets and root.widgets["menagerieDetailPanel.stage"]
+    -- The ACTIVE host's stage. Hardcoding the Menagerie's made this dump answer
+    -- "no stage widget built" from the Decor tab -- the one host a scene bug had
+    -- actually been reported in.
+    local w = HDG.UI:PetStage()
     if not w then _print("no stage widget built") return end
     _print("petscene diagnostic dump:")
     local cx, cy, cz = w._scene:GetCameraPosition()
@@ -155,6 +195,22 @@ function D:PetScene()
     else
         _G.print("  pet actor:   nil")
     end
+    -- The decor actor, which the dump used to omit entirely -- and the composed
+    -- seat is computed from ITS bounding box, so a wrong-looking composition
+    -- cannot be diagnosed without it.
+    local dec = w._decorActor
+    if dec then
+        local dx, dy, dz = dec:GetPosition()
+        local ok, _, _, _, _, _, maxZ = pcall(dec.GetActiveBoundingBox, dec)  -- exception(boundary): nil until streamed
+        _G.print(("  decor actor: loaded=%s pos=%.2f,%.2f,%.2f boxMaxZ=%s"):format(
+            tostring(dec:IsLoaded()), dx, dy, dz, tostring(ok and maxZ)))
+    else
+        _G.print("  decor actor: nil")
+    end
+    _G.print(("  you actor:   %s"):format(
+        w._youActor and tostring(w._youActor:IsLoaded()) or "nil"))
+    _G.print(("  portrait:    %s  (no decor AND no You = portrait framing)"):format(
+        tostring(w._sceneSpec ~= nil and not w._sceneSpec.decor and not w._sceneSpec.withYou)))
     _G.print(("  scene shown: %s  widget %dx%d"):format(
         tostring(w._scene:IsVisible()), w:GetWidth(), w:GetHeight()))  -- exception(boundary): debug print, WoW API
 end

@@ -66,7 +66,6 @@ end
 
 local function _matchesAxis(row, ui)
     if ui.axval == "all" then return true end
-    if ui.axis == "kind" then return row.kind == ui.axval end
     if ui.axis == "clade" then return row.clade == ui.axval end
     if ui.axis == "family" then return row.petType == ui.axval end
     if ui.axis == "size" then
@@ -82,13 +81,19 @@ end
 Selectors:Register("menagerie.items", {
     memoized = true,
     reads = { "session.ui.menagerie.mode", "session.ui.menagerie.axis",
-              "session.ui.menagerie.axval", "session.ui.menagerie.spot",
+              "session.ui.menagerie.axval", "session.ui.menagerie.search",
+              "session.ui.menagerie.spot",
               "session.ui.menagerie.roomQuery", "session.ui.menagerie.selectedSpeciesID",
               "session.resolvers.pets.tick", "session.resolvers.staticData.tick" },
     fn = function(state)
         local ui = state.session.ui.menagerie
         local PF = HDG.StaticData.PetFacts
         local out = {}
+        -- Search matches the NAME the player sees OR the row's kind. Matching the
+        -- kind is the whole point: "squirrel" is a kind, not a pet name, and the
+        -- chip row can never carry all 712 of them. The row already displays its
+        -- kind, so what you can read you can also type.
+        local needle = ui.search ~= "" and ui.search:lower() or nil
         for _, row in ipairs(HDG.PetObserver:GetAttachable()) do
             local keep, why
             if ui.mode == "byPet" then
@@ -96,11 +101,16 @@ Selectors:Register("menagerie.items", {
             else
                 keep, why = _matchesSpot(row, ui, PF)
             end
+            if keep and needle then
+                local name = row.displayName:lower()
+                keep = name:find(needle, 1, true) ~= nil
+                    or (row.kind and row.kind:lower():find(needle, 1, true) ~= nil)
+            end
             if keep then
                 out[#out + 1] = {
                     kind      = "menagerieRow",
                     speciesID = row.speciesID,
-                    name      = row.customName or row.name,
+                    name      = row.displayName,
                     kindLabel = row.kind or "?",   -- exception(nullable): post-build species -- "?" is the honest mark
                     selected  = row.speciesID == ui.selectedSpeciesID,
                     why       = why,
@@ -122,46 +132,100 @@ Selectors:Register("menagerie.headerLabel", {
 })
 
 -- ===== the two-row filter ===================================================
+-- Kinds and clades are stored lowercase (they come from model-folder stems);
+-- the chip is the only place they are ever shown to a player.
+local function _titleCase(word)
+    return (word:gsub("^%l", string.upper))
+end
+
+-- ===== kind suggestions =====================================================
+-- The 712-kind vocabulary, reachable by typing. A chip row cannot hold it (the
+-- drill tried and drew over the list) but the SEARCH bounds it: suggestions only
+-- exist once you type, and only the handful that match.
+--
+-- PREFIX match, not substring: typing narrows predictably s -> sq -> squ, which
+-- is the behaviour being asked for. Substring would keep "sporebat" alive under
+-- "bat" and make the row jump around as you type.
+--
+-- Counted over the PLAYER's attachable pets, so a suggestion never leads to an
+-- empty list.
+-- SIX, not ten. The row is two chip-lines tall and kind stems run long
+-- ("squirrelardenweald"), so a larger cap does not fit more suggestions -- it
+-- just wraps them out of the box and over the clade row below, which is the
+-- same overflow that killed the drill. Narrow by typing another letter.
+local SUGGEST_MAX = 6
+
+Selectors:Register("menagerie.kindSuggestions", {
+    memoized = true,
+    reads = { "session.ui.menagerie.search", "session.resolvers.pets.tick" },
+    fn = function(state)
+        local q = state.session.ui.menagerie.search
+        if q == "" then return {} end          -- nothing typed, nothing offered
+        q = q:lower()
+        local counts = {}
+        for _, row in ipairs(HDG.PetObserver:GetAttachable()) do
+            local k = row.kind
+            if k and k:lower():sub(1, #q) == q then counts[k] = (counts[k] or 0) + 1 end
+        end
+        local keys = {}
+        for k in pairs(counts) do keys[#keys + 1] = k end
+        table.sort(keys, function(a, b)
+            if counts[a] ~= counts[b] then return counts[a] > counts[b] end
+            return a < b
+        end)
+        local out = {}
+        for i = 1, math.min(#keys, SUGGEST_MAX) do
+            local k = keys[i]
+            out[i] = { group = "suggest", value = k, label = _titleCase(k),
+                       count = counts[k], active = q == k:lower() }
+        end
+        return out
+    end,
+})
+
+-- Visibility gate: the row collapses entirely when there is nothing to suggest,
+-- so an untouched search box costs the list no height.
+Selectors:Register("menagerie.hasKindSuggestions", {
+    calls = { "menagerie.kindSuggestions" },
+    fn = function(state, ctx)
+        return #Selectors:Call("menagerie.kindSuggestions", state, ctx) > 0
+    end,
+})
+
 Selectors:Register("menagerie.axes", {
     reads = { "session.ui.menagerie.axis" },
     fn = function(state)
         local out = {}
         for _, a in ipairs(M().AXES) do
-            out[#out + 1] = { value = a.value, label = a.label,
+            out[#out + 1] = { group = "axis", value = a.value, label = a.label,
                               active = a.value == state.session.ui.menagerie.axis }
         end
         return out
     end,
 })
 
+-- Row two: the axis's values, full stop.
+--
+-- Kind briefly lived here as a SECOND LEVEL -- pick a clade, get its kinds --
+-- to reach the 712-kind tail that a flat top-N could never show. It was
+-- reverted (owner, 2026-08-25): a clade's kind list is not row-sized. Beast
+-- carries 438 species across 114 kinds, and chipStrip grows to fit rather than
+-- clipping, so the row drew straight over the pet list. Fifteen clades fit;
+-- their kinds do not, at any nesting depth, without a different surface than
+-- a chip row.
 Selectors:Register("menagerie.axisValues", {
     memoized = true,
     reads = { "session.ui.menagerie.axis", "session.ui.menagerie.axval",
               "session.resolvers.pets.tick", "session.resolvers.staticData.tick" },
     fn = function(state)
         local ui  = state.session.ui.menagerie
-        local out = { { value = "all", label = "All", active = ui.axval == "all" } }
+        local out = {}
         local function add(value, label, n)
-            out[#out + 1] = { value = value, label = label, count = n,
-                              active = ui.axval == value }
+            out[#out + 1] = { group = "axval", value = value, label = label,
+                              count = n, active = ui.axval == value }
         end
-        if ui.axis == "kind" then
-            -- Top-N kinds AMONG THE PLAYER'S attachable pets (not the global
-            -- collection): counts the player can act on.
-            local counts = {}
-            for _, row in ipairs(HDG.PetObserver:GetAttachable()) do
-                if row.kind then counts[row.kind] = (counts[row.kind] or 0) + 1 end
-            end
-            local keys = {}
-            for k in pairs(counts) do keys[#keys + 1] = k end
-            table.sort(keys, function(a, b)
-                if counts[a] ~= counts[b] then return counts[a] > counts[b] end
-                return a < b
-            end)
-            for i = 1, math.min(#keys, M().KIND_CHIP_MAX) do
-                add(keys[i], (keys[i]:gsub("^%l", string.upper)), counts[keys[i]])
-            end
-        elseif ui.axis == "clade" then
+        add("all", "All", nil)
+        if ui.axis == "clade" then
             local counts = {}
             for _, row in ipairs(HDG.PetObserver:GetAttachable()) do
                 if row.clade then counts[row.clade] = (counts[row.clade] or 0) + 1 end
@@ -169,13 +233,11 @@ Selectors:Register("menagerie.axisValues", {
             local keys = {}
             for k in pairs(counts) do keys[#keys + 1] = k end
             table.sort(keys)
-            for _, k in ipairs(keys) do add(k, (k:gsub("^%l", string.upper)), counts[k]) end
+            for _, k in ipairs(keys) do add(k, _titleCase(k), counts[k]) end
         elseif ui.axis == "family" then
-            for i, name in ipairs(HDG.PetObserver:GetFamilies()) do
-                add(i, name)
-            end
+            for i, name in ipairs(HDG.PetObserver:GetFamilies()) do add(i, name, nil) end
         elseif ui.axis == "size" then
-            for _, b in ipairs(M().SIZE_BUCKETS) do add(b.key, b.label) end
+            for _, b in ipairs(M().SIZE_BUCKETS) do add(b.key, b.label, nil) end
         end
         return out
     end,
@@ -202,149 +264,6 @@ Selectors:Register("menagerie.hasSelection", {
     end,
 })
 
-Selectors:Register("menagerie.card.title", {
-    calls = { "menagerie.selected" },
-    fn = function(state, ctx)
-        local p = Selectors:Call("menagerie.selected", state, ctx)
-        if not p then return "Pick a pet" end
-        return p.customName or p.name
-    end,
-})
-
-Selectors:Register("menagerie.card.family", {
-    calls = { "menagerie.selected" },
-    reads = { "session.resolvers.pets.tick" },
-    fn = function(state, ctx)
-        local p = Selectors:Call("menagerie.selected", state, ctx)
-        if not p then return "" end
-        local fam = HDG.PetObserver:GetFamilies()[p.petType]  -- exception(nullable): unknown petType
-        return fam and ("Family: " .. fam) or ""
-    end,
-})
-
-Selectors:Register("menagerie.card.howBig", {
-    calls = { "menagerie.selected" },
-    fn = function(state, ctx)
-        local p = Selectors:Call("menagerie.selected", state, ctx)
-        if not p then return "" end
-        local b = _bucketOf(p.height)
-        if not b then return "?" end   -- unmeasured: the honest mark, never a guess (spec ruling 6)
-        return string.format("%s -- height %.2f (you are 2.242)", b.label, p.height)
-    end,
-})
-
-Selectors:Register("menagerie.card.needs", {
-    calls = { "menagerie.selected" },
-    fn = function(state, ctx)
-        local p = Selectors:Call("menagerie.selected", state, ctx)
-        if not p then return "" end
-        local meta = p.clade and M().CLADE_META[p.clade]
-        return meta and meta.needs or "?"
-    end,
-})
-
-Selectors:Register("menagerie.card.matches", {
-    calls = { "menagerie.selected" },
-    fn = function(state, ctx)
-        local p = Selectors:Call("menagerie.selected", state, ctx)
-        if not p then return "" end
-        return table.concat(_motifsOf(p), "  ")
-    end,
-})
-
-Selectors:Register("menagerie.card.light", {
-    calls = { "menagerie.selected" },
-    reads = { "session.resolvers.staticData.tick" },
-    fn = function(state, ctx)
-        local p = Selectors:Call("menagerie.selected", state, ctx)
-        if not p then return "" end
-        local prof = HDG.StaticData.PetFacts:AnimProfile(p.speciesID)
-        local g = prof and prof.glow   -- exception(nullable): 6 unparsed models
-        if not g then return "?" end
-        if g[1] > 0 then return "carries a light -- it will illuminate its spot" end
-        if g[3] > 0 or g[2] >= 3 then return "glows" end
-        return "no glow"
-    end,
-})
-
--- ===== the behaviour flowchart (ruling 10: THE one behaviour surface) =======
--- Data only. Node labels come from the curated per-model table when eyeballed;
--- otherwise the honest fallback "Stand (variation N)" with unverified = true.
-Selectors:Register("menagerie.flow", {
-    memoized = true,
-    calls = { "menagerie.selected" },
-    reads = { "session.resolvers.staticData.tick" },
-    fn = function(state, ctx)
-        local p = Selectors:Call("menagerie.selected", state, ctx)
-        if not p then return nil end   -- exception(nullable): card empty pre-selection
-        local PF   = HDG.StaticData.PetFacts
-        local prof = PF:AnimProfile(p.speciesID)
-        if not prof then return nil end  -- exception(nullable): unparsed model; section hides
-        local nodes = {}
-        for _, e in ipairs(prof.idle) do
-            local id, var, pct, ms = e[1], e[2], e[3], e[4]
-            local key   = id .. ":" .. var
-            local label = prof.labels and prof.labels[key]
-            nodes[#nodes + 1] = {
-                animID = id, variation = var, pct = pct, seconds = ms / 1000,
-                label = label or (var == 0 and "Stand" or ("Stand (variation " .. var .. ")")),
-                unverified = label == nil and var ~= 0,
-            }
-        end
-        local voice = PF:Voice(p.speciesID)
-        local voiceNode
-        if voice then
-            local cadence = voice.delayMin
-                and string.format("every %d-%ds", voice.delayMin, voice.delayMax)
-                or "now and then"
-            voiceNode = { word = voice.word or "sound", cadence = cadence,
-                          kits = voice.kits, sharedWith = voice.sharedWith }
-        end
-        return { nodes = nodes, voice = voiceNode, also = prof.also }
-    end,
-})
-
--- ===== the scene ============================================================
-Selectors:Register("menagerie.scene", {
-    calls = { "menagerie.selected" },
-    reads = { "session.ui.menagerie.scene", "session.resolvers.staticData.tick" },
-    fn = function(state, ctx)
-        local p = Selectors:Call("menagerie.selected", state, ctx)
-        if not p then return nil end   -- exception(nullable): empty stage pre-selection
-        local ui = state.session.ui.menagerie.scene
-        local decor
-        if ui.decorID then
-            local d = HDG.StaticData.PetFacts:SceneDecor()[ui.decorID]
-            decor = { decorID = ui.decorID, file = d.file, name = d.name }
-        end
-        return {
-            speciesID    = p.speciesID,
-            petDisplayID = p.displayID,   -- exception(nullable): a species with no display renders 2D fallback
-            petHeight    = p.height,
-            petScale     = HDG.StaticData.PetFacts:SceneScale(p.speciesID),
-            petLift      = HDG.StaticData.PetFacts:SceneLift(p.speciesID),
-            petGirth     = HDG.StaticData.PetFacts:SceneGirth(p.speciesID),
-            decor        = decor,
-            withYou      = ui.withYou == true,
-        }
-    end,
-})
-
--- ===== scene strip chips ====================================================
-Selectors:Register("menagerie.sceneChips", {
-    reads = { "session.ui.menagerie.scene", "session.resolvers.staticData.tick" },
-    fn = function(state)
-        local ui = state.session.ui.menagerie.scene
-        local out = { { value = "none", label = "--", active = ui.decorID == nil } }
-        local decor = HDG.StaticData.PetFacts:SceneDecor()
-        for _, did in ipairs(M().SCENE_CHIP_DECOR) do
-            out[#out + 1] = { value = did, label = decor[did].name, active = ui.decorID == did }
-        end
-        out[#out + 1] = { value = "you", label = "You", active = ui.withYou == true }
-        return out
-    end,
-})
-
 -- ===== chip-strip adapters ==================================================
 -- ChipStrip wants a FLAT items[]; these project the richer selectors above into
 -- chip streams. Cell kinds (and their click dispatches) live in the controller.
@@ -363,8 +282,8 @@ Selectors:Register("menagerie.modeChips", {
     fn = function(state)
         local mode = state.session.ui.menagerie.mode
         return {
-            { value = "byPet",  label = "By Pet",  active = mode == "byPet" },
-            { value = "bySpot", label = "By Spot", active = mode == "bySpot" },
+            { group = "mode", value = "byPet",  label = "By Pet",  active = mode == "byPet" },
+            { group = "mode", value = "bySpot", label = "By Spot", active = mode == "bySpot" },
         }
     end,
 })
@@ -406,11 +325,187 @@ Selectors:Register("menagerie.spotWantChips", {
     end,
 })
 
--- The flowchart as one chip stream: phases in idle-mix order, then the voice.
-Selectors:Register("menagerie.flowChips", {
-    calls = { "menagerie.flow" },
+-- ===== the shared card family ==============================================
+-- ONE registration loop serves BOTH hosts of the card (ruling 9): the
+-- Menagerie view and the Decor tab's Pets mode. Everything downstream of a
+-- selection -- card facts, behaviour flow, scene spec, chip adapters -- is
+-- identical; only the selection lives per host. The scene CHOICES
+-- (bed/plinth/You) are deliberately ONE shared transient
+-- (session.ui.menagerie.scene): your staging setup follows you across tabs.
+local function RegisterCardFamily(NS, SELECTED)
+
+Selectors:Register(NS .. ".card.title", {
+    calls = { SELECTED },
     fn = function(state, ctx)
-        local flow = Selectors:Call("menagerie.flow", state, ctx)
+        local p = Selectors:Call(SELECTED, state, ctx)
+        if not p then return HDG.Locale:Get("MENAGERIE_DETAIL_TITLE") end
+        return p.displayName
+    end,
+})
+
+Selectors:Register(NS .. ".card.family", {
+    calls = { SELECTED },
+    reads = { "session.resolvers.pets.tick" },
+    fn = function(state, ctx)
+        local p = Selectors:Call(SELECTED, state, ctx)
+        if not p then return "" end
+        local fam = HDG.PetObserver:GetFamilies()[p.petType]  -- exception(nullable): unknown petType
+        return fam and ("Family: " .. fam) or ""
+    end,
+})
+
+Selectors:Register(NS .. ".card.howBig", {
+    calls = { SELECTED },
+    fn = function(state, ctx)
+        local p = Selectors:Call(SELECTED, state, ctx)
+        if not p then return "" end
+        local b = _bucketOf(p.height)
+        if not b then return "?" end   -- unmeasured: the honest mark, never a guess (spec ruling 6)
+        -- No "(you are N)" parenthetical. It was a second copy of
+        -- PET_CHARACTER_HEIGHT written as a literal, and it overran the Decor
+        -- host's 220px facts column -- the one line of the four that did. The
+        -- player-sized comparison it was reaching for is what the scene's You
+        -- chip IS (ruling 13), and the row tooltip still states it as numbers.
+        return string.format("%s -- height %.2f", b.label, p.height)
+    end,
+})
+
+Selectors:Register(NS .. ".card.needs", {
+    calls = { SELECTED },
+    fn = function(state, ctx)
+        local p = Selectors:Call(SELECTED, state, ctx)
+        if not p then return "" end
+        local meta = p.clade and M().CLADE_META[p.clade]
+        return meta and meta.needs or "?"
+    end,
+})
+
+Selectors:Register(NS .. ".card.matches", {
+    calls = { SELECTED },
+    fn = function(state, ctx)
+        local p = Selectors:Call(SELECTED, state, ctx)
+        if not p then return "" end
+        return table.concat(_motifsOf(p), "  ")
+    end,
+})
+
+Selectors:Register(NS .. ".card.light", {
+    calls = { SELECTED },
+    reads = { "session.resolvers.staticData.tick" },
+    fn = function(state, ctx)
+        local p = Selectors:Call(SELECTED, state, ctx)
+        if not p then return "" end
+        local prof = HDG.StaticData.PetFacts:AnimProfile(p.speciesID)
+        local g = prof and prof.glow   -- exception(nullable): 6 unparsed models
+        if not g then return "?" end
+        if g[1] > 0 then return "carries a light -- it will illuminate its spot" end
+        if g[3] > 0 or g[2] >= 3 then return "glows" end
+        return "no glow"
+    end,
+})
+
+-- ===== the behaviour flowchart (ruling 10: THE one behaviour surface) =======
+-- Data only. Node labels come from the curated per-model table when eyeballed;
+-- otherwise the honest fallback "Stand (variation N)" with unverified = true.
+Selectors:Register(NS .. ".flow", {
+    memoized = true,
+    calls = { SELECTED },
+    reads = { "session.resolvers.staticData.tick" },
+    fn = function(state, ctx)
+        local p = Selectors:Call(SELECTED, state, ctx)
+        if not p then return nil end   -- exception(nullable): card empty pre-selection
+        local PF   = HDG.StaticData.PetFacts
+        local prof = PF:AnimProfile(p.speciesID)
+        if not prof then return nil end  -- exception(nullable): unparsed model; section hides
+        local nodes = {}
+        for _, e in ipairs(prof.idle) do
+            local id, var, pct, ms = e[1], e[2], e[3], e[4]
+            local key   = id .. ":" .. var
+            local label = prof.labels and prof.labels[key]
+            nodes[#nodes + 1] = {
+                animID = id, variation = var, pct = pct, seconds = ms / 1000,
+                label = label or (var == 0 and "Stand" or ("Stand (variation " .. var .. ")")),
+                unverified = label == nil and var ~= 0,
+            }
+        end
+        local voice = PF:Voice(p.speciesID)
+        local voiceNode
+        if voice then
+            local cadence = voice.delayMin
+                and string.format("every %d-%ds", voice.delayMin, voice.delayMax)
+                or "now and then"
+            -- No word. HDGR_PetVoiceDB's `word` is the CASC folder stem
+            -- (sound/creature/<X>/), which is an English creature noun for about
+            -- a third of the 286 voices and build debris for the rest
+            -- ("bloodfangwidowspider", "revenant2_fire", "fx_grab_aura") -- and
+            -- nothing here can tell the two apart. The player is looking at the
+            -- pet besides; what they cannot see is that the voice is BORROWED,
+            -- so sharedWith is the fact worth spending the line on.
+            voiceNode = { cadence = cadence, kits = voice.kits, durs = voice.durs,
+                          sharedWith = voice.sharedWith }
+        end
+        return { nodes = nodes, voice = voiceNode, also = prof.also }
+    end,
+})
+
+-- ===== the scene ============================================================
+Selectors:Register(NS .. ".scene", {
+    calls = { SELECTED },
+    reads = { "session.ui.menagerie.scene", "session.resolvers.staticData.tick" },
+    fn = function(state, ctx)
+        local p = Selectors:Call(SELECTED, state, ctx)
+        if not p then return nil end   -- exception(nullable): empty stage pre-selection
+        local ui = state.session.ui.menagerie.scene
+        local decor
+        if ui.decorID then
+            local d = HDG.StaticData.PetFacts:SceneDecor()[ui.decorID]
+            -- seatZ nil = no eyeballed seat for this decor yet; the stage falls
+            -- back to the bounding-box top, which is right only for flat-topped
+            -- decor (see Constants.MENAGERIE.SCENE_SEAT_Z).
+            decor = { decorID = ui.decorID, file = d.file, name = d.name,
+                      seatZ = M().SCENE_SEAT_Z[ui.decorID] }   -- exception(nullable): unmeasured decor keeps bbox-top
+        end
+        return {
+            speciesID    = p.speciesID,
+            petDisplayID = p.displayID,   -- exception(nullable): a species with no display renders 2D fallback
+            petHeight    = p.height,
+            petScale     = HDG.StaticData.PetFacts:SceneScale(p.speciesID),
+            petLift      = HDG.StaticData.PetFacts:SceneLift(p.speciesID),
+            petGirth     = HDG.StaticData.PetFacts:SceneGirth(p.speciesID),
+            -- Hover allowance for the camera: hover ANIMATIONS translate the
+            -- model above its mesh, invisibly to any offline measurement.
+            -- Family Flying (petType 3) and the elemental clade are the
+            -- hoverers (sporebats, skyfins, batdemons; motes, driftlings).
+            petHovers    = p.petType == 3
+                           or select(2, HDG.StaticData.PetFacts:Taxonomy(p.speciesID)) == "elemental",
+            decor        = decor,
+            withYou      = ui.withYou == true,
+        }
+    end,
+})
+
+-- ===== scene strip chips ====================================================
+Selectors:Register(NS .. ".sceneChips", {
+    reads = { "session.ui.menagerie.scene", "session.resolvers.staticData.tick" },
+    fn = function(state)
+        local ui = state.session.ui.menagerie.scene
+        local out = { { group = "scene", value = "none", label = "--", active = ui.decorID == nil } }
+        local decor = HDG.StaticData.PetFacts:SceneDecor()
+        for _, did in ipairs(M().SCENE_CHIP_DECOR) do
+            out[#out + 1] = { group = "scene", value = did, label = decor[did].name,
+                              active = ui.decorID == did }
+        end
+        out[#out + 1] = { group = "scene", value = "you", label = "You", active = ui.withYou == true }
+        return out
+    end,
+})
+
+
+-- The flowchart as one chip stream: phases in idle-mix order, then the voice.
+Selectors:Register(NS .. ".flowChips", {
+    calls = { NS .. ".flow" },
+    fn = function(state, ctx)
+        local flow = Selectors:Call(NS .. ".flow", state, ctx)
         if not flow then return {} end   -- exception(nullable): empty strip pre-selection
         local out = {}
         for _, n in ipairs(flow.nodes) do
@@ -419,18 +514,22 @@ Selectors:Register("menagerie.flowChips", {
                               animID = n.animID, variation = n.variation }
         end
         if flow.voice then
-            out[#out + 1] = { nodeType = "voice", label = flow.voice.word,
+            -- durs travels WITH kits: the controller's sound bar fills over
+            -- durs[i] for the kit it just played, so a chip carrying kits but
+            -- no durations leaves the bar permanently at length zero.
+            out[#out + 1] = { nodeType = "voice",
                               cadence = flow.voice.cadence, kits = flow.voice.kits,
+                              durs = flow.voice.durs,
                               sharedWith = flow.voice.sharedWith }
         end
         return out
     end,
 })
 
-Selectors:Register("menagerie.alsoChips", {
-    calls = { "menagerie.flow" },
+Selectors:Register(NS .. ".alsoChips", {
+    calls = { NS .. ".flow" },
     fn = function(state, ctx)
-        local flow = Selectors:Call("menagerie.flow", state, ctx)
+        local flow = Selectors:Call(NS .. ".flow", state, ctx)
         if not flow or not flow.also then return {} end  -- exception(nullable): empty pre-selection
         -- SHOWABLE only: the repertoire carries dozens of combat/movement ids a
         -- player has no reason to click; unfiltered, Pandaren Monk's 40 chips
@@ -441,7 +540,7 @@ Selectors:Register("menagerie.alsoChips", {
             local verb = M().SHOWABLE_ANIMS[id]
             if verb and not seen[verb] then
                 seen[verb] = true
-                out[#out + 1] = { animID = id, label = verb }
+                out[#out + 1] = { group = "also", animID = id, label = verb }
             end
         end
         return out
@@ -450,6 +549,30 @@ Selectors:Register("menagerie.alsoChips", {
 
 -- Described ships HIDDEN in v1 (plan ruling): the gate is honest -- it opens when
 -- a description DB exists, with no layout change. Today there is none.
+
+end
+
+RegisterCardFamily("menagerie", "menagerie.selected")
+
+-- The Decor host feeds the SAME family off the selection selector it already
+-- had (HDGR_Selectors_Pets, loaded first per the TOC). A second registration
+-- reading the same decor id through the same observer would be one selector
+-- under two names -- two memo caches to keep agreeing, and one of them silently
+-- wrong the day the selection source moves.
+RegisterCardFamily("pets", "pets.selectedPet")
+
+-- "Pets for this room" button label: capture affordance one way, visible-clear
+-- the other (plan risk 2: the captured context must be SHOWN so staleness is
+-- never silent).
+Selectors:Register("menagerie.roomBtnLabel", {
+    reads = { "session.ui.menagerie.roomQuery" },
+    fn = function(state)
+        local q = state.session.ui.menagerie.roomQuery
+        if q then return "Clear: " .. q.label end
+        return HDG.Locale:Get("MENAGERIE_ROOM_BTN")
+    end,
+})
+
 Selectors:Register("menagerie.hasDescription", {
     reads = { "session.resolvers.staticData.tick" },
     fn = function() return false end,

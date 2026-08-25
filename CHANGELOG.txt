@@ -1,5 +1,49 @@
 ## [Unreleased]
 
+## [3.28.0] - 2026-08-25 (August 2026)
+
+### Added
+- **Search your pets by name or by kind.** House > Pets has a search box under the
+  By Pet / By Spot buttons. Type a pet's name, or type what it IS -- "squirrel",
+  "moth", "golem", "murloc" -- and the list narrows to match. The kind is printed
+  beside every pet in the list, so whatever you can read there, you can type. As
+  you type, a row of suggestions appears offering the kinds that start with those
+  letters, with a count of how many you own; click one to fill it in. Two letters
+  is usually enough to get from 1,934 pets to the handful you meant.
+- **Bats are their own group.** They used to sit with the birds, which never felt
+  right -- you hang a bat in a cellar, not on a garden perch. There is now a Bat
+  group of its own, and the card tells you a bat wants a rafter somewhere dim.
+  The room matcher treats them accordingly: ask "pets for this room" in something
+  gothic and the bats put their hands up.
+- **The pet card came to the Decor tab.** Decor > Pets now shows the same card the
+  Menagerie does -- the live stage with the bed, the plinth and your own character,
+  the facts line, and the behaviour flowchart -- instead of the old flat preview.
+  One pet, one card, wherever you are looking at it from.
+
+### Changed
+- **Pets are grouped correctly now.** A pass over every pet in the game moved
+  around two hundred of them into the group they actually belong to. Crocodiles
+  were filed as birds. A wombat was a bird. Revenants, which are elementals, were
+  filed as insects, as were stone giants, a cauldron, a pen, a torch and a
+  carnivorous plant. A panther was an insect. A crate was a rodent. A dog in a
+  hard hat was a construct, and a clockwork dog was a bird. Balloon animals were
+  filed as the animals they are shaped like. If you have ever picked a group and
+  wondered why something odd was in it, that is why.
+- **The pet list is in alphabetical order.** It used to be sorted by height, which
+  made sense when each row carried a size bar; the size story moved to the card's
+  stage, and a list you arrive at knowing the name you want should be in name
+  order. Renamed pets sort under the name you gave them.
+
+### Fixed
+- **The sound button on a pet's card now works properly.** Clicking the sound chip
+  plays a different one of that pet's sounds each time rather than the same, often
+  near-silent, loop; a small bar fills to show how long the clip runs; and it no
+  longer draws that bar when the client refuses to play anything. The chip also
+  stops naming the sound after an internal file name -- it now tells you how many
+  other pets share that voice, which is the surprising part.
+- **The Pets tab no longer keeps showing the old list after you filter it.** Under
+  some combinations of filters the list could stay as it was instead of narrowing.
+
 ## [3.27.0] - 2026-08-25 (August 2026)
 
 ### Added

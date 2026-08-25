@@ -65,13 +65,25 @@ LC.sections["pets.statusRail"] = {
 LC.sections["pets.detailBody"] = {
     ["in"] = "petDetailPanel", layout = "vertical", padding = "lg", gap = "md", order = 10,
 }
--- 410h matches decor.previewSlot so switching modes does not resize the column.
+-- 330h: stage 300 -- the SAME stage height as the Menagerie host -- plus the
+-- scene strip. The card underneath affords it by running facts and flowchart
+-- SIDE BY SIDE: four short fact lines were burning full-width rows in a 540px
+-- panel (owner, 2026-08-25 -- "wasted space, don't take it from the preview").
 LC.sections["pets.previewSlot"] = {
-    ["in"] = "pets.detailBody", layout = "vertical", height = 410, order = 10,
+    ["in"] = "pets.detailBody", layout = "vertical", gap = "xs", height = 330, order = 10,
 }
 LC.sections["pets.detailCard"] = {
-    ["in"]  = "pets.detailBody", layout = "vertical", padding = "lg",
+    ["in"]  = "pets.detailBody", layout = "vertical", padding = "md",
     gap = "sm", width = "fill", order = 20, chrome = "inset",
+}
+LC.sections["pets.cardCols"] = {
+    ["in"] = "pets.detailCard", layout = "horizontal", gap = "md", height = 138, order = 18,
+}
+LC.sections["pets.cardFacts"] = {
+    ["in"] = "pets.cardCols", layout = "vertical", gap = "xs", width = 220, order = 10,
+}
+LC.sections["pets.cardFlow"] = {
+    ["in"] = "pets.cardCols", layout = "vertical", gap = "xs", width = "fill", order = 20,
 }
 
 -- ===== Widgets ===============================================================
@@ -130,35 +142,70 @@ LC.widgets["petPanel.search"] = {
 }
 
 -- ===== Detail pane ===========================================================
+-- The SHARED CARD (ruling 9): the same stage / scene strip / facts / flowchart
+-- the Menagerie shows, bound to this host's selection through the pets.* card
+-- family. The old modelPreview large display is gone -- one component, two
+-- hosts, one behaviour surface (ruling 10).
 
 LC.widgets["petDetailPanel.title"] = {
     tooltip = false,
     kind = "label", ["in"] = "petDetailPanel", slot = "header",
-    text = "locale:PETS_CLICK_A_PET", font = "heading",
+    text = "locale:MENAGERIE_DETAIL_TITLE", font = "heading",
     height = 18, width = "auto", order = 10,
-    binding = "pets.selectedPet.name",
+    binding = "pets.card.title",
 }
--- The large preview. Reuses modelPreview whole: same registered-scene transition,
--- orbit camera, inverted-pitch hook, background options and 2D fallback as decor.
--- No defaultSceneID -- the pet path always resolves its scene from
--- GetPetModelSceneInfoBySpeciesID, so there is nothing to fall back to.
-LC.widgets["petDetailPanel.preview"] = {
+LC.widgets["petDetailPanel.stage"] = {
     tooltip = false,
-    kind = "modelPreview", ["in"] = "pets.previewSlot", order = 10,
-    binding = { speciesID = "pets.selectedSpeciesID", bg = "decor.previewBg" },
-    showControls = true,
-    showCorbels  = false,
-    showAtlas    = false,
-    bgTile         = true,
-    configurableBg = true,
-    placeholder  = "locale:PETS_PREVIEW_PLACEHOLDER",
-    sceneInsets  = { top = 2, right = 2, bottom = 2, left = 2 },
+    kind = "petScene", ["in"] = "pets.previewSlot",
+    binding = "pets.scene",
+    width = "fill", height = 300, order = 10,
+}
+LC.widgets["petDetailPanel.sceneChips"] = {
+    tooltip = false,
+    kind = "chipStrip", ["in"] = "pets.previewSlot",
+    binding = "pets.sceneChips", cellKind = "menagerieChip",
+    chipHeight = 20, order = 20, height = 24,
 }
 LC.widgets["petDetailPanel.family"] = {
     tooltip = false,
-    kind = "label", ["in"] = "pets.detailCard", font = "small",
+    kind = "label", ["in"] = "pets.cardFacts", font = "small",
     text = "", height = 14, order = 10,
-    binding = "pets.selectedPet.familyLabel",
+    binding = "pets.card.family",
+}
+LC.widgets["petDetailPanel.howBig"] = {
+    tooltip = false,
+    kind = "label", ["in"] = "pets.cardFacts", font = "small", justifyH = "LEFT",
+    text = "", width = "fill", height = 14, order = 12,
+    binding = "pets.card.howBig",
+}
+LC.widgets["petDetailPanel.needs"] = {
+    tooltip = false,
+    kind = "label", ["in"] = "pets.cardFacts", font = "small", justifyH = "LEFT",
+    text = "", width = "fill", height = 14, order = 14,
+    binding = "pets.card.needs",
+}
+LC.widgets["petDetailPanel.light"] = {
+    tooltip = false,
+    kind = "label", role = "TextInfo", ["in"] = "pets.cardFacts", font = "small",
+    justifyH = "LEFT", text = "", width = "fill", height = 14, order = 16,
+    binding = "pets.card.light",
+}
+LC.widgets["petDetailPanel.flowHeader"] = {
+    tooltip = false,
+    kind = "label", ["in"] = "pets.cardFlow", font = "heading", justifyH = "LEFT",
+    text = "locale:MENAGERIE_FLOW_HEADER", width = "fill", height = 18, order = 20,
+}
+LC.widgets["petDetailPanel.flow"] = {
+    tooltip = false,
+    kind = "chipStrip", ["in"] = "pets.cardFlow",
+    binding = "pets.flowChips", cellKind = "menagerieFlowNode",
+    chipHeight = 34, order = 22, height = 72,
+}
+LC.widgets["petDetailPanel.also"] = {
+    tooltip = false,
+    kind = "chipStrip", ["in"] = "pets.cardFlow",
+    binding = "pets.alsoChips", cellKind = "menagerieChip",
+    chipHeight = 18, order = 24, height = 36,
 }
 -- Summon / Dismiss. ONE button whose label flips, matching VPP: two buttons would
 -- mean one is always dead, and the state is binary. `enabled` is bound because the
@@ -172,9 +219,4 @@ LC.widgets["petDetailPanel.summonBtn"] = {
     visible = "pets.hasSelection",
 }
 
-LC.widgets["petDetailPanel.size"] = {
-    tooltip = false,
-    kind = "label", ["in"] = "pets.detailCard", font = "small",
-    text = "", height = 14, order = 20,
-    binding = "pets.selectedPet.sizeLabel",
-}
+

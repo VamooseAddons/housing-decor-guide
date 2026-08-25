@@ -12,25 +12,19 @@
 
 ---
 
-## What's New in v3.26.0
+## What's New in v3.28.0
 
-**Vendors who trade in more than one place now appear in each of them.** A vendor standing in both housing neighbourhoods, or in Stormwind and Dornogal, was only ever listed in one of them. Around 30 vendor listings return, each with its own map location. A few of the restored ones have no coordinates recorded yet, so they list without a pin until someone walks them.
+**The Pets tab has a search box.** It sits under the By Pet and By Spot buttons, and it matches two things: the pet's name, and the kind of creature it is. Typing "squirrel" finds every squirrel you own even though none of them is called one. The kind is printed beside each pet in the list, so anything you can read there is something you can type. As you type, a row of suggestions appears below the box offering kinds that begin with those letters, each with a count of how many you own. Click one to fill it in.
 
-**Decor sold by a vendor now names the vendor, not a quest.** Where a piece is both a quest or achievement reward and stocked by a vendor, the source line used to name the quest. That is true once, and no help to someone reading a blueprint list who was never offered it. The vendor is named instead, with the zone beside it, and the quest or achievement still shows on the chips. This applies on the Blueprints copy list, the decor tooltip and the item detail panel. The tooltip also lists every vendor that stocks the piece.
+**Bats are now their own group.** They were previously grouped with birds. A bat belongs somewhere dim and high rather than on a garden perch, so it has its own group, its own placement note, and it now answers to a gothic room when you ask which pets suit the room you are standing in.
 
-**Vendors who only exist in one neighbourhood say so.** Six vendors are in Founder's Point or Razorwind Shores but not both. Their entry now states which neighbourhood does not have them, so a search in the wrong one gives an answer rather than nothing.
+**Decor > Pets shows the full pet card.** It previously showed a flat preview. It now shows the same card as the House > Pets view: the stage with the pet at true size, the option to seat it on a bed or a plinth or stand your character beside it, the placement facts, and the flowchart of what the pet does when left alone.
 
-**The Pets tab no longer opens empty.** After a reload it waited for the game to volunteer a pet-journal update before building its list, which on a quiet login never arrived. A companion already summoned was also offered a Summon button that did nothing.
+**Pets are in the correct groups.** Every pet in the game was reviewed against its model, and around two hundred moved. Crocodiles were listed as birds. Revenants and stone giants, which are elementals, were listed as insects, along with a cauldron, a pen and a carnivorous plant. A panther was an insect and a crate was a rodent. Balloon animals were grouped as the animals they resemble. If you have picked a group and found something odd inside it, this is the reason.
 
-**A pet with no preview shows its icon instead of a blank panel.** The panel could also frame a pet with the camera intended for furniture.
+**The pet list is in alphabetical order.** It was previously ordered by height, which suited the size bar each row used to carry. Size is now shown on the card instead, and a list you come to knowing the name you want reads better in name order. A renamed pet sorts under the name you gave it.
 
-**Profession filters work on non-English clients.** A scanned recipe stored the translated profession name over the addon's own, so the Alchemy filter found nothing and the Recipes tab counted zero beside a second, empty bucket.
-
-**Being traded lumber no longer counts as farming it.** A guildmate handing over 40 Ashwood started a farming session and dropped a harvest marker where you stood. Buying lumber at the auction house did the same.
-
-**A guild recipe scan puts your profession filters back.** The scan borrows them while it reads the guild's recipes and restores them when it finishes, but a reload partway through meant it never got to, and those settings persist between sessions. They are now restored the next time you open a profession window. A scan also no longer waits ten seconds per profession your guild rank cannot view.
-
-**The Goblin export no longer garbles losses.** Anything sold at a loss exported a scrambled number, so the rows the export exists to surface were the ones you could not read.
+**The sound chip on a pet's card plays a different sound each time.** It previously replayed one sound, which for many pets was a near-silent background loop. A small bar now shows how long the clip lasts, and no bar appears when the client declines to play anything. The chip also states how many other pets share that voice.
 
 ---
 
@@ -123,7 +117,7 @@ A companion window injects into Blizzard's House Editor so you can **place decor
 ---
 
 **Author:** Vamoose
-**Version:** 3.26.0
+**Version:** 3.28.0
 **Game Version:** 12.1.0 (Midnight)
 **Source / Issues:** https://github.com/VamooseAddons/housing-decor-guide
 **Discord:** https://discord.gg/RWZaxJaHFP

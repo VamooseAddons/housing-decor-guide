@@ -1442,11 +1442,17 @@ HDG.WidgetTypes:Register("modelPreview", {
 -- ============================================================================
 local SCENE_SEAT_LIFT = 0    -- Phase C seat-point data replaces this per-decor
 
-local function _sceneCamera(widget, topZ, spec)
-    -- Frame the tallest thing in shot: the seated pet (decor top + its TRUE
+local function _sceneCamera(widget, topZ, seatZ, spec)
+    -- Frame the tallest thing in shot: the seated pet (its seat + its TRUE
     -- height) or the You actor. petHeight is a framing input only -- the pet's
     -- rendered size comes from SetRequestedScale in the paint.
-    local content = (topZ or 0) + (spec.petHeight or 0.9)  -- exception(nullable): SizeDB miss; median pet frames fine
+    --
+    -- max(decor top, pet top): a pet on a low cushion must not crop the backrest
+    -- BEHIND it out of shot, and a tall pet on a low seat must not crop itself.
+    -- With no seat datum seatZ == topZ and this is the old topZ + height exactly.
+    local petTop = seatZ + (spec.petHeight or 0.9)  -- exception(nullable): SizeDB miss; median pet frames fine
+    local content = math.max(topZ, petTop)
+    if spec.petHovers then content = content + 1.1 end   -- hover anims lift the model ~a unit above its mesh
     if spec.withYou then content = math.max(content, 2.6) end
     -- Aim at 42% of the stack, not 55: aiming high pushed floor pets to the
     -- bottom edge (cut off under the strip when You raised the content height).
@@ -1461,18 +1467,21 @@ end
 -- last one wins, so out-of-order streaming converges without tokens. A nil
 -- _decorTopZ means the decor is still streaming -- its own load callback
 -- re-enters when the box is readable.
--- Alone = PORTRAIT, composed = TRUE SCALE. The portrait uses Blizzard's own
--- card normalization (NormalizedScale=1 on the pet card's actor, UiModelSceneActor
--- row 5): the mixin measures the RUNTIME bounding box -- which sees animation
--- travel and hover, everything offline mesh data cannot -- and fills the frame
--- identically for every species. True scale (our photo-verified chain) belongs
--- to the decor/You compositions, where relative size is the point (ruling 13);
--- the facts line and the You actor are our banana.
+-- Alone = PORTRAIT via Blizzard's FULL card recipe, composed = TRUE SCALE.
+-- The portrait needs BOTH halves of what ApplyFromModelSceneActorInfo does:
+-- SetNormalizedScaleAggressiveness(1) (fit the runtime box -- which sees
+-- animation travel and hover, everything offline data cannot) AND
+-- SetUseCenterForOrigin (re-origin the model to its box CENTER). The first
+-- attempt shipped only the first half and a snake whose travel-box extends
+-- off-origin normalized fine but sat OUTSIDE the camera -- the "blank stage".
+-- Centered + normalized, every species lands mid-frame at the same fill.
+-- True scale (our photo-verified chain) stays for the decor/You compositions,
+-- where relative size is the point (ruling 13).
+local PORTRAIT_DIST = 3.4   -- frames the mixin's 2.118 reference box with margin
+
 local function _sceneIsPortrait(spec)
     return not spec.decor and not spec.withYou
 end
-
-local PORTRAIT_CONTENT = 2.118   -- the mixin's reference human-male height
 
 local function _seatAndFrame(widget)
     local spec = widget._sceneSpec
@@ -1481,15 +1490,23 @@ local function _seatAndFrame(widget)
     if not topZ then return end
     if _sceneIsPortrait(spec) then
         if widget._petActor then widget._petActor:SetPosition(0, 0, 0) end
-        widget._scene:SetCameraPosition(PORTRAIT_CONTENT * 1.6, 0, PORTRAIT_CONTENT * 0.42)
+        widget._scene:SetCameraPosition(PORTRAIT_DIST, 0, 0)   -- subject is centered AT the origin
         return
     end
+    -- The SEAT is not the box top. A bounding box has no idea where a bed's
+    -- cushion is -- its top is the crown of the backrest -- so an eyeballed
+    -- per-decor seat wins where we have one, and the box top stands in where we
+    -- do not (right for flat-topped decor, which is why the plinth always looked
+    -- correct and the bed never did).
+    local seatZ = widget._seatOverride                      -- exception(nullable): /hdg petseat calibration only
+             or (spec.decor and spec.decor.seatZ)           -- exception(nullable): decor with no eyeballed seat yet
+             or topZ
     if widget._petActor then
         -- petLift grounds hovering meshes: fliers are authored above their
         -- origin and render out of frame without it (Amberglow Stinger).
-        widget._petActor:SetPosition(0, 0, topZ + spec.petLift + SCENE_SEAT_LIFT)
+        widget._petActor:SetPosition(0, 0, seatZ + spec.petLift + SCENE_SEAT_LIFT)
     end
-    _sceneCamera(widget, topZ, spec)
+    _sceneCamera(widget, topZ, seatZ, spec)
 end
 
 -- The three actors are created ONCE per widget and re-pointed thereafter (the
@@ -1560,6 +1577,7 @@ local function dispatchPetScene(widget, values)
                 -- emitters -- short-idle pets (334ms mote) strobe without this.
                 local spec = widget._sceneSpec
                 local kit = spec and HDG.PetObserver:CardAnimKit(spec.speciesID)
+                widget._petKit = kit   -- PlayPhase restores it when the base idle is clicked
                 if kit then actor:PlayAnimationKit(kit) end  -- exception(nullable): species without a card kit keeps the default loop
             end)
             pet:SetAnimationBlendOperation(Enum.ModelBlendOperation.None)
@@ -1578,12 +1596,15 @@ local function dispatchPetScene(widget, values)
         -- Template-correct scale: the actor mixin applies requestedScale on load
         -- and on change; raw SetScale fights its OnUpdate machinery. Both knobs
         -- are dirty-checked, so flipping composition re-applies WITHOUT reload.
+        local pet = widget._petActor
         if _sceneIsPortrait(scene) then
-            widget._petActor:SetRequestedScale(1)
-            widget._petActor:SetNormalizedScaleAggressiveness(1)
+            pet:SetUseCenterForOrigin(true, true, true)
+            pet:SetRequestedScale(1)
+            pet:SetNormalizedScaleAggressiveness(1)
         else
-            widget._petActor:SetRequestedScale(scene.petScale)
-            widget._petActor:SetNormalizedScaleAggressiveness(0)
+            pet:SetUseCenterForOrigin(false, false, false)
+            pet:SetRequestedScale(scene.petScale)
+            pet:SetNormalizedScaleAggressiveness(0)
         end
     end
 
@@ -1624,11 +1645,31 @@ local function buildPetScene(parent, spec)
     HDG.Theme:Register(ph, "TextDim")
     widget._placeholderFs = ph
 
+    -- Re-seat and re-frame from current widget state. Every async load already
+    -- funnels through the same path; this is the door in for a caller that
+    -- changed something the dispatcher cannot see -- today only /hdg petseat.
+    function widget:Reframe() _seatAndFrame(self) end
+
     -- The controller's imperative surface (plays are NOT state):
     function widget:PlayPhase(animID, variation)
-        if self._petActor then
-            self._petActor:StopAnimationKit()   -- the card kit owns the idle; a clicked phase takes over
-            pcall(self._petActor.SetAnimation, self._petActor, animID, variation)  -- exception(boundary): Blizzard API, variation arg tolerated
+        local pet = self._petActor  ---@diagnostic disable-line: undefined-field
+        if HDG.Store:GetState().account.config.debug then
+            _G.print(("[HDG petscene] PlayPhase(%s, %s) actor=%s loaded=%s kit=%s"):format(
+                tostring(animID), tostring(variation), tostring(pet ~= nil),
+                tostring(pet and pet:IsLoaded()), tostring(self._petKit)))  ---@diagnostic disable-line: undefined-field
+        end
+        if not pet then return end
+        if animID == 0 and (variation or 0) == 0 and self._petKit then
+            -- Base idle clicked: restore the card kit rather than raw looping
+            -- sequence 0 -- the raw loop restarts one-shot emitters and strobes
+            -- short-idle pets (the mote), which the kit exists to prevent.
+            pet:PlayAnimationKit(self._petKit)
+            return
+        end
+        pet:StopAnimationKit()   -- the card kit owns the idle; a clicked phase takes over
+        local ok, err = pcall(pet.SetAnimation, pet, animID, variation)  -- exception(boundary): Blizzard API, variation arg tolerated
+        if not ok and HDG.Store:GetState().account.config.debug then
+            _G.print("[HDG petscene] SetAnimation errored: " .. tostring(err))
         end
     end
     return widget
@@ -1641,6 +1682,20 @@ HDG.WidgetTypes:Register("petScene", {
     destroy  = destroyWidget,
     specFields = { "camDistance" },
 })
+
+-- The card has TWO hosts (ruling 9) and so does its stage, which means anything
+-- reaching for "the" stage -- a chip click, a diagnostic dump -- has to ask which
+-- one is on screen. ONE answer, here: the mapping lived in the controller and the
+-- debug dump answered only for the Menagerie, so `/hdg petscene` reported "no
+-- stage widget built" from the Decor tab, where the stage was in plain sight.
+--
+-- HDG.mainFrame, not the rootFrame handed to Wire(): that proved to be a
+-- different frame whose .widgets never held the stage.
+function HDG.UI:PetStage()
+    local view = HDG.Store:GetState().account.ui.view
+    local id = view == "decor" and "petDetailPanel.stage" or "menagerieDetailPanel.stage"
+    return HDG.mainFrame and HDG.mainFrame.widgets[id]   -- exception(nullable): no frame before first open
+end
 
 HDG.WidgetTypes:Register("dropdown", {
     build = buildDropdown,
@@ -2340,7 +2395,11 @@ function HDG.UI:EditBox(parent, opts, font)
         local ph = host:CreateFontString(nil, "OVERLAY")
         applyFontToFS(ph, font)
         ph:SetText(text)
-        ph:SetWordWrap(true)
+        -- Wrap ONLY where there is a second line to wrap into. A single-line
+        -- EditBox has none, so a placeholder longer than the box wrapped and
+        -- spilled out of the frame instead of being clipped (the Menagerie
+        -- search box, 2026-08-25). Multiline boxes still wrap.
+        ph:SetWordWrap(opts.multiline == true)
         ph:SetJustifyH("LEFT")
         ph:SetJustifyV("TOP")
         HDG.Theme:Register(ph, "TextDim")
@@ -2361,6 +2420,59 @@ function HDG.UI:EditBox(parent, opts, font)
         -- to the hook's suspenders.
         host._hdgrPlaceholderRefresh = refresh
         edit._hdgrPlaceholderRefresh = refresh
+        refresh()
+    end
+
+    -- Search chrome: magnifier on the left, clear "x" on the right. Ported from
+    -- VN's search box (owner likes it) but using Blizzard's own SearchBoxTemplate
+    -- art rather than VN's letter-Q stand-in -- the atlases are
+    -- `common-search-magnifyingglass` and `common-search-clearbutton`, and the
+    -- template dims the glass to 0.6 when idle and lifts it to 1.0 on focus,
+    -- which is the affordance doing the work.
+    --
+    -- The caller's OnTextChanged is NOT taken: this hooks, so the search wiring
+    -- that already owns the box keeps owning it.
+    local function attachSearchChrome(host, edit, insetL, insetR)
+        local glass = host:CreateTexture(nil, "OVERLAY")
+        glass:SetAtlas("common-search-magnifyingglass")   -- exception(boundary): Blizzard atlas
+        glass:SetSize(12, 12)
+        glass:SetPoint("LEFT", 5, 0)
+        glass:SetVertexColor(0.6, 0.6, 0.6)
+
+        local clear = CreateFrame("Button", nil, host)
+        clear:SetSize(15, 15)
+        clear:SetPoint("RIGHT", -3, 0)
+        local x = clear:CreateTexture(nil, "OVERLAY")
+        x:SetAtlas("common-search-clearbutton")           -- exception(boundary): Blizzard atlas
+        x:SetSize(10, 10)
+        x:SetPoint("CENTER")
+        x:SetAlpha(0.5)
+        clear:SetScript("OnEnter", function() x:SetAlpha(1) end)
+        clear:SetScript("OnLeave", function() x:SetAlpha(0.5) end)
+        clear:SetScript("OnClick", function()
+            edit:SetText("")
+            edit:ClearFocus()
+            -- SetText does not fire OnTextChanged with userInput, so the search
+            -- state would keep the old needle while the box read empty. Tell the
+            -- consumer explicitly.
+            if edit._hdgrOnClear then edit._hdgrOnClear() end
+            if edit._hdgrPlaceholderRefresh then edit._hdgrPlaceholderRefresh() end
+        end)
+        clear:Hide()
+
+        local function refresh()
+            local has = (edit.GetText and edit:GetText() or "") ~= ""
+            local focused = edit.HasFocus and edit:HasFocus()
+            local lit = (has or focused) and 1 or 0.6
+            glass:SetVertexColor(lit, lit, lit)
+            if has then clear:Show() else clear:Hide() end
+        end
+        edit:HookScript("OnTextChanged", refresh)
+        edit:HookScript("OnEditFocusGained", refresh)
+        edit:HookScript("OnEditFocusLost", refresh)
+        edit:SetTextInsets(insetL, insetR, 0, 0)
+        host._hdgrSearchRefresh = refresh
+        edit._hdgrSearchRefresh = refresh
         refresh()
     end
 
@@ -2385,9 +2497,16 @@ function HDG.UI:EditBox(parent, opts, font)
             box:HookScript("OnEditFocusGained", function() HDG.Theme:SetState(box, { focused = true }) end)
             box:HookScript("OnEditFocusLost",   function() HDG.Theme:SetState(box, { focused = false }) end)
         end
+        -- Search chrome first: it sets the text insets the placeholder must clear,
+        -- so the hint starts after the magnifier instead of underneath it.
+        local padL, padR = 8, 8
+        if opts.search == true then
+            attachSearchChrome(box, box, 20, 20)
+            padL, padR = 20, 20
+        end
         attachPlaceholder(box, box, opts.placeholder, function(ph)
-            ph:SetPoint("LEFT", 8, 0)
-            ph:SetPoint("RIGHT", -8, 0)
+            ph:SetPoint("LEFT", padL, 0)
+            ph:SetPoint("RIGHT", -padR, 0)
         end)
         return box
     end
@@ -2487,7 +2606,7 @@ HDG.WidgetTypes:Register("editbox", {
         },
     },
     destroy = destroyWidget,
-    specFields = { "text", "font", "multiline", "placeholder", "maxLetters",
+    specFields = { "text", "font", "multiline", "placeholder", "search", "maxLetters",
                    "justifyH", "justifyV", "wrap", "tags" },
 })
 

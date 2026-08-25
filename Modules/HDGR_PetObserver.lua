@@ -56,6 +56,11 @@ local function _entryFor(petID)
         speciesID  = info.speciesID,
         name       = info.name,
         customName = info.customName,   -- exception(boundary): nil unless the player renamed it
+        -- The name the player actually SEES, derived once. It is the list's sort
+        -- key and its search key, and four call sites used to each re-derive it --
+        -- one of them disagreeing would sort a renamed pet away from where the
+        -- eye looks for it.
+        displayName = info.customName or info.name,
         icon       = info.icon,
         petType    = info.petType,
         displayID  = info.displayID,    -- exception(boundary): nil for a species with no display
@@ -70,20 +75,20 @@ local function _entryFor(petID)
     }
 end
 
--- Height-ascending, unmeasured last, then name, then speciesID. Unmeasured sorts
--- to the end because the ordering IS the feature; a nil cannot take part in it.
+-- Alphabetical by the DISPLAYED name. The list was height-ascending while the row
+-- carried a size bar and the ordering was itself the reading -- ruling 13 took the
+-- bar off the row and moved scale into the card's scene, which left the order
+-- saying nothing a player could use. A browse surface of ~2,000 rows that you
+-- arrive at knowing the name you want sorts by that name.
+--
+-- displayName, not name: a renamed pet must sit where its rendered label puts it.
 --
 -- speciesID is the final tie-break so this is a TOTAL order. The list is built by
 -- iterating a species-keyed table, and pairs() order is not deterministic under
 -- LuaJIT -- without a total order, table.sort (which is not stable) would let that
 -- non-determinism surface as rows shuffling between reloads.
-local function _byHeight(a, b)
-    if a.height and b.height then
-        if a.height ~= b.height then return a.height < b.height end
-    elseif a.height then return true
-    elseif b.height then return false
-    end
-    if a.name ~= b.name then return a.name < b.name end
+local function _byDisplayName(a, b)
+    if a.displayName ~= b.displayName then return a.displayName < b.displayName end
     return a.speciesID < b.speciesID
 end
 
@@ -125,7 +130,7 @@ function P:Rebuild()
     end
     local list = {}
     for _, entry in pairs(bySpecies) do list[#list + 1] = entry end
-    table.sort(list, _byHeight)
+    table.sort(list, _byDisplayName)
     self._attachable = list
     self._bySpecies  = bySpecies
     self._families   = _families()
@@ -198,7 +203,7 @@ function P:Resolve(speciesID)
     return {
         petDisplayID   = entry.displayID,
         uiModelSceneID = cardSceneID,
-        name           = entry.customName or entry.name,
+        name           = entry.displayName,
         iconTexture    = entry.icon,
     }
 end

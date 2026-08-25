@@ -59,13 +59,14 @@ HDG.Locale:Register("enUS", {
     MENAGERIE_DETAIL_TITLE  = "Pick a pet",
     MENAGERIE_PICK_A_PET    = "Pick a pet from the list",
     MENAGERIE_FLOW_HEADER   = "On its own it will",
+    MENAGERIE_SEARCH_PLACEHOLDER = "Search name or kind...",
+    MENAGERIE_ROOM_BTN = "Pets for this room",
+    MENAGERIE_ROOM_EMPTY = "Stand in a furnished room of your house first -- the capture reads the placed decor around you.",
     MENAGERIE_SCENE_LABEL   = "Scene",
     MENAGERIE_ALSO_LABEL    = "Also knows",
     PETS_BROWSER_TITLE     = "Placeable Pets",
     PETS_BLANK             = "No placeable pets match those filters.",
     PETS_SEARCH_PLACEHOLDER = "Search your pets by name...",
-    PETS_CLICK_A_PET       = "Click a pet",
-    PETS_PREVIEW_PLACEHOLDER = "Click a pet to preview",
     PETS_SUMMON            = "Summon",
     PETS_DISMISS           = "Dismiss",
     -- %d = how many are shown
@@ -74,7 +75,6 @@ HDG.Locale:Register("enUS", {
     PETS_COUNT_FILTERED    = "%d of %d placeable pets",
     -- %.2f the pet's height, %.2f the player's, in the shipped model units
     PETS_HEIGHT            = "Height %.2f  (you are %.2f)",
-    PETS_HEIGHT_UNKNOWN    = "Size not measured",
     -- Browser header click hints
     DECOR_HINT_LEFT        = "Select a decor item",
     DECOR_HINT_RIGHT       = "Favorite or unfavorite",

@@ -553,7 +553,12 @@ function S.PetFacts:Voice(speciesID)
     if not e then return nil end
     _ensurePetIndexes()
     local v = _table("HDGR_PetVoiceDB").voices[e.v]
-    return { word = v.word, kits = v.kits, index = e.v,
+    -- `word` is deliberately NOT exposed. The DB carries it (the CASC folder
+    -- stem the kits came from) but it is a build identifier, not English -- it
+    -- reads as "bloodfangwidowspider" as often as "crab", and the UI shipped it
+    -- raw once already. Anything that wants to name a voice needs a curated
+    -- vocabulary first; the facade not offering it keeps that decision here.
+    return { kits = v.kits, durs = v.durs, index = e.v,
              delayMin = e.d1, delayMax = e.d2,
              sharedWith = _pfVoiceShare[e.v] - 1 }
 end

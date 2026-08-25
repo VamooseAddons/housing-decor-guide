@@ -16,14 +16,10 @@ HDG.Constants = {
     -- Standard icon crop (trims the baked border off square item icons).
     -- Consumed via SetTexCoord(unpack(HDG.Constants.ICON_CROP)) (hygiene A6).
     ICON_CROP = { 0.08, 0.92, 0.08, 0.92 },
-    -- Pet size bar (Pets browser). PET_CHARACTER_HEIGHT is the player character
-    -- measured in HDGR_PetSizeDB's units and is the bar's reference mark;
-    -- PET_BAR_MAX runs a little past it so a pet taller than the player pins at
-    -- full width. Both live here because the row-list selector computes the
-    -- fraction and the row factory places the mark -- two files on one axis, and
-    -- a second copy of either number is one edit away from disagreeing.
+    -- The player character measured in HDGR_PetSizeDB's units. The pet tooltip
+    -- states a height against it, because a number in model units means nothing
+    -- until it has something a player already has an eye for beside it.
     PET_CHARACTER_HEIGHT = 2.242,
-    PET_BAR_MAX          = 2.6,
     -- Generic bullet/blip dot glyph (tone varies per site; the atlas never does).
     BULLET_DOT_ATLAS = "PlayerPartyBlip",
     BLUEPRINT_SLOT_MAX = 50,  -- HousingConsts: 50 blueprints per Bnet account
@@ -237,6 +233,11 @@ HDG.Constants = {
             beast     = { needs = "open floor",             motif = "nature" },
             rodent    = { needs = "a shelf or branch",      motif = "nature" },
             bird      = { needs = "a perch or rafter",      motif = "nature" },
+            -- Bats are NOT birds (owner, 2026-08-25). They read as a different
+            -- THEME rather than a different animal -- you hang them in a cellar,
+            -- not on a garden perch -- so they take the gothic motif and join the
+            -- room query alongside undead rather than alongside songbirds.
+            bat       = { needs = "a rafter somewhere dim", motif = "gothic" },
             aquatic   = { needs = "water, or a pond edge",  motif = "water" },
             reptile   = { needs = "a warm flat spot",       motif = "nature" },
             insect    = { needs = "a corner to explore",    motif = "nature" },
@@ -253,16 +254,43 @@ HDG.Constants = {
         -- adds one beyond the clade (the Mechanical Squirrel two-facts case).
         FAMILY_MOTIF = { [9] = "mechanical", [8] = "arcane", [6] = "gothic", [2] = "reptilian" },
         -- Identity axes for the By Pet two-row filter (ruling 14).
-        AXES = { { value = "kind", label = "Kind" }, { value = "clade", label = "Clade" },
+        -- Kind is NOT an axis. There are 712 kinds -- 239 of them with a single
+        -- pet, 71% with four or fewer -- so as a flat chip row it could only ever
+        -- show a top-N: the shipped twelve reached 14% of species and left
+        -- "squirrel" (12 pets, 40th) unreachable with nothing on screen saying so.
+        -- Kind is the SECOND LEVEL of clade instead: pick Rodent, and row two
+        -- becomes rat / rabbit / squirrel / porcupine. Every kind is reachable,
+        -- and no row ever has to be truncated.
+        AXES = { { value = "clade", label = "Clade" },
                  { value = "family", label = "Family" }, { value = "size", label = "Size" } },
-        KIND_CHIP_MAX = 12,   -- top-N kinds by count shown as chips; rest reachable via clade
         -- "Also knows" whitelist: anim id -> player verb. Only ids a PLAYER would
         -- click for fun belong here -- combat/movement ids are repertoire noise
         -- (Pandaren Monk carries ~40; unfiltered chips overflowed the window).
         -- Ids from the Emotes.db2-adjudicated ANIM_NAMES set.
+        -- FacetDB mood id -> pet motif, for the "Pets for this room" capture:
+        -- the room's placed decor votes through its mood facets, and the motifs
+        -- with agreement become the query. Ids from HDGR_FacetVocab.mood.
+        MOOD_MOTIFS = { [2] = "arcane", [3] = "nature", [4] = "gothic",
+                        [8] = "mechanical", [9] = "water", [10] = "void",
+                        [13] = "novelty" },
         -- The scene strip's curated decor (ruled 2026-08-25): one bed, one
         -- plinth. All 10 attachables stay in SceneDecorDB; these are the chips.
         SCENE_CHIP_DECOR = { 12246, 25122 },   -- Paw Pal Bed, Loyal Companion's Plinth
+        -- Where a pet actually SITS on each scene decor, in world units.
+        --
+        -- The stage falls back to the decor's bounding-box top, which is only the
+        -- seat when the silhouette is flat. The Paw Pal Bed's box top is the crown
+        -- of its backrest (box 0.661 vs the plinth's 0.378 -- 1.75x taller than a
+        -- squat pedestal, all of it backrest), so bbox-seating floats the pet above
+        -- the cushion and the camera then clips it at the top edge.
+        --
+        -- A bounding box cannot tell us where the cushion is, so these are EYEBALLED
+        -- per decor with `/hdg petseat <z>` and written down here. An entry absent
+        -- from this table keeps the bbox-top fallback.
+        SCENE_SEAT_Z = {
+            -- [12246] = ?,   -- Paw Pal Bed: the cushion, well below the backrest
+            -- [25122] = ?,   -- Loyal Companion's Plinth: flat top, bbox is already right
+        },
         SHOWABLE_ANIMS = {
             [4] = "walks", [5] = "runs", [38] = "jumps", [42] = "swims",
             [60] = "talks", [61] = "eats", [66] = "bows", [67] = "waves",

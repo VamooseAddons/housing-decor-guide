@@ -178,6 +178,13 @@ local function releaseAll(container)
         chip:Hide()
         chip:ClearAllPoints()
         chip:SetScript("OnClick", nil)
+        -- OnUpdate too. A released chip carrying a live ticker was safe only by
+        -- CONVENTION -- the Menagerie's voice-bar happens to clear it at the top
+        -- of its binder, and every re-show path happens to run a binder. The next
+        -- ticker whose cell kind forgets that would have run against recycled
+        -- state with nothing to catch it. Releasing a pooled frame drops its
+        -- scripts; that is the pool's job, not each cell kind's.
+        chip:SetScript("OnUpdate", nil)
         container._chipPool.free[#container._chipPool.free + 1] = chip
     end
     container._chipPool.active = {}

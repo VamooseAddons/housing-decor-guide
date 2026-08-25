@@ -59,6 +59,30 @@ LC.sections["menagerie.body"] = {
 LC.sections["menagerie.modeRow"] = {
     ["in"] = "menagerie.body", layout = "vertical", order = 5, height = 30,
 }
+-- Search sits OUTSIDE the mode-gated stacks, directly under the mode strip, so
+-- it survives a mode switch: narrowing to "squirrel" and then flipping By Pet ->
+-- By Spot should keep the squirrels, not silently drop the filter.
+LC.sections["menagerie.searchRow"] = {
+    ["in"] = "menagerie.body", layout = "vertical", order = 7, height = 26,
+}
+
+-- Kind suggestions, directly under the search box. Gated on having any, so the
+-- row COLLAPSES when the box is empty -- hidden children are excluded from the
+-- layout index, so the list keeps the height rather than staring at a gap.
+LC.sections["menagerie.suggestRow"] = {
+    ["in"] = "menagerie.body", layout = "vertical", order = 8,
+    height = 56, chrome = "inset", padding = "sm",
+    visible = "menagerie.hasKindSuggestions",
+}
+
+-- A hair of air between the suggestions and the Clade/Family/Size row. Without
+-- it the two chip rows read as one block and the eye cannot tell which chips
+-- belong to the typing and which are the standing filter.
+LC.sections["menagerie.suggestGap"] = {
+    ["in"] = "menagerie.body", layout = "vertical", order = 9, height = 6,
+    visible = "menagerie.hasKindSuggestions",
+}
+
 -- The two-row identity filter (By Pet) and the needs-vocabulary (By Spot) are
 -- sibling stacks gated by mode -- no axis appears in both (ruling 14).
 LC.sections["menagerie.byPetFilters"] = {
@@ -66,7 +90,7 @@ LC.sections["menagerie.byPetFilters"] = {
     visible = "menagerie.isByPet",
 }
 LC.sections["menagerie.bySpotFilters"] = {
-    ["in"] = "menagerie.body", layout = "vertical", gap = "xs", order = 11, height = 82,
+    ["in"] = "menagerie.body", layout = "vertical", gap = "xs", order = 11, height = 112,
     visible = "menagerie.isBySpot",
 }
 LC.sections["menagerie.list"] = {
@@ -117,6 +141,25 @@ LC.widgets["menagerieListPanel.modeStrip"] = {
     binding = "menagerie.modeChips", cellKind = "menagerieChip",
     chipHeight = 22, order = 10, height = 26,
 }
+-- Reaches the kind tail a chip row cannot: 712 kinds, 509 of them with four pets
+-- or fewer. Matches the pet's name AND its kind, and the row shows the kind, so
+-- the thing you can read is the thing you can type.
+LC.widgets["menagerieListPanel.search"] = {
+    tooltip = false,
+    kind = "editbox", ["in"] = "menagerie.searchRow", font = "body",
+    height = 22, width = "fill", order = 10,
+    multiline = false, search = true,
+    placeholder = "locale:MENAGERIE_SEARCH_PLACEHOLDER",
+}
+
+LC.widgets["menagerieListPanel.suggest"] = {
+    tooltip = false,
+    kind = "chipStrip", ["in"] = "menagerie.suggestRow",
+    binding = "menagerie.kindSuggestions", cellKind = "menagerieChip",
+    chipHeight = 20, order = 10, height = 44,   -- two rows: long kind names wrap
+    visible = "menagerie.hasKindSuggestions",
+}
+
 LC.widgets["menagerieListPanel.axes"] = {
     tooltip = false,
     kind = "chipStrip", ["in"] = "menagerie.byPetFilters",
@@ -140,6 +183,13 @@ LC.widgets["menagerieListPanel.spotSize"] = {
     kind = "chipStrip", ["in"] = "menagerie.bySpotFilters",
     binding = "menagerie.spotSizeChips", cellKind = "menagerieChip",
     chipHeight = 20, order = 20, height = 24,
+}
+LC.widgets["menagerieListPanel.roomBtn"] = {
+    tooltip = false,
+    kind = "button", ["in"] = "menagerie.bySpotFilters", font = "small",
+    text = "locale:MENAGERIE_ROOM_BTN", width = "auto", height = 22, order = 40,
+    variant = "tertiary",
+    binding = { text = "menagerie.roomBtnLabel" },
 }
 LC.widgets["menagerieListPanel.spotWants"] = {
     tooltip = false,
