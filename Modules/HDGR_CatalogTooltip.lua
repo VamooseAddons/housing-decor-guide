@@ -63,10 +63,13 @@ local function _appendCatalogVendorLines(add, vendors)
     for _, l in ipairs(world) do add(l, VENDOR_R, VENDOR_G, VENDOR_B) end
 end
 
--- Dyed-copies lines, under the sourcing: one per owned dyed variant, each dye
--- NAME painted in its own swatch colour (the Companion's dye droplets read the
--- same swatchColorStart), the count after it. The catalog tile's "Total Owned"
--- lumps every colour together; this is the line that says WHICH colours.
+-- The dyed line, under the sourcing, for THE TILE UNDER THE CURSOR: every dyed
+-- variant is its own tile in Blizzard's catalog, so the hover names that one
+-- variant's dyes -- each NAME painted in its own swatch colour (the Companion's
+-- droplets read the same swatchColorStart) -- and its stored count. Listing
+-- every owned variant here was wrong (3.29.0: a player with hundreds of one
+-- table dyed got the whole inventory on every hover). The tile's "Total Owned"
+-- is the aggregate across colours; the count here is this colour's own.
 local function _dyeNameMarkup(Obs, dyeColorID)
     local info = Obs:GetDyeColorInfo(dyeColorID)
     if not info then return nil end   -- exception(boundary): C_DyeColor returns nil for an unknown id
@@ -75,13 +78,16 @@ local function _dyeNameMarkup(Obs, dyeColorID)
         math.floor(r * 255 + 0.5), math.floor(g * 255 + 0.5), math.floor(b * 255 + 0.5), info.name)
 end
 
-local function _appendCatalogDyeLines(add, Obs, dyedVariants)
+local function _appendCatalogDyeLine(add, Obs, dyedVariants, variantIdentifier)
     for _, dv in ipairs(dyedVariants) do
-        local names = {}
-        for _, id in ipairs(dv.dyeColorIDs) do
-            names[#names + 1] = _dyeNameMarkup(Obs, id) or dv.label
+        if dv.variantIdentifier == variantIdentifier then
+            local names = {}
+            for _, id in ipairs(dv.dyeColorIDs) do
+                names[#names + 1] = _dyeNameMarkup(Obs, id) or dv.label
+            end
+            add(("Dyed: %s x%d"):format(table.concat(names, ", "), dv.numStored), GATE_R, GATE_G, GATE_B)
+            return
         end
-        add(("Dyed: %s x%d"):format(table.concat(names, ", "), dv.numStored), GATE_R, GATE_G, GATE_B)
     end
 end
 
@@ -118,8 +124,9 @@ local function _onTooltipCreated(_, entry, tooltip)
         _appendCatalogVendorLines(add, row.vendors)
     end
     _appendCatalogCostLine(add, row)
-    if row.dyedVariants and #row.dyedVariants > 0 then   -- exception(nullable): non-customizable decor bakes no variants
-        _appendCatalogDyeLines(add, Obs, row.dyedVariants)
+    -- variantIdentifier 0 is the undyed base tile: nothing to name.
+    if row.dyedVariants and vid.variantIdentifier ~= 0 then   -- exception(nullable): non-customizable decor bakes no variants
+        _appendCatalogDyeLine(add, Obs, row.dyedVariants, vid.variantIdentifier)
     end
 
     if #body == 0 then return end   -- nothing HDG can add -> leave Blizzard's tooltip untouched

@@ -12,19 +12,19 @@
 
 ---
 
-## What's New in v3.29.0
+## What's New in v3.29.1
 
-**Pets can be filtered by room.** House > Pets has a Room filter beside Clade, Family and Size. Choose the Kitchen and the list narrows to the pets that suit a kitchen, with each row saying whether the pet belongs there, fits, or could work. There are twenty-two rooms, each a hand-picked list rather than a rule. Search and the other filters still apply inside a room.
+**The catalog tooltip names the colours of the tile you are hovering.** Each dyed variant is its own tile in the house editor's catalog, and 3.29.0 listed every colour you owned the item in on every hover. The tooltip now names the dyes of the tile under the cursor, each in its own colour, with the number of that colour you have.
 
-**And by mood.** The Mood filter uses the same names as the Styles tab: Rustic, Cozy, Nature, Arcane, Scholarly, Gothic, Void, Royal, Industrial, Seafaring, Whimsical and Primitive. Ask for gothic and you get the bats and gargoyles rather than every undead pet.
+Also new since 3.28.0, released earlier today in 3.29.0:
 
-**Spiders are their own group.** They were grouped with the insects. The card now says what a spider wants: a beam, or a quiet corner.
+**Pets can be filtered by room.** House > Pets has a Room filter beside Clade, Family and Size. Choose the Kitchen and the list narrows to the pets that suit a kitchen, with each row saying whether the pet belongs there, fits, or could work. There are twenty-two rooms, each a hand-picked list rather than a rule.
 
-**A pet on its decor sits on it.** Small pets sank into the Loyal Companion's Plinth and large ones hovered above it. Every pet now lands on the surface, and the Paw Pal Bed seats pets on the mattress rather than on the top of the backrest.
+**And by mood.** The Mood filter uses the same names as the Styles tab, from Rustic and Cozy to Gothic, Void and Seafaring.
 
-**The plinth is the same size on every pet's card.** The camera no longer refits itself to each pet, so a mouse and a moonkin are seen against the same plinth and their size reads at a glance. A pet whose idle animation is taller than that frame moves the camera back rather than being cropped.
+**Spiders are their own group**, with a card that says what a spider wants.
 
-**The catalog tooltip lists your dyed copies.** Hover a piece in the house editor's catalog. Under the vendor lines, each colour you own it in is named in that dye's colour, with the number you have.
+**A pet on its decor sits on it**, and the plinth is the same size on every pet's card, so a mouse and a moonkin are seen against the same plinth.
 
 **Removed:** the "Pets for this room" button and the By Pet / By Spot switch. The Room filter replaces both.
 
@@ -119,7 +119,7 @@ A companion window injects into Blizzard's House Editor so you can **place decor
 ---
 
 **Author:** Vamoose
-**Version:** 3.29.0
+**Version:** 3.29.1
 **Game Version:** 12.1.0 (Midnight)
 **Source / Issues:** https://github.com/VamooseAddons/housing-decor-guide
 **Discord:** https://discord.gg/RWZaxJaHFP

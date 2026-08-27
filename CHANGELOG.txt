@@ -1,3 +1,10 @@
+## [3.29.1] - 2026-08-27 (August 2026)
+
+### Fixed
+- **The catalog tooltip names the colours of the tile you are hovering**, not
+  every colour you own the item in. Each dyed variant is its own tile in the
+  catalog; 3.29.0 listed all of them on every hover, which for a player with a
+  hundred of one dyed table was the whole inventory each time.
 ## [3.29.0] - 2026-08-27 (August 2026)
 
 ### Added
