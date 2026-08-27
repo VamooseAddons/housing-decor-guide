@@ -1174,22 +1174,17 @@ local function buildModelPreview(parent, spec)
     modelScene:Hide()
     frame.modelScene = modelScene
 
-    -- ModelSceneControlFrameTemplate: pcall because existence isn't guaranteed across builds.
+    -- ModelSceneControlFrameTemplate is a Blizzard SharedXML template: either the
+    -- client has it or the whole preview is broken, and that is a load-time fact
+    -- rather than a runtime hazard. Strict -- a missing template should error
+    -- loudly on the first build, not warn once and leave a preview with no
+    -- controls that nobody can explain.
     if showControls then
-        local ok, ctrl = pcall(CreateFrame, "Frame", nil, frame, "ModelSceneControlFrameTemplate")
-        if not ok then
-            HDG.Log:Warn("ui_optional",
-                "ModelSceneControlFrameTemplate unavailable on this client: " .. tostring(ctrl))
-        elseif ctrl then
-            ctrl:SetPoint("BOTTOM", frame, "BOTTOM", 0, 8)
-            local okSc, errSc = pcall(ctrl.SetModelScene, ctrl, modelScene)
-            if not okSc then
-                HDG.Log:Warn("ui_optional",
-                    "ModelSceneControl:SetModelScene failed: " .. tostring(errSc))
-            end
-            ctrl:Hide()
-            frame.controls = ctrl
-        end
+        local ctrl = CreateFrame("Frame", nil, frame, "ModelSceneControlFrameTemplate")
+        ctrl:SetPoint("BOTTOM", frame, "BOTTOM", 0, 8)
+        ctrl:SetModelScene(modelScene)
+        ctrl:Hide()
+        frame.controls = ctrl
     end
 
     -- Decorative corbels: matches Blizzard housing chrome. Pure cosmetic.
@@ -1295,18 +1290,22 @@ local function buildModelPreview(parent, spec)
         -- No scene and no declared fallback is a real state (a species Blizzard has
         -- no card scene for), not an error -- hand it to the 2D path unremarked.
         if not sceneID then return false end
-        local sceneOk, sceneErr = pcall(function()
-            modelScene:TransitionToModelSceneID(
-                sceneID,
-                _G.CAMERA_TRANSITION_TYPE_IMMEDIATE,
-                _G.CAMERA_MODIFICATION_TYPE_DISCARD,
-                true)
-        end)
-        if not sceneOk then
+        -- ASK before calling, rather than catching the throw. TransitionToModelSceneID
+        -- indexes what GetModelSceneInfoByID returns, so an id the client does not
+        -- know errors inside Blizzard's code -- and this used to be a pcall whose
+        -- failure was the 2D fallback's trigger. Checking the id is the same
+        -- fallback without swallowing anything: a real external boundary
+        -- (Blizzard's own scene table) answered with a strict read.
+        if not _G.C_ModelInfo.GetModelSceneInfoByID(sceneID) then  -- exception(boundary): unknown sceneID -> the 2D path
             HDG.Log:Warn("model_preview",
-                "TransitionToModelSceneID(" .. tostring(sceneID) .. ") failed: " .. tostring(sceneErr))
+                "no model scene " .. tostring(sceneID) .. "; falling back to the icon")
             return false
         end
+        modelScene:TransitionToModelSceneID(
+            sceneID,
+            _G.CAMERA_TRANSITION_TYPE_IMMEDIATE,
+            _G.CAMERA_MODIFICATION_TYPE_DISCARD,
+            true)
         _enable3DCameraPitch()
         if info.petDisplayID then
             if not _pointActorAtPet(info.petDisplayID) then return false end
@@ -1442,25 +1441,78 @@ HDG.WidgetTypes:Register("modelPreview", {
 -- ============================================================================
 local SCENE_SEAT_LIFT = 0    -- Phase C seat-point data replaces this per-decor
 
-local function _sceneCamera(widget, topZ, seatZ, spec)
-    -- Frame the tallest thing in shot: the seated pet (its seat + its TRUE
-    -- height) or the You actor. petHeight is a framing input only -- the pet's
-    -- rendered size comes from SetRequestedScale in the paint.
-    --
-    -- max(decor top, pet top): a pet on a low cushion must not crop the backrest
-    -- BEHIND it out of shot, and a tall pet on a low seat must not crop itself.
-    -- With no seat datum seatZ == topZ and this is the old topZ + height exactly.
-    local petTop = seatZ + (spec.petHeight or 0.9)  -- exception(nullable): SizeDB miss; median pet frames fine
-    local content = math.max(topZ, petTop)
-    if spec.petHovers then content = content + 1.1 end   -- hover anims lift the model ~a unit above its mesh
-    if spec.withYou then content = math.max(content, 2.6) end
-    -- Aim at 42% of the stack, not 55: aiming high pushed floor pets to the
-    -- bottom edge (cut off under the strip when You raised the content height).
-    -- Distance frames the larger of height and girth -- snakes are 0.1 tall
-    -- and 3 long -- with headroom for hover ANIMATIONS, which translate the
-    -- model without touching the mesh (Driftling, the batdemons).
-    local dist = math.max(content * 2.6, (spec.petGirth or 0) * 0.8, 1.5)  -- exception(nullable): SizeDB miss ships no girth
-    widget._scene:SetCameraPosition(dist, 0, content * 0.42)
+-- The stage's FOV (SetCameraFieldOfView 0.75) is HORIZONTAL: screenshots put
+-- the plinth's 1.30-unit width at ~665 px per unit of tan on a 524 px stage,
+-- which is 524 / (2 tan 0.375) exactly. The vertical half-angle follows from
+-- the frame's aspect, and the frame is `width = "fill"` -- wider on the Decor
+-- tab than in the Menagerie -- so the aspect is read at frame time, not assumed.
+local SCENE_TAN_HALF_FOV = math.tan(0.75 / 2)
+-- How much of the frame a decor composition fills. Vertical is the tight axis
+-- on a 524x300 stage, and the shot exists to show PROPORTION -- a pet on a
+-- thing, with air around the pair -- so at 0.6 the decor's base and the pet's
+-- crown each sit a fifth of a frame from the edge. Filling it (the old
+-- content x 2.6) put the crown on the edge and cropped the dog's ears (2026-08-27).
+local SCENE_FILL_V, SCENE_FILL_H = 0.6, 0.7
+-- The decor is framed with THIS much room above it for a pet, every time, so
+-- the plinth is the same size and in the same place on every card and a pet's
+-- size reads against it (owner ruling 2026-08-27: a camera that refits each
+-- pet destroys the comparison the shot exists to make). 1.4 is the 75th-
+-- percentile shipped pet height; a rendered idle taller than the envelope
+-- pushes the camera back rather than cropping to talons (Albino Buzzard).
+local SCENE_PET_ENVELOPE = 1.4
+
+-- The pet's RENDERED extent, scene units, relative to its rendered origin. The
+-- runtime box of a loaded actor is the Stand animation's bounds (it equals
+-- CreatureModelData.GeoBox, verified), i.e. what is on screen -- a reared eel
+-- is 1.78 tall where its bind-pose mesh, which is what the shipped height
+-- measures, is 0.61, and a chimaeraling's idle is twice its crouch. That box
+-- also carries every hover, so no family guess about who floats is needed.
+-- Nil until the model streams, and nil for a TRAVELLING idle: a box taller
+-- than PET_IDLE_TRAVEL_CAP x the mesh is the volume the pet jumps through
+-- (Gill'dan reads 10x; the six pets checked 2026-08-27 all sit under 3.2x),
+-- and framing that makes the pet a speck -- the mesh height stands in.
+local PET_IDLE_TRAVEL_CAP = 4
+local function _petIdleExtent(widget, spec, meshH)
+    local pet = widget._petActor
+    if not pet then return nil end   -- exception(nullable): a species with no display renders the 2D fallback, no actor
+    local _, minY, minZ, _, maxY, maxZ = pet:GetActiveBoundingBox()
+    if not minZ then return nil end   -- exception(boundary): box unread until the model streams; the load callback re-frames
+    local sc = spec.petScale
+    if (maxZ - minZ) * sc > PET_IDLE_TRAVEL_CAP * meshH then return nil end
+    return minZ * sc, maxZ * sc, (maxY - minY) * sc
+end
+
+local function _sceneCamera(widget, topZ, originZ, spec)
+    -- Frame what is RENDERED: the idle's extent once the model has streamed,
+    -- the shipped bind-pose height until then, both standing on the rendered
+    -- origin. The pet's size itself comes from SetRequestedScale in the paint.
+    local meshH = spec.petHeight or 0.9  -- exception(nullable): SizeDB miss; median pet frames fine
+    local idleBottom, idleTop, idleWidth = _petIdleExtent(widget, spec, meshH)
+    local petTop    = originZ + (idleTop or meshH)
+    local petBottom = originZ + (idleBottom or 0)
+    local petWidth  = idleWidth or spec.petGirth
+    if spec.withYou then
+        -- Your character is the ruler here (2.24 tall) and this framing was
+        -- approved as it stands: aim at 42% of the stack, 2.6x back. Distance
+        -- also frames width -- snakes are 0.1 tall and 3 long.
+        local content = math.max(topZ, petTop, 2.6)
+        widget._scene:SetCameraPosition(
+            math.max(content * 2.6, petWidth * 0.8, 1.5), 0, content * 0.42)
+        return
+    end
+    -- Decor composition: frame the decor from its base (the plinth's is 0.18
+    -- below its origin) to its top plus the pet envelope -- a FIXED span per
+    -- decor -- widened only when the pet overruns it in height or width (the
+    -- bed is 1.86 across; a snake outreaches any decor). Aim at the middle.
+    local w, h = widget:GetWidth(), widget:GetHeight()
+    if w == 0 or h == 0 then return end   -- exception(boundary): frame geometry unset before first layout; every load callback re-frames
+    local bottom = math.min(widget._decorBottomZ, petBottom)
+    local top    = math.max(topZ + SCENE_PET_ENVELOPE, petTop)
+    local dist = math.max(
+        (top - bottom) / (2 * SCENE_TAN_HALF_FOV * (h / w) * SCENE_FILL_V),
+        math.max(widget._decorWidth, petWidth) / (2 * SCENE_TAN_HALF_FOV * SCENE_FILL_H),
+        1.5)
+    widget._scene:SetCameraPosition(dist, 0, (top + bottom) / 2)
 end
 
 -- Seat + frame from CURRENT widget state; every async load funnels here and the
@@ -1483,30 +1535,173 @@ local function _sceneIsPortrait(spec)
     return not spec.decor and not spec.withYou
 end
 
+-- ===== portrait orbit (portrait ONLY, deliberately) =========================
+-- Spin / zoom exist while the pet stands alone and NOWHERE else. Once the
+-- bed, the plinth or your own character is in shot, the framing IS the
+-- information -- the whole point of the composed view is true relative scale --
+-- and a camera the player has moved quietly destroys the comparison the shot
+-- exists to make. So the controls live behind _sceneIsPortrait and the view
+-- resets whenever the selection or the composition changes.
+--
+-- The ACTOR yaws; the camera does not orbit. Lighting is set in world space, so
+-- orbiting swings the pet through its own shadow, while yawing keeps the key
+-- light on the viewer's side. SetYaw is 0 = facing camera (verified).
+local PORTRAIT_ZOOM_MIN, PORTRAIT_ZOOM_MAX = 1.6, 8.0
+-- Elevation stops short of overhead. At the poles the look-at degenerates (the
+-- camera is directly above the subject with no meaningful horizon) and the model
+-- spins on the spot; 75 degrees gives a steep top-down without reaching it.
+local PORTRAIT_ELEV_MAX = math.rad(75)
+
+local function _applyPortraitView(widget)
+    local v = widget._portrait
+    -- The subject never moves: it stands at the origin and turns on the spot.
+    -- Sliding the ACTOR was the right-drag pan, and it is gone (2026-08-27) --
+    -- decor's drag moves the camera, and so does this.
+    if widget._petActor then
+        widget._petActor:SetPosition(0, 0, 0)
+        widget._petActor:SetYaw(v.yaw)
+    end
+    -- The camera rides a circle in the XZ plane CENTRED ON THE ORIGIN, because
+    -- that is where the subject is -- Blizzard's own note on
+    -- SetCameraOrientationByYawPitchRoll reads "yaw=PI = face -X (toward model at
+    -- origin)". Pivoting on half the pet's height instead pushed every model
+    -- down the frame by exactly that much (2026-08-27: a 1.82 pet lost its legs,
+    -- a 0.29 pet barely moved), which is the measurement that proves the subject
+    -- is centred on the origin and not standing on it.
+    --
+    -- PITCH IS +elev, not -elev. The sign is not documented and was settled by
+    -- observation: -elev was in place when a vertical drag slid the pet through
+    -- the frame instead of orbiting it, which is the camera looking the wrong way
+    -- as it rises. If this ever reads as sliding again, the sign is the first
+    -- thing to flip -- it is the only unverified term here.
+    local ce, se = math.cos(v.elev), math.sin(v.elev)
+    widget._scene:SetCameraPosition(v.dist * ce, 0, v.dist * se)
+    widget._scene:SetCameraOrientationByYawPitchRoll(math.pi, v.elev, 0)
+end
+
+local function _resetPortraitView(widget)
+    widget._portrait = { yaw = 0, elev = 0, dist = PORTRAIT_DIST }
+end
+
+-- ONE zoom step, so the wheel and the zoom buttons cannot drift apart. delta is
+-- Blizzard's wheel convention (+1 in, -1 out), which is also what the control
+-- frame's zoom buttons send -- they call the scene's OnMouseWheel with their own
+-- increment rather than having a zoom path of their own.
+local function _portraitZoom(widget, delta)
+    local v = widget._portrait
+    v.dist = math.max(PORTRAIT_ZOOM_MIN,
+             math.min(PORTRAIT_ZOOM_MAX, v.dist - delta * (v.dist * 0.12)))
+    _applyPortraitView(widget)
+end
+
+-- ===== decor's control row, driven by this stage's camera ===================
+-- The five buttons under the decor preview are Blizzard's
+-- ModelSceneControlFrameTemplate, and they talk to whatever object you hand
+-- SetModelScene: zoom calls scene:OnMouseWheel, rotate calls
+-- scene:AdjustCameraYaw / StopCameraYaw, reset calls scene:Reset, and
+-- UpdateLayout asks scene:GetActiveCamera():GetZoomAvailable() before it will
+-- even show the zoom pair.
+--
+-- Our ModelScene answers none of those: it is NoCameraControl with hand-built
+-- actors and no activeCamera, DELIBERATELY -- that is the Phase D ruling
+-- (2026-08-24, owner-verified) that sidesteps the MAINTAIN-compounding and
+-- per-species-framing traps. So the buttons get a scene-SHAPED object instead,
+-- and Blizzard's own button code runs unmodified against it. No hooks, no
+-- overridden mixin methods, and the row behaves exactly as it does under decor.
+local _ZOOM_AVAILABLE = { GetZoomAvailable = function() return true end }
+
+-- One tick function for every stage, so holding a rotate button does not build a
+-- closure per press. The step and the stage both ride the control frame, which
+-- makes "stop" a single act: detach the script.
+local function _yawTick(ctrl)
+    local widget = ctrl._stage
+    widget._portrait.yaw = widget._portrait.yaw + ctrl._yawStep
+    _applyPortraitView(widget)
+end
+
+local function _portraitControlShim(widget, ctrl)
+    return {
+        GetActiveCamera = function() return _ZOOM_AVAILABLE end,
+        OnMouseWheel    = function(_, delta) _portraitZoom(widget, delta) end,
+        -- Rotate is press-and-hold: Blizzard's button sets a direction on mouse
+        -- down and clears it on mouse up, and the SCENE is expected to apply it
+        -- every frame. The ticker is attached for exactly as long as the button
+        -- is held -- an OnUpdate that runs while nothing is rotating is work for
+        -- no one, and a step left set behind a hidden row would resume spinning
+        -- the moment the row came back.
+        AdjustCameraYaw = function(_, direction, increment)
+            ctrl._yawStep = (direction == "left" and -1 or 1) * (increment or 0.05)
+            ctrl:SetScript("OnUpdate", _yawTick)
+        end,
+        StopCameraYaw   = function() ctrl:SetScript("OnUpdate", nil) end,
+        Reset           = function()
+            _resetPortraitView(widget)
+            _applyPortraitView(widget)
+        end,
+    }
+end
+
+local function _buildPortraitControls(widget)
+    -- ModelSceneControlFrameTemplate is Blizzard SharedXML, the same frame the
+    -- decor preview builds. Strict: a client without it should error on the
+    -- first build rather than quietly produce a stage with no controls.
+    local ctrl = CreateFrame("Frame", nil, widget, "ModelSceneControlFrameTemplate")
+    ctrl._stage = widget
+    ctrl:SetPoint("BOTTOM", widget, "BOTTOM", 0, 8)   -- where decor puts it
+    ctrl:SetModelScene(_portraitControlShim(widget, ctrl))
+    -- A release that lands off the button never reaches OnMouseUp (the recorded
+    -- gotcha), and neither does a row hidden mid-hold. Hiding is therefore the
+    -- backstop stop, and every path that ends a rotation goes through it.
+    ctrl:SetScript("OnHide", function(self) self:SetScript("OnUpdate", nil) end)
+    ctrl:Hide()
+    return ctrl
+end
+
+-- Controls belong to the PORTRAIT and nothing else: once the bed, the plinth or
+-- your character is in shot the framing is the information, so there is nothing
+-- for a player to adjust and no button offering to.
+local function _syncPortraitControls(widget)
+    if not widget._controls then return end   -- exception(nullable): template absent on this client
+    local spec = widget._sceneSpec  -- exception(nullable): nothing selected
+    widget._controls:SetShown(spec ~= nil and _sceneIsPortrait(spec))
+end
+
 local function _seatAndFrame(widget)
     local spec = widget._sceneSpec
     if not spec then return end        -- exception(nullable): late load callback after deselect
     local topZ = widget._decorTopZ
     if not topZ then return end
     if _sceneIsPortrait(spec) then
-        if widget._petActor then widget._petActor:SetPosition(0, 0, 0) end
-        widget._scene:SetCameraPosition(PORTRAIT_DIST, 0, 0)   -- subject is centered AT the origin
+        _applyPortraitView(widget)
         return
     end
-    -- The SEAT is not the box top. A bounding box has no idea where a bed's
-    -- cushion is -- its top is the crown of the backrest -- so an eyeballed
-    -- per-decor seat wins where we have one, and the box top stands in where we
-    -- do not (right for flat-topped decor, which is why the plinth always looked
-    -- correct and the bed never did).
+    -- The SEAT is not always the box top. A bounding box has no idea where a
+    -- bed's cushion is -- its top is the crown of the backrest -- so a per-decor
+    -- seat wins where we have one, and the box top stands in where we do not
+    -- (right for flat-topped decor: the plinth's mesh ends at its box top).
     local seatZ = widget._seatOverride                      -- exception(nullable): /hdg petseat calibration only
              or (spec.decor and spec.decor.seatZ)           -- exception(nullable): decor with no eyeballed seat yet
              or topZ
+    local originZ = seatZ + spec.petLift + SCENE_SEAT_LIFT   -- where the model origin renders, scene units
     if widget._petActor then
         -- petLift grounds hovering meshes: fliers are authored above their
         -- origin and render out of frame without it (Amberglow Stinger).
-        widget._petActor:SetPosition(0, 0, seatZ + spec.petLift + SCENE_SEAT_LIFT)
+        --
+        -- DIVIDED BY THE PET'S SCALE. An actor's position is applied in its own
+        -- scaled frame -- the engine renders the origin at z x GetScale(), not
+        -- at z -- so a seat in scene units has to be handed over pre-divided or
+        -- a 0.3-scale pet lands at a third of the height it was given. That was
+        -- the "seated pet sinks / floats" bug: three pets at three scales, all
+        -- back-projected from screenshots to origin = z x scale (docs/
+        -- HDGR_PET_SEAT_HANDOFF_2026-08-27.md), and the 1.2 once baked for the
+        -- plinth was nothing but 0.378 / 0.3001 for the one pet it was eyeballed
+        -- with. Scale-1 pets never showed it, which is why a rat on the bed
+        -- looked right and a bird on the plinth did not. VPP's size probe hit the
+        -- same wall ("SetPosition works in SCENE units which are NOT the
+        -- model-box units") without naming it.
+        widget._petActor:SetPosition(0, 0, originZ / spec.petScale)
     end
-    _sceneCamera(widget, topZ, seatZ, spec)
+    _sceneCamera(widget, topZ, originZ, spec)
 end
 
 -- The three actors are created ONCE per widget and re-pointed thereafter (the
@@ -1526,6 +1721,7 @@ end
 local function dispatchPetScene(widget, values)
     local scene = values.scene
     widget._sceneSpec = scene
+    _syncPortraitControls(widget)
     local keys = widget._sceneKeys
     if not scene then
         if keys.decor or keys.pet or keys.you then
@@ -1547,19 +1743,29 @@ local function dispatchPetScene(widget, values)
         -- keys.decor and decorFile are both nil, the branch below is skipped,
         -- and an uninitialized _decorTopZ left _seatAndFrame bailing -- the
         -- first-selected pet painted unseated under the build-time camera.
-        widget._decorTopZ = 0
+        widget._decorTopZ, widget._decorBottomZ, widget._decorWidth = 0, 0, 0
     end
     if keys.decor ~= decorFile then
         keys.decor = decorFile
         if decorFile then
             widget._decorTopZ = nil        -- unknown until the load callback reads the box
-            _sceneActor(widget, "_decorActor", function(actor)
+            local decorActor = _sceneActor(widget, "_decorActor", function(actor)
                 if widget._sceneKeys.decor then
-                    local ok, _, _, _, _, _, maxZ = pcall(actor.GetActiveBoundingBox, actor)  -- exception(boundary): nil until streamed
-                    widget._decorTopZ = (ok and maxZ) or 0.5
+                    -- Nil until the model streams -- it RETURNS nil, it does not
+                    -- throw, so there was never anything for a pcall to catch.
+                    local _, minY, minZ, _, maxY, maxZ = actor:GetActiveBoundingBox()
+                    -- exception(boundary): box unread until the model streams
+                    widget._decorTopZ    = maxZ or 0.5
+                    widget._decorBottomZ = minZ or 0
+                    widget._decorWidth   = maxZ and (maxY - minY) or 1
                     _seatAndFrame(widget)
                 end
-            end):SetModelByFileID(decorFile)
+            end)
+            -- The render box, no collision preference: a decor M2's collision box
+            -- IS its bounding box (plinth 6023432: identical to four decimals),
+            -- and the box top is where the mesh really ends -- the seat that once
+            -- looked wrong here was the pet's scale, not this box.
+            decorActor:SetModelByFileID(decorFile)
         elseif widget._decorActor then
             widget._decorActor:ClearModel()
         end
@@ -1567,6 +1773,9 @@ local function dispatchPetScene(widget, values)
 
     if keys.pet ~= scene.petDisplayID then
         keys.pet = scene.petDisplayID
+        -- A new subject starts square-on. Inheriting the last pet's spin means
+        -- clicking down the list shows you a row of animals facing away.
+        _resetPortraitView(widget)
         if scene.petDisplayID then
             -- Blend None: a REUSED actor lerps between models, so stepping the
             -- list morphs one species into the next (VPP DetailView's finding).
@@ -1627,9 +1836,11 @@ local function buildPetScene(parent, spec)
     local widget = CreateFrame("Frame", nil, parent)
     widget._camDistance = spec.camDistance or 6
     widget._sceneKeys = {}
+    _resetPortraitView(widget)
     local scene = CreateFrame("ModelScene", nil, widget, "NoCameraControlModelSceneMixinTemplate")
     scene:SetAllPoints(widget)
     scene:EnableMouse(true)   -- opaque to the world: without this, hovering the stage tooltips units BEHIND the window
+    scene:EnableMouseWheel(true)
     scene:SetCameraPosition(widget._camDistance, 0, 1.2)
     scene:SetCameraOrientationByYawPitchRoll(math.pi, 0, 0)
     scene:SetCameraFieldOfView(0.75)
@@ -1644,6 +1855,55 @@ local function buildPetScene(parent, spec)
     ph:SetText(HDG.Locale:Get("MENAGERIE_PICK_A_PET"))
     HDG.Theme:Register(ph, "TextDim")
     widget._placeholderFs = ph
+
+    widget._controls = _buildPortraitControls(widget)
+
+    -- ===== portrait input ===================================================
+    -- Drag left/right spins, drag up/down orbits, wheel zooms -- all three inert
+    -- unless the pet is alone on the stage. There is no pan: nothing here moves
+    -- the pet off the centre of the frame.
+    local function portraitOK()
+        local cur = widget._sceneSpec  ---@diagnostic disable-line: undefined-field
+        return cur ~= nil and _sceneIsPortrait(cur)
+    end
+
+    local function onDrag(_, elapsed)
+        local x, y = GetCursorPosition()
+        local sc = widget:GetEffectiveScale()
+        local dx, dy = (x - widget._dragX) / sc, (y - widget._dragY) / sc
+        widget._dragX, widget._dragY = x, y
+        local v = widget._portrait  ---@diagnostic disable-line: undefined-field
+        -- Signs are INVERTED from the obvious reading (owner, 2026-08-26). The
+        -- stage yaws the ACTOR rather than orbiting a camera, so "drag right"
+        -- has no inherent direction -- turning the model right and swinging the
+        -- viewpoint right are opposite motions, and the model-turning reading is
+        -- the one that felt backwards in the hand. Same reasoning as the
+        -- inverted-pitch hook on modelPreview above.
+        v.yaw = v.yaw + dx * 0.012
+        v.elev = math.max(-PORTRAIT_ELEV_MAX,
+                 math.min(PORTRAIT_ELEV_MAX, v.elev + dy * 0.008))
+        _applyPortraitView(widget)
+    end
+
+    scene:SetScript("OnMouseDown", function(_, button)
+        if button ~= "LeftButton" then return end
+        if not portraitOK() then return end
+        widget._dragX, widget._dragY = GetCursorPosition()
+        widget:SetScript("OnUpdate", onDrag)
+    end)
+    -- OnMouseUp is NOT a reliable drag-end (recorded gotcha): a release outside
+    -- the frame never reaches it. OnHide and a leave both stop the drag too.
+    local function stopDrag()
+        widget:SetScript("OnUpdate", nil)
+    end
+    scene:SetScript("OnMouseUp", stopDrag)
+    scene:SetScript("OnLeave", stopDrag)
+    widget:SetScript("OnHide", stopDrag)
+
+    scene:SetScript("OnMouseWheel", function(_, delta)
+        if not portraitOK() then return end
+        _portraitZoom(widget, delta)
+    end)
 
     -- Re-seat and re-frame from current widget state. Every async load already
     -- funnels through the same path; this is the door in for a caller that
@@ -1667,10 +1927,7 @@ local function buildPetScene(parent, spec)
             return
         end
         pet:StopAnimationKit()   -- the card kit owns the idle; a clicked phase takes over
-        local ok, err = pcall(pet.SetAnimation, pet, animID, variation)  -- exception(boundary): Blizzard API, variation arg tolerated
-        if not ok and HDG.Store:GetState().account.config.debug then
-            _G.print("[HDG petscene] SetAnimation errored: " .. tostring(err))
-        end
+        pet:SetAnimation(animID, variation)
     end
     return widget
 end
@@ -2922,8 +3179,7 @@ function HDG.UI:ScrollBox(parent, opts)
             end
         end
         if ed and sb.ScrollToElementData then
-            local ok, err = pcall(sb.ScrollToElementData, sb, ed)
-            if not ok then HDG.Log:Warn("scroll", "ScrollToElementData failed: " .. tostring(err)) end
+            sb:ScrollToElementData(ed)
         end
         return ed
     end

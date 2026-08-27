@@ -241,6 +241,12 @@ HDG.Constants = {
             aquatic   = { needs = "water, or a pond edge",  motif = "water" },
             reptile   = { needs = "a warm flat spot",       motif = "nature" },
             insect    = { needs = "a corner to explore",    motif = "nature" },
+            -- Arachnids split from insect (owner, 2026-08-26) on the same
+            -- reasoning as bat: a different THEME, not merely a different branch.
+            -- A spider is cobwebs and a dark corner; a butterfly is a garden. They
+            -- shared "a corner to explore" and the nature motif, which sent
+            -- tarantulas to answer a flowerbed.
+            arachnid  = { needs = "a beam, or a quiet corner", motif = "gothic" },
             construct = { needs = "a workbench or plinth",  motif = "mechanical" },
             elemental = { needs = "space -- it hovers",     motif = "arcane" },
             undead    = { needs = "somewhere dim",          motif = "gothic" },
@@ -262,17 +268,212 @@ HDG.Constants = {
         -- becomes rat / rabbit / squirrel / porcupine. Every kind is reachable,
         -- and no row ever has to be truncated.
         AXES = { { value = "clade", label = "Clade" },
-                 { value = "family", label = "Family" }, { value = "size", label = "Size" } },
+                 { value = "family", label = "Family" }, { value = "size", label = "Size" },
+                 { value = "room", label = "Room" },
+                 { value = "mood", label = "Mood" } },
+
+        -- ===== the Room axis ================================================
+        -- Pick a room, get the pets that suit it. This is the second attempt at
+        -- "room": the first read the room's PLACED DECOR and was removed on
+        -- 2026-08-27 because the game only enumerates decor per AREA, and indoors
+        -- is one area -- see docs/HDGR_BY_ROOM_SPEC_2026-08-25.md section 7. The
+        -- data problem is gone here: nothing is read from the world at all.
+        --
+        -- Keyed by KIND, not clade, because clades cannot make a shortlist. The
+        -- clade table this replaces put 775 species in a kitchen (rodent + bird +
+        -- insect) and 1,298 in a garden. Kinds are the fine instrument: 712 of
+        -- them, 509 with four species or fewer, and roughly a dozen per room
+        -- lands on the ~100 that was asked for.
+        --
+        -- The weight is the RANKING, and it is a person's judgement rather than a
+        -- computed score: 3 = belongs here, 2 = fits, 1 = could work. The removed
+        -- version summed five weak signals and produced an order nobody could
+        -- argue with; a number someone chose can be disagreed with by name.
+        --
+        -- Order is a walk through a house, not the alphabet. Every kind here is
+        -- checked against the live taxonomy by test_menagerie_selectors -- a typo
+        -- is a pet that silently never appears.
+        ROOMS = {
+            { key = "greathall", label = "Great Hall", kinds = {
+                tiger = 3, frostsabre = 3, bear = 2, gryphon = 2, peacock = 2,
+                eagle = 2, dragonhawk = 2, boar = 1, deer = 1, raptor = 1,
+                gorilla = 1, anubisath = 1, frostwolfpup = 1, phoenix = 1 } },
+            { key = "lounge", label = "Lounge", kinds = {
+                cat = 3, redpanda = 3, fox = 2, mistfox = 2, capybara = 2,
+                otter = 2, peacock = 1, parrot = 1, raccoon = 1, rabbit = 1,
+                toucan = 1 } },
+            { key = "kitchen", label = "Kitchen", kinds = {
+                rat = 3, cockroach = 3, chicken = 3, cat = 2, duck = 2,
+                squirrel = 2, pig = 2, goat = 1, crab = 1 } },
+            -- The owner's favourite, and the one room here that is a PLACE
+            -- rather than a function: the small companionable animals that would
+            -- sit on a counter or take the other chair. Deliberately not the
+            -- Lounge's list -- no rabbits, and the birds are the talkative ones.
+            { key = "coffeeshop", label = "Coffee Shop", kinds = {
+                cat = 3, redpanda = 3, raccoon = 2, capybara = 2, squirrel = 2,
+                parrot = 2, owl = 1, otter = 1, mistfox = 1, toucan = 1,
+                prairiedog = 1, duck = 1 } },
+            { key = "tavern", label = "Tavern", kinds = {
+                murloc = 3, pig = 2, boar = 2, chicken = 2, rat = 2, cat = 1,
+                duck = 1, koboldmale = 1, ogrepet = 1 } },
+            { key = "bedroom", label = "Bedroom", kinds = {
+                cat = 3, rabbit = 3, fox = 2, otter = 2, redpanda = 2,
+                capybara = 2, mistfox = 1, squirrel = 1, owl = 1, raccoon = 1 } },
+            { key = "nursery", label = "Nursery", kinds = {
+                rabbit = 3, babyturtle = 3, babyhippo = 2, dreamfawn = 2,
+                babyhyena = 2, prairiedog = 2, capybara = 1, porcupine = 1,
+                beaver = 1, chicken = 1 } },
+            { key = "study", label = "Study", kinds = {
+                owl = 3, manafiend = 3, flyingbook = 3, manawurm = 2,
+                manawyrm = 2, faeriedragon = 2, wisp = 2, cat = 1, lanternpet = 1,
+                babyobserver = 1, inquisitoreye = 1, spider = 1 } },
+            { key = "library", label = "Library", kinds = {
+                owl = 3, flyingbook = 3, cat = 2, spider = 2, manafiend = 2,
+                babyobserver = 2, lanternpet = 1, wisp = 1, moth = 1,
+                faeriedragon = 1 } },
+            { key = "bath", label = "Bath", kinds = {
+                frog = 3, toad = 3, otter = 3, babyturtle = 2, goldfish = 2,
+                waterstrider = 2, seaslug = 1, babyoctopus = 1, jellyfish = 1,
+                snail = 1 } },
+            { key = "cellar", label = "Cellar", kinds = {
+                bat = 3, giantvampirebat = 3, spider = 3, cockroach = 2, rat = 2,
+                bonespider = 1, scorpion = 1, snailrock = 1, shalespider = 1,
+                cryptfiend = 1 } },
+            -- The Cellar is the damp under your house; the Dungeon is a
+            -- deliberate horror set-piece. Crypt fiend and bone spider are in
+            -- both on purpose -- kinds belong to as many rooms as suit them,
+            -- the way a cat is in the Kitchen, Bedroom, Tavern and Study.
+            { key = "dungeon", label = "Dungeon", kinds = {
+                abominationsmall = 3, ghoul = 3, gnomeskeleton = 3, cryptfiend = 2,
+                skeletonhandpet = 2, skeletonspinepet = 2, boneguard = 2,
+                fleshbeast = 2, fleshgolem = 2, minespider = 2,
+                nerubianspiderling = 2, bonespider = 1, tarantula = 1, imp = 1,
+                felstalker = 1, grell = 1, greaterslime = 1, maldraxxusslime = 1,
+                shahaunt = 1, walker = 1, valkierpet = 1, ghostlyskullpet = 1 } },
+            { key = "workshop", label = "Workshop", kinds = {
+                gnomespidertank = 3, mechagonpet = 3, sapper = 3, golem = 2,
+                mechanicalhandpet = 2, fuelrobot = 2, clockworkbeagle = 2,
+                robotpet = 2, tripod = 1, balloon = 1, geode = 1, lanternpet = 1,
+                golemdwarven = 1, toygorilla = 1, arakkoagolem = 1, encrypted = 1,
+                earthelemental = 1, flyingbook = 1 } },
+            { key = "laboratory", label = "Laboratory", kinds = {
+                manafiend = 3, greaterslime = 3, maldraxxusslime = 2, slime = 2,
+                tentacleslime = 2, geode = 2, mechagonpet = 2, babyobserver = 1,
+                inquisitoreye = 1, encrypted = 1, sapper = 1, larva = 1 } },
+            { key = "armory", label = "Armory", kinds = {
+                anubisath = 3, golemdwarven = 3, gnomespidertank = 2, golem = 2,
+                boneguard = 2, arakkoagolem = 2, skeletonhandpet = 1, gargoyle = 1,
+                tripod = 1, mechagonpet = 1, frostwolfpup = 1, raptor = 1,
+                tiger = 1, warpstalker = 1, felstalker = 1 } },
+            { key = "garden", label = "Garden", kinds = {
+                moth = 3, butterfly = 3, dragonfly = 3, lasherorchid = 2,
+                podling = 2, turnippet = 2, rabbit = 2, cricket = 1,
+                beecreature = 1, sporecreature = 1, snail = 1 } },
+            { key = "greenhouse", label = "Greenhouse", kinds = {
+                lasherorchid = 3, podling = 3, turnippet = 3, sporecreature = 2,
+                moth = 2, butterfly = 2, dragonfly = 2, fungallasher = 2,
+                sporeling = 1, snail = 1, cricket = 1, beecreature = 1,
+                silkworm = 1 } },
+            { key = "pond", label = "Pond", kinds = {
+                hermitcrab = 3, deepseacrab = 3, seaeel = 2, spidercrab = 2,
+                dragonturtle = 2, goldfish = 2, babyoctopus = 1, jellyfish = 1,
+                seaslug = 1, otter = 1, frog = 1, babyturtle = 1 } },
+            { key = "aviary", label = "Aviary", kinds = {
+                parrot = 3, toucan = 3, owl = 2, peacock = 2, eagle = 2,
+                carrionbird = 2, crane = 1, duck = 1, seagull = 1,
+                woodpecker = 1, dragonhawk = 1, phoenix = 1 } },
+            { key = "stable", label = "Stable", kinds = {
+                protoram = 3, protosheep = 3, babyhorse = 3, goat = 2, boar = 2,
+                pig = 2, deer = 2, frostwolfpup = 2, ram = 2, sheep = 2,
+                ridinghorse = 2, mammoth2pet = 1, dreamfawn = 1, arathilynx = 1,
+                raptor = 1 } },
+            { key = "shrine", label = "Shrine", kinds = {
+                wisp = 3, ghost = 3, elemental = 2, waterspiritsmall = 2,
+                firespiritsmall = 2, forestsprite = 2, manafiend = 2,
+                airelemental = 2, gargoyle = 1, crane = 1, babylich = 1,
+                waterelemental = 1, wraith = 1, shade = 1, wellofsouls = 1 } },
+            { key = "trophy", label = "Trophy Room", kinds = {
+                raptor = 3, triceratops = 3, dragonwhelp = 2, komododragon = 2,
+                crocodile = 2, mammoth2pet = 2, bear = 1, tiger = 1,
+                warpstalker = 1, hydra = 1 } },
+        },
+
+        -- ===== the Mood axis ================================================
+        -- The same instrument pointed at style instead of function, and the same
+        -- vocabulary the Styles tab browses decor with (HDGR_FacetVocab.mood,
+        -- via styles.smartset). Build a gothic room over there, come here and
+        -- ask for gothic pets.
+        --
+        -- TWELVE of Blizzard's sixteen moods. Omitted: military, holy, festive
+        -- and mysterious -- there is no honest dozen pets for any of them, and a
+        -- chip that opens on four rows is worse than a chip that is not there.
+        -- (`mysterious` would also just be gothic and void again.)
+        --
+        -- Deriving these from the clade motif pets already carry was the obvious
+        -- shortcut and is the wrong answer for the same reason clades were: nine
+        -- motifs over 1,935 pets means "gothic" is the entire undead clade.
+        MOODS = {
+            { key = "rustic", label = "Rustic", kinds = {
+                chicken = 3, pig = 3, goat = 3, duck = 2, boar = 2, squirrel = 2,
+                rabbit = 2, deer = 1, prairiedog = 1, beaver = 1, porcupine = 1,
+                skunk = 1, protosheep = 1 } },
+            { key = "cozy", label = "Cozy", kinds = {
+                cat = 3, rabbit = 3, redpanda = 3, capybara = 2, otter = 2,
+                mistfox = 2, raccoon = 1, babyturtle = 1, porcupine = 1,
+                dreamfawn = 1, squirrel = 1 } },
+            { key = "nature", label = "Nature", kinds = {
+                moth = 3, butterfly = 3, dragonfly = 3, lasherorchid = 2,
+                podling = 2, turnippet = 2, sporecreature = 2, cricket = 1,
+                beecreature = 1, snail = 1, fox = 1, deer = 1 } },
+            { key = "arcane", label = "Arcane", kinds = {
+                manafiend = 3, manawurm = 3, manawyrm = 3, faeriedragon = 2,
+                wisp = 2, geode = 2, babyobserver = 1, inquisitoreye = 1,
+                flyingbook = 1, lanternpet = 1, elemental = 1 } },
+            { key = "scholarly", label = "Scholarly", kinds = {
+                owl = 3, flyingbook = 3, babyobserver = 2, manafiend = 2,
+                spider = 2, cat = 1, inquisitoreye = 1, lanternpet = 1, moth = 1,
+                wisp = 1 } },
+            { key = "gothic", label = "Gothic", kinds = {
+                bat = 3, giantvampirebat = 3, spider = 3, ghost = 2, gargoyle = 2,
+                cryptfiend = 2, bonespider = 2, gnomeskeleton = 1, wraith = 1,
+                shade = 1, ghostlyskullpet = 1, valkierpet = 1, scorpion = 1,
+                minespider = 1, nerubianspiderling = 1, fleshgolem = 1 } },
+            { key = "void", label = "Void", kinds = {
+                beholder = 3, beholdereye = 3, eyeofnzothpet = 3, voidcreeper = 3,
+                mercilessone = 2, babytentacleface = 2, voidterror = 2,
+                voidcaller = 2, devourersmall = 1, devourerswarmer = 1,
+                yoggsaron = 1, corruptedtentacle = 1 } },
+            { key = "royal", label = "Royal", kinds = {
+                peacock = 3, gryphon = 3, phoenix = 3, dragonhawk = 2, tiger = 2,
+                frostsabre = 2, crane = 1, babyhawkstrider = 1, eagle = 1,
+                anubisath = 1, faeriedragon = 1, toucan = 1 } },
+            { key = "industrial", label = "Industrial", kinds = {
+                gnomespidertank = 3, mechagonpet = 3, sapper = 2, fuelrobot = 2,
+                robotpet = 2, tripod = 2, mechanicalhandpet = 2, golemdwarven = 1,
+                clockworkbeagle = 1, encrypted = 1, geode = 1, golem = 1,
+                earthelemental = 1, arakkoagolem = 1, progenitoraxolotl = 1 } },
+            { key = "seafaring", label = "Seafaring", kinds = {
+                murloc = 3, hermitcrab = 3, crab = 3, deepseacrab = 2, seaeel = 2,
+                babyoctopus = 2, jellyfish = 1, seagull = 1, parrot = 1,
+                spidercrab = 1, seaslug = 1, goldfish = 1 } },
+            { key = "whimsical", label = "Whimsical", kinds = {
+                toygorilla = 3, balloon = 3, elekkplushie = 3, gnometoypet = 2,
+                clockworkbeagle = 2, dragonkite = 2, redpanda = 2, voodoodoll = 1,
+                tuskarkite = 1, babyhippo = 1, duck = 1, capybara = 1 } },
+            { key = "primitive", label = "Primitive", kinds = {
+                triceratops = 3, raptor = 3, komododragon = 2, goren = 2,
+                lessergronn = 2, boar = 2, wendigo = 1, ogrepet = 1,
+                koboldmale = 1, gnollmelee = 1, warpstalker = 1, babydevilsaur = 1,
+                hydra = 1, protoram = 1, mammoth2pet = 1, gorilla = 1 } },
+        },
+
+        -- Weight -> the words on the row. Three tiers, because a curated 1-3 is
+        -- as fine as a judgement call honestly goes.
+        ROOM_FIT = { "MENAGERIE_FIT_COULD", "MENAGERIE_FIT_FITS", "MENAGERIE_FIT_BELONGS" },
         -- "Also knows" whitelist: anim id -> player verb. Only ids a PLAYER would
         -- click for fun belong here -- combat/movement ids are repertoire noise
         -- (Pandaren Monk carries ~40; unfiltered chips overflowed the window).
         -- Ids from the Emotes.db2-adjudicated ANIM_NAMES set.
-        -- FacetDB mood id -> pet motif, for the "Pets for this room" capture:
-        -- the room's placed decor votes through its mood facets, and the motifs
-        -- with agreement become the query. Ids from HDGR_FacetVocab.mood.
-        MOOD_MOTIFS = { [2] = "arcane", [3] = "nature", [4] = "gothic",
-                        [8] = "mechanical", [9] = "water", [10] = "void",
-                        [13] = "novelty" },
         -- The scene strip's curated decor (ruled 2026-08-25): one bed, one
         -- plinth. All 10 attachables stay in SceneDecorDB; these are the chips.
         SCENE_CHIP_DECOR = { 12246, 25122 },   -- Paw Pal Bed, Loyal Companion's Plinth
@@ -287,9 +488,17 @@ HDG.Constants = {
         -- A bounding box cannot tell us where the cushion is, so these are EYEBALLED
         -- per decor with `/hdg petseat <z>` and written down here. An entry absent
         -- from this table keeps the bbox-top fallback.
+        -- Where a pet's FEET go on each scene decor, in scene units. The box top
+        -- IS right for flat-topped decor -- the plinth's mesh ends at 0.378
+        -- exactly, read from its M2 -- so the plinth has no entry. The bed's box
+        -- top is the crown of its backrest (0.661); its mattress is the large
+        -- flat vertex sheet at 0.32-0.34 in the same mesh, and 0.34 is that
+        -- sheet, not an eyeball. (A 1.2 once sat here for the plinth: it was
+        -- 0.378 / 0.3001, the seat pre-divided by the one pet it was calibrated
+        -- with -- the stage now divides by the pet's scale itself; see
+        -- _seatAndFrame.)
         SCENE_SEAT_Z = {
-            -- [12246] = ?,   -- Paw Pal Bed: the cushion, well below the backrest
-            -- [25122] = ?,   -- Loyal Companion's Plinth: flat top, bbox is already right
+            [12246] = 0.34,   -- Paw Pal Bed: the mattress sheet, below the backrest crown
         },
         SHOWABLE_ANIMS = {
             [4] = "walks", [5] = "runs", [38] = "jumps", [42] = "swims",

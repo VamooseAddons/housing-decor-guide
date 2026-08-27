@@ -7,8 +7,7 @@
 -- mode owns those names; the two surfaces converge at plan phase 5.
 --
 -- The impure edges live in the CONTROLLER by design: playing an animation or a
--- voice (SetAnimation / PlaySound) and capturing the room query. Selectors here
--- emit ids and data only. PetFacts rides the staticData tick; the journal rides
+-- voice (SetAnimation / PlaySound). Selectors here emit ids and data only. PetFacts rides the staticData tick; the journal rides
 -- the pets tick.
 
 local Selectors = HDG.Selectors
@@ -33,35 +32,37 @@ local function _motifsOf(row)
     return out
 end
 
-local function _matchesSpot(row, ui, PF)
-    if ui.roomQuery then
-        local motifs = _motifsOf(row)
-        for _, m in ipairs(motifs) do
-            for _, want in ipairs(ui.roomQuery.motifs) do
-                if m == want then return true, m end
-            end
-        end
-        return false
+-- The CURATED axes: the ones whose values are hand-written lists of kinds with a
+-- weight, rather than a field read off the pet. Room asks what a pet is FOR,
+-- Mood asks what it LOOKS like; the machinery is identical, so it is written
+-- once and the axis names which table it reads.
+local CURATED = { room = "ROOMS", mood = "MOODS" }
+
+-- Entry lookup, indexed once per axis. Pure derivation from Constants -- a
+-- lookup table, not state: nothing dispatches it and nothing invalidates it.
+-- The index is keyed to the SOURCE table it was built from, so a Constants
+-- table that is swapped wholesale (the test seam) rebuilds instead of serving
+-- a stale answer -- the same guard StaticData keeps on its pet indexes.
+local _curatedIndex, _curatedSource = {}, {}
+local function _curatedFor(axis, key)
+    local field = CURATED[axis]
+    if not field then return nil end   -- exception(nullable): clade / family / size read the pet directly
+    local tbl = M()[field]
+    if _curatedSource[axis] ~= tbl then
+        local idx = {}
+        for _, e in ipairs(tbl) do idx[e.key] = e end
+        _curatedIndex[axis], _curatedSource[axis] = idx, tbl
     end
-    local bucket = _bucketOf(row.height)
-    if ui.spot.surface ~= "any" then
-        local meta = row.clade and M().CLADE_META[row.clade]
-        if ui.spot.surface == "water" then
-            if not (meta and meta.needs:find("water", 1, true)) then return false end
-        elseif not bucket or bucket.key ~= ui.spot.surface then
-            return false
-        end
-    end
-    if ui.spot.size ~= "any" and (not bucket or bucket.key ~= ui.spot.size) then return false end
-    for want in pairs(ui.spot.wants) do
-        if want == "quiet" and PF:Voice(row.speciesID) then return false end
-        if want == "glow" then
-            local prof = PF:AnimProfile(row.speciesID)
-            local g = prof and prof.glow
-            if not (g and (g[1] > 0 or g[3] > 0 or g[2] >= 3)) then return false end
-        end
-    end
-    return true
+    return _curatedIndex[axis][key]   -- exception(nullable): "all", or a key no entry owns
+end
+
+-- How well this pet suits that room or mood, or nil for "not on the list". The
+-- weight is both the membership test and the sort key -- one number, one
+-- curated source, so a list and its order can never disagree.
+local function _curatedWeight(row, axis, key)
+    local entry = _curatedFor(axis, key)
+    if not entry or not row.kind then return nil end  -- exception(nullable): post-build species carries no kind
+    return entry.kinds[row.kind]
 end
 
 local function _matchesAxis(row, ui)
@@ -72,50 +73,69 @@ local function _matchesAxis(row, ui)
         local b = _bucketOf(row.height)
         return b ~= nil and b.key == ui.axval
     end
+    if CURATED[ui.axis] then return _curatedWeight(row, ui.axis, ui.axval) ~= nil end
     return false
 end
 
 -- ===== the list =============================================================
 -- Row envelopes carry name + kind ONLY (ruling 13: no size on rows; scale lives
--- in the scene). `why` appears only under a room query, naming the matched motif.
+-- in the scene). Everything the row factory paints is stamped HERE so it never
+-- dives into state mid-paint (cookbook 03).
+local function _menagerieRow(row, ui, weight)
+    return {
+        kind      = "menagerieRow",
+        speciesID = row.speciesID,
+        name      = row.displayName,
+        kindLabel = row.kind or "?",   -- exception(nullable): post-build species -- "?" is the honest mark
+        selected  = row.speciesID == ui.selectedSpeciesID,
+        -- Only the Room axis ranks, so only its rows say how well they fit. The
+        -- weight itself never reaches the row: the player is owed the judgement
+        -- ("belongs here"), not the number behind it.
+        weight    = weight,
+        fit       = weight and HDG.Locale:Get(M().ROOM_FIT[weight]) or nil,
+    }
+end
+
 Selectors:Register("menagerie.items", {
     memoized = true,
-    reads = { "session.ui.menagerie.mode", "session.ui.menagerie.axis",
-              "session.ui.menagerie.axval", "session.ui.menagerie.search",
-              "session.ui.menagerie.spot",
-              "session.ui.menagerie.roomQuery", "session.ui.menagerie.selectedSpeciesID",
+    reads = { "session.ui.menagerie.axis", "session.ui.menagerie.axval",
+              "session.ui.menagerie.search", "session.ui.menagerie.selectedSpeciesID",
               "session.resolvers.pets.tick", "session.resolvers.staticData.tick" },
     fn = function(state)
         local ui = state.session.ui.menagerie
-        local PF = HDG.StaticData.PetFacts
         local out = {}
         -- Search matches the NAME the player sees OR the row's kind. Matching the
         -- kind is the whole point: "squirrel" is a kind, not a pet name, and the
         -- chip row can never carry all 712 of them. The row already displays its
         -- kind, so what you can read you can also type.
         local needle = ui.search ~= "" and ui.search:lower() or nil
+        -- A curated axis RANKS; clade / family / size are plain either-or and
+        -- stay in the observer's name order.
+        local ranked = CURATED[ui.axis] ~= nil and ui.axval ~= "all"
+
         for _, row in ipairs(HDG.PetObserver:GetAttachable()) do
-            local keep, why
-            if ui.mode == "byPet" then
-                keep = _matchesAxis(row, ui)
+            local keep, weight
+            if ranked then
+                weight = _curatedWeight(row, ui.axis, ui.axval)
+                keep = weight ~= nil
             else
-                keep, why = _matchesSpot(row, ui, PF)
+                keep = _matchesAxis(row, ui)
             end
             if keep and needle then
-                local name = row.displayName:lower()
-                keep = name:find(needle, 1, true) ~= nil
+                keep = row.displayName:lower():find(needle, 1, true) ~= nil
                     or (row.kind and row.kind:lower():find(needle, 1, true) ~= nil)
             end
-            if keep then
-                out[#out + 1] = {
-                    kind      = "menagerieRow",
-                    speciesID = row.speciesID,
-                    name      = row.displayName,
-                    kindLabel = row.kind or "?",   -- exception(nullable): post-build species -- "?" is the honest mark
-                    selected  = row.speciesID == ui.selectedSpeciesID,
-                    why       = why,
-                }
-            end
+            if keep then out[#out + 1] = _menagerieRow(row, ui, weight) end
+        end
+
+        if ranked then
+            -- Best first, then by name. table.sort is NOT stable in Lua, so the
+            -- name tie-break is what makes the order total -- without it two pets
+            -- of equal weight swap places between repaints.
+            table.sort(out, function(x, y)
+                if x.weight ~= y.weight then return x.weight > y.weight end
+                return x.name < y.name
+            end)
         end
         return out
     end,
@@ -238,6 +258,20 @@ Selectors:Register("menagerie.axisValues", {
             for i, name in ipairs(HDG.PetObserver:GetFamilies()) do add(i, name, nil) end
         elseif ui.axis == "size" then
             for _, b in ipairs(M().SIZE_BUCKETS) do add(b.key, b.label, nil) end
+        elseif CURATED[ui.axis] then
+            -- Count YOUR pets per entry, so one that would open empty says so
+            -- before the click. One pass over the collection builds the kind
+            -- tally; the entries then read it, rather than each of twenty-one
+            -- rooms re-walking 1,935 rows.
+            local owned = {}
+            for _, row in ipairs(HDG.PetObserver:GetAttachable()) do
+                if row.kind then owned[row.kind] = (owned[row.kind] or 0) + 1 end
+            end
+            for _, entry in ipairs(M()[CURATED[ui.axis]]) do
+                local n = 0
+                for kind in pairs(entry.kinds) do n = n + (owned[kind] or 0) end
+                add(entry.key, entry.label, n)
+            end
         end
         return out
     end,
@@ -261,67 +295,6 @@ Selectors:Register("menagerie.hasSelection", {
     calls = { "menagerie.selected" },
     fn = function(state, ctx)
         return Selectors:Call("menagerie.selected", state, ctx) ~= nil
-    end,
-})
-
--- ===== chip-strip adapters ==================================================
--- ChipStrip wants a FLAT items[]; these project the richer selectors above into
--- chip streams. Cell kinds (and their click dispatches) live in the controller.
-
-Selectors:Register("menagerie.isByPet", {
-    reads = { "session.ui.menagerie.mode" },
-    fn = function(state) return state.session.ui.menagerie.mode == "byPet" end,
-})
-Selectors:Register("menagerie.isBySpot", {
-    reads = { "session.ui.menagerie.mode" },
-    fn = function(state) return state.session.ui.menagerie.mode == "bySpot" end,
-})
-
-Selectors:Register("menagerie.modeChips", {
-    reads = { "session.ui.menagerie.mode" },
-    fn = function(state)
-        local mode = state.session.ui.menagerie.mode
-        return {
-            { group = "mode", value = "byPet",  label = "By Pet",  active = mode == "byPet" },
-            { group = "mode", value = "bySpot", label = "By Spot", active = mode == "bySpot" },
-        }
-    end,
-})
-
--- The By Spot needs-vocabulary (ruling 14: exclusive to this mode).
-local SPOT_CHIPS = {
-    surface = { { "any", "Anywhere" }, { "shelf", "Shelf" }, { "table", "Table" },
-                { "floor", "Floor" }, { "water", "Water" } },
-    size    = { { "any", "Any size" }, { "shelf", "Small" }, { "table", "Medium" },
-                { "floor", "Large" } },
-}
-local WANT_CHIPS = { { "glow", "Glow" }, { "quiet", "Stay quiet" } }
-
-local function _spotChipRow(state, group)
-    local spot, out = state.session.ui.menagerie.spot, {}
-    for _, c in ipairs(SPOT_CHIPS[group]) do
-        out[#out + 1] = { group = group, value = c[1], label = c[2],
-                          active = spot[group] == c[1] }
-    end
-    return out
-end
-Selectors:Register("menagerie.spotSurfaceChips", {
-    reads = { "session.ui.menagerie.spot" },
-    fn = function(state) return _spotChipRow(state, "surface") end,
-})
-Selectors:Register("menagerie.spotSizeChips", {
-    reads = { "session.ui.menagerie.spot" },
-    fn = function(state) return _spotChipRow(state, "size") end,
-})
-Selectors:Register("menagerie.spotWantChips", {
-    reads = { "session.ui.menagerie.spot" },
-    fn = function(state)
-        local wants, out = state.session.ui.menagerie.spot.wants, {}
-        for _, c in ipairs(WANT_CHIPS) do
-            out[#out + 1] = { group = "wants", value = c[1], label = c[2],
-                              active = wants[c[1]] == true }
-        end
-        return out
     end,
 })
 
@@ -472,12 +445,6 @@ Selectors:Register(NS .. ".scene", {
             petScale     = HDG.StaticData.PetFacts:SceneScale(p.speciesID),
             petLift      = HDG.StaticData.PetFacts:SceneLift(p.speciesID),
             petGirth     = HDG.StaticData.PetFacts:SceneGirth(p.speciesID),
-            -- Hover allowance for the camera: hover ANIMATIONS translate the
-            -- model above its mesh, invisibly to any offline measurement.
-            -- Family Flying (petType 3) and the elemental clade are the
-            -- hoverers (sporebats, skyfins, batdemons; motes, driftlings).
-            petHovers    = p.petType == 3
-                           or select(2, HDG.StaticData.PetFacts:Taxonomy(p.speciesID)) == "elemental",
             decor        = decor,
             withYou      = ui.withYou == true,
         }
@@ -560,18 +527,6 @@ RegisterCardFamily("menagerie", "menagerie.selected")
 -- under two names -- two memo caches to keep agreeing, and one of them silently
 -- wrong the day the selection source moves.
 RegisterCardFamily("pets", "pets.selectedPet")
-
--- "Pets for this room" button label: capture affordance one way, visible-clear
--- the other (plan risk 2: the captured context must be SHOWN so staleness is
--- never silent).
-Selectors:Register("menagerie.roomBtnLabel", {
-    reads = { "session.ui.menagerie.roomQuery" },
-    fn = function(state)
-        local q = state.session.ui.menagerie.roomQuery
-        if q then return "Clear: " .. q.label end
-        return HDG.Locale:Get("MENAGERIE_ROOM_BTN")
-    end,
-})
 
 Selectors:Register("menagerie.hasDescription", {
     reads = { "session.resolvers.staticData.tick" },

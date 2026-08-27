@@ -1,4 +1,53 @@
-## [Unreleased]
+## [3.29.0] - 2026-08-27 (August 2026)
+
+### Added
+- **The catalog tooltip lists your dyed copies.** Hover a piece in the house
+  editor's catalog and, under the vendor lines, each colour you own it in is
+  named in that dye's own colour with how many you have -- the way the
+  Companion labels its dyed tiles. The catalog's own count lumps every colour
+  together; this is the line that says which.
+- **Pick a room, get the pets that suit it.** House > Pets has a fourth filter
+  beside Clade, Family and Size: Room. Choose the Kitchen and you get rats,
+  roaches, chickens and a cat -- about a hundred pets, not eight hundred -- with
+  the ones that truly belong at the top and each row saying which it is:
+  "belongs here", "fits", or "could work". Twenty-two rooms, from the Great Hall
+  to the Stable, each one a hand-picked list rather than a rule -- so the Dungeon
+  really is abominations and ghouls, the Aviary really is parrots, the Library
+  really is owls, and yes, there is a Coffee Shop. Search and the other filters
+  still work inside it.
+- **And a Mood filter, in the same language the Styles tab speaks.** Rustic,
+  Cozy, Nature, Arcane, Scholarly, Gothic, Void, Royal, Industrial, Seafaring,
+  Whimsical, Primitive -- the moods you already sort decor by. Build a gothic
+  room in Styles, come to Pets, ask for gothic, and get the bats and the
+  gargoyles rather than every undead in the game.
+- **Spiders are their own group.** They used to sit with the insects, which filed a
+  tarantula and a butterfly in the same drawer. Spiders now have a group of their
+  own, and the card says what one actually wants -- a beam, or a quiet corner --
+  instead of pointing it at a flowerbed.
+
+### Removed
+- **The old "Pets for this room" button is gone**, replaced by the Room filter
+  above. It tried to read the furniture around you, but the game hands an addon
+  the contents of your whole indoors as one lump -- there is no way to ask what
+  is in the room you are standing in, so the kitchen, the bedroom and the study
+  all voted in one ballot. Choosing the room yourself is both simpler and right.
+- **The By Pet / By Spot switch is gone too.** With Room as a filter there is
+  only one list, so there is nothing left to switch between.
+
+### Fixed
+- **A pet on its decor now sits on it.** Put Akiki on the Loyal Companion's
+  Plinth and it sank in up to its chest; put Alarm-o-Dog there and it hovered a
+  hand's width above. The stage was handing each pet its seat height in the
+  wrong units, so every pet landed at the seat multiplied by its own size --
+  small pets low, big pets high, and only the ones near player size where they
+  belonged. Every pet now lands on the surface it was given, and the Paw Pal
+  Bed seats them on the mattress rather than on the crown of its backrest.
+- **And the plinth is the same size on every card.** The point of putting a
+  pet on the plinth is to see how big it is, so the camera no longer refits
+  itself to each pet: each decor gets one fixed frame, and a mouse and a
+  moonkin are seen against the same plinth. Only a pet whose idle outgrows
+  that frame -- a rearing eel, a buzzard hovering high -- pushes the camera
+  back, rather than being cropped at the top.
 
 ## [3.28.0] - 2026-08-25 (August 2026)
 

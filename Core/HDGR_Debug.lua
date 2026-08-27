@@ -192,6 +192,28 @@ function D:PetScene()
         local px, py, pz = pet:GetPosition()
         _G.print(("  pet actor:   loaded=%s scale=%.4f requested=%s pos=%.2f,%.2f,%.2f"):format(
             tostring(pet:IsLoaded()), pet:GetScale(), tostring(pet:GetRequestedScale()), px, py, pz))
+        -- WHERE ARE ITS FEET. SetPosition places the model ORIGIN at pos x scale
+        -- (the position is in the actor's scaled frame), and a mesh authored
+        -- above or below its own origin lands off the seat by minZ x scale on
+        -- top of that -- which is what seatLift is generated to cancel. Printing the box is
+        -- the only way to see whether the generated number matches this model:
+        -- one pet standing correctly and another floating at the SAME seat means
+        -- the two disagree about where their origin is.
+        --
+        -- Caveat, and it is a big one: for a creature this box is a union over
+        -- the whole animation set, so a travelling idle inflates it (the recorded
+        -- Gill'dan case, 8x). Read minZ as "the lowest this model ever goes",
+        -- not "where it stands".
+        local minX, minY, minZ, maxX, maxY, maxZ = pet:GetActiveBoundingBox()
+        if minZ then
+            local sc = pet:GetScale()
+            _G.print(("   pet box:    z %.4f..%.4f  x %.4f..%.4f  y %.4f..%.4f"):format(
+                minZ, maxZ, minX, maxX, minY, maxY))
+            _G.print(("   feet at:    %.4f   ((pos %.4f + minZ %.4f) x scale %.4f)"):format(
+                (pz + minZ) * sc, pz, minZ, sc))
+        else
+            _G.print("   pet box:    nil -- model not streamed")
+        end
     else
         _G.print("  pet actor:   nil")
     end

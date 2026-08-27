@@ -583,18 +583,19 @@ end
 
 -- The Menagerie (House > Pets). ALL transient; UI_SET_TRANSIENT(view="menagerie")
 -- is the only writer -- zero feature-specific actions by design
--- (HDGR_MENAGERIE_LATTICE_PLAN_2026-08-24 section 3). roomQuery is a SNAPSHOT the
--- controller captures on click (imperative moment 1), never live-tracked.
+-- (HDGR_MENAGERIE_LATTICE_PLAN_2026-08-24 section 3).
+--
+-- One mode, By Pet. The room mode and its captured roomQuery were removed
+-- 2026-08-27: the game enumerates placed decor per AREA, and indoors is ONE
+-- area, so a capture could only ever describe the whole interior while calling
+-- itself a room. See the closing section of docs/HDGR_BY_ROOM_SPEC_2026-08-25.md.
 local function NewMenagerieSessionUI()
     return {
-        mode = "byPet",                -- "byPet" | "bySpot"
         axis = "clade", axval = "all", -- the two-row identity filter
         -- Search reaches the KIND tail that no chip row can hold: 712 kinds, 509
         -- of them with four pets or fewer. Typing "squirrel" is the surface that
         -- scales where a nested axis did not (the drill was reverted 2026-08-25).
         search = "",
-        spot = { surface = "any", size = "any", wants = {} },
-        roomQuery = nil,               -- { label, motifs = {..}, capturedAt } | nil
         scene = { decorID = nil, withYou = false },
         selectedSpeciesID = nil,
     }

@@ -63,7 +63,29 @@ local function _appendCatalogVendorLines(add, vendors)
     for _, l in ipairs(world) do add(l, VENDOR_R, VENDOR_G, VENDOR_B) end
 end
 
--- Cost line (last), summing every payment option.
+-- Dyed-copies lines, under the sourcing: one per owned dyed variant, each dye
+-- NAME painted in its own swatch colour (the Companion's dye droplets read the
+-- same swatchColorStart), the count after it. The catalog tile's "Total Owned"
+-- lumps every colour together; this is the line that says WHICH colours.
+local function _dyeNameMarkup(Obs, dyeColorID)
+    local info = Obs:GetDyeColorInfo(dyeColorID)
+    if not info then return nil end   -- exception(boundary): C_DyeColor returns nil for an unknown id
+    local r, g, b = info.swatchColorStart:GetRGB()
+    return ("|cff%02x%02x%02x%s|r"):format(
+        math.floor(r * 255 + 0.5), math.floor(g * 255 + 0.5), math.floor(b * 255 + 0.5), info.name)
+end
+
+local function _appendCatalogDyeLines(add, Obs, dyedVariants)
+    for _, dv in ipairs(dyedVariants) do
+        local names = {}
+        for _, id in ipairs(dv.dyeColorIDs) do
+            names[#names + 1] = _dyeNameMarkup(Obs, id) or dv.label
+        end
+        add(("Dyed: %s x%d"):format(table.concat(names, ", "), dv.numStored), GATE_R, GATE_G, GATE_B)
+    end
+end
+
+-- Cost line (last of the sourcing), summing every payment option.
 local function _appendCatalogCostLine(add, row)
     if not (row.costEntries and #row.costEntries > 0) then return end   -- exception(nullable): item has no vendor cost
     local parts = {}
@@ -96,6 +118,9 @@ local function _onTooltipCreated(_, entry, tooltip)
         _appendCatalogVendorLines(add, row.vendors)
     end
     _appendCatalogCostLine(add, row)
+    if row.dyedVariants and #row.dyedVariants > 0 then   -- exception(nullable): non-customizable decor bakes no variants
+        _appendCatalogDyeLines(add, Obs, row.dyedVariants)
+    end
 
     if #body == 0 then return end   -- nothing HDG can add -> leave Blizzard's tooltip untouched
     tooltip:AddLine("Housing Decor Guide - Decor sourcing:", HEAD_R, HEAD_G, HEAD_B)

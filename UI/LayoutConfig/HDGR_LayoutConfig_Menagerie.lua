@@ -3,9 +3,9 @@
 -- The Menagerie (House > Pets) -- its own view, a nav child under House beside
 -- Blueprints. Spec rulings 9-14; plan HDGR_MENAGERIE_LATTICE_PLAN_2026-08-24.
 --
--- Shape: list column (mode switch, the two-row identity filter OR the By Spot
--- needs-vocabulary, the pet list) + detail column (the scene with its strip,
--- the four card facts, the behaviour flowchart, the hidden Described block).
+-- Shape: list column (search, the two-row identity filter, the pet list) +
+-- detail column (the scene with its strip, the four card facts, the behaviour
+-- flowchart, the hidden Described block).
 -- Behaviours render EXACTLY ONCE (ruling 10) -- the flowchart is the surface.
 
 HDG = HDG or {}
@@ -56,12 +56,7 @@ LC.panels.menagerieDetailPanel = {
 LC.sections["menagerie.body"] = {
     ["in"] = "menagerieListPanel", layout = "vertical", padding = "lg", gap = "sm", order = 10,
 }
-LC.sections["menagerie.modeRow"] = {
-    ["in"] = "menagerie.body", layout = "vertical", order = 5, height = 30,
-}
--- Search sits OUTSIDE the mode-gated stacks, directly under the mode strip, so
--- it survives a mode switch: narrowing to "squirrel" and then flipping By Pet ->
--- By Spot should keep the squirrels, not silently drop the filter.
+-- The one control that reaches every pet, above the standing filter.
 LC.sections["menagerie.searchRow"] = {
     ["in"] = "menagerie.body", layout = "vertical", order = 7, height = 26,
 }
@@ -83,15 +78,22 @@ LC.sections["menagerie.suggestGap"] = {
     visible = "menagerie.hasKindSuggestions",
 }
 
--- The two-row identity filter (By Pet) and the needs-vocabulary (By Spot) are
--- sibling stacks gated by mode -- no axis appears in both (ruling 14).
+-- The two-row identity filter: Clade / Family / Size, then that axis's values.
+-- Height is MEASURED, not declared. ChipStrip is a FlowContainer: it wraps its
+-- chips to the panel width and publishes the height it actually used
+-- (`_intrinsicHeight` + HDG:RequestReflow, HDGR_ChipStrip.lua:148-160), and the
+-- Layout engine resolves `height = "auto"` from exactly that intrinsic
+-- (HDGR_Layout.lua:126). So the strip asks for the room it needs and this
+-- section sums its children with `height = "content"`.
+--
+-- It was a fixed number until 2026-08-27 and went stale twice in one day: at 140
+-- it was sized for 5 rows of clade chips, and splitting arachnid off insect made
+-- 6 -- so Void drew on top of the pet list. Bumping it to fit 23 room chips then
+-- spent a third of a 680px column on chips that the Size axis (four of them)
+-- does not need. A measured height is tall for Room, short for Size, and cannot
+-- drift when a room, a clade or a translated label changes.
 LC.sections["menagerie.byPetFilters"] = {
-    ["in"] = "menagerie.body", layout = "vertical", gap = "xs", order = 10, height = 144,
-    visible = "menagerie.isByPet",
-}
-LC.sections["menagerie.bySpotFilters"] = {
-    ["in"] = "menagerie.body", layout = "vertical", gap = "xs", order = 11, height = 112,
-    visible = "menagerie.isBySpot",
+    ["in"] = "menagerie.body", layout = "vertical", gap = "xs", order = 10, height = "content",
 }
 LC.sections["menagerie.list"] = {
     ["in"] = "menagerie.body", layout = "fill", order = 20, chrome = "inset",
@@ -135,12 +137,6 @@ LC.widgets["menagerieListPanel.headerSpacer"] = {
     tooltip = false, kind = "spacer", ["in"] = "menagerieListPanel", slot = "header",
     width = "fill", height = 14, order = 50,
 }
-LC.widgets["menagerieListPanel.modeStrip"] = {
-    tooltip = false,
-    kind = "chipStrip", ["in"] = "menagerie.modeRow",
-    binding = "menagerie.modeChips", cellKind = "menagerieChip",
-    chipHeight = 22, order = 10, height = 26,
-}
 -- Reaches the kind tail a chip row cannot: 712 kinds, 509 of them with four pets
 -- or fewer. Matches the pet's name AND its kind, and the row shows the kind, so
 -- the thing you can read is the thing you can type.
@@ -170,32 +166,7 @@ LC.widgets["menagerieListPanel.axisValues"] = {
     tooltip = false,
     kind = "chipStrip", ["in"] = "menagerie.byPetFilters",
     binding = "menagerie.axisValues", cellKind = "menagerieChip",
-    chipHeight = 20, order = 20, height = 116,
-}
-LC.widgets["menagerieListPanel.spotSurface"] = {
-    tooltip = false,
-    kind = "chipStrip", ["in"] = "menagerie.bySpotFilters",
-    binding = "menagerie.spotSurfaceChips", cellKind = "menagerieChip",
-    chipHeight = 20, order = 10, height = 24,
-}
-LC.widgets["menagerieListPanel.spotSize"] = {
-    tooltip = false,
-    kind = "chipStrip", ["in"] = "menagerie.bySpotFilters",
-    binding = "menagerie.spotSizeChips", cellKind = "menagerieChip",
-    chipHeight = 20, order = 20, height = 24,
-}
-LC.widgets["menagerieListPanel.roomBtn"] = {
-    tooltip = false,
-    kind = "button", ["in"] = "menagerie.bySpotFilters", font = "small",
-    text = "locale:MENAGERIE_ROOM_BTN", width = "auto", height = 22, order = 40,
-    variant = "tertiary",
-    binding = { text = "menagerie.roomBtnLabel" },
-}
-LC.widgets["menagerieListPanel.spotWants"] = {
-    tooltip = false,
-    kind = "chipStrip", ["in"] = "menagerie.bySpotFilters",
-    binding = "menagerie.spotWantChips", cellKind = "menagerieChip",
-    chipHeight = 20, order = 30, height = 24,
+    chipHeight = 20, order = 20, height = "auto",   -- as many rows as it wraps to
 }
 LC.widgets["menagerieListPanel.list"] = {
     tooltip = false,

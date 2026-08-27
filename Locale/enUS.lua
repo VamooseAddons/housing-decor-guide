@@ -59,9 +59,12 @@ HDG.Locale:Register("enUS", {
     MENAGERIE_DETAIL_TITLE  = "Pick a pet",
     MENAGERIE_PICK_A_PET    = "Pick a pet from the list",
     MENAGERIE_FLOW_HEADER   = "On its own it will",
+    -- Room axis: what the weight in Constants.ROOMS means, in words. The row
+    -- shows the judgement, never the number.
+    MENAGERIE_FIT_BELONGS   = "belongs here",
+    MENAGERIE_FIT_FITS      = "fits",
+    MENAGERIE_FIT_COULD     = "could work",
     MENAGERIE_SEARCH_PLACEHOLDER = "Search name or kind...",
-    MENAGERIE_ROOM_BTN = "Pets for this room",
-    MENAGERIE_ROOM_EMPTY = "Stand in a furnished room of your house first -- the capture reads the placed decor around you.",
     MENAGERIE_SCENE_LABEL   = "Scene",
     MENAGERIE_ALSO_LABEL    = "Also knows",
     PETS_BROWSER_TITLE     = "Placeable Pets",

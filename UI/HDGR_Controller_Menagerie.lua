@@ -1,10 +1,10 @@
 -- HDG.MenagerieController
 -- ============================================================================
 -- The Menagerie (House > Pets): thin glue. Every gesture is one UI_SET_TRANSIENT
--- (view="menagerie") -- zero feature actions by design. The two sanctioned
--- imperative moments live here (plan section 6): playing a phase / voice on the
--- scene widget, and (phase 5) capturing the room query. Cell kinds for every
--- chip strip and the menagerieRow factory also live here, per house pattern.
+-- (view="menagerie") -- zero feature actions by design. The one sanctioned
+-- imperative moment lives here (plan section 6): playing a phase / voice on the
+-- scene widget. Cell kinds for every chip strip and the menagerieRow factory
+-- also live here, per house pattern.
 
 HDG = HDG or {}
 HDG.MenagerieController = HDG.MenagerieController or {}
@@ -61,50 +61,9 @@ end
 -- view names whose stage this click drives. HDG.UI:PetStage is the one answer.
 local function _stage() return HDG.UI:PetStage() end
 
--- ===== "Pets for this room" =================================================
--- The sanctioned imperative moment (plan section 6): on click, read the room
--- HERE -- current area's placed decor votes through its FacetDB mood facets --
--- and dispatch the RESULT as a snapshot. Selectors stay pure; the capture is
--- deliberately a snapshot, labeled, so staleness is visible rather than silent.
-local function _captureRoom()
-    local state = HDG.Store:GetState()
-    if state.session.ui.menagerie.roomQuery then
-        _set("roomQuery", nil)
-        return
-    end
-    local area = state.session.styles.currentArea
-    local counts = {}
-    for _, entry in pairs(state.session.styles.placedDecor) do
-        if entry.areaID == area and entry.itemID then
-            local f = HDG.StaticData.Facets:Get(entry.itemID)  -- exception(nullable): unfaceted decor casts no vote
-            local mods = f and f.mod
-            if mods then
-                for _, moodID in ipairs(mods) do
-                    local motif = HDG.Constants.MENAGERIE.MOOD_MOTIFS[moodID]
-                    if motif then counts[motif] = (counts[motif] or 0) + 1 end
-                end
-            end
-        end
-    end
-    local ranked = {}
-    for motif, n in pairs(counts) do
-        if n >= 2 then ranked[#ranked + 1] = { motif = motif, n = n } end
-    end
-    table.sort(ranked, function(a, b) return a.n > b.n end)
-    if #ranked == 0 then
-        HDG.Log:Notify("info", HDG.Locale:Get("MENAGERIE_ROOM_EMPTY"))
-        return
-    end
-    local motifs = {}
-    for i = 1, math.min(3, #ranked) do motifs[i] = ranked[i].motif end
-    _set("mode", "bySpot")
-    _set("roomQuery", { label = table.concat(motifs, "/"), motifs = motifs })
-end
-
 -- ===== chip cell kind: every plain chip strip ===============================
--- One kind serves mode / axes / axis values / spot rows / scene strip / also --
--- the item's fields say which dispatch it is. Immutable table rebuilds for the
--- spot group (RMW discipline: build next value, then dispatch).
+-- One kind serves axes / axis values / kind suggestions / scene strip / also --
+-- the item's fields say which dispatch it is.
 -- Every chip stream stamps its own `group`, so this dispatches on ONE field.
 -- It used to fall through a chain of shape guesses -- "a string value with no
 -- count that equals one of four axis names" -- which is a rule about what the
@@ -112,10 +71,7 @@ end
 -- value collided.
 local function _chipClick(item)
     local g = item.group
-    if g == "mode" then
-        _set("mode", item.value)
-
-    elseif g == "axis" then
+    if g == "axis" then
         _set("axis", item.value); _set("axval", "all")
 
     elseif g == "axval" then
@@ -132,18 +88,6 @@ local function _chipClick(item)
             if C._searchBox._hdgrPlaceholderRefresh then C._searchBox._hdgrPlaceholderRefresh() end
             if C._searchBox._hdgrSearchRefresh then C._searchBox._hdgrSearchRefresh() end
         end
-
-    elseif g == "surface" or g == "size" then
-        local spot = _ui().spot
-        local next_ = { surface = spot.surface, size = spot.size, wants = spot.wants }
-        next_[g] = item.value
-        _set("spot", next_)
-
-    elseif g == "wants" then
-        local spot, wants = _ui().spot, {}
-        for k in pairs(_ui().spot.wants) do wants[k] = true end
-        if wants[item.value] then wants[item.value] = nil else wants[item.value] = true end
-        _set("spot", { surface = spot.surface, size = spot.size, wants = wants })
 
     elseif g == "scene" then
         local scene = _ui().scene
@@ -253,8 +197,7 @@ HDG.ChipStrip:RegisterCellKind("menagerieFlowNode", {
 })
 
 -- ===== menagerieRow =========================================================
--- Name + kind ONLY (ruling 13: scale lives in the scene, not on rows). The
--- why-line appears under a room query, naming the matched motif.
+-- Name + kind ONLY (ruling 13: scale lives in the scene, not on rows).
 local function _layoutMenagerieRow(row)
     local name = row:CreateFontString(nil, "OVERLAY")
     HDG.UI.applyFontRole(name, "body")
@@ -275,9 +218,9 @@ end
 
 local function _paintMenagerieRow(row, ed)
     row._nameFs:SetText(ed.name)
-    local k = ed.kindLabel
-    if ed.why then k = ed.why .. "  " .. k end
-    row._kindFs:SetText(k)
+    -- Under the Room axis the row says how well it fits BEFORE what it is: that
+    -- is the question the room asked. Every other axis shows the kind alone.
+    row._kindFs:SetText(ed.fit and (ed.fit .. "  " .. ed.kindLabel) or ed.kindLabel)
     row._speciesID = ed.speciesID
 end
 
@@ -316,9 +259,6 @@ HDG.Rows:Register("menagerieRow", {
 -- returns nil and the handler is never attached. Wiring is LAZY against
 -- HDG.mainFrame on first Refresh instead, where the widget table is populated.
 local LAZY = {
-    roomBtn = { id = "menagerieListPanel.roomBtn", attach = function(w)
-        w:SetScript("OnClick", _captureRoom)
-    end },
     search = { id = "menagerieListPanel.search", attach = function(w)
         local function set(text)
             HDG.ControllerHelpers.Mechanics.SetUITransientView("menagerie", "search", text)

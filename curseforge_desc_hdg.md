@@ -12,19 +12,21 @@
 
 ---
 
-## What's New in v3.28.0
+## What's New in v3.29.0
 
-**The Pets tab has a search box.** It sits under the By Pet and By Spot buttons, and it matches two things: the pet's name, and the kind of creature it is. Typing "squirrel" finds every squirrel you own even though none of them is called one. The kind is printed beside each pet in the list, so anything you can read there is something you can type. As you type, a row of suggestions appears below the box offering kinds that begin with those letters, each with a count of how many you own. Click one to fill it in.
+**Pets can be filtered by room.** House > Pets has a Room filter beside Clade, Family and Size. Choose the Kitchen and the list narrows to the pets that suit a kitchen, with each row saying whether the pet belongs there, fits, or could work. There are twenty-two rooms, each a hand-picked list rather than a rule. Search and the other filters still apply inside a room.
 
-**Bats are now their own group.** They were previously grouped with birds. A bat belongs somewhere dim and high rather than on a garden perch, so it has its own group, its own placement note, and it now answers to a gothic room when you ask which pets suit the room you are standing in.
+**And by mood.** The Mood filter uses the same names as the Styles tab: Rustic, Cozy, Nature, Arcane, Scholarly, Gothic, Void, Royal, Industrial, Seafaring, Whimsical and Primitive. Ask for gothic and you get the bats and gargoyles rather than every undead pet.
 
-**Decor > Pets shows the full pet card.** It previously showed a flat preview. It now shows the same card as the House > Pets view: the stage with the pet at true size, the option to seat it on a bed or a plinth or stand your character beside it, the placement facts, and the flowchart of what the pet does when left alone.
+**Spiders are their own group.** They were grouped with the insects. The card now says what a spider wants: a beam, or a quiet corner.
 
-**Pets are in the correct groups.** Every pet in the game was reviewed against its model, and around two hundred moved. Crocodiles were listed as birds. Revenants and stone giants, which are elementals, were listed as insects, along with a cauldron, a pen and a carnivorous plant. A panther was an insect and a crate was a rodent. Balloon animals were grouped as the animals they resemble. If you have picked a group and found something odd inside it, this is the reason.
+**A pet on its decor sits on it.** Small pets sank into the Loyal Companion's Plinth and large ones hovered above it. Every pet now lands on the surface, and the Paw Pal Bed seats pets on the mattress rather than on the top of the backrest.
 
-**The pet list is in alphabetical order.** It was previously ordered by height, which suited the size bar each row used to carry. Size is now shown on the card instead, and a list you come to knowing the name you want reads better in name order. A renamed pet sorts under the name you gave it.
+**The plinth is the same size on every pet's card.** The camera no longer refits itself to each pet, so a mouse and a moonkin are seen against the same plinth and their size reads at a glance. A pet whose idle animation is taller than that frame moves the camera back rather than being cropped.
 
-**The sound chip on a pet's card plays a different sound each time.** It previously replayed one sound, which for many pets was a near-silent background loop. A small bar now shows how long the clip lasts, and no bar appears when the client declines to play anything. The chip also states how many other pets share that voice.
+**The catalog tooltip lists your dyed copies.** Hover a piece in the house editor's catalog. Under the vendor lines, each colour you own it in is named in that dye's colour, with the number you have.
+
+**Removed:** the "Pets for this room" button and the By Pet / By Spot switch. The Room filter replaces both.
 
 ---
 
@@ -117,7 +119,7 @@ A companion window injects into Blizzard's House Editor so you can **place decor
 ---
 
 **Author:** Vamoose
-**Version:** 3.28.0
+**Version:** 3.29.0
 **Game Version:** 12.1.0 (Midnight)
 **Source / Issues:** https://github.com/VamooseAddons/housing-decor-guide
 **Discord:** https://discord.gg/RWZaxJaHFP
