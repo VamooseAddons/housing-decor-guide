@@ -472,18 +472,27 @@ Selectors:Register("projects.architectColumns", {
 
 -- Floor tab list: 1..max(live numFloors, version.numFloors, highest room floor).
 -- What-if: version.numFloors is the user-controlled count (1..3 cap).
+-- How many floors the house HAS: the live capture, the what-if's declared count,
+-- and any room sitting above both. ONE rule, because the floor tab strip and the
+-- Section view must agree on it -- a floor with a tab but no plate is a bug the
+-- player sees before we do.
+local function _declaredFloorCount(state)
+    local _, _, layout = _activeLayoutContext(state)
+    local maxFloor = state.session.house.numFloors
+    if layout and layout.numFloors and layout.numFloors > maxFloor then   -- exception(nullable): no active layout in Live mode
+        maxFloor = layout.numFloors
+    end
+    for _, room in pairs(_activeRooms(state)) do
+        if room.floor and room.floor > maxFloor then maxFloor = room.floor end
+    end
+    return maxFloor
+end
+
 Selectors:Register("projects.floorTabs", {
     reads = { "account.projects.houses", "account.projects.layouts", "account.rooms",
               "session.house.numFloors", "session.ui.projects.selectedFloor" },
     fn = function(state)
-        local _, _, layout = _activeLayoutContext(state)
-        local maxFloor = state.session.house.numFloors
-        if layout and layout.numFloors and layout.numFloors > maxFloor then
-            maxFloor = layout.numFloors
-        end
-        for _, room in pairs(_activeRooms(state)) do
-            if room.floor and room.floor > maxFloor then maxFloor = room.floor end
-        end
+        local maxFloor = _declaredFloorCount(state)
         local active = state.session.ui.projects.selectedFloor
         local tabs = {}
         for f = 1, maxFloor do tabs[#tabs + 1] = { floor = f, isActive = (f == active) } end
@@ -717,6 +726,147 @@ Selectors:Register("projects.canvasModel", {
             bbox = { minX = bb.minX, maxX = bb.maxX, minY = bb.minY, maxY = bb.maxY,
                      cols = (bb.maxX - bb.minX) + 1, rows = (bb.maxY - bb.minY) + 1 },
         }
+    end,
+})
+
+-- ===== Section view (isometric) =============================================
+-- The Architect's second view mode: the whole house as ONE drawing instead of a
+-- floor at a time. Emits PURE CELL SPACE -- footprint-boundary edges in layout
+-- cells, tagged by floor -- because the iso projection and the fit-to-viewport
+-- scale depend on host size, which is not state. The controller owns both, the
+-- same split the plan canvas already uses for its tiling.
+--
+-- WHY a whole-house model rather than per-floor: stair alignment and what sits
+-- above what are VERTICAL relationships, and a floor-at-a-time view structurally
+-- cannot show them.
+local function _roomBoundaryEdges(cellX, cellY, mask)
+    local occupied = {}
+    for _, m in ipairs(mask) do occupied[(cellX + m[1]) .. "," .. (cellY + m[2])] = true end
+    local edges = {}
+    for _, m in ipairs(mask) do
+        local x, y = cellX + m[1], cellY + m[2]
+        if not occupied[x .. "," .. (y - 1)] then edges[#edges + 1] = { x, y, x + 1, y } end
+        if not occupied[x .. "," .. (y + 1)] then edges[#edges + 1] = { x, y + 1, x + 1, y + 1 } end
+        if not occupied[(x - 1) .. "," .. y] then edges[#edges + 1] = { x, y, x, y + 1 } end
+        if not occupied[(x + 1) .. "," .. y] then edges[#edges + 1] = { x + 1, y, x + 1, y + 1 } end
+    end
+    return edges
+end
+
+-- Footprint centroid in cell space -- the label anchor and the stair-shaft foot.
+local function _maskCentroid(cellX, cellY, mask)
+    local sx, sy = 0, 0
+    for _, m in ipairs(mask) do
+        sx, sy = sx + cellX + m[1] + 0.5, sy + cellY + m[2] + 0.5
+    end
+    return sx / #mask, sy / #mask
+end
+
+Selectors:Register("projects.sectionModel", {
+    memoized = true,
+    reads = { "account.projects.houses", "account.projects.layouts", "account.rooms",
+              "session.house.numFloors",
+              "session.ui.projects.selectedFloor", "session.ui.projects.selectedRoomID" },
+    fn = function(state)
+        local A, FM = HDG.Projects.ShapeAtlas, HDG.Projects.FloorMap
+        local nav   = state.session.ui.projects
+        local byFloor, stairAt = {}, {}
+        local minX, maxX, minY, maxY, minF, maxF
+        for roomID, room in pairs(_activeRooms(state)) do
+            local rot   = room.cell.rotation or 0   -- exception(optional): rotation absent on un-rotated records
+            local canon = A.GetCells(room.shape)
+            local mask  = A.RotateMask(A.GetMask(room.shape), rot, canon[1], canon[2])
+            local cx, cy = _maskCentroid(room.cell.x, room.cell.y, mask)
+            local floor = room.floor
+            local span  = FM.EffectiveSpan(room)
+            byFloor[floor] = byFloor[floor] or {}
+            local rooms = byFloor[floor]
+            rooms[#rooms + 1] = {
+                roomID   = roomID,
+                shape    = room.shape,
+                name     = room.name,
+                edges    = _roomBoundaryEdges(room.cell.x, room.cell.y, mask),
+                cx       = cx,
+                cy       = cy,
+                selected = (roomID == nav.selectedRoomID),
+            }
+            -- Every floor a stair record reaches gets a marker; a shaft segment is
+            -- then any floor pair that BOTH carry one at the same anchor. That covers
+            -- planner spans (one record, floors = 2) and captured sections (one
+            -- span-1 record per floor) with the same rule.
+            if A.IsStairShape(room.shape) then
+                for f = floor, floor + span - 1 do
+                    stairAt[f] = stairAt[f] or {}
+                    stairAt[f][room.cell.x .. "," .. room.cell.y] = { cx = cx, cy = cy }
+                end
+            end
+            for _, m in ipairs(mask) do
+                local x, y = room.cell.x + m[1], room.cell.y + m[2]
+                if not minX or x < minX then minX = x end
+                if not maxX or x > maxX then maxX = x end
+                if not minY or y < minY then minY = y end
+                if not maxY or y > maxY then maxY = y end
+            end
+            if not minF or floor < minF then minF = floor end
+            local top = floor + span - 1
+            if not maxF or top > maxF then maxF = top end
+        end
+
+        -- Floors 1..declared, extended by any volume reaching higher: an empty top
+        -- floor still earns a plate, exactly as it earns a tab.
+        local declared = _declaredFloorCount(state)
+        if declared and declared >= 1 then
+            minF = 1
+            if not maxF or declared > maxF then maxF = declared end
+        end
+
+        if not minF then
+            return { empty = true, floors = {}, shafts = {},
+                     bbox = { minX = 0, maxX = 0, minY = 0, maxY = 0, cols = 1, rows = 1 },
+                     floorMin = 1, floorMax = 1, selectedFloor = nav.selectedFloor }
+        end
+
+        local shafts = {}
+        for f = minF, maxF - 1 do
+            local here, above = stairAt[f], stairAt[f + 1]
+            if here and above then
+                for key, anchor in pairs(here) do
+                    if above[key] then
+                        shafts[#shafts + 1] = { cx = anchor.cx, cy = anchor.cy, floor = f }
+                    end
+                end
+            end
+        end
+
+        local floors = {}
+        for f = minF, maxF do
+            floors[#floors + 1] = { floor = f, rooms = byFloor[f] or {} }
+        end
+        return {
+            empty = false, floors = floors, shafts = shafts,
+            bbox = { minX = minX, maxX = maxX + 1, minY = minY, maxY = maxY + 1,
+                     cols = (maxX - minX) + 1, rows = (maxY - minY) + 1 },
+            floorMin = minF, floorMax = maxF, selectedFloor = nav.selectedFloor,
+        }
+    end,
+})
+
+-- Canvas mode: which of the two Architect views is live. Two selectors rather
+-- than one string so LayoutConfig `visible` reads a boolean directly.
+Selectors:Register("projects.canvasIsPlan", {
+    reads = { "session.ui.projects.canvasMode" },
+    fn = function(state) return state.session.ui.projects.canvasMode == "plan" end,
+})
+Selectors:Register("projects.canvasIsSection", {
+    reads = { "session.ui.projects.canvasMode" },
+    fn = function(state) return state.session.ui.projects.canvasMode == "section" end,
+})
+-- The toggle names the mode it switches TO (a button labels its action).
+Selectors:Register("projects.canvasModeToggleLabel", {
+    reads = { "session.ui.projects.canvasMode" },
+    fn = function(state)
+        if state.session.ui.projects.canvasMode == "plan" then return HDG.Locale:Get("PROJ_VIEW_SECTION") end
+        return HDG.Locale:Get("PROJ_VIEW_PLAN")
     end,
 })
 

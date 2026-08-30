@@ -1024,6 +1024,8 @@ HDG.Constants = {
         SHOPPING_ITEM_SET_QTY      = "HDGR_SHOPPING_ITEM_SET_QTY",      -- payload: { listID?, itemID, npcID?, qty }  (absolute; EditBox direct entry)
         SHOPPING_ITEM_ADJUST_QTY   = "HDGR_SHOPPING_ITEM_ADJUST_QTY",   -- payload: { listID?, itemID, npcID?, delta }  (relative; +/- buttons, removes at <=0)
         SHOPPING_RESOLVE_VENDORS   = "HDGR_SHOPPING_RESOLVE_VENDORS",   -- payload: { listID, resolutions = {[itemID]=npcID} }
+        SHOPPING_SET_NEIGHBORHOOD  = "HDGR_SHOPPING_SET_NEIGHBORHOOD",  -- payload: { value = "alliance"|"horde" }
+        RECIPE_SOURCE_RESOLVED     = "HDGR_RECIPE_SOURCE_RESOLVED",     -- tick: a recipe's acquisition text was read + parsed
         SHOPPING_WIDGET_TOGGLE     = "HDGR_SHOPPING_WIDGET_TOGGLE",
 
         -- ===== Vendor buying (spec docs/HDGR_VENDOR_BUYING_SPEC.md) =====
@@ -1252,10 +1254,21 @@ HDG.Constants.ACQ_SOURCES[#HDG.Constants.ACQ_SOURCES + 1] =
 -- Vendors standing here are ungated by construction: you are in your own
 -- neighborhood, so there is no questline between you and the merchant. That is
 -- what makes the `neighborhood` filter exact rather than a good guess.
-HDG.Constants.NEIGHBORHOOD_MAP_IDS = {
-    [2352] = true,   -- Founder's Point (Alliance)
-    [2351] = true,   -- Razorwind Shores (Horde)
+-- Keyed by the toggle's own value so the shopping preference maps to a uiMapID
+-- without a second lookup table drifting from this one.
+HDG.Constants.NEIGHBORHOOD_MAP_BY_FACTION = {
+    alliance = 2352,   -- Founder's Point
+    horde    = 2351,   -- Razorwind Shores
 }
+
+-- Both directions derived from the one table above -- a hand-maintained second
+-- copy is how the pair goes out of sync the day a third neighborhood ships.
+HDG.Constants.NEIGHBORHOOD_MAP_IDS       = {}
+HDG.Constants.NEIGHBORHOOD_FACTION_BY_MAP = {}
+for faction, mapID in pairs(HDG.Constants.NEIGHBORHOOD_MAP_BY_FACTION) do
+    HDG.Constants.NEIGHBORHOOD_MAP_IDS[mapID]        = true
+    HDG.Constants.NEIGHBORHOOD_FACTION_BY_MAP[mapID] = faction
+end
 
 -- Gold has no Blizzard currency ID; CURRENCY_GOLD sentinel lets cost-entry tables iterate uniformly.
 HDG.Constants.COIN_ATLAS    = "|A:auctionhouse-icon-coin-gold:14:14|a"

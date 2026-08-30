@@ -459,6 +459,12 @@ LC.widgets["projectsNavPanel.removeFloor"] = {
     font = "body", text = "locale:PROJ_REMOVE_FLOOR", width = 72, height = 22, order = 17,
     visible = "projects.canRemoveWhatIfFloor",
 }
+-- Plan <-> Section toggle. Labelled with the mode it switches TO.
+LC.widgets["projectsNavPanel.viewMode"] = {
+    tooltip = false, kind = "button", ["in"] = "projectsNavPanel",
+    font = "body", binding = { text = "projects.canvasModeToggleLabel" },
+    width = 92, height = 22, order = 19,
+}
 LC.widgets["projectsNavPanel.captureAll"] = {
     tooltip = { recipe = "ProjectsCaptureAll" }, kind = "button", ["in"] = "projectsNavPanel",
     font = "body", text = "locale:PROJ_CAPTURE_ALL_FLOORS", width = 130, height = 22, order = 20,
@@ -480,6 +486,15 @@ LC.widgets["projectsNavPanel.help"] = {
 LC.widgets["projectsCanvasPanel.canvas"] = {
     tooltip = false, kind = "projectsCanvas", ["in"] = "projectsCanvasPanel",
     binding = { model = "projects.canvasModel" }, width = "fill", height = "fill", order = 10,
+    visible = "projects.canvasIsPlan",
+}
+-- Section: the same cell, the whole house at once (isometric, read-only). The
+-- visibility cascade drops whichever mode is off before the solver runs, so the
+-- two never fight over the cell.
+LC.widgets["projectsCanvasPanel.section"] = {
+    tooltip = false, kind = "projectsSection", ["in"] = "projectsCanvasPanel",
+    binding = { model = "projects.sectionModel" }, width = "fill", height = "fill", order = 10,
+    visible = "projects.canvasIsSection",
 }
 
 -- Detail panel: selected room title.

@@ -26,9 +26,10 @@ local M = HDG.Projects.FloorMap
 -- up") else the shape default. The SINGLE source for how many floors a room occupies
 -- -- every multi-floor room is ONE record that derives its span here (no linked
 -- per-floor records, no stairsLink).
-local function _effectiveSpan(room)
+function M.EffectiveSpan(room)
     return room.floors or HDG.Projects.ShapeAtlas.GetFloors(room.shape)
 end
+local _effectiveSpan = M.EffectiveSpan
 
 -- Cells occupied on `floor`. Any record whose span reaches `floor` marks its
 -- footprint there: garden projections + planner-stamped stair spans; captured

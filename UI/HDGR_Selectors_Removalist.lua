@@ -15,7 +15,7 @@ local Selectors = HDG.Selectors
 -- is SOLVED. NOTE: the DB2 NeighborhoodMap.MapID (2735/2736) are NOT uiMaps (no GetMapInfo).
 --   alliance = 2352  "Founder's Point"
 --   horde    = 2351  "Razorwind Shores"
-local NEIGHBORHOOD_UIMAP = { alliance = 2352, horde = 2351 }
+local NEIGHBORHOOD_UIMAP = HDG.Constants.NEIGHBORHOOD_MAP_BY_FACTION
 
 -- Community orientation buckets -> degrees clockwise.
 local LETTER_DEG = { A = 0, B = 90, C = 180, D = 270 }

@@ -750,14 +750,35 @@ end
 -- dialog. WoW addons cannot write files, so "export" here means the player
 -- copies and saves it themselves -- which is why the button says Copy, not
 -- Export, and nobody goes hunting on disk for a file that was never written.
+-- The switch's caption. Short: the exported TEXT carries the full
+-- "Vendors listed for: Alliance (Founder's Point)" line, so the window only has
+-- to name the side.
+local EXPORT_SWITCH_LABEL = { alliance = "Alliance", horde = "Horde" }
+
 function C:_CopyRequirements()
     -- Hoisted: the title's name and the body must come from the same state, or
     -- the dialog could be headed with a different blueprint than it lists.
     local state = HDG.Store:GetState()  -- exception(false-positive): top-level controller method (not a row factory)
     local text  = HDG.Selectors:Call("blueprints.manifestText", state, {})
     if not text then return end  -- exception(nullable): button is gated on hasManifest; a race gets a no-op
-    local name = HDG.Selectors:Call("blueprints.displayName", state, {})
-    HDG.UI:CopyDialog():Open(HDG.Locale:Get("BP_COPY_REQS_TITLE"):format(name), text)
+    local name    = HDG.Selectors:Call("blueprints.displayName", state, {})
+    local faction = HDG.Selectors:Call("blueprints.exportNeighborhood", state, {})
+
+    -- The switch belongs on THIS window rather than the tab behind it: the
+    -- choice is about the artefact being copied, not a standing preference, so
+    -- it is session state and never writes back to the shopping toggle.
+    HDG.UI:CopyDialog():Open(HDG.Locale:Get("BP_COPY_REQS_TITLE"):format(name), text, {
+        faction = faction and {
+            current = faction,
+            label   = EXPORT_SWITCH_LABEL[faction],
+            onChange = function(nextFaction)
+                HDG.Store:Dispatch({ type = A.UI_SET_TRANSIENT, payload = {
+                    view = "blueprints", key = "exportNeighborhood", value = nextFaction } })
+                local newText = HDG.Selectors:Call("blueprints.manifestText", HDG.Store:GetState(), {})
+                return newText, EXPORT_SWITCH_LABEL[nextFaction]
+            end,
+        } or nil,   -- exception(nullable): a neutral character expresses no neighborhood, so no switch
+    })
     HDG.Log:Success("blueprints", ("Copied requirements for %q"):format(name))
 end
 

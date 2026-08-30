@@ -1,3 +1,75 @@
+## [3.31.0] - 2026-08-31 (August 2026)
+
+### Added
+- **The Architect can show your whole house at once.** A new Section view draws
+  every floor stacked in place, seen from an angle, with dashed lines running up
+  through the stairwells that join them. Floor plans show one storey at a time,
+  so the things that live BETWEEN floors -- whether your stairs line up, what is
+  sitting above what -- were the one thing you could never see. Click any floor's
+  label to drop back into its plan and keep building. The button sits next to
+  Capture all floors.
+
+- **Crafted decor says where its recipe comes from.** The decor detail card
+  gains a Recipe line under the profession -- "Profession Trainer -- Classic
+  Alchemy (25)", or the vendor and zone that sells the pattern -- and the
+  Recipes tab tooltip lists every source a recipe has, with the cost shown in
+  its own coins and currency icons. The answer is the profession book's own,
+  read from the game as you look rather than stored, so it stays right as the
+  game changes. 305 of the 325 craftable pieces have one.
+
+- **A copied requirements list says which neighbourhood its vendors are for,
+  and you choose which as you copy it.** The copy window carries an
+  Alliance/Horde switch, and the text gains a "Vendors listed for:" line naming
+  the side it was written for. Some decor is sold by differently-named traders
+  in Founder's Point and Razorwind Shores, so a shared list that does not say
+  which one it means sends half its readers to the wrong place. Flipping the
+  switch rewrites the list in front of you before you copy it. The choice
+  belongs to that export and does not change where your own shopping list
+  sends you.
+
+### Fixed
+- **Decor from the in-game shop or a promotion says so when you copy a
+  blueprint's list.** 3.30.0 taught that list about delves, treasures and
+  events and stopped one step short of these two, so a Naturally Elegant
+  Doormat still copied out with nothing after its name. Found by Vamoose.
+
+## [3.30.0] - 2026-08-29 (August 2026)
+
+### Added
+- **The shopping list can be told which neighbourhood you shop in.** A small
+  Alliance/Horde switch sits beside the list name, and where the same decor is
+  sold in both Founder's Point and Razorwind Shores, it sends you to yours.
+  Eighteen merchants keep a stall in both neighbourhoods, so this is usually the
+  same trader either way -- it just stops the list routing you across the world
+  for a rug you could buy at home. Either faction can shop in either place, so
+  nothing is ever hidden: a trader who works nowhere else still appears, and
+  flipping the switch re-sorts the list you already have rather than only the
+  next one you import. Until you touch it, it follows your character. Reported
+  by moondazze, who was sent to the Horde vendors for an Alliance house.
+
+- **Shopping lists can be renamed.** A Rename button beside + New, opened with
+  the current name selected so it is type-over-and-Enter. A list routed from a
+  blueprint arrives named after the blueprint, which is right up until you have
+  three of them. Asked for by moondazze.
+- **The item and vendor counts moved to a rail under the list**, where the Decor
+  and Pets tabs already keep theirs, instead of competing for room with the
+  controls along the top.
+
+### Fixed
+- **A named trader is no longer passed over for "World Vendors".** Where a piece
+  is sold both by someone standing in a zone and by the game's catch-all
+  "World Vendors" listing, the catch-all sometimes came first -- so a copied
+  blueprint list said to buy Flat Boulders from nobody in particular while
+  Trevor Grenner was standing in Founder's Point selling them. The trader you
+  can actually walk to now wins, and the catch-all is still listed when it is
+  genuinely the only source. Reported by Madailein Hatter.
+- **Decor that comes from a delve, a treasure, or an event says so when you copy
+  a blueprint's list.** The Hanging Dawnflower knew perfectly well it was a
+  Midnight Delves drop -- Find Decor had been saying so all along -- but the
+  copied list left the line bare, because only vendors, quests, achievements and
+  professions were ever written into it. All three now come through. Reported by
+  Madailein Hatter.
+
 ## [3.29.1] - 2026-08-27 (August 2026)
 
 ### Fixed

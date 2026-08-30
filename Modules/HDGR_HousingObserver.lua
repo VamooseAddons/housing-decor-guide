@@ -507,11 +507,21 @@ end
 function HO:_BeginCapture(floor)
     -- nextIndex stamps capture order per room (surfaced in "Hallway 2" labels).
     _capture = { active = true, floor = floor or 1, rooms = {}, nextIndex = 1 }
+    -- The bucket's floor is the SWEEP's counter; the game's viewed floor is the
+    -- truth about which floor's pins are about to arrive. Log both: when they
+    -- disagree, the rooms land under the wrong floor (owner-observed 2026-08-28 --
+    -- capture floor 1 held the house's third storey).
+    HDG.Log:Warn("projects_save", ("capture: arm floor %d (viewed=%s)")
+        :format(_capture.floor, tostring(C_HousingLayout and C_HousingLayout.GetViewedFloor and C_HousingLayout.GetViewedFloor())))  -- exception(boundary): C_HousingLayout absent headless
     HDG.CaptureTap.OnBegin(_capture.floor)   -- raw-stream tap (inert unless HDG_DB.captureTap)
 end
 
 function HO:_EndCapture()
     if not (_capture and _capture.active) then return nil end
+    local n = 0
+    for _ in pairs(_capture.rooms) do n = n + 1 end
+    HDG.Log:Warn("projects_save", ("capture: commit floor %d: %d room(s) (viewed=%s)")
+        :format(_capture.floor, n, tostring(C_HousingLayout and C_HousingLayout.GetViewedFloor and C_HousingLayout.GetViewedFloor())))  -- exception(boundary): C_HousingLayout absent headless
     HDG.CaptureTap.OnEnd()
     _capture.active = false
     local snap = _capture
@@ -723,7 +733,35 @@ local function _pinsFor(rooms, floor, placements)
             end
         end
     end
-    for _, id in ipairs(ids) do   -- pass 2: chronology, for NEW sections
+    -- Pass 2a: SIBLING COUNTER. Placing a stairwell mints BOTH of its sections in
+    -- one action, so the pair's placement counters are ADJACENT -- |delta| == 1 --
+    -- no matter which floor was built first. This is the direction-free test that
+    -- pass 2b cannot make: 2b requires the floor BELOW to carry the smaller
+    -- counter, which is only true of a house built UPWARD from its entry. Build
+    -- downward -- entry on floor 4, cellars dug afterwards -- and the basements
+    -- carry the HIGHER counters, so the mate is never found and every floor packs
+    -- to its own origin. Measured on the owner's five-floor manor 2026-08-28: all
+    -- four shafts were adjacent pairs (3/4, 5/6, 9/10, 21/22) and three of them
+    -- failed to pin under the chronological rule alone.
+    for _, id in ipairs(ids) do
+        if not pins[id] then
+            local rec, sibKey = rooms[id], nil
+            for key, pl in pairs(lower) do
+                if not used[key] and pl.shape == rec.shape and pl.placementIndex
+                   and math.abs(pl.placementIndex - rec.placementIndex) == 1
+                   and (sibKey == nil or key < sibKey) then
+                    sibKey = key
+                end
+            end
+            if sibKey then
+                used[sibKey] = true
+                pins[id] = { x = placements[sibKey].x, y = placements[sibKey].y }
+            end
+        end
+    end
+    -- Pass 2b: chronology, for sections whose sibling counter was lost to the
+    -- allocator reusing a freed slot after an edit (spec SS2.2).
+    for _, id in ipairs(ids) do
         if not pins[id] then
             local rec, bestKey, bestIdx = rooms[id], nil, nil
             for key, pl in pairs(lower) do
@@ -746,6 +784,10 @@ local function _pinsFor(rooms, floor, placements)
     end
     return next(pins) and pins or nil
 end
+
+-- Seam for tests: the pin matcher is the whole reason floors stack rather than
+-- float, and it is pure (rooms + floor + placements in, pins out).
+HO._TEST_pinsFor = _pinsFor
 
 -- Frame anchor (solver spec SS10): an UNCONSTRAINED re-solve (lowest floor) must
 -- not shift the shared frame under committed upper floors -- translate the fresh
@@ -857,12 +899,21 @@ function HO:_FinalizeCapture(snapshot, houseID)
     _dispatchCaptureCommit(houseID, rooms, deleteRoomIDs)
 end
 
--- GetViewedFloor is 0-INDEXED (the sweep maps floor 1 -> SetViewedFloor(0)); +1 to
--- the 1-indexed capture floor. Was fed raw: ground-floor passives were silently
+-- Forward declarations: both live with the sweep below, but the passive capture
+-- handlers above need them -- the range start to map a viewed index to a capture
+-- floor, and the arrival hook so the floor-changed event can drive an active sweep.
+local _floorRangeStart
+local _onSweepFloorArrived
+
+-- GetViewedFloor returns the GAME floor INDEX, which starts at the lowest occupied
+-- floor (measured 0, basements included). Rebase it onto the 1-based capture floor;
+-- fed raw it was doubly wrong: ground-floor passives were silently
 -- DISCARDED (makeFloorID rejects 0) and upper-storey passives committed one floor
 -- low, replacing the floor below via the recapture diff (solver spec SS2.8).
 local function _viewedCaptureFloor()
-    return ((C_HousingLayout and C_HousingLayout.GetViewedFloor and C_HousingLayout.GetViewedFloor()) or 0) + 1  -- exception(boundary): C_HousingLayout is a Blizzard API namespace; nil in headless tests
+    local viewed = (C_HousingLayout and C_HousingLayout.GetViewedFloor and C_HousingLayout.GetViewedFloor()) or 0  -- exception(boundary): C_HousingLayout is a Blizzard API namespace; nil in headless tests
+    local lo = _floorRangeStart()
+    return (viewed - lo) + 1
 end
 
 -- Passive capture: begin on Layout entry, finalize on exit. Suppressed during active sweep.
@@ -881,10 +932,79 @@ function HO:_OnCaptureModeChanged()
 end
 
 function HO:OnLayoutFloorChanged()
-    if _activeSweep or not self:IsCapturing() then return end
+    -- During a sweep this event is the ARRIVAL signal, not a passive recapture cue.
+    if _activeSweep then _onSweepFloorArrived(); return end
+    if not self:IsCapturing() then return end
     local snap, houseID = self:_EndCapture(), _currentHouseID()
     if snap and houseID then self:_FinalizeCapture(snap, houseID) end
     self:_BeginCapture(_viewedCaptureFloor())
+end
+
+-- Arrival is an EVENT, not a duration. The client does not reach a requested floor
+-- synchronously and the trip scales with distance: MEASURED 2026-08-28 (capture
+-- diagnostics, 5-floor house), SetViewedFloor(0) issued while showing floor 4 still
+-- reported viewed=2 a second and a half later. Against the old fixed settle every
+-- bucket opened and closed mid-transit -- floor 1 banked a floor it was merely
+-- passing, and the lowest floor was never displayed inside ANY window, so it never
+-- captured at all (bottom storey missing, floor 1 holding the third).
+--
+-- So we wait on HOUSING_LAYOUT_VIEWED_FLOOR_CHANGED rather than on a timer. Two
+-- cases a pure event wait would hang on, both handled:
+--   * already there -- SetViewedFloor to the current floor emits NO change event,
+--     so check before subscribing;
+--   * the event never comes -- a backstop fires so a sweep can't stall forever,
+--     and says which floor drifted rather than banking it silently.
+-- The settle that remains covers only pin EMISSION after arrival, which is what it
+-- was always meant to measure.
+-- A floor request can be DROPPED. Measured 2026-08-28: the sweep's first
+-- SetViewedFloor is issued right after ActivateHouseEditorMode(layout), lands before
+-- the mode switch has taken, and is discarded -- the client sat on the player's own
+-- floor for the full 5s timeout while every later call arrived within a second. One
+-- request is therefore not enough; re-assert it until the client actually moves.
+-- (This was the whole bug: with floor 1's request dropped, its bucket banked
+-- whichever floor the player happened to be standing on.)
+local FLOOR_ARRIVE_TIMEOUT, FLOOR_RETRY = 5, 0.75
+local function _viewedFloorNow()
+    return C_HousingLayout and C_HousingLayout.GetViewedFloor and C_HousingLayout.GetViewedFloor()  -- exception(boundary): C_HousingLayout absent headless
+end
+
+local function _awaitViewedFloor(target, onArrive)
+    if not _activeSweep or _activeSweep.cancelled then return end
+    if _viewedFloorNow() == target then onArrive(); return end   -- already displayed: no event will fire
+    _activeSweep.awaitTarget, _activeSweep.awaitFn = target, onArrive
+    local seq = (_activeSweep.awaitSeq or 0) + 1
+    _activeSweep.awaitSeq = seq
+    local function stillWaiting()
+        return _activeSweep and not _activeSweep.cancelled
+           and _activeSweep.awaitSeq == seq and _activeSweep.awaitFn ~= nil
+    end
+    local function reassert()
+        if not stillWaiting() then return end
+        if C_HousingLayout and C_HousingLayout.SetViewedFloor then C_HousingLayout.SetViewedFloor(target) end
+        if C_Timer and C_Timer.After then C_Timer.After(FLOOR_RETRY, reassert) end
+    end
+    if C_Timer and C_Timer.After then C_Timer.After(FLOOR_RETRY, reassert) end
+    if C_Timer and C_Timer.After then
+        C_Timer.After(FLOOR_ARRIVE_TIMEOUT, function()
+            if not _activeSweep or _activeSweep.cancelled then return end
+            if _activeSweep.awaitSeq ~= seq or not _activeSweep.awaitFn then return end   -- already arrived
+            HDG.Log:Warn("projects_save",
+                ("capture: floor %d never displayed (asked index %d, showing %s) -- capturing anyway")
+                :format(_activeSweep.floor, target, tostring(_viewedFloorNow())))
+            local fn = _activeSweep.awaitFn
+            _activeSweep.awaitTarget, _activeSweep.awaitFn = nil, nil
+            fn()
+        end)
+    end
+end
+
+-- Called from the floor-changed EVENT while a sweep is running.
+_onSweepFloorArrived = function()
+    if not (_activeSweep and _activeSweep.awaitFn) then return end
+    if _viewedFloorNow() ~= _activeSweep.awaitTarget then return end   -- passing through, not arrived
+    local fn = _activeSweep.awaitFn
+    _activeSweep.awaitTarget, _activeSweep.awaitFn = nil, nil
+    fn()
 end
 
 -- Active sweep: Decorate->Layout (re-emits pins), iterate floors with settle delay.
@@ -918,35 +1038,102 @@ local function _stepSweep()
         return
     end
     _activeSweep.floor = nextFloor
-    HO:_BeginCapture(nextFloor)
-    if C_HousingLayout and C_HousingLayout.SetViewedFloor then C_HousingLayout.SetViewedFloor(nextFloor - 1) end
-    if C_Timer and C_Timer.After then C_Timer.After(_activeSweep.settleSeconds, _stepSweep) end
+    local target = _activeSweep.lowest + nextFloor - 1
+    if C_HousingLayout and C_HousingLayout.SetViewedFloor then C_HousingLayout.SetViewedFloor(target) end
+    -- Arm only once the client is SHOWING the floor: its pins are what belongs in
+    -- this bucket, and anything emitted in transit belongs to a floor we are not
+    -- capturing.
+    _awaitViewedFloor(target, function()
+        HO:_BeginCapture(nextFloor)
+        if C_Timer and C_Timer.After then C_Timer.After(_activeSweep.settleSeconds, _stepSweep) end
+    end)
 end
 
--- C_HousingLayout.GetNumFloors is absent from the 12.1 GENERATED DOCS but is NOT gone at
--- runtime: Blizzard_Deprecated/Mainline/Deprecated_12_1_0.lua re-provides it as
--- (highest - lowest) + 1 -- the same arithmetic as our own branch below -- whenever the
--- loadDeprecationFallbacks CVar is on, which is the default. So branch 1 is what actually
--- runs on live and the range branch is the fallback, not the other way round. Both compute
--- the identical number, so this is a comment correction, not a behaviour one. (Same story
--- for IsInsideOwnHouse, aliased to IsInsideOwnedHouse in that file.) The range path still
--- earns its keep for anyone who disables the CVar. Original note: it was dropped from the
--- documented surface on 12.1 in favour of the occupied-floor
--- INDEX range (GetLowest/GetHighestOccupiedFloorIndex). Return the same floor COUNT
--- the old API gave: prefer it on live 12.0.x, derive it from the index range on 12.1
--- (highest - lowest + 1 -- correct for a contiguous occupied range).
--- Owner-ruled 2026-08-10 (solver spec SS10): floors are ALWAYS indexed from 0
--- upward regardless of how many sit below the entry -- SetViewedFloor(0) is the
--- lowest floor, so the floor-1 mapping below is safe, basements included.
+-- The occupied floor RANGE. MEASURED in-game 2026-08-28 (/hdgr floors, a 5-floor
+-- house with three storeys below its entry):
+--     GetNumFloors 5 | lowest 0 | highest 4 | GetBaseRoomFloor 3
+--     AnyRoomsOnFloor answers only on 0..4; nothing below 0.
+-- So floor INDICES are 0-based from the lowest storey even when the house is built
+-- downward -- the 2026-08-10 ruling recorded here is CONFIRMED, not superseded, and
+-- basements are NOT negative. (An earlier read of this code inferred negative
+-- indexing from the existence of GetLowestOccupiedFloorIndex and the
+-- OCCUPIED_FLOOR_RANGE_CHANGED event; the dump disproves it. Don't re-derive it.)
+--
+-- What the entry's position DOES change is nothing here: GetBaseRoomFloor was 3 on
+-- that house while the sweep still starts at index 0, and the floor carrying the
+-- Entry room captured as floor 4 = base 3 + 1, exactly as the mapping intends.
+--
+-- The range API is still what we read, because it states its own start rather than
+-- assuming one; it happens to equal 0 today. GetNumFloors survives on live via
+-- Blizzard_Deprecated (loadDeprecationFallbacks, default on) as (highest-lowest)+1,
+-- so it is a COUNT and cannot tell us where the range begins -- fallback only.
 -- exception(boundary): C_HousingLayout is a Blizzard API namespace; nil in headless tests.
-local function _numFloors()
+local function _floorRange()
     local CL = C_HousingLayout
     if not CL then return nil end
-    if CL.GetNumFloors then return CL.GetNumFloors() end                        -- live 12.0.x
-    if CL.GetHighestOccupiedFloorIndex and CL.GetLowestOccupiedFloorIndex then  -- 12.1
-        return CL.GetHighestOccupiedFloorIndex() - CL.GetLowestOccupiedFloorIndex() + 1
+    if CL.GetLowestOccupiedFloorIndex and CL.GetHighestOccupiedFloorIndex then   -- 12.1: the real range
+        local lo, hi = CL.GetLowestOccupiedFloorIndex(), CL.GetHighestOccupiedFloorIndex()
+        if lo and hi and hi >= lo then return lo, hi end
+    end
+    if CL.GetNumFloors then                                                      -- 12.0.x: lowest was always 0
+        local n = CL.GetNumFloors()
+        if n and n >= 1 then return 0, n - 1 end
     end
     return nil
+end
+
+_floorRangeStart = function()
+    local lo = _floorRange()
+    return lo or 0   -- exception(boundary): no range off-house-context; 0 keeps the old mapping
+end
+
+local function _numFloors()
+    local lo, hi = _floorRange()
+    if not lo then return nil end
+    return (hi - lo) + 1
+end
+
+-- /hdgr floors -- raw Blizzard floor-indexing dump. The capture's floor mapping
+-- rests on how the game numbers floors in a house with rooms BELOW the entry, and
+-- that has never been read back from a live basement house -- it was RULED from
+-- houses whose entry was the ground floor. This prints the ground truth instead of
+-- inferring it: the occupied range, the base (entry) floor, and a per-index probe
+-- wide enough to catch negative indexing if it exists. Dev tool; prints, mutates
+-- nothing.
+function HO:FloorDump()
+    local CL, CH = C_HousingLayout, C_Housing
+    local function fmt(v)
+        if v == nil then return "|cff888888nil|r" end
+        return "|cffffd200" .. tostring(v) .. "|r"
+    end
+    local function call(tbl, fn, ...)
+        if not (tbl and tbl[fn]) then return nil, "absent" end
+        local ok, a, b = pcall(tbl[fn], ...)   -- exception(boundary): probing an undocumented Blizzard surface; a throw is data
+        if not ok then return nil, "error" end
+        return a, b
+    end
+    print("|cff66ccffHDGR floor dump|r")
+    print("  inside owned house: " .. fmt((call(CH, "IsInsideOwnedHouse"))))
+    print("  GetNumFloors():                " .. fmt((call(CL, "GetNumFloors"))))
+    print("  GetLowestOccupiedFloorIndex(): " .. fmt((call(CL, "GetLowestOccupiedFloorIndex"))))
+    print("  GetHighestOccupiedFloorIndex():" .. fmt((call(CL, "GetHighestOccupiedFloorIndex"))))
+    print("  GetViewedFloor():              " .. fmt((call(CL, "GetViewedFloor"))))
+    print("  GetBaseRoomFloor():            " .. fmt((call(CL, "GetBaseRoomFloor"))))
+    -- The probe: which indices actually hold rooms, and which the game will accept.
+    -- If basements are negative, the negative half answers true; if the range is
+    -- 0..N-1, it does not. Either way this settles it without a guess.
+    local rows = {}
+    for i = -6, 10 do
+        local any = (call(CL, "AnyRoomsOnFloor", i))
+        local can = (call(CL, "CanSetViewedFloor", i))
+        if any ~= nil or can ~= nil then
+            rows[#rows + 1] = string.format("%d:%s%s", i,
+                any and "rooms" or "-", can and "/settable" or "")
+        end
+    end
+    print("  per-index probe (AnyRoomsOnFloor / CanSetViewedFloor):")
+    print("    " .. (#rows > 0 and table.concat(rows, "  ") or "|cff888888no index answered|r"))
+    print("  |cff888888(run inside your house; Layout mode gives the fullest answer)|r")
 end
 
 function HO:CaptureAllFloors()
@@ -986,8 +1173,9 @@ function HO:CaptureAllFloors()
 
     if C_HouseEditor.EnterHouseEditor then C_HouseEditor.EnterHouseEditor() end  -- exception(boundary): C_HouseEditor is a Blizzard API namespace; nil in headless tests
     if C_HouseEditor.ActivateHouseEditorMode then C_HouseEditor.ActivateHouseEditorMode(_decorateMode()) end  -- exception(boundary): C_HouseEditor is a Blizzard API namespace; nil in headless tests
+    local lowest = _floorRange() or 0   -- exception(boundary): no range off-house-context
     _activeSweep = {
-        houseID = houseID, floor = 1,
+        houseID = houseID, floor = 1, lowest = lowest,
         maxFloor = maxFloor,
         settleSeconds = 1.5, cancelled = false,
     }
@@ -995,9 +1183,13 @@ function HO:CaptureAllFloors()
         C_Timer.After(0.1, function()
             if not _activeSweep or _activeSweep.cancelled then return end
             if C_HouseEditor.ActivateHouseEditorMode then C_HouseEditor.ActivateHouseEditorMode(_layoutMode()) end  -- exception(boundary): C_HouseEditor is a Blizzard API namespace; nil in headless tests
-            if C_HousingLayout and C_HousingLayout.SetViewedFloor then C_HousingLayout.SetViewedFloor(0) end
-            if not self:IsCapturing() then self:_BeginCapture(1) end
-            C_Timer.After(_activeSweep.settleSeconds, _stepSweep)
+            if C_HousingLayout and C_HousingLayout.SetViewedFloor then C_HousingLayout.SetViewedFloor(_activeSweep.lowest) end
+            -- Floor 1 travels furthest (from wherever the player was standing), so it
+            -- is the floor that most needs the arrival wait, not least.
+            _awaitViewedFloor(_activeSweep.lowest, function()
+                if not self:IsCapturing() then self:_BeginCapture(1) end
+                C_Timer.After(_activeSweep.settleSeconds, _stepSweep)
+            end)
         end)
     end
     return true

@@ -1009,6 +1009,17 @@ end
 
 -- _composeRepProgressSuffix lives in HDG.Format (live progress via detail-panel selector + RepObserver).
 
+-- "Source (Zone)" for the drop/treasure/event records _ParseSourceText stamps.
+-- Module scope because BOTH source bakes want it: _bakeSourceTags for the chip
+-- and _bakeSourceTypes for the headline.
+local function _composeSourceText(rec)
+    if not rec then return nil end   -- exception(nullable): row carries only the source kinds it has
+    if rec.zone and rec.zone ~= "" then
+        return rec.source .. " (" .. rec.zone .. ")"
+    end
+    return rec.source
+end
+
 -- _bakeSourceTypes: the "Source: X" label -- one concrete answer to "where do I
 -- get this?". Priority: Vendor > Quest > Ach > Crafted.
 --
@@ -1023,19 +1034,41 @@ end
 -- Distinct from _bakeSourceTags, which stays binding-strength ordered (REP >
 -- CRAFT > QUEST > ...) -- gate chips answer "what stops me", not "where is it".
 function R:_bakeSourceTypes(row)
-    local firstVendor = row.vendors and row.vendors[1]
-    if firstVendor then
-        -- Vendor: surface the first vendor's name (Hesta Forlath) and zone
+    -- nil preference: one baked row serves every player, so the neighborhood
+    -- toggle cannot be frozen in here. The pick still demotes the unroutable
+    -- groupings, which is what "Vendor: World Vendors" over a named merchant was.
+    local bestVendor = HDG.VendorRank.Pick(row, nil)
+    if bestVendor then
+        -- Vendor: surface the vendor's name (Hesta Forlath) and zone
         -- (Silvermoon City) in the label. Detail-panel renders as
         --   [VEND] Hesta Forlath (Silvermoon City)
-        row.sourceType, row.sourceName = 5, firstVendor.name or ""
-        row.sourceDetail              = firstVendor.zone or ""
+        row.sourceType, row.sourceName = 5, bestVendor.name or ""
+        row.sourceDetail              = bestVendor.zone or ""
     elseif row.quest then
         row.sourceType, row.sourceName = 2, row.quest
     elseif row.achievement then
         row.sourceType, row.sourceName = 1, row.achievement
     elseif row.recipe then
         row.sourceType, row.sourceName = 6, row.recipe.expansion or ""
+    -- Drop/Treasure/Event were parsed and chipped but never made it into the
+    -- HEADLINE, so a delve-only piece fell through to UNKN(0) -- and the plain-
+    -- text manifest drops UNKN lines rather than stamp "Unknown" on every
+    -- unbaked row. That is why Hanging Dawnflower read "[DROP] Midnight Delves"
+    -- in Find Decor and carried no source at all into a copied blueprint list.
+    elseif row.drop then
+        row.sourceType, row.sourceName = 4, _composeSourceText(row.drop)
+    elseif row.treasure then
+        row.sourceType, row.sourceName = 9, _composeSourceText(row.treasure)
+    elseif row.event then
+        row.sourceType, row.sourceName = 14, _composeSourceText(row.event)
+    -- Shop and Promotion are the catalog's two BARE lines: it says the piece
+    -- comes from the in-game shop or a promotion and names nothing further,
+    -- so these carry a kind with no name. The label IS the whole answer, which
+    -- is why the manifest prints them without a trailing "name" clause.
+    elseif row.shop then
+        row.sourceType, row.sourceName = 12, ""
+    elseif row.promo then
+        row.sourceType, row.sourceName = 10, ""
     else
         row.sourceType, row.sourceName = 0, ""
     end
@@ -1112,14 +1145,6 @@ function R:_bakeSourceTags(row)
 
     -- Non-gating signals: chip-only or "Source (Zone)" when descriptor text exists.
     -- Drop/Treasure/Event come from _ParseSourceText (stamps row.drop/treasure/event).
-    local function _composeSourceText(rec)
-        if not rec then return nil end
-        if rec.zone and rec.zone ~= "" then
-            return rec.source .. " (" .. rec.zone .. ")"
-        end
-        return rec.source
-    end
-
     if row.vendors and #row.vendors > 0 then emit("VENDOR", {}) end
     if row.drop      then emit("DROP",     { text = _composeSourceText(row.drop)     }) end
     if row.treasure  then emit("TREASURE", { text = _composeSourceText(row.treasure) }) end

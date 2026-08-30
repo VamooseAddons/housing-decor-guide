@@ -279,6 +279,8 @@ SlashCmdList["HDG"] = function(msg)
         HDG.SelectorCallLog:Command(rest)   -- was /hdgrsl
     elseif first == "perf" then
         HDG.Perf:Command(rest)              -- was /hdgr perf
+    elseif lower == "floors" then
+        HDG.HousingObserver:FloorDump()   -- raw Blizzard floor-indexing dump
     elseif lower == "doors" then
         HDG.ProjectsCanvasController:DoorAudit()  -- was /hdgr doors
     elseif lower == "housemap" then

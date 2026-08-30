@@ -19,10 +19,16 @@ function AcquisitionController:OpenWorldMapAt(uiMapID)
 end
 
 -- itemRow: item name + profession/expansion meta. Click selects the primary vendor.
+--
+-- Ranked rather than vendors[1]: catalog parse order puts Blizzard's synthetic
+-- "World Vendors" grouping ahead of a named merchant often enough that clicking
+-- a boulder selected a vendor with no location instead of the one standing in
+-- Founder's Point. No neighborhood preference here -- that is the shopping
+-- list's travel aid, and this is "show me who sells it".
 local function FindFirstVendorForItem(itemID)
     local row = HDG.HousingCatalogObserver:GetRow(itemID)
-    local v = row and row.vendors and row.vendors[1]
-    if not v then return nil end
+    local v = HDG.VendorRank.Pick(row, nil)
+    if not v then return nil end  -- exception(nullable): drops/quests/achievements have no vendor
     return HDG.StaticData.VendorAugment:ResolveName(v.name, v.zone)
 end
 

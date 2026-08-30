@@ -460,6 +460,19 @@ LC.widgets["decorDetailPanel.itemProfession"] = {
     binding = "decor.selectedItem.profession",
     visible = "decor.selectedItem.isCrafted",
 }
+-- Where the RECIPE comes from, directly under the profession that makes it.
+-- Wrapped like itemSource below: "Profession Trainer -- Classic Alchemy (25)"
+-- plus a zone routinely outruns the ~284px column. Gated on isCrafted so the
+-- row does not reserve height on a vendor-bought piece; the selector ALSO
+-- returns "" when there is no acquisition text, so a crafted piece the server
+-- says nothing about collapses too.
+LC.widgets["decorDetailPanel.itemRecipeSource"] = {
+    tooltip = false,
+    kind = "label", ["in"] = "decor.detailMeta", font = "small",
+    text = "", wrap = true, height = 28, order = 18,
+    binding = "decor.selectedItem.recipeSource",
+    visible = "decor.selectedItem.isCrafted",
+}
 LC.widgets["decorDetailPanel.itemSource"] = {
     tooltip = false,
     kind = "label", ["in"] = "decor.detailMeta", font = "small",

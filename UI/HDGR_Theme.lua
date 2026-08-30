@@ -863,6 +863,25 @@ HDG.Theme.Skinners = {
         line:SetColorTexture(c.r, c.g, c.b, c.a)   -- nil alpha -> API defaults to 1
     end,
 
+    -- SectionRoomMuted: a room on a floor you are NOT looking at. The Section view
+    -- stacks floors that overlap on screen -- a floor whose rooms sit in one corner
+    -- of the house draws over the floors above it -- so the floor in focus has to
+    -- read louder than its neighbours or you cannot tell which storey a room is on.
+    SectionRoomMuted = function(line, _scheme)
+        if not (line and line.SetColorTexture) then return end
+        local c = HDG.Theme:GetColor("border.default")
+        line:SetColorTexture(c.r, c.g, c.b, 0.42)
+    end,
+
+    -- SectionPlate: the Section view's floor-footprint outline. Deliberately
+    -- fainter than RoomOutline -- it reads as ground the rooms sit on, and must
+    -- never compete with the room edges it frames.
+    SectionPlate = function(line, _scheme)
+        if not (line and line.SetColorTexture) then return end
+        local c = HDG.Theme:GetColor("border.default")
+        line:SetColorTexture(c.r, c.g, c.b, 0.28)
+    end,
+
     -- progressbar: Blizzard StatusBar frames. state.variant picks semantic.* fill;
     -- default = "accent". Also paints the unfilled track.
     -- Distinct from ProgressBarFill (texture-tint skinner for WidgetTypes "progressbar").

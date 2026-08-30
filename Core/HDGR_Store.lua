@@ -126,6 +126,12 @@ local function NewAccountUI()
         -- Flipped by SHOPPING_WIDGET_TOGGLE; the MainFrame reconciler
         -- subscriber overrides `view` to "shoppingList" when this is true.
         shoppingWidgetShown = false,
+        -- Which housing neighborhood the shopping list should send you to when
+        -- BOTH sell the same decor. "" = follow this character's faction; the
+        -- player's own pick ("alliance"/"horde") persists over it. Both
+        -- neighborhoods are shoppable by either faction, so this is travel
+        -- convenience -- it reorders vendors, it never hides one.
+        shoppingNeighborhood = "",
         -- Zone Scanner popup visibility (parallel slot to shoppingWidgetShown).
         -- Flipped by ZONE_POPUP_TOGGLE; also set true by HDGR_ZoneAlertEngine
         -- when a zone-entry alert fires AND zoneScannerPopup is true. Persists
@@ -523,6 +529,7 @@ local function NewProjectsSessionUI()
     return {
         activeView      = "landing",   -- "landing" | "architect"
         selectedFloor   = 1,
+        canvasMode      = "plan",      -- "plan" (top-down floor) | "section" (isometric whole-house)
         selectedRoomID  = nil,
         selectedCrateID = nil,
         -- Layouts tab: the version whose floors the preview/detail show (NOT the
@@ -602,7 +609,16 @@ local function NewMenagerieSessionUI()
 end
 
 local function NewBlueprintsSessionUI()
-    return { missingOnly = false, collapsedGroups = {}, pasteError = false }
+    -- exportNeighborhood: which neighborhood the COPIED requirements list names
+    -- its vendors for. "" = follow the shopping preference, which is only the
+    -- opening position; the copy window's own switch moves it from there.
+    --
+    -- SESSION, not account, and it deliberately does not write back to the
+    -- shopping preference. Choosing who a shared list is written for is a
+    -- decision about that export, and it must not quietly change where your own
+    -- shopping list sends you.
+    return { missingOnly = false, collapsedGroups = {}, pasteError = false,
+             exportNeighborhood = "" }
 end
 
 local function NewSessionUI()
@@ -4580,7 +4596,13 @@ HDG.Actions:Register{ name = "SHOPPING_RESOLVE_VENDORS",
         for i = #list.items, 1, -1 do
             local entry = list.items[i]
             local npc = res[entry.itemID]   -- resolved vendor for this itemID, or nil
-            if (not entry.npcID) and npc then
+            -- Applies to entries that ALREADY carry an npcID, not just blanks:
+            -- flipping the neighborhood toggle has to move a list that was
+            -- resolved under the old preference, or the setting would only ever
+            -- affect the next import. The CALLER decides what is safe to move --
+            -- ShoppingController only ever proposes a swap between the two
+            -- housing neighborhoods, so a vendor picked anywhere else stands.
+            if npc and npc ~= entry.npcID then
                 _resolveVendorForEntry(list, i, entry, npc)
             end
         end
@@ -4588,6 +4610,17 @@ HDG.Actions:Register{ name = "SHOPPING_RESOLVE_VENDORS",
     -- =========================================================================
     -- Catalog lifecycle
     -- =========================================================================
+    end }
+
+HDG.Actions:Register{ name = "SHOPPING_SET_NEIGHBORHOOD",
+    persists = true, combatUnsafe = false,
+            invalidates = { "account.ui.shoppingNeighborhood" },
+    reduce = function(state, payload)
+        -- Preference only. The npcIDs already stored on the lists are rewritten
+        -- by ShoppingController's enrich pass, which subscribes to this action --
+        -- it needs the catalog and VendorAugment to find the twin vendor, and
+        -- neither belongs in a reducer.
+        state.account.ui.shoppingNeighborhood = payload.value
     end }
 
 HDG.Actions:Register{ name = "CATALOG_LOAD_REQUESTED",
@@ -5438,6 +5471,15 @@ HDG.Resolver:Register{ name = "catalog", facade = "HousingCatalogObserver",
 -- TOC-shipped tables behind HDG.StaticData are IMMUTABLE within a session;
 -- selectors declare the read so shipped-data deps flow through read-tracking
 -- like any state path (ADR-003c). Reserved for hot-reload / dev-tool override.
+-- Recipe acquisition text. ProfessionScanner:GetRecipeSource reads the live
+-- (undocumented) C_TradeSkillUI.GetRecipeSourceText and parses it; the tick
+-- bumps the first time a given recipe fills, so a detail card that asked before
+-- the answer existed repaints with it. Method-scoped: the scanner already hosts
+-- the profession facade, and this is a second, separate answer from it.
+HDG.Resolver:Register{ name = "recipeSource",
+    facade = { module = "ProfessionScanner", method = "GetRecipeSource" },
+    actions = { { name = "RECIPE_SOURCE_RESOLVED" } } }
+
 HDG.Resolver:RegisterStatic{ name = "staticData", facade = "StaticData" }
 
 -- Prices (the species A+B hybrid, split per TICK_REVALIDATION). A-side: the

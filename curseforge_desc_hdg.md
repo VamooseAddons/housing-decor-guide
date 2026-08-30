@@ -12,21 +12,15 @@
 
 ---
 
-## What's New in v3.29.1
+## What's New in v3.31.0
 
-**The catalog tooltip names the colours of the tile you are hovering.** Each dyed variant is its own tile in the house editor's catalog, and 3.29.0 listed every colour you owned the item in on every hover. The tooltip now names the dyes of the tile under the cursor, each in its own colour, with the number of that colour you have.
+**The Architect can show your whole house at once.** A new Section view draws every floor stacked in place, seen from an angle, with dashed lines running up through the stairwells that join them. A floor plan shows one storey at a time, so what sits between floors, and whether your stairs line up, was the one thing it could not show you. Click a floor's label to drop back into its plan and keep building. The button sits beside Capture all floors. This view is still being built out, and more of it will arrive in later releases.
 
-Also new since 3.28.0, released earlier today in 3.29.0:
+**Crafted decor says where its recipe comes from.** The decor detail card gains a Recipe line under the profession, naming the trainer, vendor and zone, or whatever else the pattern comes from. The Recipes tab tooltip lists every source a recipe has, with the cost shown in its own coins and currency icons. The answer is read from the profession book as you look rather than stored, so it stays correct as the game changes. 305 of the 325 craftable pieces have one.
 
-**Pets can be filtered by room.** House > Pets has a Room filter beside Clade, Family and Size. Choose the Kitchen and the list narrows to the pets that suit a kitchen, with each row saying whether the pet belongs there, fits, or could work. There are twenty-two rooms, each a hand-picked list rather than a rule.
+**A copied requirements list says which neighbourhood its vendors are for.** The copy window carries an Alliance/Horde switch, and the copied text gains a "Vendors listed for:" line naming the side it was written for. Some decor is sold by differently-named traders in Founder's Point and Razorwind Shores, so a shared list that does not say which it means sends half its readers to the wrong place. Flipping the switch rewrites the list in front of you before you copy it, and the choice applies to that export only.
 
-**And by mood.** The Mood filter uses the same names as the Styles tab, from Rustic and Cozy to Gothic, Void and Seafaring.
-
-**Spiders are their own group**, with a card that says what a spider wants.
-
-**A pet on its decor sits on it**, and the plinth is the same size on every pet's card, so a mouse and a moonkin are seen against the same plinth.
-
-**Removed:** the "Pets for this room" button and the By Pet / By Spot switch. The Room filter replaces both.
+**Decor from the in-game shop or a promotion now says so** when you copy a blueprint's list. Delves, treasures and events were covered in 3.30.0; these two were not, so a piece like the Naturally Elegant Doormat copied out with nothing after its name.
 
 ---
 
@@ -119,7 +113,7 @@ A companion window injects into Blizzard's House Editor so you can **place decor
 ---
 
 **Author:** Vamoose
-**Version:** 3.29.1
+**Version:** 3.31.0
 **Game Version:** 12.1.0 (Midnight)
 **Source / Issues:** https://github.com/VamooseAddons/housing-decor-guide
 **Discord:** https://discord.gg/RWZaxJaHFP

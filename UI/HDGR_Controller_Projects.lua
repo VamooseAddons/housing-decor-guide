@@ -221,6 +221,17 @@ function PC:ExpandStackUp(roomID)
 end
 
 -- Kick the multi-floor capture sweep; surface its failure reason.
+-- Plan <-> Section. Transient (per-view bucket), so it resets to plan on reload:
+-- the section view is for reading the house, the plan is for building it.
+local function _toggleCanvasMode()
+    local mode = HDG.Store:GetState().session.ui.projects.canvasMode  -- exception(false-positive): top-level controller read, not a row factory
+    HDG.Store:Dispatch({
+        type    = HDG.Constants.ACTIONS.UI_SET_TRANSIENT,
+        payload = { view = "projects", key = "canvasMode",
+                    value = (mode == "plan") and "section" or "plan" },
+    })
+end
+
 local function _captureHouse()
     -- Capture sweeps the house you're STANDING IN -- a mismatched focus would
     -- silently capture the wrong house (or nothing). Fail loud at the click.
@@ -1183,6 +1194,7 @@ function PC:Wire(rootFrame)
     })
     HDG.UI.OnClick(rootFrame, "projectsDetailPanel.equipSet",        function(self) _openEquipMenu(self) end)
     HDG.UI.OnClick(rootFrame, "projectsPickerPreviewPanel.equipSet", function(self) _openEquipMenu(self) end)
+    HDG.UI.OnClick(rootFrame, "projectsNavPanel.viewMode",           _toggleCanvasMode)
     HDG.UI.OnClick(rootFrame, "projectsNavPanel.captureAll",         _captureHouse)
     HDG.UI.OnClick(rootFrame, "projectsNavPanel.autoAssign",         _autoAssign)
     HDG.UI.OnClick(rootFrame, "projectsNavPanel.addFloor",           function() _setWhatIfFloors(1) end)

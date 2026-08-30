@@ -82,6 +82,12 @@ R.BuyAll = {
     anchor = "ANCHOR_RIGHT",
 }
 
+R.ShopNeighborhood = {
+    title  = "locale:SHOP_NBHD_TITLE",
+    body   = "locale:SHOP_NBHD_HINT",
+    anchor = "ANCHOR_RIGHT",
+}
+
 
 
 -- ===== Outreach (about pane) ================================================
@@ -477,6 +483,45 @@ local function _buildRecipeRowMaterials(extras, recipe, counts, mult)
     end
 end
 
+-- Where the recipe itself comes from -- the profession book's own answer, via
+-- C_TradeSkillUI.GetRecipeSourceText (see Core/HDGR_RecipeSourceParse.lua).
+-- Every source it lists, not just the best one: a tooltip has the room, and a
+-- recipe sold by two vendors in two zones is exactly the case where naming one
+-- is worse than naming both.
+--
+-- SINGLE LINES, "Kind: where", matching the Decor:/Recipe:/In bags: lines around
+-- them. The first cut used AddDoubleLine, which threw the value hard right and
+-- left the name, zone and cost running together in one column -- the only lines
+-- in the tooltip not shaped like their neighbours.
+--
+-- COST IS PASSED THROUGH UNTOUCHED, in parentheses. It carries money textures
+-- and currency hyperlinks (|Hcurrency:3379|h|T...|t|h), which the tooltip
+-- renders as coin and currency icons -- the reason this line is worth having.
+--
+-- `row._recipeID` is the produced ITEM's id, not a recipe spell id -- HDG's row
+-- envelopes use that name for it ("recipeID == produced itemID"). Hence the
+-- ForItem call: handing this straight to the spell-keyed getter returns nil for
+-- every row, which is how this line silently showed nothing at all.
+local function _appendRecipeSource(extras, itemID)
+    if not itemID then return end   -- exception(nullable): header rows carry no recipe
+    local sources = HDG.ProfessionScanner:GetRecipeSourceForItem(itemID)
+    if not sources then return end  -- exception(nullable): ~1 recipe in 20 has no acquisition text
+    for _, src in ipairs(sources) do
+        -- The game labels one source kind "Recipe", and this tooltip already
+        -- has a "Recipe:" line meaning whether you KNOW it. Two lines opening
+        -- the same word for different questions is the confusion; "Source"
+        -- carries this one instead. (The detail card resolves the same
+        -- collision the same way.)
+        local label = (src.kind == "Recipe") and "Source" or src.kind
+        local line  = label .. ": " .. (src.name or "")
+        if src.zone and src.zone ~= "" then line = line .. ", " .. src.zone end
+        if src.cost and src.cost ~= "" then line = line .. " (" .. src.cost .. ")" end
+        -- A calm blue-grey: the three status lines above own green/amber/red,
+        -- and this answers "where", not "how am I doing".
+        extras[#extras + 1] = { text = line, r = 0.70, g = 0.78, b = 0.88 }
+    end
+end
+
 -- R4: Recipe row -- Recipes tab, Mogul, Queue.
 -- stamp: row._itemID, _recipeID, optional _qtyMult (queue rows), _clickHints (goblin)
 -- Materials computed at hover time from StaticData.Professions + BagObserver.
@@ -488,6 +533,7 @@ function R.RecipeRow(self)
 
     _appendRecipeDecorStatus(extras, self._itemID)
     _appendRecipeKnowledge(extras, self._itemID)
+    _appendRecipeSource(extras, self._recipeID)
     _appendRecipeStockContext(extras, self._itemID, counts, mult)
     -- recipes.db, NOT StaticData.Recipes:Get -- the seed alone is what the panel
     -- stopped reading. The scan overlays 12.1's corrected reagents onto

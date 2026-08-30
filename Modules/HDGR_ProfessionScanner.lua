@@ -704,6 +704,52 @@ function PS:StartGuildHarvest()
     _G.QueryGuildRecipes()
 end
 
+-- ===== Recipe acquisition text ===============================================
+-- Where an unlearned recipe comes from, per the profession book's own hover.
+--
+-- Lives HERE because this module is the declared sole owner of C_TradeSkillUI
+-- (ADR-011, boot-validated disjoint) -- the parse itself is a pure Core file.
+--
+-- The getter is SYNCHRONOUS and answers cold, so there is no request to make
+-- and nothing to wait for; the tick exists only so a card that asked before the
+-- first fill repaints once. Memoised per spellID, and MISSES ARE MEMOISED TOO
+-- (as `false`): about 1 recipe in 20 has no acquisition data, and without a
+-- negative entry those would re-ask the API on every repaint forever.
+--
+-- Lazy by design -- no walk at login. 325 decor recipes fill as they are looked
+-- at, which is a handful per session, not a sweep.
+local _recipeSource = {}
+
+function PS:GetRecipeSource(spellID)
+    if not spellID then return nil end  -- exception(nullable): non-crafted rows have none
+    local hit = _recipeSource[spellID]
+    if hit ~= nil then
+        return hit or nil   -- false is the memoised miss
+    end
+    -- exception(boundary): undocumented Blizzard getter; nil OR "" when the
+    -- server has no acquisition data, and "" is truthy in Lua.
+    local raw = _G.C_TradeSkillUI and _G.C_TradeSkillUI.GetRecipeSourceText
+        and _G.C_TradeSkillUI.GetRecipeSourceText(spellID) or nil
+    local parsed = HDG.RecipeSourceParse.Parse(raw)
+    _recipeSource[spellID] = parsed or false
+    HDG.Store:Dispatch({ type = HDG.Constants.ACTIONS.RECIPE_SOURCE_RESOLVED })
+    return parsed
+end
+
+-- The same answer, keyed by the CRAFTED ITEM rather than the recipe spell.
+--
+-- Every surface that wants this holds an itemID, and HDG's own row envelopes
+-- call that id `recipeID` ("recipeID == produced itemID", Selectors_Recipes) --
+-- which reads exactly like the spell id this API needs and is not. Passing one
+-- for the other returns nil forever and looks like an item with no data, so the
+-- conversion lives HERE and no call site has to know the difference.
+function PS:GetRecipeSourceForItem(itemID)
+    if not itemID then return nil end  -- exception(nullable): header rows carry no item
+    local recipe = HDG.StaticData.Recipes:Get(itemID)  -- exception(nullable): not every crafted item is in DecorDB
+    if not recipe then return nil end
+    return self:GetRecipeSource(recipe.spellID)
+end
+
 -- ===== Module registration ===================================================
 HDG.Modules:Declare({
     name = "ProfessionScanner",

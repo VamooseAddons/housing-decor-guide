@@ -345,6 +345,41 @@ Selectors:Register("decor.selectedItem.profession", {
         return string.format("%sProfession:|r %s%s|r", accent, known, profName)
     end,
 })
+-- Where the RECIPE comes from, for a crafted piece: "Recipe: Profession
+-- Trainer -- Classic Alchemy (25)". Distinct from the Profession line above,
+-- which says what skill makes it; this says how you get the pattern.
+--
+-- Reference data, shown whether or not the recipe is known (owner ruling
+-- 2026-08-31). Collapses to "" when the piece is not crafted, when the recipe
+-- has no acquisition text (about 1 in 20), or before the resolver's first fill
+-- -- the same convention decor.selectedItem.profession uses, so an absent
+-- answer reads as absent rather than as an empty row.
+--
+-- session.resolvers.recipeSource.tick is the facade's declared read: without
+-- it, a card opened before the first fill would never repaint with the answer.
+Selectors:Register("decor.selectedItem.recipeSource", {
+    reads = {"account.config.scheme", "session.resolvers.recipeSource.tick"},
+    calls = {"decor.selectedItem"},
+    fn = function(state, ctx)
+        local v = Selectors:Call("decor.selectedItem", state, ctx)
+        if not v or v.sourceType ~= 6 then return "" end   -- 6 = CRAFTED
+        local sources = HDG.ProfessionScanner:GetRecipeSourceForItem(v.itemID)
+        local best    = HDG.RecipeSourceParse.Best(sources)
+        if not best then return "" end
+        local where = best.name or ""
+        if best.zone and best.zone ~= "" then where = where .. " (" .. best.zone .. ")" end
+        -- The kind normally adds the "how" the line's own label cannot say
+        -- ("Recipe: Profession Trainer -- Classic Alchemy"). When the game's own
+        -- kind IS "Recipe", repeating it reads as a stutter -- "Recipe: Recipe
+        -- -- Purchasable on the Auction House" -- so the value stands alone.
+        local text = (best.kind == "Recipe") and where
+                     or (best.kind .. " -- " .. where)
+        local accent = HDG.Theme:ColorCode("semantic.accent")
+        local body   = HDG.Theme:GetTextStateColorToken("known_self")
+        return string.format("%sRecipe:|r %s%s|r", accent, body, text)
+    end,
+})
+
 Selectors:Register("decor.selectedItem.expansion", {
     calls = {"decor.selectedItem"},
     fn = function(state, ctx)

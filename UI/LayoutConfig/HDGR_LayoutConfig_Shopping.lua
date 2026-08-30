@@ -94,6 +94,20 @@ LC.sections["shopping.entries"] = {
     chrome   = "inset",
 }
 
+-- Item/vendor counts under the list. Same shape as decor/pets/menagerie, which
+-- all carry their count in a 16px rail below the content it describes -- this
+-- was the one list view keeping its summary up in the header, where it competed
+-- for width with the list controls and truncated to "5 ve...".
+--
+-- Above the action bar, not below it: the number describes the LIST, so it
+-- belongs against the list rather than adrift under a row of buttons.
+LC.sections["shopping.statusRail"] = {
+    ["in"]   = "shopping.body",
+    layout   = "horizontal",
+    height   = 16,
+    order    = 25,
+}
+
 LC.sections["shopping.actionBar"] = {
     ["in"]   = "shopping.body",
     layout   = "horizontal",
@@ -142,15 +156,37 @@ LC.widgets["shoppingHeaderPanel.close"] = {
 
 -- (No panel title: the window titlebar already reads "Shopping List", so a
 --  second "Shopping" heading in the content header was redundant.)
--- Summary: width="fill" absorbs slack and truncates gracefully
--- (auto+spacer shrank to 0 on long text, pushing the dropdown out of the slot).
-LC.widgets["shoppingPanel.summary"] = {
+-- (The item/vendor summary moved to shopping.statusRail below the list.)
+
+-- Slack absorber. The summary used to be width="fill" and did this job; with it
+-- gone the header needs an explicit spacer, or the toggle, + New and the list
+-- dropdown all pack against the left edge.
+LC.widgets["shoppingPanel.headerSpacer"] = {
     tooltip = false,
+    kind = "spacer", ["in"] = "shoppingPanel", slot = "header",
+    width = "fill", height = 14, order = 16,
+}
+-- Neighborhood preference: which of the two housing neighborhoods to be sent to
+-- when both sell the same decor. Sits with the list controls rather than in the
+-- action bar below -- that row is all one-shot verbs (Buy All, Clear, Delete),
+-- and a standing preference among them invites a mis-click.
+LC.widgets["shoppingPanel.neighborhoodToggle"] = {
+    tooltip = { recipe = "ShopNeighborhood" },
+    kind = "factionToggle", ["in"] = "shoppingPanel", slot = "header",
+    -- height 16 = round7.png's native height (margin 7 + 2px centre + margin 7),
+    -- so the capsule is drawn rather than stretched. See FACTION_CAPSULE_HEIGHT.
+    width = 26, height = 16, order = 12,
+    binding = { current = "shopping.neighborhood" },
+}
+-- Names the side the colour is showing (see shopping.neighborhoodLabel).
+LC.widgets["shoppingPanel.neighborhoodLabel"] = {
+    tooltip = { recipe = "ShopNeighborhood" },
     kind = "label", role = "Text", ["in"] = "shoppingPanel", slot = "header",
     text = "", font = "small", justifyH = "LEFT",
-    height = 14, width = "fill", order = 12,
-    binding = "shopping.summaryText",
+    width = 52, height = 14, order = 14,
+    binding = "shopping.neighborhoodLabel",
 }
+
 -- List switcher dropdown. Dispatches SHOPPING_LIST_ACTIVATE { id = value }.
 LC.widgets["shoppingPanel.listSwitcher"] = {
     tooltip = false,
@@ -177,6 +213,17 @@ LC.widgets["shoppingPanel.attributionOpenBtn"] = {
     font = "small", text = "locale:SHOP_OPEN_BTN", width = "auto", height = 20,
     order = 20, variant = "tertiary",
     visible = "shopping.hasUrl",
+}
+
+-- ===== Widgets -- status rail ================================================
+
+-- "50 items - 5 vendors". TextInfo tone + a 16px rail, matching decorPanel.count.
+LC.widgets["shoppingPanel.summary"] = {
+    tooltip = false,
+    kind = "label", role = "TextInfo", ["in"] = "shopping.statusRail",
+    text = "", font = "small", justifyH = "LEFT",
+    width = "fill", height = 14, order = 10,
+    binding = "shopping.summaryText",
 }
 
 -- ===== Widgets -- entries scrollbox ==========================================
@@ -240,14 +287,25 @@ LC.widgets["shoppingPanel.deleteListBtn"] = {
     order = 48, variant = "tertiary",
     visible = "shopping.hasMultipleLists",
 }
--- + New: lives in the header row (left of the list dropdown), NOT the action bar,
--- so the bar doesn't overflow. Header summary is width="fill", so this button and
--- the dropdown (order 20) are pushed right together -- + New sits just left of it.
+-- + New / Rename: the list-management pair, in the header row beside the list
+-- they act on, NOT the action bar (which would overflow). headerSpacer is the
+-- width="fill" slack absorber, so both buttons and the dropdown (order 20) are
+-- pushed right together.
+--
+-- Delete stays down in the action bar deliberately: it is the destructive one,
+-- and it is hidden entirely at one list, so pairing it with these two would put
+-- a sometimes-there button between two always-there ones.
 LC.widgets["shoppingPanel.newListBtn"] = {
     tooltip = false,
     kind = "button", ["in"] = "shoppingPanel", slot = "header",
     font = "body", text = "locale:SHOP_NEW_LIST", width = "auto", height = 22,
     order = 18, variant = "tertiary",
+}
+LC.widgets["shoppingPanel.renameListBtn"] = {
+    tooltip = false,
+    kind = "button", ["in"] = "shoppingPanel", slot = "header",
+    font = "body", text = "locale:SHOP_RENAME_LIST", width = "auto", height = 22,
+    order = 19, variant = "tertiary",
 }
 
 -- ===== Satellite window (HDG-ADR-025 step 5) ===============================

@@ -25,6 +25,46 @@ Selectors:Register("shopping.windowVisible", {
     end,
 })
 
+-- Which housing neighborhood to prefer when BOTH sell the same decor, as a
+-- faction key ("alliance"/"horde"), or nil for no preference.
+--
+-- "" is the stored "never picked a side", where this character's own faction is
+-- the sensible opening position -- so a player who never opens the toggle still
+-- gets sent to their own neighborhood. SessionIdentity is the ONLY source for
+-- that faction ("A"/"H"/"N"); selectors are pure and must never reach for
+-- UnitFactionGroup themselves.
+--
+-- "N" (a Pandaren who has not chosen) returns nil, and nil means "leave the
+-- catalog's own order alone" rather than a guess at a neighborhood they have
+-- no claim on yet.
+Selectors:Register("shopping.neighborhood", {
+    reads = { "account.ui.shoppingNeighborhood", "session.identity.factionGroup" },
+    fn = function(state)
+        local pick = state.account.ui.shoppingNeighborhood
+        if pick ~= "" then return pick end
+        local fg = state.session.identity.factionGroup
+        if fg == "A" then return "alliance" end
+        if fg == "H" then return "horde"    end
+        return nil
+    end,
+})
+
+-- The word beside the toggle. The switch carries the choice in colour, which
+-- is exactly what a colour-blind player cannot read -- so the side is also
+-- named. account.config.locale is declared because this sits on the shopping
+-- SATELLITE window, which RefreshMainWindow does not repaint on a locale swap
+-- (same reason merchant.buyAllLabel declares it).
+Selectors:Register("shopping.neighborhoodLabel", {
+    calls = { "shopping.neighborhood" },
+    reads = { "account.config.locale" },
+    fn = function(state, ctx)
+        local faction = Selectors:Call("shopping.neighborhood", state, ctx)
+        if faction == "alliance" then return HDG.Locale:Get("SHOP_NBHD_ALLIANCE") end
+        if faction == "horde"    then return HDG.Locale:Get("SHOP_NBHD_HORDE")    end
+        return HDG.Locale:Get("SHOP_NBHD_NONE")
+    end,
+})
+
 -- Active list record or nil when no list active.
 Selectors:Register("shopping.activeList", {
     reads = { "account.vendorShoppingLists", "account.activeShoppingListId" },
@@ -198,10 +238,10 @@ end
 -- show "where to buy" without freezing a (possibly wrong / multi-vendor) npcID.
 -- Returns a coords-bearing table, a name/zone-only table, or nil (drop/quest/ach
 -- items with no vendor).
-local function _resolveWishlistVendor(itemID)
+local function _resolveWishlistVendor(itemID, preferredMapID)
     local crow = HDG.HousingCatalogObserver:GetRow(itemID)
-    local cv = crow and crow.vendors and crow.vendors[1]
-    if not cv then return nil end
+    local cv = HDG.VendorRank.Pick(crow, preferredMapID)
+    if not cv then return nil end  -- exception(nullable): drops/quests/achievements have no vendor
     local npc = HDG.StaticData.VendorAugment:ResolveName(cv.name, cv.zone)
     local aug = npc and HDG.StaticData.VendorAugment:Get(npc)
     if aug and aug.mapID and aug.mapID > 0 then
@@ -217,11 +257,18 @@ end
 
 Selectors:Register("shopping.activeListEntries", {
     reads = {"session.resolvers.staticData.tick",  "session.itemNames.names", "session.resolvers.catalog.tick" },
-    calls = { "shopping.activeList" },
+    calls = { "shopping.activeList", "shopping.neighborhood" },
     fn = function(state, ctx)
         local list = Selectors:Call("shopping.activeList", state, ctx)
         if not list then return {} end
         local sweep = state.session.resolvers.catalog.tick
+        -- Only the wishlist hint below needs this. Entries that already carry an
+        -- npcID render the vendor they were resolved to -- ShoppingController
+        -- rewrites those on the store when the preference changes, so the
+        -- grouping and this hint stay in step without resolving twice.
+        local prefFaction  = Selectors:Call("shopping.neighborhood", state, ctx)
+        local preferredMap = prefFaction
+            and HDG.Constants.NEIGHBORHOOD_MAP_BY_FACTION[prefFaction] or nil
         local out = {}
         for _, entry in ipairs(list.items) do
             -- Drop non-housing items (reagents, crafting mats) that may have
@@ -249,7 +296,7 @@ Selectors:Register("shopping.activeListEntries", {
                         faction = meta.faction,
                     } or nil,
                     -- Wishlist (no npcID) render hint: where the catalog says it sells.
-                    availableFrom = (not entry.npcID) and _resolveWishlistVendor(entry.itemID) or nil,
+                    availableFrom = (not entry.npcID) and _resolveWishlistVendor(entry.itemID, preferredMap) or nil,
                     -- BoE = crafted (Professions) = the only AH-tradeable decor -> Auction House lane.
                     isTradeable = HDG.HousingCatalogObserver:GetBindTypeForItem(entry.itemID) == "BoE",
                 }
