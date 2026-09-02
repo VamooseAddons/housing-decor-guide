@@ -1,7 +1,7 @@
 -- HDGR_CatalogOverrides -- itemID-keyed field-level overrides applied to
 -- catalog rows at HousingCatalogObserver:BuildRow time.
 --
--- Two override categories supported per entry:
+-- Three override categories supported per entry:
 --
 --   1. Field-level field corrections -- correct KNOWN-WRONG values the
 --      catalog ships (typo, mis-tagged zone, faction-gate the catalog claims
@@ -18,7 +18,13 @@
 --        [256923] = { sources = { { type = 5, name = "Chel the Chip",
 --                                    detail = "Found at active Abundant Harvest" } } }
 --
--- Both can coexist on the same itemID. Sparse: items without overrides have
+--   3. Vendor removal -- the catalog names a merchant who does NOT stock the
+--      piece. `notSoldBy` lists that merchant's name(s) as the catalog spells
+--      them, and BuildRow drops those records from the item's vendor list.
+--      Nothing is added: the catalog keeps naming the real seller itself.
+--        [245405] = { notSoldBy = { "Ransa Greyfeather" } }
+--
+-- All three can coexist on the same itemID. Sparse: items without overrides have
 -- no entry. Override application is transparent to selectors -- observer
 -- applies inside BuildRow so downstream sees the corrected row directly.
 
@@ -45,6 +51,33 @@ HDGR_CatalogOverrides = {
     [263026] = { factionGate = { factionName = "Brawl'gar Arena", standing = "Rank 2" } },  -- Brawler's Barricade
     [259071] = { factionGate = { factionName = "Brawl'gar Arena", standing = "Rank 5" } },  -- Brawler's Guild Punching Bag
     [255840] = { factionGate = { factionName = "Brawl'gar Arena", standing = "Rank 7" } },  -- Champion Brawler's Gloves
+
+    -- ===== Thunder Totem: Ransa Greyfeather does not sell Torv Dubstomp's stock ==
+    -- The catalog's sourceText names Ransa Greyfeather, the Highmountain Tribe
+    -- emissary, as the FIRST seller of these twelve Highmountain pieces, with
+    -- Torv Dubstomp -- Thunder Totem's Decor Specialist, a few steps from her --
+    -- second at the same price (ProfTools catalog scan, 2026-09-02). She stocks
+    -- only the eight reputation-gated pieces (Tauren Waterwheel, Tauren
+    -- Windmill, Thunder Totem Kiln, Highmountain Totem, Stonebull Canoe, Small
+    -- Highmountain Drum, Riverbend Jar, Tauren Hanging Brazier); these twelve
+    -- are Torv's alone -- reganart bought them from him (Discord, 2026-09-02),
+    -- and Wowhead's merchant scans list them under Torv and not under her.
+    -- Two vendors of equal rank keep the catalog's order, so her name won the
+    -- decor card, the source line and a Shop by Vendor page. The three other
+    -- pieces he sells (Skyhorn Banner, Hanging Arrow Kite, Thunder Totem
+    -- Mailbox) already name him alone in the 12.1 catalog and need no entry.
+    [245405] = { notSoldBy = { "Ransa Greyfeather" } },  -- Large Highmountain Drum
+    [245409] = { notSoldBy = { "Ransa Greyfeather" } },  -- Dried Whitewash Corn
+    [245453] = { notSoldBy = { "Ransa Greyfeather" } },  -- Whitewash River Basket
+    [245456] = { notSoldBy = { "Ransa Greyfeather" } },  -- Warbrave's Brazier
+    [245457] = { notSoldBy = { "Ransa Greyfeather" } },  -- Riverbend Netting
+    [245460] = { notSoldBy = { "Ransa Greyfeather" } },  -- Skyhorn Storage Chest
+    [245461] = { notSoldBy = { "Ransa Greyfeather" } },  -- Tauren Vertical Windmill
+    [256913] = { notSoldBy = { "Ransa Greyfeather" } },  -- Tauren Jeweler's Roller
+    [257397] = { notSoldBy = { "Ransa Greyfeather" } },  -- Tauren Storyteller's Frame
+    [257721] = { notSoldBy = { "Ransa Greyfeather" } },  -- Skyhorn Arrow Kite
+    [257723] = { notSoldBy = { "Ransa Greyfeather" } },  -- Skyhorn Eagle Kite
+    [260698] = { notSoldBy = { "Ransa Greyfeather" } },  -- Kobold Trassure Pile
 
     -- Wooden Mug
     [239162] = { sources = { { type = 5, name = 'Peter', detail = 'Lunarfall', cost = { gold = 500000, currencies = { { id = 824, amount = 100 } } } }, { type = 5, name = 'Vora Strongarm', detail = 'Frostwall' } } },

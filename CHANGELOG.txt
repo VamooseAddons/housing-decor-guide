@@ -1,3 +1,31 @@
+## [3.31.2] - 2026-09-03 (September 2026)
+
+### Fixed
+- **The three-second freeze at login is gone, and so is the one at first open.**
+  Two things met. Since 3.31.1, the first read of the decor catalogue also
+  asked the game to match every achievement name it knows -- some four thousand
+  lookups, three seconds with the game held still -- so that achievement links
+  would work for decor the addon had no ID for. On 12.1 that turned out to be
+  eight pieces. The addon now ships those IDs, resolved from the game's own
+  data, and never asks the client to match names again: the same read that
+  took 3.2 seconds takes about a tenth of one. And since July the zone alert
+  had been triggering that read the moment a character logged in, so the
+  freeze landed on every character, every login. The catalogue is now left
+  alone at login, as everything else in the addon is, and is read when you
+  first open the window, visit a vendor or hover a decor tooltip; the alert for
+  the zone you are standing in fires at that point instead. Reported by
+  themindboggle.
+
+- **Torv Dubstomp's decor is no longer credited to Ransa Greyfeather.** Twelve
+  Highmountain pieces -- the Large Highmountain Drum, the Skyhorn kites, the
+  Skyhorn Storage Chest, the Tauren Vertical Windmill and eight more -- named
+  Ransa Greyfeather, the Highmountain Tribe emissary in Thunder Totem, as their
+  seller, and her Shop by Vendor page listed every one of them. She does not
+  stock them: she sells only the eight reputation pieces, and the twelve come
+  from Torv Dubstomp, the Decor Specialist a few steps from her. The decor card,
+  the source line and Shop by Vendor now all say Torv, and her page lists only
+  what she actually sells. Reported by reganart.
+
 ## [3.31.1] - 2026-09-02 (September 2026)
 
 ### Fixed

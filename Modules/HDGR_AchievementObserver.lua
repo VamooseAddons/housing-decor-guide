@@ -68,70 +68,18 @@ function R:OnAchievementEarned(achievementID)
     })
 end
 
--- ===== Name -> ID =========================================================
--- The housing catalog names an achievement and never gives its ID; ItemAugment
--- is the only ID source and covers 200 of them. Everything else rendered a dead
--- [ACH] link. The client knows all of them, so ask it instead of curating:
--- GetCategoryList answers COLD, with no Blizzard_AchievementUI loaded (170
--- categories on a fresh login, verified in-game 2026-08-31).
---
--- Both sides of the match are localised by the same client -- the catalog's
--- name and GetAchievementInfo's name -- so this works in every locale, which a
--- shipped name-keyed table could not.
---
--- AMBIGUOUS NAMES RESOLVE TO NOTHING. Achievements share names (faction pairs,
--- tiered series); mapping decor to one of them arbitrarily would look like it
--- worked, which is worse than the dead link it replaces. A duplicated name is
--- marked false here and returns nil, leaving that row exactly as it is today.
---
--- Built once, lazily, on the first name that needs it -- roughly 4,000 API
--- calls, so never at login and never per lookup.
-local _nameToID   -- nil = not built; [name] = id | false (ambiguous)
-
-local function _buildNameIndex()
-    _nameToID = {}
-    local cats = _G.GetCategoryList and _G.GetCategoryList()  -- exception(boundary): bare FrameXML global
-    if not cats then return end
-    local dupes = 0
-    for _, catID in ipairs(cats) do
-        local n = _G.GetCategoryNumAchievements(catID) or 0  -- exception(boundary): bare FrameXML global
-        for i = 1, n do
-            local id, name = _G.GetAchievementInfo(catID, i)  -- exception(boundary): bare FrameXML global
-            if id and name and name ~= "" then
-                local seen = _nameToID[name]
-                if seen == nil then
-                    _nameToID[name] = id
-                elseif seen ~= id and seen ~= false then
-                    _nameToID[name] = false   -- two IDs, one name: refuse both
-                    dupes = dupes + 1
-                end
-            end
-        end
-    end
-    HDG.Log:Debug("achievements",
-        ("name index built: %d categories, %d ambiguous name(s) left unlinked")
-        :format(#cats, dupes))
-end
-
--- The achievement ID for a name, or nil when unknown OR ambiguous.
-function R:ResolveIDByName(name)
-    if not name or name == "" then return nil end  -- exception(nullable): rows without an achievement
-    if not _nameToID then _buildNameIndex() end
-    local id = _nameToID[name]
-    if id == false then return nil end   -- ambiguous: never guess
-    return id
-end
+-- NO name -> ID index here. 3.31.1 built one from GetCategoryList /
+-- GetAchievementInfo (~4,000 by-index calls) inside the first catalog sweep;
+-- the owner's /hdgr perf measured it at 3,079 ms of a 3,168 ms sweep
+-- (2026-09-03) -- the whole freeze themindboggle reported. Achievement IDs
+-- ship in ItemAugment, resolved against the Achievement DB2 at rebuild time
+-- (housingdecorguide-tools/itemaugment/achievement_id_map.lua); the client is
+-- never asked to match a name.
 
 HDG.Modules:Declare({
     name = "AchievementObserver",
-    -- GetCategoryList / GetCategoryNumAchievements / GetAchievementInfo are bare
-    -- FrameXML globals, not a C_ namespace -- no claim to make (same footing as
-    -- ProfessionScanner's guild tradeskill globals).
     ownsBlizzardNamespaces = { "C_AchievementInfo" },
     dependencies = {},
-    logTags = {
-        achievements = { user = false, level = "info" },
-    },
     blizzardEvents = {
         ACHIEVEMENT_EARNED = { handler = "OnAchievementEarned",
                                requiresMainWindow = true },

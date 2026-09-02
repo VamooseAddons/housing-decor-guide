@@ -12,21 +12,13 @@
 
 ---
 
-## What's New in v3.31.1
+## What's New in v3.31.2
 
-A round of fixes, most of them reported from the Discord.
+Two fixes, both reported from the Discord.
 
-**Buying decor that goes to your bags no longer stalls.** Some vendors sell decor for gold that lands in your bags rather than in decor storage. The quantity picker only watched decor storage, so it waited for something that was never coming: the gold was spent, the item was in your bags, and it reported buying nothing. It now watches both.
+**The three-second freeze at login, and at first open, is gone.** Since 3.31.1 the first read of the decor catalogue also asked the game to match every achievement name it knows, four thousand lookups with the game held still, so that the achievement line on a decor card would link for pieces the addon had no identifier for. On 12.1 that came to eight pieces. Those identifiers now ship with the addon, taken from the game's own data, and the read that cost 3.2 seconds costs about a tenth of one. Since July the zone alert had been triggering that read the moment a character logged in, which put the freeze on every character; the catalogue is now left alone at login and read when you first open the window, visit a vendor or hover a decor tooltip.
 
-**The quantity picker works on every item at a vendor**, not only the first ten of a page. On a wider vendor window everything past the tenth item ignored the right-click and bought the ordinary way.
-
-**Dennia Silvertongue's shelves are no longer nearly empty.** Shop by Vendor listed seven of the thirty-four pieces she sells, because the game files the rest under a catch-all or under where the item first came from. Her Paw Pal range, the Sanctuary Chess set, the bottles, the ice chest and the Perch of the Dawnfire Phoenix now appear under her, with a map pin, while still showing their original source.
-
-**Decor sold in both neighbourhoods names both of them**, rather than one of them twice. Timicky, Taifa and the Cursed Keepsake each stand in Founder's Point as well as Razorwind Shores; all sixteen Kobold Endeavor pieces showed the same place on both lines. Each now has an entry per neighbourhood, with a map pin for each.
-
-**Clicking a decor's achievement opens the achievement window again.** The game names an achievement without giving its identifier, and the addon only knew a couple of hundred of them, so for the rest the link did nothing. It now asks the game to match the name, which covers every achievement and works in any language.
-
-**Opening the window at a house you have not captured yet no longer throws an error**, and looking up where a recipe comes from no longer makes the whole window redraw itself.
+**Torv Dubstomp's decor is credited to Torv Dubstomp.** Twelve Highmountain pieces, among them the Large Highmountain Drum, the Skyhorn kites and the Tauren Vertical Windmill, named Ransa Greyfeather as their seller, and her Shop by Vendor page listed every one of them. She sells the eight reputation pieces and nothing else. The rest come from Torv Dubstomp, the Decor Specialist standing a few steps from her in Thunder Totem.
 
 ---
 
@@ -119,7 +111,7 @@ A companion window injects into Blizzard's House Editor so you can **place decor
 ---
 
 **Author:** Vamoose
-**Version:** 3.31.1
+**Version:** 3.31.2
 **Game Version:** 12.1.0 (Midnight)
 **Source / Issues:** https://github.com/VamooseAddons/housing-decor-guide
 **Discord:** https://discord.gg/RWZaxJaHFP

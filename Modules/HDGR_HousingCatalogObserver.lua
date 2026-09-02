@@ -201,6 +201,64 @@ local function _indexVendorsFromRow(acc, row)
     end
 end
 
+-- ===== Sweep stage profiling ================================================
+-- Splits catalog.indexSweep into its stages WITH CALL COUNTS, so /hdgr perf can
+-- say which layer the time is in: the Blizzard entry read, the variant fetch,
+-- our parse, each bake group, the index stamp. The owner's 2026-09-03 login
+-- profile showed the whole sweep as one 3297 ms op (2045 entries) with nothing
+-- to say whether that was Blizzard's calls or ours. Live only during a timed
+-- sweep (_sweepProf is set by _OnSearcherResults under HDG.Perf:Enabled());
+-- every lap site is a single nil-check when perf is off. A stage's count is
+-- its denominator: "variants (225 calls)" reads as 225 fetches, not 2045 rows
+-- that did nothing.
+-- Every top-level stage is single-sided: entryInfo, variants, variantDyes and
+-- parseSource.strip are Blizzard calls; everything else is ours. The stages
+-- partition the sweep, and "~unlapped" is what the laps did not cover (the loop
+-- itself), so the report proves its own coverage instead of asserting it.
+-- "~clock" is the cost of reading the clock, the floor every per-call figure
+-- must be read against.
+local SWEEP_STAGES = {
+    "entryInfo", "rowTable", "variants", "parseSource", "overrides+augment",
+    "tags+category+placement", "vendors", "cost", "recipe+sourceTypes+bonus",
+    "variantDyes", "sourceTags", "index",
+}
+-- Nested inside parseSource: the C_StringUtil.StripHyperlinks half of the parse,
+-- one call per sourceText line. Reported on its own row, not part of the sum.
+local STRIP_STAGE = "parseSource.strip"
+local CLOCK_PROBE_READS = 1000
+local _sweepProf = nil   -- { ms = {stage=ms}, n = {stage=count} } during a timed sweep
+
+local function _lap(stage, t0)
+    local now = _G.debugprofilestop()
+    _sweepProf.ms[stage] = (_sweepProf.ms[stage] or 0) + (now - t0)
+    _sweepProf.n[stage]  = (_sweepProf.n[stage]  or 0) + 1
+    return now
+end
+
+local function _clockFloorMs()
+    local t0 = _G.debugprofilestop()
+    for _ = 1, CLOCK_PROBE_READS do _G.debugprofilestop() end
+    return _G.debugprofilestop() - t0
+end
+
+local function _reportSweepStages(perf, totalMs, entries)
+    local lapped = 0
+    for _, stage in ipairs(SWEEP_STAGES) do
+        local n = _sweepProf.n[stage]
+        if n then
+            perf:RecordOpQuiet(("catalog.sweep.%s (%d calls)"):format(stage, n), _sweepProf.ms[stage])
+            lapped = lapped + _sweepProf.ms[stage]
+        end
+    end
+    local strips = _sweepProf.n[STRIP_STAGE]
+    if strips then
+        perf:RecordOpQuiet(("catalog.sweep.%s (%d calls, inside parseSource)"):format(STRIP_STAGE, strips),
+                           _sweepProf.ms[STRIP_STAGE])
+    end
+    perf:RecordOpQuiet(("catalog.sweep.~unlapped (%d entries)"):format(entries), totalMs - lapped)
+    perf:RecordOpQuiet(("catalog.sweep.~clock (%d reads)"):format(CLOCK_PROBE_READS), _clockFloorMs())
+end
+
 -- Process one searcher entry: build the row, stamp the indexes, feed vendors.
 -- entryType must be a REAL member of Enum.HousingCatalogEntryType. Blizzard's
 -- argument validator rejects anything else and GetCatalogEntryInfo throws
@@ -246,7 +304,9 @@ local function _processEntry(acc, entry)
         acc.skippedPoisoned = (acc.skippedPoisoned or 0) + 1
         return
     end
+    local t = _sweepProf and _G.debugprofilestop()
     local info = _G.C_HousingCatalog.GetCatalogEntryInfo(entry)
+    if t then t = _lap("entryInfo", t) end
     if not info then return end
     -- (12.0.5+ searcher rows have no subtypeIdentifier -- the old variant-placeholder
     -- filter is gone with the compound-entryID era.)
@@ -254,11 +314,13 @@ local function _processEntry(acc, entry)
     -- info.recordID isn't always populated by the entry-info API; the entry
     -- itself carries it via the searcher result.
     info.recordID = info.recordID or rid
-    local row = R:BuildRow(info)
+    local row = R:BuildRow(info)   -- laps its own stages
+    if t then t = _G.debugprofilestop() end
     acc.byItemID[row.itemID] = row
     acc.byDecorID[rid]       = row
     if row.isOwned then acc.owned[rid] = true end
     _indexVendorsFromRow(acc, row)
+    if t then _lap("index", t) end
 end
 
 function R:_OnSearcherResults(searcher)
@@ -293,6 +355,7 @@ function R:_OnSearcherResults(searcher)
     local _perf  = HDG.Perf
     local _timed = _perf and _perf:Enabled()
     local _t0    = _timed and _G.debugprofilestop() or nil
+    _sweepProf   = _timed and { ms = {}, n = {} } or nil
     for _, entry in ipairs(items) do
         _processEntry(acc, entry)
     end
@@ -301,8 +364,10 @@ function R:_OnSearcherResults(searcher)
             :format(acc.skippedPoisoned))
     end
     if _timed then
-        _perf:RecordOp("catalog.indexSweep (" .. #items .. " entries)",
-                       _G.debugprofilestop() - _t0)
+        local totalMs = _G.debugprofilestop() - _t0
+        _perf:RecordOp("catalog.indexSweep (" .. #items .. " entries)", totalMs)
+        _reportSweepStages(_perf, totalMs, #items)
+        _sweepProf = nil
     end
     table.sort(acc.allVendorNames)
 
@@ -533,6 +598,7 @@ end
 -- Snapshots live state at sweep time; stale until next sweep/reload.
 -- Internal callers must never pass nil (strict read -- will throw on nil info).
 function R:BuildRow(info)
+    local t = _sweepProf and _G.debugprofilestop()
     local row = {
         -- identity
         itemID    = info.itemID,
@@ -587,6 +653,7 @@ function R:BuildRow(info)
     }
     -- isOwned: includes remainingRedeemable (unclaimed tokens count as owned).
     row.isOwned = (row.quantity + row.remainingRedeemable + row.numPlaced) > 0
+    if t then t = _lap("rowTable", t) end
 
     -- Dye variants for customizable items. API takes {recordID, entryType} table arg
     -- (not positional -- exception(boundary): positional args silently errored under old pcall).
@@ -600,12 +667,14 @@ function R:BuildRow(info)
         if type(variants) == "table" then
             row.variants = variants
         end
+        if t then t = _lap("variants", t) end
     end
 
     -- Parse sourceText into structured vendor/quest/achievement/category/
     -- factionGate fields. Sets row.vendors[], row.quest, row.achievement,
     -- row.category, row.factionGate. Pure; mutates row in place.
     R:_ParseSourceText(info.sourceText or "", row)
+    if t then t = _lap("parseSource", t) end
 
     -- Apply CatalogOverrides. Sparse: most items have no entry, :Get returns nil.
     -- Transparent to selectors: they see corrected rows directly without knowing
@@ -620,22 +689,29 @@ function R:BuildRow(info)
     -- Order matters: bakes that depend on others (gateLine reads gates,
     -- costLine reads costEntries) come after the producers.
     R:_bakeItemAugmentBackfill(row)  -- row.achievement / row.achievementID from aug.sources type=1
+    if t then t = _lap("overrides+augment", t) end
     R:_bakeTags(row)         -- row.expansion, row.sizeLabel, row.tags(+Label), row.dataTags
     R:_bakeCategory(row)     -- row.categoryLabel
     R:_bakePlacement(row)    -- row.placementLabel (budget icon prefixed)
+    if t then t = _lap("tags+category+placement", t) end
     R:_bakeVendors(row)      -- per-vendor enrichment + row.vendorLines[]
+    if t then t = _lap("vendors", t) end
     R:_bakeCost(row)         -- row.costEntries (unified) + row.costLine
+    if t then t = _lap("cost", t) end
     R:_bakeRecipe(row)       -- row.recipe + row.recipeLabel (MUST precede _bakeSourceTypes,
                              -- which reads row.recipe to assign sourceType=6 / CRAFTED)
     R:_bakeSourceTypes(row)  -- row.sourceType / sourceName / sourceDetail (vendor-first)
     R:_bakeBonusXp(row)      -- row.bonusXpLabel (first-acquisition reward chip)
+    if t then t = _lap("recipe+sourceTypes+bonus", t) end
     R:_bakeVariantDyes(row)  -- row.dyedVariants[] (per-owned-variant dye derivation)
+    if t and row.variants then t = _lap("variantDyes", t) end   -- only rows that had variants to walk
     -- Single canonical source/gate bake. Produces row.sourceTags[] in
     -- SOURCE_KIND_PRIORITY order; entries carry text + extras (factionPrefix,
     -- achievementID, ...) for kinds that have them, nothing for chip-only
     -- kinds (DROP, VENDOR, etc.). row.gateLine + row.primarySourceCode are
     -- thin derivations of sourceTags[1] kept for backward-compat consumers.
     R:_bakeSourceTags(row)
+    if t then _lap("sourceTags", t) end
 
     return row
 end
@@ -647,18 +723,14 @@ end
 -- type=1 sources. Runs before _bakeSourceTypes so downstream sees consistent ach data.
 -- The catalog "Achievement:" line gives a name but NEVER an achievementID; ItemAugment
 -- is the sole achievementID source -- without it the [ACH] hyperlink has no ID.
--- Last resort for the achievement ID: ask the client to match the NAME.
--- ItemAugment covers 200 achievements; the catalog names many more and never
--- gives their IDs, so those rendered a dead [ACH] link. AchievementObserver
--- builds a name->ID index from the live client (lazily, and only if something
--- here actually needs it), and refuses ambiguous names rather than guessing --
--- so a row either gets its real ID or stays exactly as it was.
-local function _resolveAchIDByName(row)
-    if row.achievementID then return end          -- exception(nullable): most rows have none
-    if not (row.achievement and row.achievement ~= "") then return end
-    row.achievementID = HDG.AchievementObserver:ResolveIDByName(row.achievement)
-end
-
+-- ItemAugment is the ONLY achievementID source, and it is complete: on 12.1
+-- the catalog names an achievement for 184 items and ItemAugment carries the
+-- ID for every one (achievement_id_map.lua resolves the catalog names against
+-- the Achievement DB2 at rebuild time). 3.31.1 instead asked the live client
+-- to match names -- ~4,000 by-index GetAchievementInfo calls -- inside the
+-- first sweep, which the owner's /hdgr perf measured at 3,079 of the sweep's
+-- 3,168 ms (2026-09-03): the whole "3 s freeze". Names are matched offline
+-- now, never in the client.
 function R:_bakeItemAugmentBackfill(row)
     local aug = HDG.StaticData.ItemAugment
                 and HDG.StaticData.ItemAugment:Get(row.itemID)
@@ -668,7 +740,7 @@ function R:_bakeItemAugmentBackfill(row)
             if not (row.achievement and row.achievement ~= "") then
                 row.achievement = s.name
             end
-            -- ID: ItemAugment is the FIRST source; always backfill.
+            -- ID: ItemAugment is the sole source; always backfill.
             row.achievementID = row.achievementID or s.achievementID
         elseif (s.type == 2 or s.type == 3) and s.questID then
             -- Quest/WQ ID(s). ItemAugment is the sole source (catalog gives name, never ID).
@@ -676,8 +748,6 @@ function R:_bakeItemAugmentBackfill(row)
             row.questID = row.questID or s.questID
         end
     end
-    -- After ItemAugment has had first refusal: ask the client to match the name.
-    _resolveAchIDByName(row)
 end
 
 -- _bakeTags: classify dataTagsByID into expansion / size / styles-or-factions / other.
@@ -775,6 +845,27 @@ local function _resolveVendorNpc(v, Aug)
     v.zone    = meta.zone or v.zone
 end
 
+-- _dropNotSoldBy: remove the vendors a CatalogOverride `notSoldBy` names. The
+-- catalog's sourceText sometimes lists a merchant who does not stock the piece:
+-- Ransa Greyfeather is named FIRST on twelve Highmountain pieces that only Torv
+-- Dubstomp, a few steps from her in Thunder Totem, sells (reganart, in-game
+-- 2026-09-02; Wowhead's merchant scans of both NPCs agree). Two routable
+-- vendors tie in VendorRank and keep the catalog's order, so that phantom name
+-- won the decor card, the source line and a Shop by Vendor page of its own.
+-- Only REMOVAL is curated: the catalog names the real seller itself. Runs after
+-- the override-source fold so it sees the whole list, and matches the catalog's
+-- English name the way every name in the overrides file does.
+local function _dropNotSoldBy(row)
+    if not row.notSoldBy then return end  -- exception(optional): sparse override field; most rows have none
+    local drop = {}
+    for _, who in ipairs(row.notSoldBy) do drop[who] = true end
+    local keep = {}
+    for _, v in ipairs(row.vendors) do
+        if not drop[v.name] then keep[#keep + 1] = v end
+    end
+    row.vendors = keep
+end
+
 function R:_bakeVendors(row)
     -- Fold CatalogOverride vendors (row.sources type=5) into row.vendors so the whole
     -- pipeline -- the zone/faction filters, the per-item vendor display, AND the byVendor
@@ -789,6 +880,7 @@ function R:_bakeVendors(row)
         end
     end
     if not row.vendors then row.vendors, row.vendorLines = {}, {}; return end
+    _dropNotSoldBy(row)
     local Aug = HDG.StaticData.VendorAugment
     local lines = {}
     for _, v in ipairs(row.vendors) do
@@ -1326,7 +1418,9 @@ function R:_ParseSourceText(sourceText, row)
     -- Tracks the active Drop:/Treasure:/Event: record so the following Zone: line can fill .zone.
     local pendingZoneTarget = nil
     for raw in rawText:gmatch("[^\n]+") do
+        local ts = _sweepProf and _G.debugprofilestop()
         local line = SHL(raw, false, false, false, false, false)
+        if ts then _lap(STRIP_STAGE, ts) end
         line = line:match("^%s*(.-)%s*$") or line  -- trim
         local vName    = line:match("^Vendors?:%s*(.+)")  -- matches Vendor: AND Vendors:
         local zone     = line:match("^Zone:%s*(.+)")

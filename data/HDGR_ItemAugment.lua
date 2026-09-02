@@ -13,7 +13,7 @@
 --       },
 --   }
 -- Sparse: items with no augmentable field have NO entry.
--- Generated 2026-06-06 20:14:55 by housingdecorguide-tools/itemaugment/rebuild_item_augment.lua
+-- Generated 2026-09-03 08:47:24 by housingdecorguide-tools/itemaugment/rebuild_item_augment.lua
 -- ============================================================================
 
 HDGR_ItemAugment = {
@@ -415,6 +415,7 @@ HDGR_ItemAugment = {
     [248942] = { sources = { { type = 1, achievementID = 60986, name = "Raise an Army for the Temple of Five Dawns" } } },
     [248958] = { sources = { { type = 1, achievementID = 42275, name = "The Grandmaster's Campaign" } } },
     [248960] = { sources = { { type = 1, achievementID = 42281, name = "The Netherlord's Campaign" } } },
+    [248962] = { sources = { { type = 1, achievementID = 63432, name = "Mysterious Mix Master" } } },
     [248965] = { sources = { { type = 11, name = "Midnight Jewelcrafting (50)", detail = "Recipe drops from Eversong Treasures (Saltheril's Soiree event)" } } },
     [249143] = { sources = { { type = 11, name = "Cataclysm Jewelcrafting (60)" } } },
     [249457] = { sources = { { type = 1, achievementID = 42288, name = "Hidden Potential of the Slayer" } } },
@@ -859,6 +860,7 @@ HDGR_ItemAugment = {
     [263302] = { sources = { { type = 10, name = "Promotion" } } },
     [263303] = { sources = { { type = 10, name = "Promotion" } } },
     [263315] = { sources = { { type = 2, questID = 88994, name = "The Cauldron of Echoes" } } },
+    [263873] = { sources = { { type = 1, achievementID = 63358, name = "Coiled to Strike" } } },
     [263997] = { sources = { { type = 1, achievementID = 42788, name = "Alchemizing at Midnight" } } },
     [263998] = { sources = { { type = 1, achievementID = 42792, name = "Blacksmithing at Midnight" } } },
     [263999] = { sources = { { type = 1, achievementID = 42795, name = "Cooking at Midnight" } } },
@@ -1012,10 +1014,16 @@ HDGR_ItemAugment = {
     [268049] = { sources = { { type = 4, name = "Crown of the Cosmos", detail = "The Voidspire" } } },
     [268550] = { sources = { { type = 12, name = "Blizzard Shop" } } },
     [269269] = { sources = { { type = 4, name = "Alleria Windrunner", detail = "The Voidspire" } } },
-    [269316] = { sources = { { type = 1, achievementID = 61083, name = "Highly Decorated" } } },  -- Bartender Bob's Rack: achievement unlock (extra copies from Morta Gage -- see CatalogOverrides)
+    [269316] = { sources = { { type = 1, achievementID = 61083, name = "Highly Decorated" } } },
+    [271971] = { sources = { { type = 1, achievementID = 61442, name = "Lorewalking: The Loa" } } },
     [273135] = { factionID = 2792, minRep = 3, factionName = "Ritual Sites" },
     [273142] = { factionID = 2792, minRep = 3, factionName = "Ritual Sites" },
     [273147] = { factionID = 2792, minRep = 3, factionName = "Ritual Sites" },
     [273157] = { factionID = 2792, minRep = 3, factionName = "Ritual Sites" },
     [273159] = { factionID = 2792, minRep = 3, factionName = "Ritual Sites" },
+    [276083] = { sources = { { type = 1, achievementID = 63325, name = "Omnium Folio Studies" } } },
+    [278369] = { sources = { { type = 1, achievementID = 63451, name = "Scales for Days" } } },
+    [278372] = { sources = { { type = 1, achievementID = 63452, name = "Fangs for the Memories" } } },
+    [278376] = { sources = { { type = 1, achievementID = 63454, name = "Nine, Ten, Never Sleep Again" } } },
+    [278380] = { sources = { { type = 1, achievementID = 63453, name = "One, Two, Ral'kala's Coming for You" } } },
 }

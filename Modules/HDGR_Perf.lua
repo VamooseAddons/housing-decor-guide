@@ -92,6 +92,13 @@ function P:RecordOp(name, ms)
     self:Mark(name, ms, "op")   -- also land it on the chronological boot timeline
 end
 
+-- Same accumulator, no timeline entry: for the per-stage split of an op that
+-- already carries its own mark (the catalog sweep's stages), so the boot
+-- timeline keeps one line per sweep instead of a dozen at the same instant.
+function P:RecordOpQuiet(name, ms)
+    _bump(self._op, name, ms)
+end
+
 -- Refresh-pipeline stage (PrepareContext/Bind/Layout/...). Not added to timeline (many-per-flush).
 function P:RecordStage(name, ms)
     _bump(self._stage, name, ms)

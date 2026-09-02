@@ -86,14 +86,17 @@ function Z:CheckAlerts()
     -- popup-show. boundary -- single Blizzard API call in this module.
     local inCombat = _G.InCombatLockdown and _G.InCombatLockdown() or false
 
-    -- Catalog is load-on-demand: on a fresh login nothing sweeps it until HDG
-    -- opens, so a cold catalog would silence zone alerts entirely. Request the
-    -- sweep (idempotent) and let the DECOR_CATALOG_READY re-check below fire the
-    -- alert -- same self-warming as the recipe capture.
-    if not HDG.HousingCatalogObserver:IsReady() then
-        HDG.HousingCatalogObserver:RequestLoad("zoneScanner")
-        return
-    end
+    -- A COLD CATALOG STAYS COLD. Nothing here may sweep it: the catalog loads
+    -- when a feature asks (window open, merchant, decor tooltip) and never at
+    -- login -- ADR-043, owner ruling 2026-07-11. ZoneObserver dispatches
+    -- ZONE_CHANGED from PLAYER_ENTERING_WORLD and zone alerts default on, so
+    -- from 2026-07-17 (a self-warm added so a fresh login could alert at once)
+    -- until 3.31.1 EVERY character login ran the full sweep in one frame:
+    -- /hdgr perf, 2026-09-03 -- catalog.indexSweep (2045 entries) 3297 ms,
+    -- requestedBy=zoneScanner; themindboggle's 3-4 s login freeze.
+    -- Bail WITHOUT marking: the DECOR_CATALOG_READY re-check fires this zone's
+    -- alert the moment the catalog does load.
+    if not HDG.HousingCatalogObserver:IsReady() then return end
     local hasUnc  = HDG.Selectors:Call("zone.hasUncollectedItems", state, {})
     local hasSL   = HDG.Selectors:Call("zone.hasShoppingListItems", state, {})
     -- Catalog swept but zone has nothing -- bail WITHOUT marking, so a
