@@ -176,43 +176,43 @@ HDGR_CatalogOverrides = {
     -- Lush Garden Fungal Fountain
     [258888] = { sources = { { type = 12, name = 'In-Game Shop' } } },
     -- Paw Pal Water Dish
-    [259044] = { sources = { { type = 12, name = 'In-Game Shop' } } },
+    [259044] = { sources = { { type = 12, name = 'In-Game Shop' }, { type = 5, name = 'Dennia Silvertongue', detail = 'Silvermoon City' } } },
     -- Paw Pal Bed and Blanket
-    [259045] = { sources = { { type = 12, name = 'In-Game Shop' } } },
+    [259045] = { sources = { { type = 12, name = 'In-Game Shop' }, { type = 5, name = 'Dennia Silvertongue', detail = 'Silvermoon City' } } },
     -- Paw Pal Bed
-    [259046] = { sources = { { type = 12, name = 'In-Game Shop' } } },
+    [259046] = { sources = { { type = 12, name = 'In-Game Shop' }, { type = 5, name = 'Dennia Silvertongue', detail = 'Silvermoon City' } } },
     -- Sanctuary's Chess Match
-    [259057] = { sources = { { type = 10, name = 'Promotional', detail = 'Diablo IV: Lord of Hatred' } } },
+    [259057] = { sources = { { type = 10, name = 'Promotional', detail = 'Diablo IV: Lord of Hatred' }, { type = 5, name = 'Dennia Silvertongue', detail = 'Silvermoon City' } } },
     -- Sanctuary's Chess Board
-    [259058] = { sources = { { type = 10, name = 'Promotional', detail = 'Diablo IV: Lord of Hatred' } } },
+    [259058] = { sources = { { type = 10, name = 'Promotional', detail = 'Diablo IV: Lord of Hatred' }, { type = 5, name = 'Dennia Silvertongue', detail = 'Silvermoon City' } } },
     -- Sanctuary Chess Dark Bishop
-    [259059] = { sources = { { type = 10, name = 'Promotional', detail = 'Diablo IV: Lord of Hatred' } } },
+    [259059] = { sources = { { type = 10, name = 'Promotional', detail = 'Diablo IV: Lord of Hatred' }, { type = 5, name = 'Dennia Silvertongue', detail = 'Silvermoon City' } } },
     -- Sanctuary Chess Dark Rook
-    [259060] = { sources = { { type = 10, name = 'Promotional', detail = 'Diablo IV: Lord of Hatred' } } },
+    [259060] = { sources = { { type = 10, name = 'Promotional', detail = 'Diablo IV: Lord of Hatred' }, { type = 5, name = 'Dennia Silvertongue', detail = 'Silvermoon City' } } },
     -- Sanctuary Chess Dark Queen
-    [259061] = { sources = { { type = 10, name = 'Promotional', detail = 'Diablo IV: Lord of Hatred' } } },
+    [259061] = { sources = { { type = 10, name = 'Promotional', detail = 'Diablo IV: Lord of Hatred' }, { type = 5, name = 'Dennia Silvertongue', detail = 'Silvermoon City' } } },
     -- Sanctuary Chess Dark Pawn
-    [259062] = { sources = { { type = 10, name = 'Promotional', detail = 'Diablo IV: Lord of Hatred' } } },
+    [259062] = { sources = { { type = 10, name = 'Promotional', detail = 'Diablo IV: Lord of Hatred' }, { type = 5, name = 'Dennia Silvertongue', detail = 'Silvermoon City' } } },
     -- Sanctuary Chess Dark Knight
-    [259063] = { sources = { { type = 10, name = 'Promotional', detail = 'Diablo IV: Lord of Hatred' } } },
+    [259063] = { sources = { { type = 10, name = 'Promotional', detail = 'Diablo IV: Lord of Hatred' }, { type = 5, name = 'Dennia Silvertongue', detail = 'Silvermoon City' } } },
     -- Sanctuary Chess Dark King
-    [259064] = { sources = { { type = 10, name = 'Promotional', detail = 'Diablo IV: Lord of Hatred' } } },
+    [259064] = { sources = { { type = 10, name = 'Promotional', detail = 'Diablo IV: Lord of Hatred' }, { type = 5, name = 'Dennia Silvertongue', detail = 'Silvermoon City' } } },
     -- Sanctuary Chess Light Bishop
-    [259065] = { sources = { { type = 10, name = 'Promotional', detail = 'Diablo IV: Lord of Hatred' } } },
+    [259065] = { sources = { { type = 10, name = 'Promotional', detail = 'Diablo IV: Lord of Hatred' }, { type = 5, name = 'Dennia Silvertongue', detail = 'Silvermoon City' } } },
     -- Sanctuary Chess Light Rook
-    [259066] = { sources = { { type = 10, name = 'Promotional', detail = 'Diablo IV: Lord of Hatred' } } },
+    [259066] = { sources = { { type = 10, name = 'Promotional', detail = 'Diablo IV: Lord of Hatred' }, { type = 5, name = 'Dennia Silvertongue', detail = 'Silvermoon City' } } },
     -- Sanctuary Chess Light Queen
-    [259067] = { sources = { { type = 10, name = 'Promotional', detail = 'Diablo IV: Lord of Hatred' } } },
+    [259067] = { sources = { { type = 10, name = 'Promotional', detail = 'Diablo IV: Lord of Hatred' }, { type = 5, name = 'Dennia Silvertongue', detail = 'Silvermoon City' } } },
     -- Sanctuary Chess Light Pawn
-    [259068] = { sources = { { type = 10, name = 'Promotional', detail = 'Diablo IV: Lord of Hatred' } } },
+    [259068] = { sources = { { type = 10, name = 'Promotional', detail = 'Diablo IV: Lord of Hatred' }, { type = 5, name = 'Dennia Silvertongue', detail = 'Silvermoon City' } } },
     -- Sanctuary Chess Light Knight
-    [259069] = { sources = { { type = 10, name = 'Promotional', detail = 'Diablo IV: Lord of Hatred' } } },
+    [259069] = { sources = { { type = 10, name = 'Promotional', detail = 'Diablo IV: Lord of Hatred' }, { type = 5, name = 'Dennia Silvertongue', detail = 'Silvermoon City' } } },
     -- Sanctuary Chess Light King
-    [259070] = { sources = { { type = 10, name = 'Promotional', detail = 'Diablo IV: Lord of Hatred' } } },
+    [259070] = { sources = { { type = 10, name = 'Promotional', detail = 'Diablo IV: Lord of Hatred' }, { type = 5, name = 'Dennia Silvertongue', detail = 'Silvermoon City' } } },
     -- Paw Pal Dog House Frame
-    [259093] = { sources = { { type = 12, name = 'In-Game Shop' } } },
+    [259093] = { sources = { { type = 12, name = 'In-Game Shop' }, { type = 5, name = 'Dennia Silvertongue', detail = 'Silvermoon City' } } },
     -- Paw Pal Dog House Elwynn Roof
-    [259094] = { sources = { { type = 12, name = 'In-Game Shop' } } },
+    [259094] = { sources = { { type = 12, name = 'In-Game Shop' }, { type = 5, name = 'Dennia Silvertongue', detail = 'Silvermoon City' } } },
     -- Miniature Replica Dark Portal
     [260785] = { sources = { { type = 5, name = 'Gabbi', detail = 'Orgrimmar', cost = { gold = 15000000 } }, { type = 5, name = 'Tuuran', detail = 'Stormwind City' }, { type = 5, name = 'Dennia Silvertongue', detail = 'Silvermoon City' } } },
     -- Spring Blossom Tree
@@ -220,7 +220,7 @@ HDGR_CatalogOverrides = {
     -- Spring Blossom Tree Pond
     [263291] = { sources = { { type = 12, name = 'In-Game Shop' } } },
     -- Corked Bottle of Liquid Mystery (promo, NOT Shop -- catalog mis-tags as Shop/World Vendors)
-    [263383] = { shop = false, sources = { { type = 10, name = 'Promotional' } } },
+    [263383] = { shop = false, sources = { { type = 10, name = 'Promotional' }, { type = 5, name = 'Dennia Silvertongue', detail = 'Silvermoon City' } } },
     -- Midnight Alchemist's Shop Sign
     [263997] = { sources = { { type = 5, name = 'Melaris', detail = 'Silvermoon City', cost = { gold = 50000 } }, { type = 1, name = 'Alchemizing at Midnight', detail = 'Professions' } } },
     -- Midnight Blacksmith's Shop Sign
@@ -246,17 +246,19 @@ HDGR_CatalogOverrides = {
     -- Three-Tier Zul'Aman Shelf
     [264254] = { sources = { { type = 5, name = 'Chel the Chip', detail = 'Found at active Abundant Harvest', cost = { currencies = { { id = 3377, amount = 800 } } } } } },
     -- Paw Pal Dog House Durotar Roof
-    [264275] = { sources = { { type = 12, name = 'In-Game Shop' } } },
+    [264275] = { sources = { { type = 12, name = 'In-Game Shop' }, { type = 5, name = 'Dennia Silvertongue', detail = 'Silvermoon City' } } },
     -- Paw Pal Dog House Eversong Roof
-    [264276] = { sources = { { type = 12, name = 'In-Game Shop' } } },
+    [264276] = { sources = { { type = 12, name = 'In-Game Shop' }, { type = 5, name = 'Dennia Silvertongue', detail = 'Silvermoon City' } } },
     -- Paw Pal Dog House Shadowglen Roof
-    [264277] = { sources = { { type = 12, name = 'In-Game Shop' } } },
+    [264277] = { sources = { { type = 12, name = 'In-Game Shop' }, { type = 5, name = 'Dennia Silvertongue', detail = 'Silvermoon City' } } },
     -- Sturdy Portable Ice Chest (promo, NOT Shop -- catalog mis-tags as Shop/World Vendors)
-    [264278] = { shop = false, sources = { { type = 10, name = 'Promotional' } } },
+    [264278] = { shop = false, sources = { { type = 10, name = 'Promotional' }, { type = 5, name = 'Dennia Silvertongue', detail = 'Silvermoon City' } } },
+    -- Perch of the Dawnfire Phoenix
+    [276873] = { sources = { { type = 5, name = 'Dennia Silvertongue', detail = 'Silvermoon City' } } },
     -- Tall Corked Bottle of Liquid Mystery (promo)
-    [264279] = { shop = false, sources = { { type = 10, name = 'Promotional' } } },
+    [264279] = { shop = false, sources = { { type = 10, name = 'Promotional' }, { type = 5, name = 'Dennia Silvertongue', detail = 'Silvermoon City' } } },
     -- Short Corked Bottle of Liquid Mystery (promo)
-    [264280] = { shop = false, sources = { { type = 10, name = 'Promotional' } } },
+    [264280] = { shop = false, sources = { { type = 10, name = 'Promotional' }, { type = 5, name = 'Dennia Silvertongue', detail = 'Silvermoon City' } } },
     -- Bluebird's Golden Cage
     [264282] = { sources = { { type = 12, name = 'In-Game Shop' } } },
     -- Amani Ritual Altar

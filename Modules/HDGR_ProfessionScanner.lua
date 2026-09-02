@@ -710,9 +710,14 @@ end
 -- Lives HERE because this module is the declared sole owner of C_TradeSkillUI
 -- (ADR-011, boot-validated disjoint) -- the parse itself is a pure Core file.
 --
--- The getter is SYNCHRONOUS and answers cold, so there is no request to make
--- and nothing to wait for; the tick exists only so a card that asked before the
--- first fill repaints once. Memoised per spellID, and MISSES ARE MEMOISED TOO
+-- The getter is SYNCHRONOUS and answers cold: the first call already returns the
+-- answer, so there is NO tick and NO dispatch here. The first cut copied
+-- ItemNameResolver's resolve-and-tick shape -- which exists because item info
+-- arrives ASYNCHRONOUSLY -- and fired a store action on every first fill. Since
+-- this is read from a selector and from a tooltip build, that put an
+-- invalidate-and-repaint in the middle of a paint, once per newly-seen recipe,
+-- nested (Store:Dispatch has no reentrancy guard). Shipped in 3.31.0 and
+-- reported as the window being laggy. Memoised per spellID, and MISSES TOO
 -- (as `false`): about 1 recipe in 20 has no acquisition data, and without a
 -- negative entry those would re-ask the API on every repaint forever.
 --
@@ -732,7 +737,6 @@ function PS:GetRecipeSource(spellID)
         and _G.C_TradeSkillUI.GetRecipeSourceText(spellID) or nil
     local parsed = HDG.RecipeSourceParse.Parse(raw)
     _recipeSource[spellID] = parsed or false
-    HDG.Store:Dispatch({ type = HDG.Constants.ACTIONS.RECIPE_SOURCE_RESOLVED })
     return parsed
 end
 

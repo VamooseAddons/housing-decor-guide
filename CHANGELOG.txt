@@ -1,3 +1,62 @@
+## [3.31.1] - 2026-09-02 (September 2026)
+
+### Fixed
+- **Decor sold in both neighbourhoods names both of them, instead of one twice.**
+  Timicky, Taifa and the Cursed Keepsake each stand in Founder's Point as well
+  as Razorwind Shores, but the addon only knew one of the two -- so the other's
+  listing landed on the wrong record and had its neighbourhood overwritten, and
+  the item showed the same vendor and place on both lines. All sixteen Kobold
+  Endeavor pieces did this. Each now has an entry in both neighbourhoods, with
+  a map pin for each, where before three of those six entries had no
+  coordinates at all. Reported by reganart.
+
+- **Opening the window at a house you have not captured yet no longer throws an
+  error.** The Architect's Section view worked out how wide to draw the house
+  from the rooms it knows about, but decided whether there was anything to draw
+  from the number of floors the game reports -- so standing at a house with
+  nothing captured gave it a floor to draw and no width to draw it at. Reported
+  by gnucleargnome, who hit it opening the window from a zone alert.
+
+- **Dennia Silvertongue's shelves are no longer nearly empty.** Shop by Vendor
+  listed seven of the thirty-four pieces she sells: the game files the rest
+  under a catch-all "World Vendors", or under where the item first came from --
+  the in-game shop, a Diablo IV promotion -- and never mention her. Her Paw Pal
+  range, the whole Sanctuary Chess set, the bottles, the ice chest and the Perch
+  of the Dawnfire Phoenix are now listed under her, with a map pin and a
+  waypoint, while still showing where they originally came from. Reported by
+  Vamoose.
+
+- **The quantity picker now works on every item at a vendor, not just the first
+  ten.** It was only attached to the first ten slots of a merchant page, so on a
+  UI that shows a wider vendor window everything past the tenth item quietly
+  ignored the right-click and bought the ordinary way instead. Reported by
+  Vamoose, who could open it on the first painting at Dennia Silvertongue but
+  not on the Dark Portal three rows down.
+
+- **Buying decor that goes to your bags no longer stalls.** Some vendors sell
+  decor for gold that arrives in your bags rather than in decor storage. The
+  picker only watched decor storage for a gold purchase, so it waited for
+  something that was never coming: the gold was spent, the item was in your
+  bags, and it reported buying nothing. It now watches both, whatever you paid
+  with. Reported by Alora at Dennia Silvertongue.
+
+- **Clicking a decor's achievement opens the achievement again.** The game's
+  catalog names an achievement but never gives its ID, and the addon only knew
+  the IDs for a couple of hundred of them -- so for everything else the [ACH]
+  line offered to open the achievement window and then did nothing at all. It
+  now asks the game itself to match the name, which covers every achievement
+  and works in any language. Where a name belongs to more than one achievement
+  it stays unlinked rather than opening the wrong one, and an achievement it
+  still cannot place reads as plain text instead of promising a click.
+
+### Changed
+- **Looking up where a recipe comes from no longer repaints the window.** It
+  announced itself the first time it saw each recipe, which told everything on
+  screen to redraw -- from inside the redraw that had just asked the question.
+  The lookup answers instantly and had nothing to announce. Worth a few
+  milliseconds a time rather than anything you would have noticed, but it was
+  work the addon was doing for no reason.
+
 ## [3.31.0] - 2026-08-31 (August 2026)
 
 ### Added
@@ -31,7 +90,7 @@
 - **Decor from the in-game shop or a promotion says so when you copy a
   blueprint's list.** 3.30.0 taught that list about delves, treasures and
   events and stopped one step short of these two, so a Naturally Elegant
-  Doormat still copied out with nothing after its name. Found by Vamoose.
+  Doormat still copied out with nothing after its name.
 
 ## [3.30.0] - 2026-08-29 (August 2026)
 
@@ -215,8 +274,8 @@
   and the Ruins of Gilneas -- was only ever listed in one, because the addon kept just the
   last place the game named and quietly dropped the rest. Around 30 vendor listings come
   back, each with its own location. Some of the restored ones have no map coordinates yet,
-  so they list without a pin until someone walks them. Found by Vamoose, who kept pointing
-  at a vendor standing in Razorwind Shores that the addon insisted was in Founder's Point.
+  so they list without a pin until someone walks them. It showed up as a vendor standing
+  in Razorwind Shores that the addon insisted was in Founder's Point.
 - **The Pets tab could come up empty, and offer to summon a pet already standing
   next to you.** After a reload it waited for the game to volunteer a pet-journal
   update before building its list, which on a quiet login never came -- so the tab

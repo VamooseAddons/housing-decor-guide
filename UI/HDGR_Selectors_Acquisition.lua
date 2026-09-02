@@ -1719,7 +1719,18 @@ end
 -- hover handlers read achievementID / name off the same row). Earned -> append
 -- a live checkmark (AchievementObserver, gated by achievementStatus.tick).
 local function _buildAchSourceLine(id, prefix, chip, t, row)
-    local line = string.format("%s%s  |cffffff00|Hhdgrach:%d|h[%s]|h|r", prefix, chip, id, t.text)
+    -- LINK ONLY WHEN THERE IS AN ID TO OPEN. The catalog's "Achievement:" line
+    -- gives a NAME and never an achievementID (_bakeItemAugmentBackfill says so:
+    -- ItemAugment is the sole ID source), so a row backed only by catalog text
+    -- has nothing to click through to. The click handler already returns early
+    -- on the missing ID -- silently -- so linking anyway offered a highlight and
+    -- a "Click to open Achievement window" tooltip for a click that could never
+    -- work (Preyhunter's Terror Effigy, reported 2026-08-31). Unlinked, it is
+    -- still named; it just stops promising.
+    local body = row.achievementID
+        and string.format("|cffffff00|Hhdgrach:%d|h[%s]|h|r", id, t.text)
+        or  string.format("[%s]", t.text)
+    local line = string.format("%s%s  %s", prefix, chip, body)
     if row.achievementID and HDG.AchievementObserver:IsEarned(row.achievementID) then
         line = line .. "  |A:common-icon-checkmark:14:14|a"
     end

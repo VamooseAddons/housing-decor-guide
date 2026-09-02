@@ -12,15 +12,21 @@
 
 ---
 
-## What's New in v3.31.0
+## What's New in v3.31.1
 
-**The Architect can show your whole house at once.** A new Section view draws every floor stacked in place, seen from an angle, with dashed lines running up through the stairwells that join them. A floor plan shows one storey at a time, so what sits between floors, and whether your stairs line up, was the one thing it could not show you. Click a floor's label to drop back into its plan and keep building. The button sits beside Capture all floors. This view is still being built out, and more of it will arrive in later releases.
+A round of fixes, most of them reported from the Discord.
 
-**Crafted decor says where its recipe comes from.** The decor detail card gains a Recipe line under the profession, naming the trainer, vendor and zone, or whatever else the pattern comes from. The Recipes tab tooltip lists every source a recipe has, with the cost shown in its own coins and currency icons. The answer is read from the profession book as you look rather than stored, so it stays correct as the game changes. 305 of the 325 craftable pieces have one.
+**Buying decor that goes to your bags no longer stalls.** Some vendors sell decor for gold that lands in your bags rather than in decor storage. The quantity picker only watched decor storage, so it waited for something that was never coming: the gold was spent, the item was in your bags, and it reported buying nothing. It now watches both.
 
-**A copied requirements list says which neighbourhood its vendors are for.** The copy window carries an Alliance/Horde switch, and the copied text gains a "Vendors listed for:" line naming the side it was written for. Some decor is sold by differently-named traders in Founder's Point and Razorwind Shores, so a shared list that does not say which it means sends half its readers to the wrong place. Flipping the switch rewrites the list in front of you before you copy it, and the choice applies to that export only.
+**The quantity picker works on every item at a vendor**, not only the first ten of a page. On a wider vendor window everything past the tenth item ignored the right-click and bought the ordinary way.
 
-**Decor from the in-game shop or a promotion now says so** when you copy a blueprint's list. Delves, treasures and events were covered in 3.30.0; these two were not, so a piece like the Naturally Elegant Doormat copied out with nothing after its name.
+**Dennia Silvertongue's shelves are no longer nearly empty.** Shop by Vendor listed seven of the thirty-four pieces she sells, because the game files the rest under a catch-all or under where the item first came from. Her Paw Pal range, the Sanctuary Chess set, the bottles, the ice chest and the Perch of the Dawnfire Phoenix now appear under her, with a map pin, while still showing their original source.
+
+**Decor sold in both neighbourhoods names both of them**, rather than one of them twice. Timicky, Taifa and the Cursed Keepsake each stand in Founder's Point as well as Razorwind Shores; all sixteen Kobold Endeavor pieces showed the same place on both lines. Each now has an entry per neighbourhood, with a map pin for each.
+
+**Clicking a decor's achievement opens the achievement window again.** The game names an achievement without giving its identifier, and the addon only knew a couple of hundred of them, so for the rest the link did nothing. It now asks the game to match the name, which covers every achievement and works in any language.
+
+**Opening the window at a house you have not captured yet no longer throws an error**, and looking up where a recipe comes from no longer makes the whole window redraw itself.
 
 ---
 
@@ -113,7 +119,7 @@ A companion window injects into Blizzard's House Editor so you can **place decor
 ---
 
 **Author:** Vamoose
-**Version:** 3.31.0
+**Version:** 3.31.1
 **Game Version:** 12.1.0 (Midnight)
 **Source / Issues:** https://github.com/VamooseAddons/housing-decor-guide
 **Discord:** https://discord.gg/RWZaxJaHFP

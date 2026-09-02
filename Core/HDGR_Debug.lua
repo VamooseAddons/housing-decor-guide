@@ -390,7 +390,14 @@ function D:CostDump(rest)
     _print(("costdump %d: %s"):format(id, row.name or "?"))
     _G.print(("  vendors: %d"):format(row.vendors and #row.vendors or 0))  -- exception(nullable): vendors list optional
     for i, v in ipairs(row.vendors or {}) do
-        _G.print(("    [%d] %s | cost=%q | costEntries=%s"):format(i, tostring(v.name), tostring(v.cost), ceStr(v.costEntries)))
+        -- ZONE + npcID per entry. Two records that resolved to the SAME zone are
+        -- the signature of a vendor missing one of its per-zone augment rows:
+        -- the second zone falls back to the first's npcID and gets its zone
+        -- stamped over the catalog's (see the multi-zone vendor note in
+        -- _flushVendor). Without these two fields the duplicate is invisible.
+        _G.print(("    [%d] %s | zone=%s | npcID=%s | cost=%q | costEntries=%s"):format(
+            i, tostring(v.name), tostring(v.zone), tostring(v.npcID),
+            tostring(v.cost), ceStr(v.costEntries)))
     end
     _G.print("  row.costEntries: " .. ceStr(row.costEntries))
     _G.print("  row.costLine: " .. tostring(row.costLine))
@@ -398,6 +405,15 @@ function D:CostDump(rest)
     local tags = ""
     for _, t in ipairs(row.sourceTags or {}) do tags = tags .. "[" .. tostring(t.kind) .. "]" end
     _G.print("  sourceTags: " .. (tags ~= "" and tags or "none"))
+    -- THE RAW STRING, last and unabridged. Everything above is HDG's own parse,
+    -- which reports our bugs back as if they were Blizzard's data -- so a
+    -- vendor-attribution question can only be settled against this line.
+    -- |n is the WoW escape, not a newline; rendered as " // " to keep it on one
+    -- chat line.
+    local e = _G.C_HousingCatalog and row.decorID
+        and _G.C_HousingCatalog.GetCatalogEntryInfoByRecordID(1, row.decorID)  -- exception(boundary): live catalog getter; nil pre-sweep
+    local raw = e and e.sourceText
+    _G.print("  RAW sourceText: " .. (raw and raw ~= "" and raw:gsub("|n", " // ") or "(empty)"))
     local info = row.decorID and _G.C_HousingCatalog
              and _G.C_HousingCatalog.GetCatalogEntryInfoByRecordID(1, row.decorID)
     if info and info.sourceText and info.sourceText ~= "" then

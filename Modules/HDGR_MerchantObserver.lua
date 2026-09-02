@@ -71,14 +71,26 @@ end
 -- delegates to Blizzard's original handler. Restored verbatim on close so the
 -- frame is never left altered. Gated behind MERCHANT_QTY_PICKER so a patch that
 -- re-templates the buttons can be worked around with one toggle.
-local MERCHANT_PAGE_BUTTONS = 10   -- MerchantItem1..10ItemButton (Blizzard fixed set)
+-- DISCOVER the buttons; do not assume how many there are. Blizzard's stock page
+-- is MERCHANT_ITEMS_PER_PAGE = 10, but a UI that widens the merchant frame gets
+-- MerchantItem11ItemButton and beyond -- and a hardcoded 1..10 left those without
+-- the override, so the quantity picker worked on the first ten items of a page
+-- and fell through to ordinary buying on every one after them. At Dennia
+-- Silvertongue that was the picker opening for slot 1 and not for slot 11 of the
+-- same page (owner, in-game 2026-09-01).
+--
+-- The cap is a runaway guard, not a page size: stop at the first missing button.
+-- Removal iterates _origClicks by button, so it restores exactly what was
+-- installed however many that turned out to be.
+local MERCHANT_BUTTON_SCAN_CAP = 60
 
 local function _installClickOverrides()
     if not HDG.Config:Get("MERCHANT_QTY_PICKER") then return end
     MO._origClicks = MO._origClicks or {}
-    for i = 1, MERCHANT_PAGE_BUTTONS do
+    for i = 1, MERCHANT_BUTTON_SCAN_CAP do
         local btn = _G["MerchantItem" .. i .. "ItemButton"]
-        if btn and not MO._origClicks[btn] then   -- exception(boundary): Blizzard may re-template merchant buttons in a patch
+        if not btn then break end   -- exception(boundary): first gap ends the frame's button run
+        if not MO._origClicks[btn] then   -- exception(boundary): Blizzard may re-template merchant buttons in a patch
             local orig = btn:GetScript("OnClick")
             MO._origClicks[btn] = orig or false   -- false = "had no handler" (still restore to nil)
             btn:SetScript("OnClick", function(self, mouseButton, down)

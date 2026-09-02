@@ -647,17 +647,28 @@ end
 -- type=1 sources. Runs before _bakeSourceTypes so downstream sees consistent ach data.
 -- The catalog "Achievement:" line gives a name but NEVER an achievementID; ItemAugment
 -- is the sole achievementID source -- without it the [ACH] hyperlink has no ID.
+-- Last resort for the achievement ID: ask the client to match the NAME.
+-- ItemAugment covers 200 achievements; the catalog names many more and never
+-- gives their IDs, so those rendered a dead [ACH] link. AchievementObserver
+-- builds a name->ID index from the live client (lazily, and only if something
+-- here actually needs it), and refuses ambiguous names rather than guessing --
+-- so a row either gets its real ID or stays exactly as it was.
+local function _resolveAchIDByName(row)
+    if row.achievementID then return end          -- exception(nullable): most rows have none
+    if not (row.achievement and row.achievement ~= "") then return end
+    row.achievementID = HDG.AchievementObserver:ResolveIDByName(row.achievement)
+end
+
 function R:_bakeItemAugmentBackfill(row)
     local aug = HDG.StaticData.ItemAugment
                 and HDG.StaticData.ItemAugment:Get(row.itemID)
-    if not (aug and aug.sources) then return end
-    for _, s in ipairs(aug.sources) do
+    for _, s in ipairs((aug and aug.sources) or {}) do
         if s.type == 1 and s.name and s.name ~= "" then
             -- Name: catalog parse wins for display; only fill when absent.
             if not (row.achievement and row.achievement ~= "") then
                 row.achievement = s.name
             end
-            -- ID: ItemAugment is the sole source; always backfill.
+            -- ID: ItemAugment is the FIRST source; always backfill.
             row.achievementID = row.achievementID or s.achievementID
         elseif (s.type == 2 or s.type == 3) and s.questID then
             -- Quest/WQ ID(s). ItemAugment is the sole source (catalog gives name, never ID).
@@ -665,6 +676,8 @@ function R:_bakeItemAugmentBackfill(row)
             row.questID = row.questID or s.questID
         end
     end
+    -- After ItemAugment has had first refusal: ask the client to match the name.
+    _resolveAchIDByName(row)
 end
 
 -- _bakeTags: classify dataTagsByID into expansion / size / styles-or-factions / other.

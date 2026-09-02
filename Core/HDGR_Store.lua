@@ -5472,13 +5472,16 @@ HDG.Resolver:Register{ name = "catalog", facade = "HousingCatalogObserver",
 -- selectors declare the read so shipped-data deps flow through read-tracking
 -- like any state path (ADR-003c). Reserved for hot-reload / dev-tool override.
 -- Recipe acquisition text. ProfessionScanner:GetRecipeSource reads the live
--- (undocumented) C_TradeSkillUI.GetRecipeSourceText and parses it; the tick
--- bumps the first time a given recipe fills, so a detail card that asked before
--- the answer existed repaints with it. Method-scoped: the scanner already hosts
--- the profession facade, and this is a second, separate answer from it.
-HDG.Resolver:Register{ name = "recipeSource",
-    facade = { module = "ProfessionScanner", method = "GetRecipeSource" },
-    actions = { { name = "RECIPE_SOURCE_RESOLVED" } } }
+-- (undocumented) C_TradeSkillUI.GetRecipeSourceText and parses it.
+--
+-- STATIC (species D marker, tick stays 0): the getter is synchronous and answers
+-- cold, so the first read already has the answer and nothing arrives later to
+-- repaint for. Registering it with a bump action instead meant a dispatch per
+-- newly-seen recipe from inside a paint -- the 3.31.0 lag. The marker still
+-- exists so selectors declare the dependency and the sweep's facade cross-check
+-- keeps working.
+HDG.Resolver:RegisterStatic{ name = "recipeSource",
+    facade = { module = "ProfessionScanner", method = "GetRecipeSource" } }
 
 HDG.Resolver:RegisterStatic{ name = "staticData", facade = "StaticData" }
 

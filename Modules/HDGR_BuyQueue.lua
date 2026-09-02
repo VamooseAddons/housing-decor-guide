@@ -103,18 +103,28 @@ function Q:Enqueue(rows)
                         -- Separate from itemID on purpose: itemID drives the
                         -- shopping-list decrement, bagItemID only counts bags.
                         bagItemID = r.bagItemID or r.itemID,
-                        -- toBags: coupon-bought decor arrives in BAGS, not decor
-                        -- storage (owner, in-game 2026-08-21), so this unit's
-                        -- confirmation is a bag-count rise, not a storage row.
+                        -- toBags: the EXPECTED destination, used only to word a
+                        -- stall message. It is not a gate -- see _bagItemID
+                        -- below, which watches bags for every run regardless.
                         toBags = (r.couponPrice or 0) > 0 }
         end
     end
     self._flat, self._total, self._done, self._running = flat, total, 0, true
     self._stopReason = nil   -- a fresh run owns its own outcome
-    -- Coupon runs are COUNTED, not confirmed unit-by-unit. One item per run (the
-    -- picker is the only caller that prices in coupons), so how many arrived is
-    -- just "how many are in bags now, minus how many were there when we started".
-    self._bagItemID = flat[1] and flat[1].toBags and flat[1].bagItemID or nil  -- exception(nullable): gold run, counted from storage signals
+    -- BAGS ARE WATCHED FOR EVERY RUN, whatever it was paid with.
+    --
+    -- This used to be gated on toBags, i.e. on the item having a coupon price --
+    -- inferring WHERE a purchase lands from HOW IT WAS PAID FOR. Dennia
+    -- Silvertongue sells gold-priced decor that goes straight to the player's
+    -- bags and never reaches decor storage, so a gold run watched only the
+    -- storage signal, which could not arrive: the gold was spent, the item was
+    -- in the bags, and the picker reported "0 items purchased" after its full
+    -- 8s stall (Alora + owner, in-game 2026-08-31).
+    --
+    -- Payment method is not destination. Both signals mean the same thing --
+    -- the purchase arrived -- and accepting either fails safe where accepting
+    -- one fails shut, which is the rule the coupon path already followed.
+    self._bagItemID = flat[1] and flat[1].bagItemID or nil  -- exception(nullable): rows without an itemID (index-only enqueue)
     self._bagStart  = self._bagItemID and HDG.BagObserver:GetBagCount(self._bagItemID) or 0
     self._landed = 0   -- units CONFIRMED in storage; _done is units INITIATED
     _dispatchProgress(total, 0)

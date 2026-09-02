@@ -820,10 +820,23 @@ Selectors:Register("projects.sectionModel", {
             if not maxF or declared > maxF then maxF = declared end
         end
 
-        if not minF then
+        -- NOTHING TO DRAW: no floor at all, or floors with no rooms in them.
+        --
+        -- Both have to be tested, because they are set by different loops. The
+        -- X/Y bounds come only from the ROOM loop above, while the declared-floor
+        -- block just before this sets minF = 1 unconditionally from the LIVE
+        -- game's floor count. So a player standing at a house with nothing
+        -- captured yet has minF = 1 and no bounds at all -- and guarding on minF
+        -- alone let that through to `maxX + 1` on nil (gnucleargnome, in-game
+        -- 2026-09-01, opening the window from a zone alert's [View] link).
+        --
+        -- floorMin/floorMax carry the real range rather than a hardcoded 1, so a
+        -- three-storey shell with nothing placed still reports three storeys.
+        if not minF or not minX then
             return { empty = true, floors = {}, shafts = {},
                      bbox = { minX = 0, maxX = 0, minY = 0, maxY = 0, cols = 1, rows = 1 },
-                     floorMin = 1, floorMax = 1, selectedFloor = nav.selectedFloor }
+                     floorMin = minF or 1, floorMax = maxF or 1,
+                     selectedFloor = nav.selectedFloor }
         end
 
         local shafts = {}

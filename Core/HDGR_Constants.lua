@@ -1025,7 +1025,6 @@ HDG.Constants = {
         SHOPPING_ITEM_ADJUST_QTY   = "HDGR_SHOPPING_ITEM_ADJUST_QTY",   -- payload: { listID?, itemID, npcID?, delta }  (relative; +/- buttons, removes at <=0)
         SHOPPING_RESOLVE_VENDORS   = "HDGR_SHOPPING_RESOLVE_VENDORS",   -- payload: { listID, resolutions = {[itemID]=npcID} }
         SHOPPING_SET_NEIGHBORHOOD  = "HDGR_SHOPPING_SET_NEIGHBORHOOD",  -- payload: { value = "alliance"|"horde" }
-        RECIPE_SOURCE_RESOLVED     = "HDGR_RECIPE_SOURCE_RESOLVED",     -- tick: a recipe's acquisition text was read + parsed
         SHOPPING_WIDGET_TOGGLE     = "HDGR_SHOPPING_WIDGET_TOGGLE",
 
         -- ===== Vendor buying (spec docs/HDGR_VENDOR_BUYING_SPEC.md) =====
