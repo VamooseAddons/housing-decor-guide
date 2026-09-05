@@ -288,6 +288,7 @@ local function _buildCardRow(entry, displayName, state, catalogReady, selectedID
         kind         = "card",
         collectionID = entry.id,
         type         = entry.type,
+        categoryID   = def.categoryID,   -- nil = not in a category; A's menu checks the current radio from this
         displayName  = displayName,
         subtitle     = def.description or nil,
         isSelected   = selectedID == entry.id,
@@ -308,12 +309,100 @@ local function _buildCardRow(entry, displayName, state, catalogReady, selectedID
     }
 end
 
+-- ===== My Styles categories (spec HDGR_STYLE_CATEGORIES_SPEC_2026-09-04 s4.1) =====
+
+-- Name (case-insensitive) then seq: a total order even after rename has made
+-- two categories share a name (spec 2.4).
+local function _sortedStyleCategories(cats)
+    local out = {}
+    for _, cat in pairs(cats) do out[#out + 1] = cat end
+    table.sort(out, function(a, b)
+        local an, bn = a.name:lower(), b.name:lower()
+        if an ~= bn then return an < bn end
+        return a.seq < b.seq
+    end)
+    return out
+end
+
+-- Bucket style entries by categoryID. A categoryID that is not a key of the
+-- registry is "not a category any more" -> loose. That is the answer, not a guard.
+local function _bucketStylesByCategory(styleEntries, cats)
+    local byCat, loose = {}, {}
+    for id in pairs(cats) do byCat[id] = {} end
+    for _, entry in ipairs(styleEntries) do
+        local bucket = byCat[entry.def.categoryID]
+        if bucket then bucket[#bucket + 1] = entry else loose[#loose + 1] = entry end
+    end
+    return byCat, loose
+end
+
+local function _entryMatches(entry, needle)
+    return not needle or tostring(_entryDisplayName(entry)):lower():find(needle, 1, true) ~= nil
+end
+
+-- Emit the cards of one flat list (the pre-category path and the other five sections).
+local function _emitCards(out, entries, needle, state, catalogReady, selectedID)
+    for _, entry in ipairs(entries) do
+        if _entryMatches(entry, needle) then
+            out[#out + 1] = _buildCardRow(entry, _entryDisplayName(entry), state, catalogReady, selectedID)
+        end
+    end
+end
+
+-- Emit one group row (category or the loose fold) and, when open, its cards.
+-- forceOpen (chip / needle) is a read-only override of the remembered flag.
+local function _emitGroup(out, row, members, remembered, needle, forceOpen, state, catalogReady, selectedID)
+    local matches = members
+    if needle then
+        matches = {}
+        for _, entry in ipairs(members) do
+            if _entryMatches(entry, needle) then matches[#matches + 1] = entry end
+        end
+        if #matches == 0 then return end
+        row.matchCount = #matches
+    end
+    row.forcedOpen = (needle ~= nil) or forceOpen
+    row.expanded   = row.forcedOpen or remembered
+    out[#out + 1] = row
+    if row.expanded then
+        for _, entry in ipairs(matches) do
+            local card = _buildCardRow(entry, _entryDisplayName(entry), state, catalogReady, selectedID)
+            card.indented = true   -- one indent stop under a category row or the fold (spec 5.1)
+            out[#out + 1] = card
+        end
+    end
+end
+
+-- The My Styles body: loose fold first, then categories. Zero categories = the
+-- plain card list, byte-identical to 3.31.2.
+local function _emitMyStylesBody(out, styleEntries, needle, forceOpen, state, catalogReady, selectedID)
+    local cats = state.account.styleCategories
+    if next(cats) == nil then
+        _emitCards(out, styleEntries, needle, state, catalogReady, selectedID)
+        return
+    end
+    local expandedCats = state.account.ui.styles.landing.expandedCategories
+    local byCat, loose = _bucketStylesByCategory(styleEntries, cats)
+    if #loose > 0 then
+        _emitGroup(out, { kind = "category", categoryID = "loose", isLoose = true, count = #loose, canAdd = false },
+                   loose, expandedCats["loose"] == true, needle, forceOpen, state, catalogReady, selectedID)
+    end
+    for _, cat in ipairs(_sortedStyleCategories(cats)) do
+        local members = byCat[cat.id]
+        _emitGroup(out, { kind = "category", categoryID = cat.id, isLoose = false, label = cat.name,
+                          count = #members, canAdd = #loose > 0 },
+                   members, expandedCats[cat.id] == true, needle, forceOpen, state, catalogReady, selectedID)
+    end
+end
+
 Selectors:Register("styles.landing.rows", {
     reads = {
         "session.ui.styles.landing.filter",
         "session.ui.styles.landing.search",
-        "session.ui.styles.landing.expandedSections",
         "session.ui.styles.selectedID",
+        "account.ui.styles.landing.expandedSections",
+        "account.ui.styles.landing.expandedCategories",
+        "account.styleCategories",
         "account.collections",
         "account.vendorShoppingLists",       -- vendor-tab shopping lists (separate slot)
         "session.styles.changeSeq",
@@ -323,9 +412,9 @@ Selectors:Register("styles.landing.rows", {
     -- Without this, section-header counts would go stale on account.collections mutations.
     calls = { "styles.collectionsByType" },
     fn = function(state)
-        local filter        = state.session.ui.styles.landing.filter or "all"
+        local filter        = state.session.ui.styles.landing.filter   -- seeded "all", always written by SET_FILTER
         local search        = (state.session.ui.styles.landing.search):lower()
-        local expanded      = state.session.ui.styles.landing.expandedSections
+        local expanded      = state.account.ui.styles.landing.expandedSections
         local selectedID    = state.session.ui.styles.selectedID
         local counts        = Selectors:Call("styles.collectionsByType", state, {})
         local catalogReady  = HDG.HousingCatalogObserver:IsReady()
@@ -334,6 +423,14 @@ Selectors:Register("styles.landing.rows", {
         local out = {}
         for _, s in ipairs(LANDING_SECTIONS) do
             if filter == "all" or filter == s.type then
+                -- A type chip is the guaranteed path to every card: it force-opens
+                -- the section AND, for My Styles, every category and the fold.
+                -- Resolved BEFORE the header literal: the chevron and the header's
+                -- "+ New Category" both paint from row.expanded, so the header has
+                -- to report the state the body is emitted in, not the raw flag --
+                -- otherwise the chip hides the only way to make a first category.
+                local chipForced      = filter == s.type
+                local sectionExpanded = expanded[s.type] == true or chipForced
                 out[#out + 1] = {
                     kind        = "header",
                     type        = s.type,
@@ -341,22 +438,55 @@ Selectors:Register("styles.landing.rows", {
                     subtitle    = s.subtitle,
                     countSuffix = s.countSuffix or "style",
                     count       = counts[s.type] or 0,  -- exception(boundary): sparse map
-                    expanded    = expanded[s.type] == true,
+                    expanded    = sectionExpanded,
+                    -- The chip is the only force on a SECTION (a needle force-opens
+                    -- groups inside My Styles, never the section itself), so the wire
+                    -- has one flag to read before it writes the remembered one.
+                    forcedOpen  = chipForced,
                 }
-                -- Card rows under expanded sections (or always when a
-                -- specific-type filter is active -- single-section view is
-                -- effectively "expanded by default").
-                local sectionExpanded = expanded[s.type] == true or filter == s.type
                 if sectionExpanded then
-                    for _, entry in ipairs(byType[s.type] or {}) do
-                        local displayName = _entryDisplayName(entry)
-                        if not needle or tostring(displayName):lower():find(needle, 1, true) then
-                            out[#out + 1] = _buildCardRow(entry, displayName, state, catalogReady, selectedID)
-                        end
+                    if s.type == "style" then
+                        _emitMyStylesBody(out, byType.style, needle, chipForced, state, catalogReady, selectedID)
+                    else
+                        _emitCards(out, byType[s.type] or {}, needle, state, catalogReady, selectedID)
                     end
                 end
             end
         end
+        return out
+    end,
+})
+
+-- Feeds A's per-style "File into" menu.
+Selectors:Register("styles.landing.categoryChoices", {
+    reads = { "account.styleCategories" },
+    fn = function(state)
+        local out = {}
+        for _, cat in ipairs(_sortedStyleCategories(state.account.styleCategories)) do
+            out[#out + 1] = { id = cat.id, name = cat.name }
+        end
+        return out
+    end,
+})
+
+-- Feeds B's "+ Add styles" menu ITEM LIST (fixed at open time). Built from the
+-- SAME buckets the landing fold is built from -- _buildSectionBuckets types an
+-- entry, _bucketStylesByCategory decides loose -- so the menu and the fold can
+-- never disagree about which styles are loose. (Routing on an "style:" id prefix
+-- here was a third rule: a colon-less id types as "style" in the fold but failed
+-- the prefix test, so it was uncloseable from this menu.)
+Selectors:Register("styles.landing.looseStyles", {
+    reads = { "account.collections", "account.styleCategories",
+              "account.vendorShoppingLists",   -- _buildSectionBuckets walks it too
+              "session.styles.changeSeq" },
+    fn = function(state)
+        local byType = _buildSectionBuckets(state)
+        local _, loose = _bucketStylesByCategory(byType.style, state.account.styleCategories)
+        local out = {}
+        for _, entry in ipairs(loose) do
+            out[#out + 1] = { collectionID = entry.id, displayName = _entryDisplayName(entry) }
+        end
+        table.sort(out, function(a, b) return tostring(a.displayName):lower() < tostring(b.displayName):lower() end)
         return out
     end,
 })

@@ -16,6 +16,36 @@ HDG.Controllers = HDG.Controllers or {}
 -- Headers use only _labelFs/_subtitleFs/_countFs.
 local _CARD_HEIGHT = 32   -- card row height (bumped from 22 for HDG parity)
 local _HDR_HEIGHT  = 28
+local _CAT_HEIGHT  = 26   -- category row / loose fold (spec 5.1)
+
+-- Defined in the menus section below (Task 6); forward-declared so the row
+-- painters can reference them without reordering the file.
+local _openFileIntoMenu, _openAddStylesMenu
+
+-- Rename + trash on a category row: alpha 0 at rest, 1 while the pointer is on
+-- the row or on the buttons themselves. Card/header rows keep them hidden anyway.
+local function _setCategoryHoverAlpha(row, over)
+    local a = over and 1 or 0
+    row._catRenameBtn:SetAlpha(a)
+    row._catDeleteBtn:SetAlpha(a)
+end
+
+-- Cross-kind hygiene on pooled rows: each painter hides the other kinds' widgets,
+-- so a row recycled from another kind cannot leave a stray button behind.
+local function _hideCardWidgets(row)
+    row._iconTex:Hide()
+    row._countCardFs:Hide()
+    row._pbBg:Hide(); row._pbFill:Hide(); row._pbFrame:Hide()
+    row._urlBtn:Hide()
+    for i = 1, 6 do row._previewTexs[i]:Hide() end
+    for _, ab in pairs(row._actionBtns) do ab:Hide() end
+end
+
+local function _hideCategoryWidgets(row)
+    row._catAddBtn:Hide()
+    row._catRenameBtn:Hide()
+    row._catDeleteBtn:Hide()
+end
 
 local function _layoutLandingRow(row)
     -- Shared text fields (used by both card and header rows).
@@ -29,23 +59,27 @@ local function _layoutLandingRow(row)
 
     local count = HDG.UI.RowText(row, "small", "TextDim", "RIGHT")
     row._countFs = count
+    -- Right-anchored count for header and category rows. (Never anchored before
+    -- this feature, so section counts were painted into the void.)
+    count:SetPoint("RIGHT", row, "RIGHT", -10, 0)
 
     -- Card-only widgets -------------------------------------------------------
     -- 36x36 collection icon (top-left of card).
     local icon = row:CreateTexture(nil, "ARTWORK", nil, 2)
     icon:SetSize(36, 36)
-    icon:SetPoint("TOPLEFT", row, "TOPLEFT", 6, -(_CARD_HEIGHT - 36) / 2 - 1)
+    -- Anchored per-paint in _paintLandingCard: the indent stop under a category
+    -- row shifts it, so the painter is the single writer of its position.
     icon:Hide()
     row._iconTex = icon
 
     -- 6x 24px preview icons, right-anchored (total 6*24 + 5*2 = 154px).
-    -- Leave 58px gap before the 3 action buttons (3*18 + 2*2 + 4 = 62px).
+    -- Leave 82px before the 4 action buttons (4*18 + 3*2 + 4 = 82px).
     row._previewTexs = {}
     for i = 1, 6 do
         local tex = row:CreateTexture(nil, "ARTWORK", nil, 2)
         tex:SetSize(24, 24)
         if i == 1 then
-            tex:SetPoint("RIGHT", row, "RIGHT", -216, 0)
+            tex:SetPoint("RIGHT", row, "RIGHT", -236, 0)
         else
             tex:SetPoint("LEFT", row._previewTexs[i - 1], "RIGHT", 2, 0)
         end
@@ -102,9 +136,10 @@ local function _layoutLandingRow(row)
     -- Action buttons: Edit, Export, Delete (atlas-icon, right-edge cluster).
     -- Action buttons: wired below in _wireLandingCard.
     local _actionDefs = {
-        { key = "edit",   atlas = "common-icon-zoomin",       tip = "Edit"   },
-        { key = "export", atlas = "common-icon-forwardarrow", tip = "Export" },
-        { key = "delete", atlas = "common-icon-delete",       tip = "Delete" },
+        { key = "category", atlas = "communities-chat-icon-plus", recipe = "StylesCategoryFile" },
+        { key = "edit",     atlas = "common-icon-zoomin",         tip = "Edit"   },
+        { key = "export",   atlas = "common-icon-forwardarrow",   tip = "Export" },
+        { key = "delete",   atlas = "common-icon-delete",         tip = "Delete" },
     }
     row._actionBtns = {}
     local btnSize, btnGap = 18, 2
@@ -115,7 +150,55 @@ local function _layoutLandingRow(row)
         ab:SetFrameLevel(row:GetFrameLevel() + 5)
         ab:Hide()
         row._actionBtns[ad.key] = ab
+        if ad.recipe then HDG.TooltipEngine:Attach(ab, HDG.TooltipRecipes[ad.recipe]) end
     end
+
+    -- Header-only: "+ New Category" sits left of the count on the My Styles bar.
+    local newCatBtn = HDG.UI:Button(row, HDG.Locale:Get("STY_LANDING_NEW_CATEGORY"), "small")
+    -- _intrinsicWidth is stamped by HDG.UI:Button; the type checker cannot see
+    -- through the factory, hence the disable-line (repo convention, not a default).
+    newCatBtn:SetSize(newCatBtn._intrinsicWidth, 20)  ---@diagnostic disable-line: undefined-field
+    newCatBtn:SetPoint("RIGHT", count, "LEFT", -10, 0)
+    newCatBtn:SetFrameLevel(row:GetFrameLevel() + 5)
+    newCatBtn:Hide()
+    HDG.TooltipEngine:Attach(newCatBtn, HDG.TooltipRecipes.StylesCategoryNew)
+    row._newCatBtn = newCatBtn
+
+    -- Category-only cluster, right edge: [trash] [Rename] [+ Add styles].
+    -- Add styles is always visible (it is the row's verb); Rename and trash reveal on hover.
+    local addBtn = HDG.UI:Button(row, HDG.Locale:Get("STY_LANDING_ADD_STYLES"), "small")
+    addBtn:SetSize(addBtn._intrinsicWidth, 20)  ---@diagnostic disable-line: undefined-field
+    addBtn:SetPoint("RIGHT", count, "LEFT", -10, 0)
+    addBtn:SetFrameLevel(row:GetFrameLevel() + 5)
+    addBtn:Hide()
+    HDG.TooltipEngine:Attach(addBtn, HDG.TooltipRecipes.StylesCategoryAdd)
+    row._catAddBtn = addBtn
+
+    local renameBtn = HDG.UI:Button(row, HDG.Locale:Get("STY_LANDING_RENAME"), "small")
+    renameBtn:SetSize(renameBtn._intrinsicWidth, 20)  ---@diagnostic disable-line: undefined-field
+    renameBtn:SetPoint("RIGHT", addBtn, "LEFT", -4, 0)
+    renameBtn:SetFrameLevel(row:GetFrameLevel() + 5)
+    renameBtn:Hide()
+    HDG.TooltipEngine:Attach(renameBtn, HDG.TooltipRecipes.StylesCategoryRename)
+    row._catRenameBtn = renameBtn
+
+    local delBtn = HDG.UI:AtlasButton(row, "common-icon-delete", 18)
+    delBtn:SetPoint("RIGHT", renameBtn, "LEFT", -4, 0)
+    delBtn:SetFrameLevel(row:GetFrameLevel() + 5)
+    delBtn:Hide()
+    HDG.TooltipEngine:Attach(delBtn, HDG.TooltipRecipes.StylesCategoryDelete)
+    row._catDeleteBtn = delBtn
+
+    -- Hover-reveal for Rename/trash: the row and both buttons share one handler so
+    -- moving from the row onto a button does not flicker (the row's OnLeave fires
+    -- when the pointer enters a child; IsMouseOver stays true).
+    local function _hover() _setCategoryHoverAlpha(row, row:IsMouseOver()) end
+    row:SetScript("OnEnter", _hover)
+    row:SetScript("OnLeave", _hover)
+    renameBtn:HookScript("OnEnter", _hover)
+    renameBtn:HookScript("OnLeave", _hover)
+    delBtn:HookScript("OnEnter", _hover)
+    delBtn:HookScript("OnLeave", _hover)
 end
 
 -- ===== _paintLandingCard =====================================================
@@ -128,8 +211,11 @@ local function _paintLandingCard(row, ed)
     -- Name on a single, vertically-centered line; the subtitle now follows it
     -- inline (was a second stacked line). LEFT-only anchor lets the name
     -- auto-size so the subtitle can sit immediately after it.
+    local inset = ed.indented and 16 or 0   -- one indent stop under a category row / the fold (spec 5.1)
+    row._iconTex:ClearAllPoints()
+    row._iconTex:SetPoint("TOPLEFT", row, "TOPLEFT", 6 + inset, -(_CARD_HEIGHT - 36) / 2 - 1)
     if ed.hideIcon then
-        row._labelFs:SetPoint("LEFT", row, "LEFT", 10, 0)   -- no icon (rule-based set): name starts at the left
+        row._labelFs:SetPoint("LEFT", row, "LEFT", 10 + inset, 0)   -- no icon (rule-based set): name starts at the left
     else
         row._labelFs:SetPoint("LEFT", row._iconTex, "RIGHT", 8, 0)
     end
@@ -223,12 +309,58 @@ local function _paintLandingCard(row, ed)
     end
 
     -- Action buttons: show only on editable types; per ACTION RULE wiring deferred.
+    if row._actionBtns.category then row._actionBtns.category:SetShown(ed.canEdit == true) end
     if row._actionBtns.edit   then row._actionBtns.edit:SetShown(ed.canEdit   == true) end
     if row._actionBtns.export then row._actionBtns.export:SetShown(ed.canExport == true) end
     if row._actionBtns.delete then row._actionBtns.delete:SetShown(ed.canDelete == true) end
 
+    _hideCategoryWidgets(row)
+    row._newCatBtn:Hide()
+
     HDG.Theme:Register(row, "RowWoodBeam", { alpha = 0.5 })  -- scheme-invariant: register first
     HDG.Theme:Register(row, "RowChrome",   { selected = ed.isSelected == true })  -- scheme-dependent: must win
+end
+
+-- ===== _paintLandingCategory =================================================
+-- Category row (or the loose fold). Flat header band, no wood beam, 22px label
+-- indent, text-glyph chevron (the Trainers idiom). Single writer of every
+-- category widget; hides the card cluster and the header button.
+local function _paintLandingCategory(row, ed)
+    HDG.UI.applyFontRole(row._labelFs, "body")
+    HDG.Theme:Register(row._labelFs, "Text")
+    row._labelFs:ClearAllPoints()
+    row._labelFs:SetPoint("LEFT", row, "LEFT", 22, 0)
+    local prefix = ed.expanded and "v " or "> "
+    if ed.isLoose then
+        row._labelFs:SetText(HDG.Theme:ColorCode("text.dim") .. prefix
+            .. HDG.Locale:Get("STY_LANDING_LOOSE") .. "|r")
+    else
+        row._labelFs:SetText(prefix .. ed.label)
+    end
+    row._labelFs:SetWordWrap(false)
+    HDG.UI.ClearRowText(row, "_subtitleFs")
+    row._subtitleFs:Hide()
+    if ed.matchCount then
+        row._countFs:SetText(string.format(HDG.Locale:Get("STY_LANDING_MATCH_FMT"), ed.matchCount, ed.count))
+    elseif ed.count == 1 then
+        row._countFs:SetText(HDG.Locale:Get("STY_LANDING_COUNT_ONE"))
+    else
+        row._countFs:SetText(string.format(HDG.Locale:Get("STY_LANDING_COUNT_FMT"), ed.count))
+    end
+    _hideCardWidgets(row)
+    row._newCatBtn:Hide()
+    row._catAddBtn:SetShown(ed.canAdd == true)
+    row._catRenameBtn:SetShown(not ed.isLoose)
+    row._catDeleteBtn:SetShown(not ed.isLoose)
+    -- Live pointer state, not false: a repaint under a stationary pointer (the
+    -- row's own toggle dispatch, or any invalidate of the landing list) must keep
+    -- the reveal -- OnEnter cannot re-fire from inside the frame.
+    _setCategoryHoverAlpha(row, row:IsMouseOver())
+    -- Beam at alpha 0, not omitted: the skinner only ever SetAlphas the pooled
+    -- texture and never hides it, so a row that was a card a moment ago would keep
+    -- its woodsign under the flat band. WoodBeam first, RowChrome last (theme rule).
+    HDG.Theme:Register(row, "RowWoodBeam", { alpha = 0 })
+    HDG.Theme:Register(row, "RowChrome",   { header = true, selected = ed.expanded == true })
 end
 
 -- ===== _paintLandingHeader ===================================================
@@ -236,7 +368,8 @@ local function _paintLandingHeader(row, ed, accentCC)
     HDG.UI.applyFontRole(row._labelFs, "subheading")
     row._labelFs:ClearAllPoints()
     row._labelFs:SetPoint("LEFT", row, "LEFT", 10, 0)
-    row._labelFs:SetText(accentCC .. (ed.label or "?") .. "|r")
+    local prefix = ed.expanded and "v " or "> "
+    row._labelFs:SetText(accentCC .. prefix .. (ed.label or "?") .. "|r")
     row._subtitleFs:ClearAllPoints()
     row._subtitleFs:SetPoint("LEFT", row._labelFs, "RIGHT", 8, 0)
     row._subtitleFs:SetText(ed.subtitle and (" -- " .. ed.subtitle) or "")
@@ -246,17 +379,11 @@ local function _paintLandingHeader(row, ed, accentCC)
     local suffix = ed.countSuffix or "style"
     row._countFs:SetText(string.format("%d %s", ed.count or 0,
         (ed.count == 1) and suffix or (suffix .. "s")))
-    -- Hide card-only widgets (guaranteed present after RowFirstPaint).
-    row._iconTex:Hide()
-    row._countCardFs:Hide()
-    row._pbBg:Hide()
-    row._pbFill:Hide()
-    row._pbFrame:Hide()
-    row._urlBtn:Hide()
-    for i = 1, 6 do row._previewTexs[i]:Hide() end
-    row._actionBtns.edit:Hide()
-    row._actionBtns.export:Hide()
-    row._actionBtns.delete:Hide()
+    -- Hide the other kinds' widgets (guaranteed present after RowFirstPaint).
+    _hideCardWidgets(row)
+    _hideCategoryWidgets(row)
+    -- "+ New Category" lives on the My Styles bar only, and only while it is open.
+    row._newCatBtn:SetShown(ed.type == "style" and ed.expanded == true)
     HDG.Theme:Register(row, "RowWoodBeam", { alpha = 0.6 })  -- scheme-invariant: register first
     HDG.Theme:Register(row, "RowChrome",   { selected = ed.expanded == true })  -- scheme-dependent: must win
 end
@@ -284,6 +411,7 @@ end
 local function _wireLandingCard(row, ed)
     local kind         = ed.kind
     local sectionType  = ed.type
+    local forced       = ed.forcedOpen
     local collectionID = ed.collectionID
     row:RegisterForClicks("LeftButtonUp")
     row:SetScript("OnClick", function()
@@ -298,6 +426,9 @@ local function _wireLandingCard(row, ed)
                 payload = { view = "detail" },
             })
         else
+            -- The chip force-opens this section; toggling then would write a flag the
+            -- user never sees flip. No-op until the override clears.
+            if forced then return end
             if not sectionType then return end
             HDG.Store:Dispatch({
                 type    = HDG.Constants.ACTIONS.STYLES_LANDING_TOGGLE_SECTION,
@@ -306,10 +437,36 @@ local function _wireLandingCard(row, ed)
         end
     end)
 
+    row._newCatBtn:SetScript("OnClick", function()
+        HDG.UI.Confirm({
+            id         = "HDGR_NEW_CATEGORY",
+            text       = HDG.Locale:Get("STY_LANDING_POPUP_NEW"),
+            accept     = HDG.Locale:Get("STY_LANDING_CREATE"),
+            cancel     = HDG.Locale:Get("STY_LANDING_CANCEL"),
+            input      = true,
+            maxLetters = 40,
+            onAccept   = function(value)
+                local name = HDG.Format.Trim(value)
+                if name == "" then return end
+                HDG.Store:Dispatch({
+                    type    = HDG.Constants.ACTIONS.STYLE_CATEGORY_CREATE,
+                    payload = { name = name },
+                })
+            end,
+        })
+    end)
+
     -- Action buttons: shown only on editable rows; header rows have no _actionBtns.
     local btns = row._actionBtns
     if not btns then return end
     local isSnapshot = ed.isSnapshot
+    if btns.category then
+        local displayName, currentCategoryID = ed.displayName, ed.categoryID
+        btns.category:SetScript("OnClick", function(self)
+            if not collectionID then return end
+            _openFileIntoMenu(self, collectionID, displayName, currentCategoryID)
+        end)
+    end
     if btns.edit then
         btns.edit:SetScript("OnClick", function()
             if not collectionID then return end
@@ -352,6 +509,72 @@ local function _wireLandingCard(row, ed)
     end
 end
 
+-- ===== _wireLandingCategory ==================================================
+local function _wireLandingCategory(row, ed)
+    local key, forced = ed.categoryID, ed.forcedOpen
+    row:RegisterForClicks("LeftButtonUp")
+    row:SetScript("OnClick", function()
+        -- Search / chip force-open this row; toggling then would write a flag the
+        -- user never sees flip. No-op until the override clears.
+        if forced then return end
+        HDG.Store:Dispatch({
+            type    = HDG.Constants.ACTIONS.STYLES_LANDING_TOGGLE_CATEGORY,
+            payload = { key = key },
+        })
+    end)
+    -- Clear before the loose-fold return: a row recycled from a category into
+    -- the loose fold would otherwise keep the previous category's closures.
+    row._catAddBtn:SetScript("OnClick", nil)
+    row._catRenameBtn:SetScript("OnClick", nil)
+    row._catDeleteBtn:SetScript("OnClick", nil)
+    if ed.isLoose then return end
+    local name = ed.label
+    row._catAddBtn:SetScript("OnClick", function(self)
+        _openAddStylesMenu(self, key, name)
+    end)
+    row._catRenameBtn:SetScript("OnClick", function()
+        HDG.UI.Confirm({
+            id         = "HDGR_RENAME_CATEGORY",
+            text       = HDG.Locale:Get("STY_LANDING_POPUP_RENAME"),
+            textArg1   = name,
+            accept     = HDG.Locale:Get("STY_LANDING_RENAME"),
+            cancel     = HDG.Locale:Get("STY_LANDING_CANCEL"),
+            input      = true,
+            maxLetters = 40,
+            data       = { categoryID = key, prefill = name },
+            onAccept   = function(value, data)
+                local trimmed = HDG.Format.Trim(value)
+                if trimmed == "" then return end
+                HDG.Store:Dispatch({
+                    type    = HDG.Constants.ACTIONS.STYLE_CATEGORY_RENAME,
+                    payload = { categoryID = data.categoryID, name = trimmed },
+                })
+            end,
+        })
+    end)
+    row._catDeleteBtn:SetScript("OnClick", function()
+        local n = ed.count
+        -- Two popup ids: UI.Confirm memoizes `text` per id on first use, and the
+        -- empty / non-empty wordings are different format strings.
+        HDG.UI.Confirm({
+            id       = (n == 0) and "HDGR_DELETE_CATEGORY_EMPTY" or "HDGR_DELETE_CATEGORY",
+            text     = HDG.Locale:Get((n == 0) and "STY_LANDING_POPUP_DELETE_EMPTY" or "STY_LANDING_POPUP_DELETE"),
+            textArg1 = name,
+            textArg2 = (n == 1) and HDG.Locale:Get("STY_LANDING_ITS_ONE_STYLE")
+                       or string.format(HDG.Locale:Get("STY_LANDING_ITS_N_STYLES_FMT"), n),
+            accept   = HDG.Locale:Get("STY_LANDING_DELETE"),
+            cancel   = HDG.Locale:Get("STY_LANDING_CANCEL"),
+            data     = { categoryID = key },
+            onAccept = function(_, data)
+                HDG.Store:Dispatch({
+                    type    = HDG.Constants.ACTIONS.STYLE_CATEGORY_DELETE,
+                    payload = { categoryID = data.categoryID },
+                })
+            end,
+        })
+    end)
+end
+
 -- ===== _resetLandingRow ======================================================
 local function _resetLandingRow(row)
     row:SetScript("OnClick", nil)
@@ -369,7 +592,10 @@ local function _resetLandingRow(row)
         if row._actionBtns.edit   then row._actionBtns.edit:Hide()   end
         if row._actionBtns.export then row._actionBtns.export:Hide() end
         if row._actionBtns.delete then row._actionBtns.delete:Hide() end
+        if row._actionBtns.category then row._actionBtns.category:Hide() end
     end
+    if row._catAddBtn then _hideCategoryWidgets(row) end
+    if row._newCatBtn then row._newCatBtn:Hide() end
 end
 
 local function _landingRowFactory(template)
@@ -379,11 +605,19 @@ local function _landingRowFactory(template)
                 function() _layoutLandingRow(row) end)
             if ed.kind == "card" then
                 _paintLandingCard(row, ed)
+            elseif ed.kind == "category" then
+                _paintLandingCategory(row, ed)
             else
                 _paintLandingHeader(row, ed, HDG.Theme:ColorCode("semantic.accent"))
             end
-            row:SetHeight(ed.kind == "card" and _CARD_HEIGHT or _HDR_HEIGHT)
-            _wireLandingCard(row, ed)
+            row:SetHeight((ed.kind == "card" and _CARD_HEIGHT)
+                       or (ed.kind == "category" and _CAT_HEIGHT)
+                       or _HDR_HEIGHT)
+            if ed.kind == "category" then
+                _wireLandingCategory(row, ed)
+            else
+                _wireLandingCard(row, ed)
+            end
         end,
         Reset = _resetLandingRow,
     }
@@ -392,15 +626,15 @@ end
 HDG.Rows:Register("stylesLandingRow", {
     font    = "subheading",
     height  = function(_index, ed)
-        if ed and ed.kind == "card" then return _CARD_HEIGHT end
+        if ed and ed.kind == "card"     then return _CARD_HEIGHT end
+        if ed and ed.kind == "category" then return _CAT_HEIGHT  end
         return _HDR_HEIGHT
     end,
     factory = _landingRowFactory,
     key     = function(ed)
         if not ed then return "?" end
-        if ed.kind == "card" then
-            return "card:" .. tostring(ed.collectionID or "?")
-        end
+        if ed.kind == "card"     then return "card:" .. tostring(ed.collectionID or "?") end
+        if ed.kind == "category" then return "cat:"  .. tostring(ed.categoryID   or "?") end
         return "hdr:" .. tostring(ed.type or "?")
     end,
 })
@@ -1252,6 +1486,82 @@ local function _refreshExportCode(rootFrame)
     codeBox:SetText(code or ""); caption:SetText(cap or "")
 end
 
+-- ===== Landing menus (spec HDGR_STYLE_CATEGORIES_SPEC_2026-09-04 s5.3) ==========
+-- Both are MenuUtil menus built at click time from the two small landing
+-- selectors; both dispatch the one reducer that writes categoryID.
+
+-- A: per-style radio menu. The ONLY place a style moves between categories or
+-- leaves one. "New category..." creates and files in a single dispatch.
+_openFileIntoMenu = function(anchor, collectionID, displayName, currentCategoryID)
+    local A = HDG.Constants.ACTIONS
+    local state = HDG.Store:GetState()  -- exception(false-positive): top-level controller read
+    local choices = HDG.Selectors:Call("styles.landing.categoryChoices", state, {})
+    local items = { { isTitle = true, text = HDG.Locale:Get("STY_LANDING_FILE_INTO") } }
+    for _, c in ipairs(choices) do
+        local catID = c.id
+        items[#items + 1] = { kind = "radio", text = c.name, value = catID,
+            selected = (currentCategoryID == catID),
+            callback = function()
+                HDG.Store:Dispatch({ type = A.STYLE_SET_CATEGORY,
+                    payload = { collectionID = collectionID, categoryID = catID } })
+            end }
+    end
+    items[#items + 1] = { kind = "radio", text = HDG.Locale:Get("STY_LANDING_NO_CATEGORY"), value = "",
+        selected = (currentCategoryID == nil),
+        callback = function()
+            HDG.Store:Dispatch({ type = A.STYLE_SET_CATEGORY,
+                payload = { collectionID = collectionID, categoryID = nil } })
+        end }
+    items[#items + 1] = { isDivider = true }
+    items[#items + 1] = { text = HDG.Locale:Get("STY_LANDING_NEW_CATEGORY_MENU"), callback = function()
+        HDG.UI.Confirm({
+            id         = "HDGR_NEW_CATEGORY_FILE",
+            text       = HDG.Locale:Get("STY_LANDING_POPUP_NEW_FILE"),
+            textArg1   = displayName,
+            accept     = HDG.Locale:Get("STY_LANDING_CREATE"),
+            cancel     = HDG.Locale:Get("STY_LANDING_CANCEL"),
+            input      = true,
+            maxLetters = 40,
+            data       = { fileStyleID = collectionID },
+            onAccept   = function(value, data)
+                local name = HDG.Format.Trim(value)
+                if name == "" then return end
+                HDG.Store:Dispatch({ type = A.STYLE_CATEGORY_CREATE,
+                    payload = { name = name, fileStyleID = data.fileStyleID } })
+            end,
+        })
+    end }
+    HDG.UI.ShowMenu(anchor, items)
+end
+
+-- B: per-category checkbox menu over the styles NOT in any category (list fixed
+-- at open time). Tick = filed now; untick before closing = unfiled. The poll
+-- reads the live record, not the loose list, or every tick would bounce back.
+_openAddStylesMenu = function(anchor, categoryID, categoryName)
+    local A = HDG.Constants.ACTIONS
+    local state = HDG.Store:GetState()  -- exception(false-positive): top-level controller read
+    local loose = HDG.Selectors:Call("styles.landing.looseStyles", state, {})
+    local countLine = string.format(HDG.Locale:Get("STY_LANDING_LOOSE_COUNT_FMT"), #loose)
+    if #loose > 20 then countLine = countLine .. HDG.Locale:Get("STY_LANDING_SCROLLS_HINT") end
+    local items = {
+        { isTitle = true, text = string.format(HDG.Locale:Get("STY_LANDING_ADD_TO_FMT"), categoryName) },
+        { isTitle = true, text = countLine },
+    }
+    for _, s in ipairs(loose) do
+        local id = s.collectionID
+        items[#items + 1] = { kind = "checkbox", text = s.displayName,
+            isSelected = function()
+                return HDG.Store:GetState().account.collections[id].categoryID == categoryID  -- exception(false-positive): top-level controller read (menu poll)
+            end,
+            callback = function()
+                local filedHere = HDG.Store:GetState().account.collections[id].categoryID == categoryID  -- exception(false-positive): top-level controller read
+                HDG.Store:Dispatch({ type = A.STYLE_SET_CATEGORY,
+                    payload = { collectionID = id, categoryID = (not filedHere) and categoryID or nil } })
+            end }
+    end
+    HDG.UI.ShowMenu(anchor, items)
+end
+
 local StylesController = {}
 
 function StylesController:Wire(rootFrame)
@@ -1274,9 +1584,12 @@ function StylesController:Wire(rootFrame)
         end)
     end
 
-    -- Search box: generic WireSearchBox writes session.ui.styles.search via
-    -- UI_SET_TRANSIENT. Section headers always render.
-    HDG.UI.WireSearchBox(rootFrame, "stylesPanel.landingSearch", "styles", "search")
+    -- Landing search: dedicated action. The generic WireSearchBox writes
+    -- session.ui.styles.search, which nothing reads; the list reads
+    -- session.ui.styles.landing.search (same shape as the detail box below).
+    HDG.UI.WireTextChanged(HDG.UI.W(rootFrame, "stylesPanel.landingSearch"), function(text)
+        HDG.Store:Dispatch({ type = HDG.Constants.ACTIONS.STYLES_LANDING_SET_SEARCH, payload = { text = text } })
+    end)
 
     -- Back button: consolidated single handler, always dispatches view=landing.
     HDG.UI.OnClick(rootFrame, "stylesPanel.headerBack", function()

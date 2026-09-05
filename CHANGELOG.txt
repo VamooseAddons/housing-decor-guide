@@ -1,3 +1,26 @@
+## [3.32.0] - 2026-09-05 (September 2026)
+
+### Added
+- **My Styles can be grouped under categories you create.** In Styles -> Browse, hit
+  "+ New Category" on the My Styles bar, then fill it from its "+ Add styles" button or
+  file a single style from the new plus button on its row. Categories remember whether
+  you left them open, and styles that aren't in one sit in their own fold at the top.
+- **The house editor companion groups your styles the same way.** Its Your Styles list
+  shows your categories, a fold for styles not in one, and your Filtered Sets under their
+  own heading; each folds with a click and remembers it, independently of the Browse tab.
+
+### Changed
+- **Styles section bars show a chevron and their count.** The bars could always be
+  clicked to fold a section; now they say so, and the count that was painted off-screen
+  since the tab shipped is back on it.
+
+### Fixed
+- **The Browse search box now filters the list.** It was writing to a slot the list never
+  read. It also looks inside collapsed categories and says how many matched.
+- **Opening or closing a Styles section no longer jumps the list back to the top**, and
+  which sections you left open is remembered between sessions instead of resetting to
+  all-closed on every login.
+
 ## [3.31.2] - 2026-09-03 (September 2026)
 
 ### Fixed

@@ -157,6 +157,16 @@ local function NewAccountUI()
         nav             = {
             collapsedGroups = {},
         },
+        -- Styles tab Browse list: which sections and which categories are open.
+        -- Persisted so the tree survives /reload; a category that has never been
+        -- toggled is absent = collapsed, which is the "collapsed on first render"
+        -- ruling with no code. "loose" is the fold of styles not in a category.
+        styles          = {
+            landing = {
+                expandedSections   = { style = true },
+                expandedCategories = {},
+            },
+        },
     }
 end
 
@@ -355,7 +365,7 @@ local function NewStylesSessionUI()
     return {
         view       = "landing",   -- "landing" | "detail" | "curator" | "smartset" | "import" | "export"
         selectedID = nil,         -- collectionID currently viewed in Detail
-        landing    = { filter = "all", search = "", expandedSections = {} },
+        landing    = { filter = "all", search = "" },   -- expandedSections moved to account.ui.styles.landing (spec 6.2)
         detail     = {
             selectedItemID = nil,
             search         = "",
@@ -449,6 +459,11 @@ local function NewCompanionAccountUI()
     return {
         window   = { x = nil, y = nil },   -- nil = default-anchor; numeric = user-positioned
         launcher = { x = nil, y = nil },   -- in-editor launcher button position (nil = default top-left)
+        -- Your Styles sidebar group folds. Sparse: present = FOLDED, so a group
+        -- the user has never touched is open -- a picker has to show everything
+        -- until the user says otherwise. Deliberately NOT Browse's set (which is
+        -- present = OPEN): the two lists fold independently.
+        collapsedGroups = {},   -- [groupKey] = true; keys "loose" | "cat:<n>" | "smartsets"
     }
 end
 
@@ -1095,6 +1110,8 @@ local function NewDefaultState()
             prices               = NewPrices(),       -- price cache
             collections          = {},                -- Styles / Snapshots / Shopping / etc., keyed by "<type>:<id>" (crates retired in v7)
             collectionSeq        = 0,                 -- monotonic counter -> collision-free smartset ids + "<Char> Style N" labels
+            styleCategories      = {},                -- [categoryID] = { id, seq, name, createdAt } -- My Styles groupings (spec 2.1)
+            styleCategorySeq     = 0,                 -- monotonic counter -> "cat:<n>" ids; never name-derived, never random
             -- Furnishings model (v7, docs/crate-redesign/10-FINAL-MODEL.md):
             -- free-standing quantified sets + persistent rooms; layouts hold placements.
             furnishingSets       = {},                -- [setID "set:N"] = { id, name, items = {{id,count},...}, isLocal, ownerRoom, createdAt }
@@ -1328,6 +1345,8 @@ local function EnsureStateShape(state)
     state.account.prices.directQtyCache = state.account.prices.directQtyCache or {}
     state.account.prices.ownedAuctions  = state.account.prices.ownedAuctions  or {}
     state.account.collections = state.account.collections or {}   -- exception(boundary): SavedVariables migration for Styles tab + Crates
+    state.account.styleCategories  = state.account.styleCategories  or {}  -- exception(boundary): SV migration -- style categories added post-3.31
+    state.account.styleCategorySeq = state.account.styleCategorySeq or 0   -- exception(boundary): pre-counter saved accounts lack styleCategorySeq
     -- Projects topology: re-ensure sub-fields so saves predating a field get it backfilled (SV migration).
     state.account.projects = state.account.projects or NewProjectsState()
     state.account.projects.houses      = state.account.projects.houses      or {}
@@ -1370,6 +1389,7 @@ local function EnsureStateShape(state)
     state.account.ui.companion = state.account.ui.companion or NewCompanionAccountUI()
     state.account.ui.companion.window = state.account.ui.companion.window or { x = nil, y = nil }
     state.account.ui.companion.launcher = state.account.ui.companion.launcher or { x = nil, y = nil }
+    state.account.ui.companion.collapsedGroups = state.account.ui.companion.collapsedGroups or {}  -- exception(boundary): SV migration -- companion group folds added post-3.31
     -- Recent Activity (HDG parity). boundary: SV migration -- guarantees the
     -- slice for saves created before edit-session history existed.
     state.account.recentActivity = state.account.recentActivity or NewRecentActivity()
@@ -2662,9 +2682,18 @@ HDG.Actions:Register{ name = "COMPANION_SET_LAUNCHER_POSITION",
     reduce = function(state, payload)
         state.account.ui.companion.launcher.x = payload.x
         state.account.ui.companion.launcher.y = payload.y
-
-    -- ===== HouseTab dashboard =====
     end }
+
+HDG.Actions:Register{ name = "COMPANION_TOGGLE_GROUP",
+    persists = true,  combatUnsafe = false,  -- writes account.ui -> must QueueSave
+    retainsScroll = true,  -- folding a group halfway down must not yank the sidebar to the top
+    invalidates = function(action) return { HDG.Paths.Join("account.ui.companion.collapsedGroups", action.payload.key) } end,
+    reduce = function(state, payload)
+        -- Sparse set, present = folded; the Companion's own set, deliberately not Browse's.
+        _toggleSetMember(state.account.ui.companion.collapsedGroups, payload.key)
+    end }
+
+-- ===== HouseTab dashboard =====
 
 HDG.Actions:Register{ name = "HOUSE_SNAPSHOT_UPDATED",
     persists = false, combatUnsafe = false,
@@ -3354,14 +3383,28 @@ HDG.Actions:Register{ name = "STYLES_LANDING_SET_FILTER",
 
 
 HDG.Actions:Register{ name = "STYLES_LANDING_TOGGLE_SECTION",
-    persists = false, combatUnsafe = false, 
-    invalidates = function(action) return { HDG.Paths.Join("session.ui.styles.landing.expandedSections", action.payload and action.payload.type) } end,
+    persists = true,  combatUnsafe = false,  -- writes account.ui -> must QueueSave
+    retainsScroll = true,  -- collapsing a section halfway down must not yank the list to the top
+    invalidates = function(action) return { HDG.Paths.Join("account.ui.styles.landing.expandedSections", action.payload.type) } end,
     reduce = function(state, payload)
-        local t = payload.type
-        if t then
-            local expanded = state.session.ui.styles.landing.expandedSections
-            _toggleSetMember(expanded, t)
-        end
+        -- payload.type comes off a header row the selector emitted a frame earlier.
+        _toggleSetMember(state.account.ui.styles.landing.expandedSections, payload.type)
+    end }
+
+HDG.Actions:Register{ name = "STYLES_LANDING_TOGGLE_CATEGORY",
+    persists = true,  combatUnsafe = false,  -- writes account.ui -> must QueueSave
+    retainsScroll = true,  -- a fold is clicked mid-list; yanking to the top loses the user's place
+    invalidates = function(action) return { HDG.Paths.Join("account.ui.styles.landing.expandedCategories", action.payload.key) } end,
+    reduce = function(state, payload)
+        -- key is a categoryID or "loose"; sparse set, present = open.
+        _toggleSetMember(state.account.ui.styles.landing.expandedCategories, payload.key)
+    end }
+
+HDG.Actions:Register{ name = "STYLES_LANDING_SET_SEARCH",
+    persists = false, combatUnsafe = false, noisy = true,   -- per keystroke; stays out of the dispatch log like STYLES_DETAIL_SET_SEARCH
+    invalidates = { "session.ui.styles.landing.search" },
+    reduce = function(state, payload)
+        state.session.ui.styles.landing.search = payload.text
     end }
 
 HDG.Actions:Register{ name = "STYLES_SELECT_COLLECTION",
@@ -3545,6 +3588,7 @@ HDG.Actions:Register{ name = "STYLES_DUPLICATE_STYLE",
             type        = "style",
             displayName = (src.displayName or srcID) .. " (copy)",
             description = src.description or "",
+            categoryID  = src.categoryID,   -- a copy stays beside its source (spec 2.2)
             items       = items,
             createdAt   = (_G.time and _G.time()) or 0,
         }
@@ -3580,6 +3624,86 @@ HDG.Actions:Register{ name = "STYLES_DELETE_STYLE",
         end
         if cur and cur.selectedTargetID == id then
             cur.selectedTargetID = nil
+        end
+    end }
+
+-- ===== Style categories (spec HDGR_STYLE_CATEGORIES_SPEC_2026-09-04 s2.2 / s3.1) =====
+
+-- The ONE code path that writes a style's categoryID. Strict on purpose: every
+-- collectionID that reaches it came off a landing row or the loose-styles menu a
+-- frame earlier, so a nil index here is a bug to surface, not a boundary.
+local function _setStyleCategory(state, collectionID, categoryID)
+    state.account.collections[collectionID].categoryID = categoryID
+end
+
+-- Case-insensitive name match over the registry. Rename can leave two categories
+-- with one name; the lowest seq (= oldest) wins so the same dispatch always lands
+-- in the same place (spec 2.4).
+local function _findStyleCategoryByName(cats, name)
+    local needle, found = name:lower(), nil
+    for _, cat in pairs(cats) do
+        if cat.name:lower() == needle and (not found or cat.seq < found.seq) then found = cat end
+    end
+    return found and found.id
+end
+
+HDG.Actions:Register{ name = "STYLE_CATEGORY_CREATE",
+    persists = true,  combatUnsafe = false,  -- writes account.* -> must QueueSave
+    invalidates = { "account.styleCategories", "account.styleCategorySeq",
+                    "account.ui.styles.landing.expandedCategories", "account.collections" },
+    reduce = function(state, payload)
+        local cats = state.account.styleCategories
+        local id = _findStyleCategoryByName(cats, payload.name)
+        if not id then
+            state.account.styleCategorySeq = state.account.styleCategorySeq + 1
+            local seq = state.account.styleCategorySeq
+            id = "cat:" .. seq
+            cats[id] = { id = id, seq = seq, name = payload.name,
+                         createdAt = (_G.time and _G.time()) or 0 }  -- exception(boundary): time() absent in headless tests
+        end
+        -- Born (or re-targeted) expanded so what the user just did is visible.
+        state.account.ui.styles.landing.expandedCategories[id] = true
+        if payload.fileStyleID then _setStyleCategory(state, payload.fileStyleID, id) end
+    end }
+
+HDG.Actions:Register{ name = "STYLE_CATEGORY_RENAME",
+    persists = true,  combatUnsafe = false,  -- writes account.* -> must QueueSave
+    invalidates = { "account.styleCategories" },
+    reduce = function(state, payload)
+        -- Members point by id, so they need no touch.
+        state.account.styleCategories[payload.categoryID].name = payload.name
+    end }
+
+HDG.Actions:Register{ name = "STYLE_CATEGORY_DELETE",
+    persists = true,  combatUnsafe = false,  -- writes account.* -> must QueueSave
+    invalidates = { "account.styleCategories", "account.collections",
+                    "account.ui.styles.landing.expandedCategories",
+                    "account.ui.companion.collapsedGroups" },
+    reduce = function(state, payload)
+        local id = payload.categoryID
+        -- Styles are never deleted with their category; they drop back to loose.
+        for collID, coll in pairs(state.account.collections) do
+            if coll.categoryID == id then _setStyleCategory(state, collID, nil) end
+        end
+        state.account.styleCategories[id] = nil
+        state.account.ui.styles.landing.expandedCategories[id] = nil
+        -- The Companion sidebar keeps its OWN fold set, so it needs its own line
+        -- here; without it a deleted category leaves an orphan key in SavedVariables
+        -- that nothing will ever read or clear again.
+        state.account.ui.companion.collapsedGroups[id] = nil
+    end }
+
+HDG.Actions:Register{ name = "STYLE_SET_CATEGORY",
+    persists = true,  combatUnsafe = false,  -- writes account.* -> must QueueSave
+    retainsScroll = true,  -- filed from a row menu; don't yank the list to the top
+    invalidates = function(action)
+        return { HDG.Paths.Join("account.collections", action.payload.collectionID),
+                 "account.ui.styles.landing.expandedCategories" }
+    end,
+    reduce = function(state, payload)
+        _setStyleCategory(state, payload.collectionID, payload.categoryID)
+        if payload.categoryID then
+            state.account.ui.styles.landing.expandedCategories[payload.categoryID] = true
         end
     end }
 

@@ -304,8 +304,11 @@ local function _placedInCurrentArea(state)
     return out
 end
 
-local function _sidebarCollectionRows(state, mode, needle, selected)
-    local typeSet = MODE_TO_TYPES[mode] or {}
+-- Sidebar rows for every collection of the mode's types, name-filtered when a
+-- needle is given. Passing needle = nil is what lets the grouped styles path
+-- count FULL membership on a group row while showing only the matches under it,
+-- off the same builder -- there is no second row shape.
+local function _collectionMatches(state, typeSet, needle, selected)
     local matches = {}
     for _, entry in ipairs(iterAllCollectionsForCompanion(state)) do
         if typeSet[entry.type] then
@@ -324,6 +327,107 @@ local function _sidebarCollectionRows(state, mode, needle, selected)
             end
         end
     end
+    return matches
+end
+
+-- ===== Your Styles groups (spec HDGR_STYLE_CATEGORIES_SPEC_2026-09-04 s4.1) =====
+-- Same grouping rules as the Browse list, its own fold set. Group rows carry no
+-- id / type / isSelected, so companion.gridItems can never be handed one.
+
+-- Name (case-insensitive) then seq -- a total order even after a rename has made
+-- two categories share a name. Same comparator as Browse's _sortedStyleCategories;
+-- deliberately re-stated rather than shared, so neither file's sort can drift the
+-- other's list out from under it.
+local function _sortedCompanionCategories(cats)
+    local out = {}
+    for _, cat in pairs(cats) do out[#out + 1] = cat end
+    table.sort(out, function(a, b)
+        local an, bn = a.name:lower(), b.name:lower()
+        if an ~= bn then return an < bn end
+        return a.seq < b.seq
+    end)
+    return out
+end
+
+-- Split styles-mode rows into the loose fold, one bucket per registered category,
+-- and the smart sets. Buckets are seeded from the registry, so a categoryID that
+-- is not a key of it is "not a category any more" -> loose. That is the answer,
+-- not a guard. Styles-mode rows are always account.collections records (the two
+-- static sources type as concept/collection), so the record read is strict.
+local function _bucketStyleRows(rows, cats, collections)
+    local byCat, loose, smart = {}, {}, {}
+    for id in pairs(cats) do byCat[id] = {} end
+    for _, row in ipairs(rows) do
+        if row.type == "smartset" then
+            smart[#smart + 1] = row
+        else
+            local bucket = byCat[collections[row.id].categoryID]
+            if bucket then bucket[#bucket + 1] = row else loose[#loose + 1] = row end
+        end
+    end
+    return byCat, loose, smart
+end
+
+-- One group row plus, when open, its members. A needle filters the members,
+-- force-opens the group and drops a group with no match entirely; count stays
+-- full membership so the row reads "1 of 4", not "1 of 1". displayName is nil for
+-- the two literal groups -- the painter resolves those from Locale.
+local function _emitSidebarGroup(out, groupKey, displayName, members, collapsed, needle)
+    local shown, matchCount = members, nil
+    if needle then
+        shown = {}
+        for _, m in ipairs(members) do
+            if tostring(m.displayName):lower():find(needle, 1, true) then shown[#shown + 1] = m end
+        end
+        if #shown == 0 then return end
+        matchCount = #shown
+    end
+    local forcedOpen  = needle ~= nil
+    local collapsedNow = collapsed and not forcedOpen
+    out[#out + 1] = {
+        isHeader   = true,
+        isGroup    = true,
+        groupKey   = groupKey,
+        displayName = displayName,
+        count      = #members,
+        matchCount = matchCount,
+        collapsed  = collapsedNow,
+        forcedOpen = forcedOpen,
+    }
+    if collapsedNow then return end
+    for _, m in ipairs(shown) do out[#out + 1] = m end
+end
+
+-- Loose fold, then categories by name, then the smart sets. The loose fold and
+-- the smart-set group are omitted when empty (they name a leftover, not a thing
+-- the user made); an empty CATEGORY still shows, or the user could not see the
+-- category they just created.
+local function _groupStyleRows(state, typeSet, needle, selected)
+    local rows = _collectionMatches(state, typeSet, nil, selected)
+    table.sort(rows, _alphaByDisplayName)
+    local cats  = state.account.styleCategories
+    local folds = state.account.ui.companion.collapsedGroups
+    local byCat, loose, smart = _bucketStyleRows(rows, cats, state.account.collections)
+    local out = {}
+    if #loose > 0 then
+        _emitSidebarGroup(out, "loose", nil, loose, folds["loose"] == true, needle)
+    end
+    for _, cat in ipairs(_sortedCompanionCategories(cats)) do
+        _emitSidebarGroup(out, cat.id, cat.name, byCat[cat.id], folds[cat.id] == true, needle)
+    end
+    if #smart > 0 then
+        _emitSidebarGroup(out, "smartsets", nil, smart, folds["smartsets"] == true, needle)
+    end
+    return out
+end
+
+local function _sidebarCollectionRows(state, mode, needle, selected)
+    local typeSet = MODE_TO_TYPES[mode] or {}
+    -- Zero categories = the flat alphabetical list this sidebar has always been.
+    if mode == "styles" and next(state.account.styleCategories) ~= nil then
+        return _groupStyleRows(state, typeSet, needle, selected)
+    end
+    local matches = _collectionMatches(state, typeSet, needle, selected)
     if mode == "themes"      then return _sectionByTier(matches) end          -- Room Concepts / Themed / Faction
     if mode == "collections" then return _sidebarCollectionsMode(matches, selected) end
     table.sort(matches, _alphaByDisplayName)
@@ -350,6 +454,8 @@ Selectors:Register("companion.sidebarRows", {
         "session.ui.companion.search",
         "session.ui.companion.selectedItemID",
         "account.collections",
+        "account.styleCategories",           -- styles-mode sidebar: the groups themselves
+        "account.ui.companion.collapsedGroups",   -- ...and this sidebar's own folds
         "account.rooms",                     -- rooms-mode sidebar: one row per room
         "account.furnishingSets",            -- rooms-mode counts
         "session.furn",                      -- rooms-mode change tick

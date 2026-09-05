@@ -872,6 +872,7 @@ HDG.Constants = {
         COMPANION_TOGGLE_COST        = "HDGR_COMPANION_TOGGLE_COST",        -- flips the cost-badge visibility
         COMPANION_CYCLE_IO           = "HDGR_COMPANION_CYCLE_IO",           -- cycles ioFilter all->indoor->outdoor
         COMPANION_SET_LAUNCHER_POSITION = "HDGR_COMPANION_SET_LAUNCHER_POSITION", -- payload: { x, y }
+        COMPANION_TOGGLE_GROUP       = "HDGR_COMPANION_TOGGLE_GROUP",       -- payload: { key = "loose"|"cat:<n>"|"smartsets" } -- folds a sidebar group
 
         -- Once per session; lets all consumers read strictly instead of calling UnitName/GetRealmName/UnitClass independently.
         SESSION_IDENTITY_SET         = "HDGR_SESSION_IDENTITY_SET",         -- payload: { name, realm, class, classFile }; reducer computes charKey
@@ -956,6 +957,8 @@ HDG.Constants = {
         STYLES_INVALIDATE_CACHE      = "HDGR_STYLES_INVALIDATE_CACHE",
         STYLES_LANDING_SET_FILTER    = "HDGR_STYLES_LANDING_SET_FILTER",    -- payload: { filter = "all"|"style"|"smartset"|"shopping"|"snapshot"|"concept"|"collection" }
         STYLES_LANDING_TOGGLE_SECTION = "HDGR_STYLES_LANDING_TOGGLE_SECTION", -- payload: { type = string }
+        STYLES_LANDING_TOGGLE_CATEGORY = "HDGR_STYLES_LANDING_TOGGLE_CATEGORY", -- payload: { key = "cat:<n>"|"loose" }
+        STYLES_LANDING_SET_SEARCH    = "HDGR_STYLES_LANDING_SET_SEARCH",    -- payload: { text = string } -- the Browse list's own search slot
         STYLES_SELECT_COLLECTION     = "HDGR_STYLES_SELECT_COLLECTION",     -- payload: { collectionID = string }
         STYLES_DETAIL_SELECT_ITEM    = "HDGR_STYLES_DETAIL_SELECT_ITEM",    -- payload: { itemID = number }
         STYLES_DETAIL_SET_SEARCH     = "HDGR_STYLES_DETAIL_SET_SEARCH",     -- payload: { text = string }
@@ -976,6 +979,12 @@ HDG.Constants = {
         STYLES_DELETE_STYLE          = "HDGR_STYLES_DELETE_STYLE",          -- payload: { collectionID }
         -- Export is a controller side-effect; Delete reuses STYLES_DELETE_STYLE.
         STYLES_EDIT_STYLE            = "HDGR_STYLES_EDIT_STYLE",            -- payload: { collectionID }
+
+        -- Style categories (spec HDGR_STYLE_CATEGORIES_SPEC_2026-09-04 s3.1)
+        STYLE_CATEGORY_CREATE        = "HDGR_STYLE_CATEGORY_CREATE",        -- payload: { name = string, fileStyleID? = "style:<slug>" } -- name match reuses; fileStyleID files in the same dispatch
+        STYLE_CATEGORY_RENAME        = "HDGR_STYLE_CATEGORY_RENAME",        -- payload: { categoryID = "cat:<n>", name = string }
+        STYLE_CATEGORY_DELETE        = "HDGR_STYLE_CATEGORY_DELETE",        -- payload: { categoryID = "cat:<n>" } -- members become loose, never deleted
+        STYLE_SET_CATEGORY           = "HDGR_STYLE_SET_CATEGORY",           -- payload: { collectionID = "style:<slug>", categoryID? = "cat:<n>" } -- nil = not in a category
         STYLES_SMARTSET_BEGIN          = "HDGR_STYLES_SMARTSET_BEGIN",          -- payload: { id? = string }
         STYLES_SMARTSET_SET_FIELD      = "HDGR_STYLES_SMARTSET_SET_FIELD",      -- payload: { field = "displayName"|"description", value = string }
         STYLES_SMARTSET_SET_AXIS       = "HDGR_STYLES_SMARTSET_SET_AXIS",       -- payload: { axis = string }

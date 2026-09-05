@@ -12,13 +12,17 @@
 
 ---
 
-## What's New in v3.31.2
+## What's New in v3.32.0
 
-Two fixes, both reported from the Discord.
+One feature asked for on the Discord, and two fixes found while building it.
 
-**The three-second freeze at login, and at first open, is gone.** Since 3.31.1 the first read of the decor catalogue also asked the game to match every achievement name it knows, four thousand lookups with the game held still, so that the achievement line on a decor card would link for pieces the addon had no identifier for. On 12.1 that came to eight pieces. Those identifiers now ship with the addon, taken from the game's own data, and the read that cost 3.2 seconds costs about a tenth of one. Since July the zone alert had been triggering that read the moment a character logged in, which put the freeze on every character; the catalogue is now left alone at login and read when you first open the window, visit a vendor or hover a decor tooltip.
+**My Styles can be grouped under categories you create.** In Styles, Browse, the My Styles bar has a "+ New Category" button. Name one, then fill it from the "+ Add styles" button on its row, which lists every style not yet in a category, or file a single style from the plus button on the style's own row, which also moves it between categories or takes it out again. Styles not in a category sit in their own fold at the top. Every category and fold remembers whether you left it open, across reloads.
 
-**Torv Dubstomp's decor is credited to Torv Dubstomp.** Twelve Highmountain pieces, among them the Large Highmountain Drum, the Skyhorn kites and the Tauren Vertical Windmill, named Ransa Greyfeather as their seller, and her Shop by Vendor page listed every one of them. She sells the eight reputation pieces and nothing else. The rest come from Torv Dubstomp, the Decor Specialist standing a few steps from her in Thunder Totem.
+**The house editor companion groups your styles the same way.** Its Your Styles list shows your categories, a fold for styles not in one, and your Filtered Sets under their own heading. Each folds with a click and remembers it, separately from the Browse tab, so the picker can stay open while the tab stays tidy.
+
+**The Browse search box now filters the list.** It had been writing to a place the list never read, so typing did nothing. It also looks inside folded categories and shows how many matched.
+
+**Folding a Styles section no longer jumps the list to the top**, and which sections you left open is remembered between sessions instead of resetting on every login. The section bars now show a chevron and their count.
 
 ---
 
@@ -58,7 +62,7 @@ Housing crafting runs on lumber, so there's a dedicated **Lumber Tracker** -- a 
 
 ## Styles -- organize and design
 
-- **Browse** -- all your sets in one place: My Styles, Smart Sets, Shopping Lists, Snapshots, plus pre-authored Room Concepts and Useful Collections, each with a preview strip and collection count.
+- **Browse** -- all your sets in one place: My Styles (grouped under categories you create, each folding with a click), Smart Sets, Shopping Lists, Snapshots, plus pre-authored Room Concepts and Useful Collections, each with a preview strip and collection count.
 - **Style Curator** -- a workspace to file your decor into named styles: pick a source, multi-select from a category-browsable grid, move into a target style, with single-step undo and a coverage bar showing how much of your collection is organized.
 - **Smart Sets** -- build filter-based sets from a deep tag taxonomy (room, mood, material, color, culture, motif, season, and more). Mark tags **Signature / Accent / Clashing** and watch a live, scored preview update against the whole catalog.
 - **Snapshots** -- capture everything you've placed in a house as a saved set.
@@ -81,7 +85,7 @@ A personal dashboard: decorator profile with house level, favor, and Collector t
 
 ## Right inside the House Editor
 
-A companion window injects into Blizzard's House Editor so you can **place decor with one click** -- browse by your designs (each room's plan), your styles, shopping lists, snapshots, room concepts, or what you've placed recently. Tooltips show ownership, placement cost, and the vendor that sells each piece; right-click sends a piece to your shopping list without leaving the editor. Indoor/outdoor filtering and dye variants are all handled for you.
+A companion window injects into Blizzard's House Editor so you can **place decor with one click** -- browse by your designs (each room's plan), your styles (grouped under your categories, each folding with a click), shopping lists, snapshots, room concepts, or what you've placed recently. Tooltips show ownership, placement cost, and the vendor that sells each piece; right-click sends a piece to your shopping list without leaving the editor. Indoor/outdoor filtering and dye variants are all handled for you.
 
 ## Tools
 
@@ -111,7 +115,7 @@ A companion window injects into Blizzard's House Editor so you can **place decor
 ---
 
 **Author:** Vamoose
-**Version:** 3.31.2
+**Version:** 3.32.0
 **Game Version:** 12.1.0 (Midnight)
 **Source / Issues:** https://github.com/VamooseAddons/housing-decor-guide
 **Discord:** https://discord.gg/RWZaxJaHFP

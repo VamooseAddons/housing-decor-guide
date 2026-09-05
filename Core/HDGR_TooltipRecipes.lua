@@ -226,6 +226,13 @@ R.StylesSeverity_accent    = { title = "locale:TIP_STY_SEV_ACCENT_TITLE",    bod
 R.StylesSeverity_versatile = { title = "locale:TIP_STY_SEV_VERSATILE_TITLE", body = "locale:TIP_STY_SEV_VERSATILE_BODY", anchor = "ANCHOR_BOTTOMRIGHT" }
 R.StylesSeverity_clashing  = { title = "locale:TIP_STY_SEV_CLASHING_TITLE",  body = "locale:TIP_STY_SEV_CLASHING_BODY",  anchor = "ANCHOR_BOTTOMRIGHT" }
 
+-- Browse list categories (spec HDGR_STYLE_CATEGORIES_SPEC_2026-09-04 s5.5).
+R.StylesCategoryNew    = { title = "locale:TIP_STY_CAT_NEW_TITLE",    body = "locale:TIP_STY_CAT_NEW_BODY",    anchor = "ANCHOR_BOTTOM" }
+R.StylesCategoryAdd    = { title = "locale:TIP_STY_CAT_ADD_TITLE",    body = "locale:TIP_STY_CAT_ADD_BODY",    anchor = "ANCHOR_BOTTOM" }
+R.StylesCategoryFile   = { title = "locale:TIP_STY_CAT_FILE_TITLE",   body = "locale:TIP_STY_CAT_FILE_BODY",   anchor = "ANCHOR_BOTTOM" }
+R.StylesCategoryRename = { title = "locale:TIP_STY_CAT_RENAME_TITLE", body = "locale:TIP_STY_CAT_RENAME_BODY", anchor = "ANCHOR_BOTTOM" }
+R.StylesCategoryDelete = { title = "locale:TIP_STY_CAT_DELETE_TITLE", body = "locale:TIP_STY_CAT_DELETE_BODY", anchor = "ANCHOR_BOTTOM" }
+
 -- ===== Acquisition filter strip (UX tooltip audit 2026-06-10) ==============
 -- Preset chips are HDG vocabulary (source-axis filters); one recipe per chip,
 -- names match the LayoutConfig loop key "AcqPreset_" .. p.value.

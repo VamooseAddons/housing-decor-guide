@@ -78,6 +78,45 @@ local function _paintHeaderRow(row, ed)
     row:EnableMouse(false)
 end
 
+-- The two literal groups name themselves from Locale; a category row carries its
+-- own name. Resolved at paint, not in the selector: a selector that baked the
+-- string in would keep serving the old language after a locale switch.
+local GROUP_LABEL_KEY = {
+    loose     = "STY_LANDING_LOOSE",          -- shared with the Browse fold: same fold, same words
+    smartsets = "COMP_GROUP_FILTERED_SETS",
+}
+local function _groupLabel(ed)
+    local key = GROUP_LABEL_KEY[ed.groupKey]
+    if key then return HDG.Locale:Get(key) end
+    return ed.displayName
+end
+
+-- Group row (a category, the loose fold, or Filtered Sets): header band, text
+-- chevron, member count, click folds. Unlike the plain header row it takes mouse.
+local function _paintGroupRow(row, ed)
+    row._dividerTex:Hide()
+    row._iconTex:Hide()
+    HDG.Theme:Register(row._labelFs, "Text")
+    row._labelFs:ClearAllPoints()
+    row._labelFs:SetPoint("LEFT", row, "LEFT", 6, 0)
+    row._labelFs:SetPoint("RIGHT", row, "RIGHT", -34, 0)
+    row._labelFs:SetText((ed.collapsed and "> " or "v ") .. _groupLabel(ed))
+    if ed.matchCount then
+        row._countFs:SetText(string.format(HDG.Locale:Get("COMP_GROUP_MATCH_FMT"), ed.matchCount, ed.count))
+    else
+        row._countFs:SetText(tostring(ed.count))
+    end
+    HDG.Theme:Register(row, "RowChrome", { header = true })
+    row:EnableMouse(true)
+    local groupKey, forcedOpen = ed.groupKey, ed.forcedOpen
+    row:SetScript("OnClick", function()
+        -- Search force-opens this row; toggling then would write a flag the user
+        -- never sees flip. No-op until the search clears.
+        if forcedOpen then return end
+        HDG.Store:Dispatch({ type = A.COMPANION_TOGGLE_GROUP, payload = { key = groupKey } })
+    end)
+end
+
 -- Selectable row: displayName + count (or time label for recent sessions).
 -- Click dispatches COMPANION_SELECT_ITEM.
 local function _paintSelectableRow(row, ed)
@@ -117,6 +156,9 @@ local function _companionRowFactory(_def)
             row:RegisterForClicks("LeftButtonUp")
             if ed.isDivider then
                 _paintDividerRow(row)
+            elseif ed.isGroup then
+                -- Before isHeader: a group row IS a header row that also folds.
+                _paintGroupRow(row, ed)
             elseif ed.isHeader then
                 _paintHeaderRow(row, ed)
             else
@@ -138,6 +180,9 @@ HDG.Rows:Register("companionSidebarRow", {
     factory = _companionRowFactory,
     key     = function(ed)
         if ed.isDivider       then return "d:" .. tostring(ed.id or "x") end
+        -- Before the header line: two categories can share a display name, and the
+        -- header key is by name -- so they need the groupKey to stay distinct rows.
+        if ed.isGroup         then return "g:" .. tostring(ed.groupKey) end
         if ed.isHeader        then return "h:" .. tostring(ed.displayName) end
         if ed.isRecentSession then return "s:" .. tostring(ed.id) end
         return "r:" .. tostring(ed.id)
