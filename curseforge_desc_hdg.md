@@ -12,11 +12,9 @@
 
 ---
 
-## What's New in v3.32.1
+## What's New in v3.32.2
 
-- A decor learned right after buying it no longer stays marked as needed on the vendor's wares or in the Decor list until you reload. The learn is applied straight away, including when it lands during the catalog's first scan of the session.
-- The blueprint "cost to build" badge shows the first three currencies and "+N more" instead of running off the panel. Hover it for the full list, with each currency named beside its amount.
-- HDG no longer catalogues your neighbours' decor as you walk past their plots. It only listens for placed decor while you are inside your own house or on your own plot.
+- The house editor companion keeps your place in a collection after you place a piece. Placing from a collection longer than a page sent the list back to the top every time; it now stays where you were, and the same holds when you pick a piece back up.
 
 ## The Decor Catalog
 
@@ -107,7 +105,7 @@ A companion window injects into Blizzard's House Editor so you can **place decor
 ---
 
 **Author:** Vamoose
-**Version:** 3.32.1
+**Version:** 3.32.2
 **Game Version:** 12.1.0 (Midnight)
 **Source / Issues:** https://github.com/VamooseAddons/housing-decor-guide
 **Discord:** https://discord.gg/RWZaxJaHFP

@@ -1,3 +1,10 @@
+## [3.32.2] - 2026-09-06 (September 2026)
+
+### Fixed
+- **The house editor companion keeps your place in a collection after you place a piece.**
+  Placing from a collection longer than a page sent the list back to the top every time;
+  it now stays where you were, and the same holds when you pick a piece back up.
+
 ## [3.32.1] - 2026-09-06 (September 2026)
 
 ### Changed

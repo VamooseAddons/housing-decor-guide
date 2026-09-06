@@ -124,7 +124,7 @@ function W:_CreateOne(name, win)
 end
 
 -- ===== Refresh (size + bind + compose/apply) ================================
-function W:_RefreshOne(name, invalidation)
+function W:_RefreshOne(name, invalidation, actionType)
     local frame = self._frames[name]
     if not frame then return end
     if not frame:IsShown() then return end   -- hidden window needs no work
@@ -137,7 +137,12 @@ function W:_RefreshOne(name, invalidation)
 
     -- BIND: push selector values to bound widgets.
     local fillView = config.windows[name].slots.fill
-    local ctx = { frame = frame, invalidation = invalidation, view = fillView, state = state }
+    -- actionType rides along for the same reason the main window forwards it:
+    -- card grids read the action's retainsScroll through it. Without it every
+    -- satellite re-push reset to the top -- the companion grid jumped on each
+    -- placement no matter what the action declared (Discord 2026-09-06).
+    local ctx = { frame = frame, invalidation = invalidation, view = fillView, state = state,
+                  actionType = actionType }
     HDG.BindingEngine:Apply(frame, state, ctx, invalidation)
 
     -- LAYOUT: harvest intrinsics, compose, apply.
@@ -156,7 +161,7 @@ function W:_RefreshOne(name, invalidation)
 end
 
 -- ===== Reconcile (visibility + position, then refresh) ======================
-function W:_ReconcileOne(name, invalidation)
+function W:_ReconcileOne(name, invalidation, actionType)
     local win   = HDG.LayoutConfig.windows[name]
     local frame = self._frames[name]
     if not (win and frame) then return end
@@ -193,7 +198,7 @@ function W:_ReconcileOne(name, invalidation)
         end
     end
 
-    if shouldShow then self:_RefreshOne(name, invalidation) end
+    if shouldShow then self:_RefreshOne(name, invalidation, actionType) end
 end
 
 -- ===== Boot (called from Init.lua OnEnable) ==================================
@@ -215,7 +220,7 @@ function W:CreateAll()
                 invalidation = nil
             end
             for name in pairs(self._frames) do
-                self:_ReconcileOne(name, invalidation)
+                self:_ReconcileOne(name, invalidation, actionType)
             end
         end)
     end

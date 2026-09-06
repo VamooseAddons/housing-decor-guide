@@ -45,6 +45,10 @@ local function registerBumpAction(resolverName, spec)
         persists     = spec.persists == true,
         combatUnsafe = spec.combatUnsafe == true,
         noisy        = spec.noisy == true or nil,
+        -- Card grids consult this per action (Components._shouldRetainScroll);
+        -- a resolver-registered row patch is exactly the in-place change that
+        -- must not send a grid back to the top.
+        retainsScroll = spec.retainsScroll == true or nil,
         invalidates  = invalidates,
         reduce       = function(state, payload)
             if extraReduce then extraReduce(state, payload) end

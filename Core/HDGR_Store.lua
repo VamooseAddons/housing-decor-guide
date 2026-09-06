@@ -2105,6 +2105,7 @@ HDG.Actions:Register{ name = "COLLECTION_BULK_LOAD",
 
 HDG.Actions:Register{ name = "COLLECTION_ITEM_LEARNED",
     persists = true,  combatUnsafe = false,
+    retainsScroll = true,  -- one piece changed in place; a grid that resets to the top loses the player's place mid-placement (Discord 2026-09-06)
             invalidates = { "account.collection.ownedDecorIDs" },
     reduce = function(state, payload)
         if payload.decorID then
@@ -2114,6 +2115,7 @@ HDG.Actions:Register{ name = "COLLECTION_ITEM_LEARNED",
 
 HDG.Actions:Register{ name = "COLLECTION_ITEM_REMOVED",
     persists = true,  combatUnsafe = false,
+    retainsScroll = true,  -- one piece changed in place; a grid that resets to the top loses the player's place mid-placement (Discord 2026-09-06)
             invalidates = { "account.collection.ownedDecorIDs" },
     reduce = function(state, payload)
         if payload.decorID then
@@ -3871,6 +3873,7 @@ HDG.Actions:Register{ name = "STYLES_SMARTSET_CANCEL",
 
 HDG.Actions:Register{ name = "STYLES_PLACED_DECOR_OBSERVED",
     persists = false, combatUnsafe = false,
+    retainsScroll = true,  -- one piece changed in place; a grid that resets to the top loses the player's place mid-placement (Discord 2026-09-06)
     invalidates = { "session.styles.placedDecor" },
     reduce = function(state, payload)
         local guid = payload.decorGUID
@@ -3894,6 +3897,7 @@ HDG.Actions:Register{ name = "STYLES_PLACED_DECOR_OBSERVED",
 
 HDG.Actions:Register{ name = "STYLES_PLACED_DECOR_REMOVED",
     persists = true, combatUnsafe = false,
+    retainsScroll = true,  -- one piece changed in place; a grid that resets to the top loses the player's place mid-placement (Discord 2026-09-06)
             invalidates = { "session.styles.placedDecor", "account.recentActivity" },
     reduce = function(state, payload)
         local guid = payload.decorGUID
@@ -3939,6 +3943,7 @@ HDG.Actions:Register{ name = "RECENT_SESSION_START",
 
 HDG.Actions:Register{ name = "RECENT_DECOR_PLACED",
     persists = true, combatUnsafe = false,
+    retainsScroll = true,  -- one piece changed in place; a grid that resets to the top loses the player's place mid-placement (Discord 2026-09-06)
             invalidates = { "account.recentActivity" },
     reduce = function(state, payload)
         _recentAppend(state, payload.houseKey, payload.itemID, "placed")
@@ -5294,6 +5299,7 @@ HDG.Actions:Register{ name = "STYLES_CURATOR_MOVE",
 
 HDG.Actions:Register{ name = "STYLES_PLACED_DECOR_OBSERVED_BATCH",
     persists = false, combatUnsafe = false,
+    retainsScroll = true,  -- one piece changed in place; a grid that resets to the top loses the player's place mid-placement (Discord 2026-09-06)
     invalidates = { "session.styles.placedDecor", "session.styles.currentArea" },
     reduce = function(state, payload)
         -- Bulk variant used by HousingObserver to coalesce the
@@ -5559,8 +5565,10 @@ HDG.Resolver:Register{ name = "pets", facade = "PetObserver",
 HDG.Resolver:Register{ name = "catalog", facade = "HousingCatalogObserver",
     actions = {
         { name = "DECOR_CATALOG_READY",                   bump = false },
-        { name = "COLLECTION_CATALOG_ROW_ADDED",          bump = false },
-        { name = "COLLECTION_CATALOG_ROW_COUNTS_UPDATED", bump = false },
+        -- retainsScroll: a per-row patch re-pushes every grid reading the tick;
+        -- resetting them to the top loses the player's place mid-placement.
+        { name = "COLLECTION_CATALOG_ROW_ADDED",          bump = false, retainsScroll = true },
+        { name = "COLLECTION_CATALOG_ROW_COUNTS_UPDATED", bump = false, retainsScroll = true },
         { name = "COLLECTION_CATALOG_ROW_REMOVED",        bump = false,
           invalidates = { "account.collection.ownedDecorIDs" },
           -- Observer calls RemoveRow on its index; reducer only scrubs
