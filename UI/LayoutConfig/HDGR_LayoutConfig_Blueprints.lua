@@ -152,8 +152,11 @@ LC.widgets["blueprintsDetailPanel.verdict"] = {
 }
 -- Cost to build, trailing the verdict: "does it fit?" and "can I afford it?" are
 -- the same decision, so they share a band. width="auto" so it takes only what the
--- currencies need and the verdict keeps the slack; hidden when nothing is left to
--- buy, since a "0" next to "you have everything" reads as a price.
+-- currencies need and the verdict keeps the slack -- which is why the selector
+-- caps how many it shows inline (BLUEPRINT_COST_BADGE_MAX) and the tooltip
+-- carries the full list: an uncapped auto-width label walked off the panel edge.
+-- Hidden when nothing is left to buy, since a "0" next to "you have everything"
+-- reads as a price.
 LC.widgets["blueprintsDetailPanel.costBadge"] = {
     tooltip = { recipe = "BlueprintCost" }, kind = "label", ["in"] = "blueprintsDetailPanel.verdictBand",
     binding = "blueprints.costBadge", font = "body", height = 16, width = "auto", order = 10,

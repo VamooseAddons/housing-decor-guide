@@ -30,6 +30,7 @@ end
 -- Returns "" for zero/nil. FormatGoldZero is the zero-visible variant (column-aligned tables).
 --   FormatAmount(n)              -> "1,234"  (commas, suppress zero)
 --   FormatCurrency(amount, cid)  -> "1,234 <icon>"
+--   CurrencyName(cid)            -> "Ancient Mana" / "Gold" / nil
 --   FormatGold(copper)           -> FormatCurrency(gold, CURRENCY_GOLD)
 
 function F.FormatAmount(n)
@@ -37,7 +38,27 @@ function F.FormatAmount(n)
     return _G.BreakUpLargeNumbers and _G.BreakUpLargeNumbers(n) or tostring(n)
 end
 
-local _trackedCurrencyIcon
+-- One ladder for anything that describes a currency by ID: the curated housing
+-- table first (name + icon, no client call), then the live client for IDs the
+-- table does not track. Returns { name, icon } or nil for an ID neither source
+-- knows -- callers render the raw id at that seam so a missing entry is visible
+-- rather than blank.
+local _trackedCurrency
+local function _currencyInfo(currencyID)
+    if not _trackedCurrency then
+        _trackedCurrency = {}
+        for _, c in ipairs(HDG.Constants.HOUSING_DECOR_CURRENCY_DATA) do
+            _trackedCurrency[c.id] = { name = c.name, icon = c.icon }
+        end
+    end
+    local tracked = _trackedCurrency[currencyID]
+    if tracked then return tracked end
+    if not (_G.C_CurrencyInfo and _G.C_CurrencyInfo.GetCurrencyInfo) then return nil end  -- exception(boundary): C_CurrencyInfo absent in headless tests
+    local info = _G.C_CurrencyInfo.GetCurrencyInfo(currencyID)
+    if not info then return nil end  -- exception(boundary): GetCurrencyInfo nil for unknown currencyIDs
+    return { name = info.name, icon = info.iconFileID }
+end
+
 function F.FormatCurrency(amount, currencyID, iconOverride)
     local n = F.FormatAmount(amount)
     if n == "" then return "" end
@@ -47,22 +68,22 @@ function F.FormatCurrency(amount, currencyID, iconOverride)
     -- Catalog icon wins (always correct). Curated table + live API are fallbacks for ItemAugment costs.
     local icon = iconOverride
     if not icon then
-        if not _trackedCurrencyIcon then
-            _trackedCurrencyIcon = {}
-            for _, c in ipairs(HDG.Constants.HOUSING_DECOR_CURRENCY_DATA) do
-                _trackedCurrencyIcon[c.id] = c.icon
-            end
-        end
-        icon = _trackedCurrencyIcon[currencyID]
-        if not icon and _G.C_CurrencyInfo and _G.C_CurrencyInfo.GetCurrencyInfo then  -- exception(boundary): C_CurrencyInfo absent in headless tests
-            local info = _G.C_CurrencyInfo.GetCurrencyInfo(currencyID)
-            icon = info and info.iconFileID  -- exception(boundary): GetCurrencyInfo nil for unknown currencyIDs
-        end
+        local info = _currencyInfo(currencyID)
+        icon = info and info.icon  -- exception(nullable): untracked and unknown to the client
     end
     if icon then return n .. " |T" .. icon .. ":14:14|t" end
     -- Final fallback: bare number with the raw id so missing tracking is
     -- visible at the UI seam instead of silently rendering as "1234".
     return n .. " (#" .. tostring(currencyID) .. ")"
+end
+
+-- Display name for a cost line. Gold is the sentinel, not a client currency.
+-- nil when neither the curated table nor the client knows the ID; the caller
+-- prints "#<id>" there for the same reason FormatCurrency does.
+function F.CurrencyName(currencyID)
+    if currencyID == HDG.Constants.CURRENCY_GOLD then return HDG.Constants.GOLD_NAME end
+    local info = _currencyInfo(currencyID)
+    return info and info.name  -- exception(nullable): untracked and unknown to the client
 end
 
 function F.FormatGold(copper)

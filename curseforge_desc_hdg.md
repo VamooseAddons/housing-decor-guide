@@ -12,19 +12,11 @@
 
 ---
 
-## What's New in v3.32.0
+## What's New in v3.32.1
 
-One feature asked for on the Discord, and two fixes found while building it.
-
-**My Styles can be grouped under categories you create.** In Styles, Browse, the My Styles bar has a "+ New Category" button. Name one, then fill it from the "+ Add styles" button on its row, which lists every style not yet in a category, or file a single style from the plus button on the style's own row, which also moves it between categories or takes it out again. Styles not in a category sit in their own fold at the top. Every category and fold remembers whether you left it open, across reloads.
-
-**The house editor companion groups your styles the same way.** Its Your Styles list shows your categories, a fold for styles not in one, and your Filtered Sets under their own heading. Each folds with a click and remembers it, separately from the Browse tab, so the picker can stay open while the tab stays tidy.
-
-**The Browse search box now filters the list.** It had been writing to a place the list never read, so typing did nothing. It also looks inside folded categories and shows how many matched.
-
-**Folding a Styles section no longer jumps the list to the top**, and which sections you left open is remembered between sessions instead of resetting on every login. The section bars now show a chevron and their count.
-
----
+- A decor learned right after buying it no longer stays marked as needed on the vendor's wares or in the Decor list until you reload. The learn is applied straight away, including when it lands during the catalog's first scan of the session.
+- The blueprint "cost to build" badge shows the first three currencies and "+N more" instead of running off the panel. Hover it for the full list, with each currency named beside its amount.
+- HDG no longer catalogues your neighbours' decor as you walk past their plots. It only listens for placed decor while you are inside your own house or on your own plot.
 
 ## The Decor Catalog
 
@@ -115,7 +107,7 @@ A companion window injects into Blizzard's House Editor so you can **place decor
 ---
 
 **Author:** Vamoose
-**Version:** 3.32.0
+**Version:** 3.32.1
 **Game Version:** 12.1.0 (Midnight)
 **Source / Issues:** https://github.com/VamooseAddons/housing-decor-guide
 **Discord:** https://discord.gg/RWZaxJaHFP

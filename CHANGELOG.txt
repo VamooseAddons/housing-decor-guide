@@ -1,3 +1,23 @@
+## [3.32.1] - 2026-09-06 (September 2026)
+
+### Changed
+- **HDG no longer catalogues your neighbours' decor as you walk past their plots.** The
+  live Placed Decor list only ever shows the house or plot you are standing in, but the
+  part of HDG feeding it was collecting every plot that came into view across a whole
+  neighbourhood. It now only listens while you are inside your own house or on your own plot.
+
+### Fixed
+- **A decor learned right after buying it no longer stays marked as needed.** The vendor
+  marks and the Decor list took a just-learned item's identity from a catalog record
+  that can be blank for a few moments after you acquire it, so the learn was dropped until
+  a reload. They now take it from the game's own storage update. A learn that lands while
+  the catalog is still doing its first scan of the session is also applied once the scan
+  finishes instead of being overwritten by it.
+- **The blueprint cost badge no longer runs off the panel.** A build priced in many
+  currencies stretched the "cost to build" line past the right edge of the detail card.
+  It now shows the first three and "+N more"; hover it to see every currency, each
+  named beside its amount, since several housing currencies share a near-identical icon.
+
 ## [3.32.0] - 2026-09-05 (September 2026)
 
 ### Added

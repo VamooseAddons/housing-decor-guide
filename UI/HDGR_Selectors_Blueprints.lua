@@ -184,17 +184,25 @@ Selectors:Register("blueprints.acquisitionCost", {
     end,
 })
 
--- Badge text: every currency, gold first. Empty when there is nothing left to
--- buy -- the band already says "you have everything" and a "0" badge beside it
--- reads like a price, not an absence.
+-- Badge text: the first BLUEPRINT_COST_BADGE_MAX currencies, gold first, then
+-- "+N more" for the rest -- the badge's hover tooltip (BlueprintCost) lists every
+-- currency, so the inline line only has to fit the band, not be complete. Empty
+-- when there is nothing left to buy -- the band already says "you have
+-- everything" and a "0" badge beside it reads like a price, not an absence.
 Selectors:Register("blueprints.costBadge", {
     calls = { "blueprints.acquisitionCost" },
     fn = function(state, ctx)
         local cost = Selectors:Call("blueprints.acquisitionCost", state, ctx)
-        if #cost.currencies == 0 then return "" end
+        local n = #cost.currencies
+        if n == 0 then return "" end
+        local max = HDG.Constants.BLUEPRINT_COST_BADGE_MAX
         local parts = {}
-        for _, c in ipairs(cost.currencies) do
+        for i = 1, math.min(n, max) do
+            local c = cost.currencies[i]
             parts[#parts + 1] = HDG.Format.FormatCurrency(c.total, c.currencyID, c.icon)
+        end
+        if n > max then
+            parts[#parts + 1] = HDG.Theme:ColorCode("text.dim") .. ("+%d more|r"):format(n - max)
         end
         return table.concat(parts, "  ")
     end,

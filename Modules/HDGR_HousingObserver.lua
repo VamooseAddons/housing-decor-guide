@@ -11,7 +11,7 @@
 --
 --   1. Placed decor (account.styles.placedDecor):
 --        HOUSE_EDITOR_MODE_CHANGED       -> topology capture only (does NOT clear)
---        HOUSING_DECOR_CUSTOMIZATION_CHANGED  -> per-decor observe (queued + batched)
+--        HOUSING_DECOR_CUSTOMIZATION_CHANGED  -> per-decor observe (queued + batched; own house/plot gated)
 --        HOUSING_DECOR_REMOVED           -> remove
 --        PLAYER_ENTERING_WORLD           -> clear when leaving a house context
 --
@@ -64,18 +64,26 @@ local function _flushQueue()
     _queue = {}
     local n = #entries
     if n == 0 then return end
-    -- ownedContext: whether the player is standing in a house they own at flush time.
-    -- The reducer will not let a burst retarget session.styles.currentArea when this is
-    -- false, so visiting a neighbour cannot repoint the Placed list at their plot.
-    -- HO owns C_Housing, so the read belongs here rather than in the reducer.
-    local ownedContext = true
-    if C_Housing and C_Housing.IsInsideOwnedHouse then  -- exception(boundary): absent headless / pre-login
-        ownedContext = C_Housing.IsInsideOwnedHouse() and true or false
-    end
+    -- ownedContext: the reducer will not let a burst retarget
+    -- session.styles.currentArea when this is false. Read through the same
+    -- predicate that gates capture -- it used to be IsInsideOwnedHouse, which is
+    -- false on your own plot outdoors, so the exterior burst could never point
+    -- the Placed list at the exterior. HO owns C_Housing, so the read lives here.
     HDG.Store:Dispatch({
         type    = HDG.Constants.ACTIONS.STYLES_PLACED_DECOR_OBSERVED_BATCH,
-        payload = { entries = entries, ownedContext = ownedContext },
+        payload = { entries = entries, ownedContext = HO:InOwnHouseContext() },
     })
+end
+
+-- Own house context: inside a house you own OR on a plot you own. The two
+-- halves are distinct signals -- IsInsideOwnedHouse is the only one that
+-- answers indoors and plot ownership the only one outdoors (measured 2026-08-12)
+-- -- and IsInsideOwnedHouseOrPlot is Blizzard's own union of them on 12.1.
+-- "Owned" is account-scoped: an alt's house reads as yours. This one predicate
+-- gates the placed-decor capture, stamps the batch's ownedContext, and defines
+-- "leaving" for the clear, so the map, the gate and the stamp cannot disagree.
+function HO:InOwnHouseContext()
+    return C_Housing.IsInsideOwnedHouseOrPlot()
 end
 
 -- The interior room the player is standing in (nil if not in one). HO owns
@@ -1242,12 +1250,11 @@ HDG.Modules:Declare({
         "C_HousingLayout",   -- Projects topology capture + budget reads
     },
     blizzardEvents = {
-        -- Placed-decor channel. CUSTOMIZATION_CHANGED is the enumeration burst --
-        -- ungated on purpose (see OnDecorCustomization). It carries decor from
-        -- several area IDs including neighbouring plots, so consumers scope by the
-        -- GUID's area segment. The old "flyovers, loading screens" rationale for
-        -- gating was never evidenced and is removed; neighbours are the real and
-        -- only observed source of foreign decor.
+        -- Placed-decor channel. CUSTOMIZATION_CHANGED is the enumeration burst,
+        -- gated on OWN house or plot only (see OnDecorCustomization): it also
+        -- fires for every neighbour's plot streaming into view, which fed nothing.
+        -- On your own plot it can still carry neighbouring area IDs, so consumers
+        -- scope by the GUID's area segment.
         HOUSE_EDITOR_MODE_CHANGED            = { handler = "OnEditorModeChanged" },
         HOUSING_DECOR_CUSTOMIZATION_CHANGED  = { handler = "OnDecorCustomization" },
         HOUSING_DECOR_REMOVED                = { handler = "OnDecorRemoved" },
@@ -1296,24 +1303,26 @@ HDG.Modules:Declare({
     end,
 
     OnDecorCustomization = function(self, decorGUID)
-        -- NO editor-active gate. This event is the only taint-free enumeration of
-        -- placed decor (GetAllPlacedDecor carries HasRestrictions), and it bulk-fires
-        -- as a burst. Gating on IsHouseEditorActive dropped the ENTIRE burst whenever
-        -- it landed before that flag flipped, which is why HDG never saw its own
-        -- enumeration channel. Verified 2026-07-26: an ungated probe captured the full
-        -- set and matched Blizzard's own Placed Decor panel 21/21 (0 missing, 0 extra);
-        -- HDG with the gate captured nothing.
+        -- Gated on OWN HOUSE CONTEXT (your house or your plot), never on the editor. The
+        -- editor-active gate dropped the ENTIRE burst because it lands before that
+        -- flag flips -- HDG never saw its own enumeration channel until the gate
+        -- went (verified 2026-07-26: ungated capture matched Blizzard's Placed
+        -- Decor panel 21/21). But the event is not only the editor-entry burst: it
+        -- fires for every neighbour's plot that streams into view, so ungated it
+        -- collected a whole neighbourhood's decor -- two housing API calls and a
+        -- catalog lookup per piece, a dispatch per frame -- into a session map
+        -- whose only reader (the companion's Placed list) is scoped to the house
+        -- or plot you stand in. Context is a property of where you are, not of
+        -- when the burst fires, so this gate cannot repeat the timing miss.
         --
-        -- What the gate was actually protecting against is decor that isn't yours --
-        -- the burst spans several area IDs, neighbouring plots included. That is a
-        -- SCOPE problem, not a timing one, so consumers filter on the area segment of
-        -- the GUID (session.styles.currentArea) instead. Scoping by identity works
-        -- regardless of when the burst fires, which matters because the trigger is
-        -- still unverified.
+        -- On your own plot the burst can still span neighbouring plots; consumers
+        -- scope by the GUID's area segment (session.styles.currentArea). A visited
+        -- house is not captured at all.
         --
         -- Safe because this path writes only session.styles.placedDecor (session-only,
         -- never persisted). account.recentActivity is written by the REMOVED handler,
         -- which fires only for the player's own removals.
+        if not HO:InOwnHouseContext() then return end
         HO:Observe(decorGUID)
     end,
 
@@ -1346,9 +1355,9 @@ HDG.Modules:Declare({
     end,
 
     OnEnteringWorld = function(self)
-        -- Only clear placed-decor map when leaving a house context.
-        -- C_Housing.IsInsideHouse catches both house + plot.
-        if C_Housing and not C_Housing.IsInsideHouse() then
+        -- Clear the placed-decor map only when leaving your own house or plot --
+        -- the same predicate that gates capture, so the map and the gate agree.
+        if not HO:InOwnHouseContext() then
             HO:CancelSweep()   -- hearth//reload mid-sweep must not wedge the next capture
             HO:ClearPlaced()
         end

@@ -5327,9 +5327,9 @@ HDG.Actions:Register{ name = "STYLES_PLACED_DECOR_OBSERVED_BATCH",
                 -- CAVEAT (review 2026-08-23, NOT fully closed): batch order is Blizzard's
                 -- event order, not a statement about where the player stands, and a burst
                 -- can carry decor from several areas including neighbouring plots. The
-                -- dispatcher now refuses to retarget while the player is not inside an
-                -- owned house (HousingObserver stamps payload.ownedContext), which stops a
-                -- neighbour's plot hijacking the view from outside. It does NOT settle the
+                -- dispatcher now refuses to retarget while the player is not in an owned
+                -- house or on an owned plot (HousingObserver stamps payload.ownedContext),
+                -- which stops a neighbour's plot hijacking the view from outside. It does NOT settle the
                 -- case where a mixed burst arrives while you ARE inside your own house --
                 -- areaID is parsed from the decor GUID and no API answers "which area am I
                 -- in", so closing that needs a live probe of what a real burst contains.

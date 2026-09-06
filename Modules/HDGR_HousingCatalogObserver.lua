@@ -22,11 +22,16 @@ R.byDecorID      = R.byDecorID      or {}  -- [decorID] = row (built alongside b
 R.byVendor       = R.byVendor       or {}
 R.allVendorNames = R.allVendorNames or {}
 R.tagIDToGroup   = R.tagIDToGroup   or {}
+-- Storage-entry events that land while a sweep is in flight are parked here and
+-- replayed by _CommitSweep against the swapped-in tables (see ReconcileEntry).
+R._sweepInFlight  = R._sweepInFlight  or false  -- exception(false-positive): idempotent module-load init
+R._pendingEntries = R._pendingEntries or {}     -- exception(false-positive): idempotent module-load init
 
 -- ===== Reconciler ============================================================
 -- Two entry points:
---   ReconcileFull       -- cold sweep, atomic-rebuilds all indexes
---   ReconcileEntry(id)  -- targeted update from HOUSING_STORAGE_ENTRY_UPDATED
+--   ReconcileFull                  -- cold sweep, atomic-rebuilds all indexes
+--   ReconcileEntry(entryVariantID) -- targeted update from HOUSING_STORAGE_ENTRY_UPDATED;
+--                                     parked while a sweep is in flight, replayed at commit
 -- Both mutate state via reducer dispatches (per ADR-012).
 
 function R:GetClientVer()
@@ -152,6 +157,9 @@ function R:ReconcileFull(reason)
     if HDG.Perf and HDG.Perf.Enabled and HDG.Perf:Enabled() then  -- exception(false-positive): HDG.Perf is TOC-guaranteed at runtime; headless test mock omits it
         self._perfSearchFiredAt = _G.debugprofilestop and _G.debugprofilestop() or nil
     end
+    -- From here until _CommitSweep swaps the snapshot in, a targeted patch would
+    -- land in tables about to be replaced; ReconcileEntry parks instead.
+    self._sweepInFlight = true
     s:RunSearch()
 end
 
@@ -407,6 +415,7 @@ function R:_CommitSweep(result)
     R.byVendor       = result.byVendor
     R.allVendorNames = result.allVendorNames
     R._catalogSchemaVersion = HDG.Constants.CATALOG_SCHEMA_VERSION
+    R._sweepInFlight = false
 
     local vendorCount = 0
     for _ in pairs(result.byVendor) do vendorCount = vendorCount + 1 end
@@ -433,6 +442,16 @@ function R:_CommitSweep(result)
             generation  = generation,
         },
     })
+
+    -- Storage-entry events parked during the sweep (ReconcileEntry) replay now,
+    -- against the tables just swapped in and after BULK_LOAD has written the
+    -- snapshot's owned set -- so a learn the snapshot predates is re-applied
+    -- rather than overwritten.
+    local parked = R._pendingEntries
+    R._pendingEntries = {}
+    for _, p in ipairs(parked) do
+        R:_ApplyEntry(p.entryID, p.decorID, p.wasOwned)
+    end
 
     -- Rebuild category nav: the MAIN_WINDOW_OPENING build runs before the sweep
     -- completes; this ensures subcategory info (e.g. Furnishings) is populated.
@@ -477,29 +496,50 @@ function R:_UpdateVintage()
     end
 end
 
--- ReconcileEntry(entryID): targeted update from HOUSING_STORAGE_ENTRY_UPDATED.
+-- ReconcileEntry(entryVariantID): targeted update from HOUSING_STORAGE_ENTRY_UPDATED.
+-- The payload is a HousingCatalogEntryVariantID {recordID, entryType,
+-- variantIdentifier} and its recordID IS the identity. The fetched info carries
+-- one too, but that field is nil on a just-acquired entry (Reference:
+-- HOUSING_CATALOG_API.md), and taking identity from there silently dropped the
+-- one learn that mattered -- the one that just happened. Merchant marks stayed
+-- red until a fresh session (Gnuclear Gnome, Discord 2026-09-05).
 function R:ReconcileEntry(entryID)
-    if not (entryID and _G.C_HousingCatalog
-            and _G.C_HousingCatalog.GetCatalogEntryInfo) then return end
+    local decorID = type(entryID) == "table" and entryID.recordID  -- exception(boundary): Blizzard event payload
+    if not decorID then
+        HDG.Log:Warn("catalog_reconcile", "storage entry event carried no recordID: " .. tostring(entryID))
+        return
+    end
+    local row      = R.byDecorID[decorID]
+    local wasOwned = row and row.isOwned or false  -- exception(nullable): entry not yet in the catalog
+    -- A sweep in flight builds a private snapshot and swaps it in wholesale at
+    -- settle, so a patch made now lands in tables about to be replaced. Park the
+    -- event for _CommitSweep to replay, keeping wasOwned from BEFORE the swap so
+    -- the learned transition survives a snapshot that already shows it owned.
+    if R._sweepInFlight then
+        R._pendingEntries[#R._pendingEntries + 1] = { entryID = entryID, decorID = decorID, wasOwned = wasOwned }
+        return
+    end
+    R:_ApplyEntry(entryID, decorID, wasOwned)
+end
+
+function R:_ApplyEntry(entryID, decorID, wasOwned)
+    if not (_G.C_HousingCatalog and _G.C_HousingCatalog.GetCatalogEntryInfo) then return end  -- exception(boundary): C_HousingCatalog absent in headless tests
     local info = _G.C_HousingCatalog.GetCatalogEntryInfo(entryID)
     if type(info) ~= "table" then
         HDG.Log:Warn("catalog_error",
             "GetCatalogEntryInfo returned non-table for entryID: " .. tostring(entryID))
         return
     end
-    local decorID = info.recordID  -- exception(boundary): Blizz struct; nil for non-catalog entries
-    if not decorID then return end
 
     local A        = HDG.Constants.ACTIONS
     local row      = R.byDecorID[decorID]
-    local wasOwned = row and row.isOwned or false
     local total    = (info.totalNumStored or 0) + (info.remainingRedeemable or 0) + (info.totalNumPlaced or 0)  -- exception(boundary): Blizzard struct field sparse
     local isOwned  = total > 0
 
     -- New row path: build + ROW_ADDED immediately (don't defer to next full sweep).
     if not row then
-        -- info.recordID isn't always populated by GetCatalogEntryInfo; stamp it from decorID.
-        info.recordID = info.recordID or decorID
+        -- BuildRow keys on info.recordID, nil on a just-acquired entry; the event's identity wins.
+        info.recordID = decorID
         local newRow = R:BuildRow(info)
         HDG.Store:Dispatch({
             type = A.COLLECTION_CATALOG_ROW_ADDED,
@@ -1948,6 +1988,7 @@ HDG.Modules:Declare({
         catalog_swept     = { user = false, level = "info"    },
         catalog_refreshed = { user = true,  level = "success", duration = 5    },
         catalog_error     = { user = true,  level = "error",   duration = nil  },
+        catalog_reconcile = { user = false, level = "warn"    },
     },
     blizzardEvents = {
         -- Queuing model: events dispatch CATALOG_REFRESH_QUEUED regardless of window state.

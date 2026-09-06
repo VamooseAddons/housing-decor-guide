@@ -24,6 +24,11 @@ HDG.Constants = {
     BULLET_DOT_ATLAS = "PlayerPartyBlip",
     BLUEPRINT_SLOT_MAX = 50,  -- HousingConsts: 50 blueprints per Bnet account
     BLUEPRINT_REQUEST_TIMEOUT = 30,  -- s; big manifests take 5-10s, and some requests are silently dropped (no event at all)
+    -- Currencies shown inline on the detail cost badge before "+N more". The
+    -- badge shares a 22px band with the fit verdict, and a real build priced in
+    -- 11 currencies ran off the panel's right edge; the hover tooltip carries
+    -- the full list, so the badge only needs enough to read as "a price".
+    BLUEPRINT_COST_BADGE_MAX = 3,
     -- Catalog row schema version. Bump when the observer row shape changes.
     -- No migration needed -- catalog is fully re-fetched from C_HousingCatalog on every sweep.
     CATALOG_SCHEMA_VERSION = 3,
@@ -1281,6 +1286,7 @@ end
 -- Gold has no Blizzard currency ID; CURRENCY_GOLD sentinel lets cost-entry tables iterate uniformly.
 HDG.Constants.COIN_ATLAS    = "|A:auctionhouse-icon-coin-gold:14:14|a"
 HDG.Constants.CURRENCY_GOLD = -1   -- sentinel; real currency IDs are positive
+HDG.Constants.GOLD_NAME     = "Gold"  -- the sentinel has no C_CurrencyInfo record to take a name from
 
 -- 134400 = INV_Misc_QuestionMark.blp -- canonical "?" placeholder for missing icons.
 HDG.Constants.PLACEHOLDER_ICON = 134400

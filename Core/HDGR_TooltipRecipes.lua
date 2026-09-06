@@ -184,6 +184,10 @@ R.BlueprintCopyReqs    = { title = "locale:TIP_BP_COPY_REQS_TITLE",   body = "lo
 -- ruling 2026-08-04) -- housing decor is not a gold-only economy, and a single
 -- gold figure would be a different, wrong answer on most builds.
 --
+-- Amount + icon left, name right. Several housing currencies share near-identical
+-- 14px icons, and a 13-line tooltip of "800 <purple gem>" does not say which
+-- currency to go earn (Boggle's build, 2026-09-05).
+--
 -- The unpriced count is stated rather than hidden. Some decor has no catalog
 -- cost at all, and a total that quietly omits it looks authoritative while being
 -- short -- worse than a total that admits what it could not price.
@@ -192,7 +196,11 @@ R.BlueprintCost = function()
     local dim  = HDG.Theme:ColorCode("text.dim")
     local lines = {}
     for _, c in ipairs(cost.currencies) do
-        lines[#lines + 1] = { text = HDG.Format.FormatCurrency(c.total, c.currencyID, c.icon) }
+        local name = HDG.Format.CurrencyName(c.currencyID)
+        lines[#lines + 1] = {
+            text  = HDG.Format.FormatCurrency(c.total, c.currencyID, c.icon),
+            right = name or ("#" .. tostring(c.currencyID)),  -- exception(nullable): untracked and unknown to the client
+        }
     end
     if cost.unpricedCount > 0 then
         lines[#lines + 1] = { text = " " }
