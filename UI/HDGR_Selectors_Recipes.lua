@@ -138,6 +138,9 @@ Selectors:Register("recipes.craftGraph", {
                     categoryName = rec.categoryName or (seed and seed.categoryName),
                     name         = seed and seed.name,
                     slots        = slots,
+                    -- Per-craft yield PowerCrafter divides demand by. Capture first; the
+                    -- seed's value when the record was scanned before the field existed.
+                    outputQtyMin = rec.outputQtyMin or (seed and seed.outputQtyMin),  -- exception(optional): sparse -- only multi-output recipes carry it
                 }
             end
         end

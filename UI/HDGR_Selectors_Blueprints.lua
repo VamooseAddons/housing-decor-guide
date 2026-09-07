@@ -123,9 +123,10 @@ Selectors:Register("blueprints.inspector", {
 -- structural, which is the same set blueprints.inspector counts as missing.
 --
 -- A CURRENCY summary, not a gold total (owner ruling): housing decor is sold for
--- several currencies, so each keeps its own running total and gold is just
--- another line. Costs come from the catalog's baked row.costEntries
--- ({currencyID, amount, icon}) -- no vendor-DB join needed.
+-- several currencies and some item tokens, so each keeps its own running total
+-- and gold is just another line. Costs come from the catalog's baked
+-- row.costEntries (currency or item-token entries, grouped by Format.CostKey)
+-- -- no vendor-DB join needed.
 --
 -- unpricedCount is carried, not swallowed. A total that silently drops the
 -- entries it could not price reads as authoritative while being wrong; one that
@@ -156,10 +157,11 @@ Selectors:Register("blueprints.acquisitionCost", {
                         if entries and #entries > 0 then
                             out.pricedCount = out.pricedCount + 1
                             for _, e in ipairs(entries) do
-                                local cur = byCurrency[e.currencyID]
+                                local key = HDG.Format.CostKey(e)
+                                local cur = byCurrency[key]
                                 if not cur then
-                                    cur = { currencyID = e.currencyID, total = 0, icon = e.icon }
-                                    byCurrency[e.currencyID] = cur
+                                    cur = { key = key, currencyID = e.currencyID, itemID = e.itemID, total = 0, icon = e.icon }
+                                    byCurrency[key] = cur
                                     order[#order + 1] = cur
                                 end
                                 cur.total = cur.total + (e.amount or 0) * it.numMissing  -- exception(boundary): baked catalog cost may omit an amount
@@ -171,14 +173,14 @@ Selectors:Register("blueprints.acquisitionCost", {
                 end
             end
         end
-        -- Gold first, then by currencyID. NOT by magnitude: 4,200 of a token and
-        -- 1,550 gold are different units, so ranking them against each other
-        -- implies a comparison that does not exist -- and it put a token above
-        -- gold purely for having a bigger number. Sorting by ID instead is
-        -- arbitrary but honest, and it is total, so the badge cannot reshuffle
-        -- between repaints. CURRENCY_GOLD is the -1 sentinel, so it sorts first
-        -- on its own.
-        table.sort(order, function(a, b) return a.currencyID < b.currencyID end)
+        -- Gold first, then currencies, then item tokens, by CostKey. NOT by
+        -- magnitude: 4,200 of a token and 1,550 gold are different units, so
+        -- ranking them against each other implies a comparison that does not
+        -- exist -- and it put a token above gold purely for having a bigger
+        -- number. Sorting by key instead is arbitrary but honest, and it is
+        -- total, so the badge cannot reshuffle between repaints. CURRENCY_GOLD
+        -- is the -1 sentinel, so "currency:-1" sorts first on its own.
+        table.sort(order, function(a, b) return a.key < b.key end)
         out.currencies = order
         return out
     end,
@@ -199,7 +201,7 @@ Selectors:Register("blueprints.costBadge", {
         local parts = {}
         for i = 1, math.min(n, max) do
             local c = cost.currencies[i]
-            parts[#parts + 1] = HDG.Format.FormatCurrency(c.total, c.currencyID, c.icon)
+            parts[#parts + 1] = HDG.Format.FormatCost(c.total, c)
         end
         if n > max then
             parts[#parts + 1] = HDG.Theme:ColorCode("text.dim") .. ("+%d more|r"):format(n - max)

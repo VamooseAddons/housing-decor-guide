@@ -96,7 +96,7 @@ local function _appendCatalogCostLine(add, row)
     if not (row.costEntries and #row.costEntries > 0) then return end   -- exception(nullable): item has no vendor cost
     local parts = {}
     for _, ce in ipairs(row.costEntries) do
-        parts[#parts + 1] = HDG.Format.FormatCurrency(ce.amount, ce.currencyID)
+        parts[#parts + 1] = HDG.Format.FormatCost(ce.amount, ce)
     end
     add("Cost: " .. table.concat(parts, "  +  "), COST_R, COST_G, COST_B)
 end

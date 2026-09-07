@@ -147,9 +147,9 @@ local function isForeignTradeSkill(CT)
 end
 
 -- Full-record equality: profession, spellID, categoryName (sub-recipes only; nil==nil for
--- decor), AND the reagent {id=qty} set. A change in ANY (12.1 reduced-lumber reagents, a
--- profession move, a new recipe, a spellID backfill) counts as changed -> re-dispatch.
--- nil `a` = itemID not in the store yet = new recipe = changed.
+-- decor), outputQtyMin, AND the reagent {id=qty} set. A change in ANY (12.1 reduced-lumber
+-- reagents, a profession move, a new recipe, a spellID backfill, a yield the store predates)
+-- counts as changed -> re-dispatch. nil `a` = itemID not in the store yet = new recipe = changed.
 local function sameRecord(a, b)
     if not a then return false end
     if a.profession ~= b.profession then return false end
@@ -157,6 +157,7 @@ local function sameRecord(a, b)
     if a.categoryName ~= b.categoryName then return false end
     if a.expansion ~= b.expansion then return false end
     if a.name ~= b.name then return false end
+    if a.outputQtyMin ~= b.outputQtyMin then return false end
     for id, qty in pairs(a.reagents) do if b.reagents[id] ~= qty then return false end end
     for id in pairs(b.reagents) do if a.reagents[id] == nil then return false end end
     return true
@@ -238,6 +239,7 @@ end
 -- and record tiered slots' quality groups.
 local function _walkProfessionBook(profName, CT, catalog, ids)
     local BASIC = (_G.Enum and _G.Enum.CraftingReagentType and _G.Enum.CraftingReagentType.Basic) or 0  -- exception(boundary): enum absent headless; Basic = 0
+    local SALVAGE = (_G.Enum and _G.Enum.TradeskillRecipeType and _G.Enum.TradeskillRecipeType.Salvage) or 2  -- exception(boundary): enum absent headless; Salvage = 2
     local recipes, n = {}, 0
     local allByOutput = {}   -- [outItemID] = { reagents, spellID, profession } -- transient closure index
     local variantGroups = {} -- [reagentID] = sorted sibling ids -- quality groups seen this walk
@@ -258,6 +260,14 @@ local function _walkProfessionBook(profName, CT, catalog, ids)
                 -- so the resolver can materialize a full entry (spellID drives IsSpellKnown) for
                 -- recipes the seed DB doesn't ship. Capture is the source of truth; seed is fallback.
                 local rec = { reagents = reagents, profession = profName, spellID = recipeID }
+                -- Per-craft yield for multi-output recipes (bolts make 2, Imbued Silkweave
+                -- 10): PowerCrafter divides demand by it. Salvage schematics report the
+                -- INPUT consumed in quantityMin (Reference gotcha), so they are skipped.
+                -- 1 is the default and is not stored -- sparse, like the seed's outputQtyMin.
+                local yield = schematic.quantityMin or 1  -- exception(boundary): schematic field, documented as number but read defensively
+                if schematic.recipeType ~= SALVAGE and yield > 1 then
+                    rec.outputQtyMin = yield
+                end
                 allByOutput[itemID] = rec
                 local row = catalog:GetRow(itemID)  -- exception(nullable): non-decor products
                 if row then  -- decor products (catalog-recognized)

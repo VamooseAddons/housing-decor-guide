@@ -1008,21 +1008,20 @@ local function _entriesFromCostSpec(cost, GOLD)
     return entries
 end
 
--- Catalog cost: currency hyperlinks from the Cost: line, or gold fallback.
-local function _costFromVendor(vendor, GOLD)
-    if not vendor then return nil end
-    if vendor.costEntries and #vendor.costEntries > 0 then
-        local entries = {}
-        for _, e in ipairs(vendor.costEntries) do
-            entries[#entries + 1] = { currencyID = e.currencyID, amount = e.amount, icon = e.icon }
-        end
-        return entries
+-- Catalog cost: the entries _extractCostEntries lifted from the RAW Cost: line
+-- (currency links, item-token links, the gold money icon) -- and nothing else.
+-- The bare-digits-means-gold fallback that used to sit here is how 25 item-token
+-- prices shipped as gold: StripHyperlinks reduces ANY unknown link to its digits,
+-- so "no entries but digits" is an unparsed shape, not a price. It must surface
+-- as no cost so the parser gets taught the shape, never as a plausible number.
+local function _costFromVendor(vendor)
+    if not vendor then return nil end  -- exception(nullable): row.vendors[1] on a vendorless row
+    if not (vendor.costEntries and #vendor.costEntries > 0) then return nil end  -- exception(nullable): priceless vendor block
+    local entries = {}
+    for _, e in ipairs(vendor.costEntries) do
+        entries[#entries + 1] = { currencyID = e.currencyID, itemID = e.itemID, amount = e.amount, icon = e.icon }
     end
-    if vendor.cost and vendor.cost:match("^[%d,]+$") then
-        local n = tonumber((vendor.cost:gsub(",", "")))
-        if n and n > 0 then return { { currencyID = GOLD, amount = n } } end
-    end
-    return nil
+    return entries
 end
 
 -- Override fallback (only when catalog has no cost). First source with a .cost wins.
@@ -1038,7 +1037,7 @@ local function _formatCostLine(entries)
     if not (entries and #entries > 0) then return "" end
     local parts = {}
     for _, e in ipairs(entries) do
-        local s = HDG.Format.FormatCurrency(e.amount, e.currencyID, e.icon)
+        local s = HDG.Format.FormatCost(e.amount, e)
         if s ~= "" then parts[#parts + 1] = s end
     end
     return table.concat(parts, "  +  ")
@@ -1048,17 +1047,17 @@ end
 local function _costKey(entries)
     local parts = {}
     for _, e in ipairs(entries) do
-        parts[#parts + 1] = tostring(e.currencyID) .. ":" .. tostring(e.amount)
+        parts[#parts + 1] = HDG.Format.CostKey(e) .. "=" .. tostring(e.amount)
     end
     table.sort(parts)
     return table.concat(parts, "|")
 end
 
 -- Distinct cost variants across all vendor blocks (e.g. 30 coupons OR 500g = two options).
-local function _costVariants(row, GOLD)
+local function _costVariants(row)
     local lines, seen = {}, {}
     for _, vendor in ipairs(row.vendors or {}) do
-        local entries = _costFromVendor(vendor, GOLD)
+        local entries = _costFromVendor(vendor)
         if entries and #entries > 0 then
             local key = _costKey(entries)
             if not seen[key] then
@@ -1085,12 +1084,12 @@ function R:_bakeCost(row)
         return
     end
     local vendor = row.vendors and row.vendors[1]
-    local entries = _costFromVendor(vendor, GOLD)
+    local entries = _costFromVendor(vendor)
                  or _costFromOverrideSources(row.sources, GOLD)
     row.costEntries = entries or {}
     row.costLine    = _formatCostLine(entries)
     -- Per-option lines (>=1 when any cost). Multi-option drives vendor list to show item once per option.
-    local variants = _costVariants(row, GOLD)
+    local variants = _costVariants(row)
     if #variants == 0 and row.costLine ~= "" then variants = { row.costLine } end
     row.costVariants = variants
 end
@@ -1385,8 +1384,11 @@ end
 -- lines. Multi-vendor items repeat the Vendor/Zone/Faction/Cost block.
 -- row.factionGate = first Faction: line; selectors fall back to ItemAugment if absent.
 --
--- _extractCostEntries: parse {currencyID, amount, icon} from the RAW Cost: line.
--- MUST be raw (not SHL-stripped) -- SHL nukes |Hcurrency:<id>|h wrappers.
+-- _extractCostEntries: parse cost entries from the RAW Cost: line --
+-- { currencyID, amount, icon } for |Hcurrency: links and the gold money icon,
+-- { itemID, amount, icon } for |Hitem: links (Format.CostKey/FormatCost/CostName
+-- read the distinction). MUST be raw (not SHL-stripped) -- SHL nukes the |H..|h
+-- wrappers, leaving bare digits that say nothing about what they count.
 -- The catalog-embedded icon is always correct; avoids a stale hand-curated table
 -- and won't drop currencies outside it (boundary: any currency in Cost: IS a decor cost).
 local function _extractCostEntries(raw)
@@ -1400,6 +1402,20 @@ local function _extractCostEntries(raw)
         local id = tonumber(cid)
         if n and id then
             entries[#entries + 1] = { currencyID = id, amount = n, icon = iconByID[id] }
+        end
+    end
+    -- Item tokens: "1|Hitem:137642|h|T<icon>:0|t|h" (Mark of Honor, Dreamsurge
+    -- Coalescence, ...). Same shape as the currency loop with the item's own ID;
+    -- an item is not a currency, so the entry carries itemID and no currencyID.
+    local itemIconByID = {}
+    for iid, icon in raw:gmatch("|Hitem:(%d+)|h|T([^:|]+)") do
+        itemIconByID[tonumber(iid)] = icon
+    end
+    for amt, iid in raw:gmatch("([%d,]+)%s*|Hitem:(%d+)|h") do
+        local n  = tonumber((amt:gsub(",", "")))
+        local id = tonumber(iid)
+        if n and id then
+            entries[#entries + 1] = { itemID = id, amount = n, icon = itemIconByID[id] }
         end
     end
     -- Gold is a money texture ("<amt>|TInterface\MoneyFrame\UI-GoldIcon...|t"), NOT a
@@ -1532,7 +1548,7 @@ function R:_ParseSourceText(sourceText, row)
             row.achievement = ach
         elseif cat then
             row.category = cat
-        elseif current and raw:match("|Hcurrency:") then
+        elseif current and (raw:match("|Hcurrency:") or raw:match("|Hitem:")) then
             -- Bare cost line (no "Cost:" prefix): achievement-vendor catalog format
             -- (e.g. "800|Hcurrency:3392|h"). Same handling as the Cost: branch.
             current.cost = line

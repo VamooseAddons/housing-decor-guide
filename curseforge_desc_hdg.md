@@ -12,9 +12,13 @@
 
 ---
 
-## What's New in v3.32.2
+## What's New in v3.32.3
 
-- The house editor companion keeps your place in a collection after you place a piece. Placing from a collection longer than a page sent the list back to the top every time; it now stays where you were, and the same holds when you pick a piece back up.
+- Decor that a vendor sells for an item rather than gold, such as the Square Stormpike Table for 1 Mark of Honor or the Moonclasp Satchel for 500 Dreamsurge Coalescence, now shows that item's icon in its cost line, vendor list, blueprint cost badge and catalog tooltip. These pieces no longer appear in the "Gold, No Unlocks" filter.
+- The Well-Lit Incontinental Loveseat now shows its Gallagio Loyalty Rewards Club rank requirement and leaves the "Gold, No Unlocks" filter.
+- The Raw materials view for a crafting queue no longer inflates gathered reagents that also have a transmute, such as the Midnight motes. Recipes that make several per craft, like Imbued Silkweave, are counted as one craft.
+- Six vendor-sold reagents now list under "From Vendor" instead of "From Gathering", and Stabilized Derivate lists under "From Crafted".
+- The Brewfest Stein and Brewfest Crate now show their holiday hut vendors in Founder's Point and Razorwind Shores, with map pins.
 
 ## The Decor Catalog
 
@@ -105,7 +109,7 @@ A companion window injects into Blizzard's House Editor so you can **place decor
 ---
 
 **Author:** Vamoose
-**Version:** 3.32.2
+**Version:** 3.32.3
 **Game Version:** 12.1.0 (Midnight)
 **Source / Issues:** https://github.com/VamooseAddons/housing-decor-guide
 **Discord:** https://discord.gg/RWZaxJaHFP

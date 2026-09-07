@@ -7,6 +7,11 @@
 --   * For CHANGED rows where PT says non-Vendor and live says Vendor (or vice versa), trust PT
 --   * Add new items found in PT recipes but absent from live
 -- Format: [itemID] = {"Source", "ItemName"} or {"Vendor:CopperPrice", "ItemName"}
+--   "Vendor" with no price = sold by a vendor, copper price not yet captured (PriceSource
+--   then falls through to AH sources). Six such rows were Gathering until 2026-09-07
+--   (KevinW, CurseForge: vendor reagents listed under "From Gathering"). Stabilized
+--   Derivate was Gathering too and is Crafted: an Alchemy recycling by-product. Wowhead's
+--   "Sold by" for it is Herbataur, the PTR bulk-testing vendor, not a live source.
 -- ============================================================================
 
 HDGR_ReagentsDB = {
@@ -287,7 +292,7 @@ HDGR_ReagentsDB = {
     [5051] = {"Gathering", "Dig Rat"},
     [220134] = {"Gathering", "Dilly-Dally Dace"},
     [3164] = {"Gathering", "Discolored Worg Heart"},
-    [226205] = {"Gathering", "Distilled Algari Freshwater"},
+    [226205] = {"Vendor", "Distilled Algari Freshwater"},
     [204215] = {"Gathering", "Dormant Primordial Fragment"},
     [248012] = {"Gathering", "Dornic Fir Lumber"},
     [200860] = {"Gathering", "Draconic Stopper"},
@@ -554,7 +559,7 @@ HDGR_ReagentsDB = {
     [192869] = {"Gathering", "Illimited Diamond"},
     [183951] = {"Gathering", "Immortal Shard"},
     [41802] = {"Gathering", "Imperial Manta Ray"},
-    [172057] = {"Gathering", "Inconceivably Aged Vinegar"},
+    [172057] = {"Vendor", "Inconceivably Aged Vinegar"},
     [43105] = {"Gathering", "Indigo Pigment"},
     [124444] = {"Gathering", "Infernal Brimstone"},
     [34054] = {"Gathering", "Infinite Dust"},
@@ -607,7 +612,7 @@ HDGR_ReagentsDB = {
     [151579] = {"Gathering", "Labradorite"},
     [203400] = {"Gathering", "Lackluster Spices"},
     [171828] = {"Gathering", "Laestrite Ore"},
-    [173168] = {"Gathering", "Laestrite Setting"},
+    [173168] = {"Vendor", "Laestrite Setting"},
     [152546] = {"Gathering", "Lane Snapper"},
     [76133] = {"Gathering", "Lapis Lazuli"},
     [14344] = {"Gathering", "Large Brilliant Shard"},
@@ -802,7 +807,7 @@ HDGR_ReagentsDB = {
     [238522] = {"Gathering", "Peerless Plumage"},
     [198615] = {"Gathering", "Pentagold Seal"},
     [6471] = {"Gathering", "Perfect Deviate Scale"},
-    [259894] = {"Gathering", "Perfect Preservatives"},
+    [259894] = {"Vendor", "Perfect Preservatives"},
     [171830] = {"Gathering", "Phaedrum Ore (SL mining)"},
     [172055] = {"Gathering", "Phantasmal Haunch"},
     [74849] = {"Gathering", "Pink Turnip"},
@@ -1048,7 +1053,7 @@ HDGR_ReagentsDB = {
     [5465] = {"Gathering", "Small Spider Leg"},
     [1475] = {"Gathering", "Small Venom Sac"},
     [165022] = {"Gathering", "Smooth River Stone"},
-    [172058] = {"Gathering", "Smuggled Azerothian Produce"},
+    [172058] = {"Vendor", "Smuggled Azerothian Produce"},
     [62780] = {"Gathering", "Snake Eye"},
     [79010] = {"Gathering", "Snow Lily"},
     [17202] = {"Gathering", "Snowball"},
@@ -1142,7 +1147,7 @@ HDGR_ReagentsDB = {
     [127287] = {"Gathering", "Tanithria's Thread"},
     [4537] = {"Gathering", "Tel'Abim Banana"},
     [44855] = {"Gathering", "Teldrassil Sweet Potato"},
-    [115352] = {"Gathering", "Telmor-Aruuna Hard Cheese"},
+    [115352] = {"Vendor", "Telmor-Aruuna Hard Cheese"},
     [154722] = {"Gathering", "Tempest Hide"},
     [194969] = {"Gathering", "Temporal Dragonhead"},
     [205257] = {"Gathering", "Temporal Vestigial"},
@@ -2343,7 +2348,7 @@ HDGR_ReagentsDB = {
     [219900] = {"Crafted", "Chitin Armor Banding"},
     [219885] = {"Gathering", "Crystalfused Hide"},
     [193223] = {"Gathering", "Lustrous Scaled Hide"},
-    [242651] = {"Gathering", "Stabilized Derivate"},
+    [242651] = {"Crafted", "Stabilized Derivate"},  -- Alchemy by-product: recycling / recrafting potions and flasks (~2 per recycle); no producing recipe, so the raw walk leaves it as a leaf
     [224110] = {"Crafted", "Oil of Beledar's Grace"},
     [191394] = {"Crafted", "Potion of the Hushed Zephyr"},
     [193238] = {"Gathering", "Infurious Hide"},

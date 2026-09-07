@@ -384,7 +384,7 @@ function D:CostDump(rest)
     local function ceStr(list)
         if not list or #list == 0 then return "EMPTY" end
         local s = ""
-        for _, e in ipairs(list) do s = s .. ("[id=%s x%s]"):format(tostring(e.currencyID), tostring(e.amount)) end
+        for _, e in ipairs(list) do s = s .. ("[%s x%s]"):format(HDG.Format.CostKey(e), tostring(e.amount)) end
         return s
     end
     _print(("costdump %d: %s"):format(id, row.name or "?"))

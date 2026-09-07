@@ -43,14 +43,32 @@ HDGR_CatalogOverrides = {
     -- The catalog has no vocabulary for ranks, and inventing one to model three
     -- items would be a schema for a special case.
     --
-    -- CURATION IS THE STOPGAP, NOT THE ANSWER. Enum.TooltipDataLineType
-    -- .UsageRequirement (43) marks these lines structurally, so the whole class
-    -- is detectable without hand-listing it -- see the tooltip-gate scanner in
-    -- TODO_HousingDecorGuide.md. These three entries stay useful even then:
-    -- an override is still the right answer for anything the scan cannot see.
+    -- CURATION IS THE ONLY ANSWER FOR THIS CLASS (settled 2026-08-15 at the
+    -- Deeprun Tram vendor, re-confirmed 2026-09-07 with the Loveseat below). The
+    -- red line reaches TooltipData only in MERCHANT context, as ErrorLine(41)
+    -- with no requirementType, and only for a character who still LACKS the
+    -- rank; GetItemByID / GetHyperlink / GetOwnedItemByID all return a reduced
+    -- tooltip without it. So no catalog sweep can find these, and an account
+    -- that already has the rank cannot even re-read the text -- a tester's
+    -- reading of the line at the vendor is the evidence there is.
     [263026] = { factionGate = { factionName = "Brawl'gar Arena", standing = "Rank 2" } },  -- Brawler's Barricade
     [259071] = { factionGate = { factionName = "Brawl'gar Arena", standing = "Rank 5" } },  -- Brawler's Guild Punching Bag
     [255840] = { factionGate = { factionName = "Brawl'gar Arena", standing = "Rank 7" } },  -- Champion Brawler's Gloves
+
+    -- ===== Gallagio: Ando the Gat's Loveseat needs Loyalty Rewards Club renown 12 ==
+    -- Same shape as Brawl'gar: the catalog sourceText is Vendor:/Zone:/Cost:
+    -- only (costdump 239213, 2026-09-07) and the three tooltip getters show five
+    -- clean lines. The item tooltip itself reads "Requires Renown rank 12 with
+    -- the Gallagio Loyalty Rewards Club" (ReganB at the vendor, Discord
+    -- 2026-09-07; wording confirmed from the item tooltip the same day), so the
+    -- standing uses HDG's renown vocabulary, which _standingStringToCode already
+    -- encodes. Unlike Brawl'gar the club IS a faction -- 2685, a friendship rep
+    -- whose ranks RepObserver compares with that same encoding -- so this
+    -- becomes a LIVE gate the day 2685 joins REP_FACTIONS; kept text-only to
+    -- match the Brawl'gar entries (owner ruling, 2026-09-07). His other piece,
+    -- the Gallagio L.U.C.K. Spinner, needs no entry: the catalog already names
+    -- its gate, "Achievement: One Rank Higher".
+    [239213] = { factionGate = { factionName = "Gallagio Loyalty Rewards Club", standing = "Renown 12" } },  -- Well-Lit Incontinental Loveseat
 
     -- ===== Thunder Totem: Ransa Greyfeather does not sell Torv Dubstomp's stock ==
     -- The catalog's sourceText names Ransa Greyfeather, the Highmountain Tribe

@@ -196,10 +196,10 @@ R.BlueprintCost = function()
     local dim  = HDG.Theme:ColorCode("text.dim")
     local lines = {}
     for _, c in ipairs(cost.currencies) do
-        local name = HDG.Format.CurrencyName(c.currencyID)
+        local name = HDG.Format.CostName(c)
         lines[#lines + 1] = {
-            text  = HDG.Format.FormatCurrency(c.total, c.currencyID, c.icon),
-            right = name or ("#" .. tostring(c.currencyID)),  -- exception(nullable): untracked and unknown to the client
+            text  = HDG.Format.FormatCost(c.total, c),
+            right = name or ("#" .. tostring(c.currencyID)),  -- exception(nullable): untracked currency unknown to the client
         }
     end
     if cost.unpricedCount > 0 then

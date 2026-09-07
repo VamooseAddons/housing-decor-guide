@@ -1,3 +1,31 @@
+## [3.32.3] - 2026-09-07 (September 2026)
+
+### Added
+- **The Brewfest Stein and Brewfest Crate now show where to buy them.** Both are sold for
+  100 gold at the neighbourhood holiday hut, by Holly Twinklebright in Founder's Point and
+  Jolli Maxiboom in Razorwind Shores, and both vendors now have map pins.
+
+### Fixed
+- **Decor paid for with an item no longer shows a gold price.** The Square Stormpike Table
+  costs 1 Mark of Honor and the Moonclasp Satchel 500 Dreamsurge Coalescence, but HDG read
+  both as gold, so they also slipped into the "Gold, No Unlocks" filter. The 25 pieces the
+  catalog prices in items now show that item's icon in the cost line, the vendor list, the
+  blueprint cost badge and the catalog tooltip, and the gold-only filter leaves them out.
+- **The Well-Lit Incontinental Loveseat no longer looks freely buyable.** Ando the Gat sells
+  it for 1000 gold, but only at Renown rank 12 with the Gallagio Loyalty Rewards Club,
+  which the game's decor catalog does not mention anywhere. It now carries that
+  reputation gate and drops out of the "Gold, No Unlocks" filter.
+- **The Raw materials view for a crafting queue no longer asks for six-figure mote counts.**
+  The four Midnight motes can each be transmuted from ten of another, in a ring, and HDG
+  treated any gathered reagent with such a recipe as something to craft, multiplying by ten
+  at every step. Gathered, vendor-sold and dropped reagents are now where the raw view
+  stops, and a recipe that makes several per craft, like Imbued Silkweave at ten, is
+  counted as one craft rather than ten.
+- **Six vendor-sold reagents no longer sit under "From Gathering".** Distilled Algari
+  Freshwater, Inconceivably Aged Vinegar, Laestrite Setting, Perfect Preservatives, Smuggled
+  Azerothian Produce and Telmor-Aruuna Hard Cheese now list under "From Vendor". Stabilized
+  Derivate, an Alchemy recycling by-product, moves to "From Crafted".
+
 ## [3.32.2] - 2026-09-06 (September 2026)
 
 ### Fixed

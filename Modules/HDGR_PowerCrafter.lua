@@ -6,7 +6,7 @@
 -- turns a queue snapshot into:
 --   * a direct material list (one entry per slot, per queue row)
 --   * a raw-DAG-expanded leaf list (intermediate crafted reagents recurse
---     down to their root materials when the player knows the sub-recipe)
+--     down to their root materials, one craft's reagents per outputQtyMin made)
 --   * a per-queue-entry rollup (no cross-row merging)
 --   * a "Craft These First" list (subsidiary recipes the queue depends on)
 --
@@ -20,13 +20,19 @@
 --     (account.recipeCapture + account.subRecipeCapture; capture wins).
 --     Passing it explicitly (Goblin:BuildProfitData pattern) keeps this
 --     module pure AND capture-reactive; the seed-DB read moved to the
---     selector. Presence in the graph IS the "crafted reagent" test -- the
---     old ReagentsDB "Crafted" classification is redundant (a crafted
---     reagent without a graph recipe was already a DAG leaf). ACCEPTED
---     divergence: GetCraftingOrder used to list a ReagentsDB-"Crafted"
---     intermediate as a placeholder row even with no producing recipe on
---     file; now such a reagent is omitted until a scan captures its recipe
---     (self-healing, and consistent with dropping ReagentsDB).
+--     selector. A graph producer is NECESSARY for a reagent to count as a
+--     crafted intermediate but not sufficient: ReagentsDB must not classify
+--     the output as a raw material (Gathering / Vendor / Drop / ...). Alchemy
+--     transmutes, disenchants and shatters all "produce" raw items from other
+--     raw items -- the four Midnight motes form a transmute ring, each 10x the
+--     previous -- and walking through them multiplied by 10 per hop until the
+--     cycle guard tripped (160k Mote of Light for 36 crafts; KevinW,
+--     CurseForge 2026-09-07). See _intermediateRecipe. A reagent ReagentsDB
+--     does not know still expands, so a freshly captured intermediate never
+--     waits for a data regen. ACCEPTED divergence: GetCraftingOrder used to
+--     list a ReagentsDB-"Crafted" intermediate as a placeholder row even with
+--     no producing recipe on file; such a reagent is omitted until a scan
+--     captures its recipe.
 --   * knownRecipeItemIDs is a set: `{ [itemID] = true }`. The CALLER decides
 --     whether to filter by selfKnown, altKnown, or both -- PowerCrafter
 --     just applies the set as the "auto-expand intermediate" gate.
@@ -109,10 +115,34 @@ end
 -- pigment would otherwise demand ~2900 Yseralline Seeds).
 local RNG_BULK_CATEGORY = { ["Mass Milling"] = true, ["Mass Prospecting"] = true }
 
--- _RawMaterialsForRow: DAG-walk to base mats. Crafted reagents (= reagents with a
--- graph producer) recurse, known-agnostic. Cycle defense: per-branch visited set +
--- MAX_DEPTH cap. Milled/prospected products are treated as leaves
--- (RNG_BULK_CATEGORY) -- raw stops at the pigment/gem.
+-- The producing recipe of a reagent the walkers may craft-expand, or nil when the
+-- reagent is a LEAF: no producer; an RNG bulk conversion (above); or a RAW material
+-- that merely has a conversion recipe. ReagentsDB is that last test: anything it
+-- classifies other than Crafted (Gathering, Vendor, Drop, Quest, Other) is obtained
+-- raw, and the transmute / disenchant / shatter that can also make it is not how
+-- you source it. Walking those multiplied the Midnight mote ring by 10 per hop.
+-- A reagent ReagentsDB does not know keeps expanding: a freshly captured
+-- intermediate must not wait for a data regen to show its materials.
+local function _intermediateRecipe(graph, itemID)
+    local sub = graph[itemID]  -- exception(nullable): gathered/vendor reagents have no producer
+    if not sub then return nil end
+    if RNG_BULK_CATEGORY[sub.categoryName] then return nil end
+    local reagent = HDG.StaticData.Reagents:Get(itemID)  -- exception(nullable): reagent outside ReagentsDB
+    if reagent and not reagent[1]:match("^Crafted") then return nil end
+    return sub
+end
+
+-- Crafts needed to make `q` units of a producer's output. outputQtyMin is the
+-- per-craft yield the seed carries for multi-output recipes (Imbued Silkweave
+-- makes 10; bolts and bars make 2) and the scanner captures from the schematic.
+local function _craftsFor(sub, q)
+    local yield = sub.outputQtyMin or 1  -- exception(optional): sparse -- only multi-output recipes carry it; absent = one per craft
+    return math.ceil(q / yield)
+end
+
+-- _RawMaterialsForRow: DAG-walk to base mats. Crafted intermediates (see
+-- _intermediateRecipe) recurse, known-agnostic, one craft's reagents per
+-- outputQtyMin made. Cycle defense: per-branch visited set + MAX_DEPTH cap.
 function PC:_RawMaterialsForRow(graph, recipeID, qty)
     local out = {}
     local function expand(itemID, q, depth, visited)
@@ -122,15 +152,16 @@ function PC:_RawMaterialsForRow(graph, recipeID, qty)
         if visited[itemID] then       -- cycle: treat as leaf
             out[itemID] = (out[itemID] or 0) + q; return
         end
-        local subRecipe = graph[itemID]  -- exception(nullable): gathered/vendor reagents have no producer
-        if not subRecipe or RNG_BULK_CATEGORY[subRecipe.categoryName] then  -- leaf: no recipe, or milled/prospected (stop at pigment/gem)
+        local subRecipe = _intermediateRecipe(graph, itemID)
+        if not subRecipe then          -- leaf: raw material, or no recipe on file
             out[itemID] = (out[itemID] or 0) + q; return
         end
         -- Intermediate: expand slots. Mark visited per-branch (siblings with
         -- shared upstream intermediates stay unblocked).
         visited[itemID] = true
+        local crafts = _craftsFor(subRecipe, q)
         for _, slot in ipairs(basicSlots(subRecipe)) do
-            expand(slot.itemID, slot.qty * q, depth + 1, visited)
+            expand(slot.itemID, slot.qty * crafts, depth + 1, visited)
         end
         visited[itemID] = nil
     end
@@ -164,7 +195,7 @@ function PC:GetSubsidiaryRecipes(graph, recipeID, knownRecipeItemIDs)
     local knownSet = knownRecipeItemIDs or {}
     for _, slot in ipairs(basicSlots(recipe)) do
         if knownSet[slot.itemID] then
-            local sub = graph[slot.itemID]
+            local sub = _intermediateRecipe(graph, slot.itemID)
             if sub then out[slot.itemID] = sub.recipeID end
         end
     end
@@ -192,11 +223,12 @@ local function _addOrMergeSlotOrder(out, index, slot, addQty, subRecipe)
 end
 
 -- Collect craftable-basic slots into the order, weighted by multiplier.
--- Craftable = the reagent has a producing recipe in the graph.
+-- Craftable = a crafted intermediate per _intermediateRecipe; a producer alone
+-- is not enough (a mote with a transmute is gathered, not crafted first).
 function PC:_collectCraftSlots(graph, recipe, multiplier, out, index)
     HDG.StaticData.Professions:VisitBasicSlots(recipe, function(slot)
         if not (slot.itemID and slot.qty) then return end
-        local subRecipe = graph[slot.itemID]  -- exception(nullable): gathered/vendor reagents have no producer
+        local subRecipe = _intermediateRecipe(graph, slot.itemID)
         if not subRecipe then return end
         _addOrMergeSlotOrder(out, index, slot, slot.qty * multiplier, subRecipe)
     end)

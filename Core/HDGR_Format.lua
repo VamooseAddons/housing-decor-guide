@@ -32,6 +32,9 @@ end
 --   FormatCurrency(amount, cid)  -> "1,234 <icon>"
 --   CurrencyName(cid)            -> "Ancient Mana" / "Gold" / nil
 --   FormatGold(copper)           -> FormatCurrency(gold, CURRENCY_GOLD)
+--   FormatCost(amount, e)        -> "1,234 <icon>" for a currency OR item-token cost entry
+--   CostName(e)                  -> "Mark of Honor" / "Ancient Mana" / "Gold" / nil
+--   CostKey(e)                   -> "item:137642" / "currency:3363" / "currency:-1"
 
 function F.FormatAmount(n)
     if not n or n <= 0 then return "" end
@@ -84,6 +87,38 @@ function F.CurrencyName(currencyID)
     if currencyID == HDG.Constants.CURRENCY_GOLD then return HDG.Constants.GOLD_NAME end
     local info = _currencyInfo(currencyID)
     return info and info.name  -- exception(nullable): untracked and unknown to the client
+end
+
+-- A cost entry is EITHER a currency ({ currencyID, amount, icon }; gold is the -1
+-- sentinel) OR an item token ({ itemID, amount, icon }). The catalog prices some
+-- decor in items (1 Mark of Honor, 500 Dreamsurge Coalescence), and an item ID is
+-- not a currency ID, so the two never share a field. These three helpers are the
+-- only place that distinction is read; every consumer goes through them.
+
+-- Stable identity for grouping / dedup. Sorts gold < currencies < items, total.
+function F.CostKey(e)
+    if e.itemID then return "item:" .. e.itemID end
+    return "currency:" .. e.currencyID
+end
+
+-- "1,234 <icon>" for either identity. Amount is a parameter, not read off `e`, so
+-- a per-currency AGGREGATE ({ currencyID, total }) renders through the same path.
+function F.FormatCost(amount, e)
+    if not e.itemID then return F.FormatCurrency(amount, e.currencyID, e.icon) end
+    local n = F.FormatAmount(amount)
+    if n == "" then return "" end
+    -- The catalog link always carries the token's icon; a missing one is drift,
+    -- shown as the raw id so it is visible rather than blank.
+    if e.icon then return n .. " |T" .. e.icon .. ":14:14|t" end
+    return n .. " (item #" .. tostring(e.itemID) .. ")"
+end
+
+-- Display name for either identity. Items go through the resolver boundary
+-- (placeholder + async kick on a cold cache); a currency is nil when neither the
+-- curated table nor the client knows the ID.
+function F.CostName(e)
+    if e.itemID then return (HDG.ItemNameResolver:ResolveName(e.itemID)) end
+    return F.CurrencyName(e.currencyID)
 end
 
 function F.FormatGold(copper)

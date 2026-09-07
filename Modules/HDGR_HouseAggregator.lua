@@ -520,6 +520,9 @@ end
 
 -- housingNeed: sum amount per currency across uncollected vendor items.
 -- `seen` is shared across a row's vendors so the same currency isn't double-counted.
+-- Item-token costs (entries with itemID, no currencyID) are skipped on purpose:
+-- housingNeed is a WALLET ledger keyed by currency, and a Mark of Honor is an
+-- inventory item, not a wallet row.
 local function _accumulateVendorCost(vendor, housingNeed, seen)
     if not vendor.costEntries then return end
     for _, e in ipairs(vendor.costEntries) do
