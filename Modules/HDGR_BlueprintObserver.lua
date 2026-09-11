@@ -131,16 +131,23 @@ end
 
 function BP:OnCollectionReceived(coll)
     local groups, used = coll.groups or {}, 0  -- exception(boundary): server payload
-    -- Auto-saves (the "Backups" group) do NOT count against the 50-blueprint
-    -- cap -- Blizzard's dashboard excludes them (11/50 vs our old 20/50), so
-    -- count only non-auto-save entries (isAutoSave per HousingBlueprintInfo).
+    -- Auto-saves (the "Backups" group) do NOT count against the manual cap --
+    -- Blizzard's dashboard excludes them (11/50 vs our old 20/50). They have a
+    -- cap of their own, which Blizzard's UI surfaces nowhere.
     for _, g in ipairs(groups) do
         for _, e in ipairs(g.entries or {}) do  -- exception(boundary): server payload
             if not e.isAutoSave then used = used + 1 end
         end
     end
+    -- The cap comes from the game, not a literal: Blizzard's collection panel
+    -- reads HOUSING_BLUEPRINTS_MAX_PER_BNET_ACCOUNT at render time. The field is
+    -- live on 12.1 but absent from the LS stubs (pinned at 12.0.7), hence the
+    -- suppression -- delete it when the stub set regenerates.
+    ---@diagnostic disable-next-line: undefined-field
+    local consts = _G.Constants.HousingConsts  -- exception(boundary): Blizzard constants table
     HDG.Store:Dispatch({ type = A.BLUEPRINT_COLLECTION_RECEIVED,
-        payload = { groups = groups, slots = { used = used, max = HDG.Constants.BLUEPRINT_SLOT_MAX } } })
+        payload = { groups = groups, slots = {
+            used = used, max = consts.HOUSING_BLUEPRINTS_MAX_PER_BNET_ACCOUNT } } })
 end
 
 function BP:OnCollectionFailure(reasonCode)

@@ -31,7 +31,7 @@ HDGR_VendorAugment = {
     [-1031] = { name = "Cursed Keepsake", zone = "Razorwind Shores", mapID = 2351, x = 53.7, y = 57.4, faction = "N", exp = "Midnight" },
     [-1030] = { name = "Cousin Shortkaf", zone = "Razorwind Shores", mapID = 2351, x = 55.2, y = 62.0, faction = "N", exp = "Midnight" },
     [-1029] = { name = "Brother Dovetail", zone = "Razorwind Shores", mapID = 2351, x = 54.3, y = 56.1, faction = "N", exp = "Midnight" },
-    [-1026] = { name = "Agratha", zone = "Razorwind Shores", mapID = 2351, faction = "N", exp = "Midnight" },
+    [-1026] = { name = "Agratha", zone = "Razorwind Shores", mapID = 2351, x = 53.6, y = 54.4, faction = "N", exp = "Midnight" },
     [-1025] = { name = "Aeeshna", zone = "Razorwind Shores", mapID = 2351, x = 54.3, y = 56.1, faction = "N", exp = "Midnight" },
     [-1024] = { name = "\"Den\" Nightshade", zone = "Razorwind Shores", mapID = 2351, faction = "N", exp = "Midnight" },
     [-1019] = { name = "Shon'ja", zone = "Founder's Point", mapID = 2352, faction = "N", exp = "Midnight" },

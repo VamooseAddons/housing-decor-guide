@@ -252,18 +252,26 @@ local function _showAhButtons(row)
     row._ahCraftBtn:Show()
 end
 
--- wishItem "where to buy" tooltip: standard item tooltip + the resolved vendor.
--- Only resolved wishlist rows stamp _shopVendor; every other row (items, headers,
--- unresolved wishlist) leaves it nil -> no tooltip, behaviour unchanged.
+-- Mouse-action hints on every item row's tooltip. The header glyphs carry the
+-- same words, but the row is where a player hovers when deciding what to do
+-- with an item, so the gesture has to be readable there too.
+local SHOP_ITEM_HINTS = {
+    shiftText = "locale:SHOP_HINT_SHIFT",
+    rightText = "locale:SHOP_HINT_RIGHT",
+}
+
+-- Item-row tooltip: Blizzard's item body, the resolved vendor when a wishlist
+-- row knows one, then the click hints. Headers stamp no _shopItemID -> no tooltip.
 local function _shoppingRowTooltip(self)
     if not self._shopItemID then return nil end  -- exception(nullable): header / non-item rows don't stamp it
     local af = self._shopVendor
-    local extraLines
+    local extraLines = {}
     if af then  -- exception(nullable): only resolved rows know a vendor; the item tooltip shows regardless
         local zone = (af.zone and af.zone ~= "") and (" -- " .. af.zone) or ""
-        extraLines = { { text = "Available from: " .. (af.name or "?") .. zone,
-                         r = 0.6, g = 0.78, b = 0.95 } }
+        extraLines[1] = { text = "Available from: " .. (af.name or "?") .. zone,
+                          r = 0.6, g = 0.78, b = 0.95 }
     end
+    HDG.TooltipEngine.AppendClickHints(extraLines, SHOP_ITEM_HINTS)
     return {
         itemID     = self._shopItemID,
         anchor     = "ANCHOR_RIGHT",
@@ -349,8 +357,15 @@ local function _configureItemRow(row, ed)
     row._shopItemID = ed.itemID
     row._shopVendor = ed.availableFrom  -- exception(nullable): AH-only / unresolved items have no vendor
     _showItemChrome(row, ed)
-    -- Right-click context menu (Set qty / Remove [/ Open vendor]).
-    HDG.UI.WireLeftRightClick(row, nil, function()
+    -- Shift-click links the item, which lands in the Auction House search bar
+    -- when the AH is open on a Buy tab -- the Warehouse and Recipes materials
+    -- gesture. The Crafting / Auction House section is where a player goes to
+    -- buy what they cannot make, so its rows carry it (owner, 2026-09-07);
+    -- wishlist and vendor items take it too so one gesture reads the same on
+    -- every row. A plain left click stays a no-op; right-click owns the menu.
+    HDG.UI.WireLeftRightClick(row, function()
+        if IsShiftKeyDown() then HDG.UI.LinkMaterial(ed.itemID, HDG.UI.ItemName(ed.itemID)) end
+    end, function()
         ShoppingController:_OpenItemContextMenu(row, ed)
     end)
 end
@@ -668,7 +683,7 @@ function ShoppingController:Wire(rootFrame)
         HDG.UI.Confirm({
             id       = "HDGR_SHOPPING_DELETE_LIST",
             text     = "Delete shopping list \"%s\"? This cannot be undone.",
-            textArg1 = list.name or "?",
+            textArg1 = list.name,   -- every list factory stamps a name
             data     = id,
             accept   = "Delete",
             cancel   = "Cancel",
@@ -679,18 +694,29 @@ function ShoppingController:Wire(rootFrame)
         })
     end)
 
-    -- Clear -- empties the active list (no-op when no active list).
+    -- Clear -- empties the active list (no-op when no active list). Confirms,
+    -- like Delete beside it: the items are gone for good either way, and two
+    -- adjacent buttons where one asks and the other doesn't reads as a bug.
     HDG.UI.OnClick(rootFrame, "shoppingPanel.clearBtn", function()
-        local id = HDG.Store:GetState().account.activeShoppingListId  -- exception(false-positive): top-level controller read
-        if id == "" then
+        local state = HDG.Store:GetState()  -- exception(false-positive): top-level controller read
+        local id    = state.account.activeShoppingListId
+        local list  = state.account.vendorShoppingLists[id]
+        if not list then  -- exception(nullable): "" (no active list) or a stale id -- same shape as Delete above
             HDG.Log:Warn("shopping", "No active list to clear")
             return
         end
-        HDG.Store:Dispatch({
-            type    = A.SHOPPING_LIST_CLEAR,
-            payload = { id = id },
+        HDG.UI.Confirm({
+            id       = "HDGR_SHOPPING_CLEAR_LIST",
+            text     = "Clear every item from shopping list \"%s\"? This cannot be undone.",
+            textArg1 = list.name,
+            data     = id,
+            accept   = "Clear",
+            cancel   = "Cancel",
+            onAccept = function(_, listId)
+                HDG.Store:Dispatch({ type = A.SHOPPING_LIST_CLEAR, payload = { id = listId } })
+                HDG.Log:Info("shopping", "Cleared all items from active list")
+            end,
         })
-        HDG.Log:Info("shopping", "Cleared all items from active list")
     end)
 
     -- Export -- encode active list + show in CopyDialog for user to copy.

@@ -398,13 +398,28 @@ local _DELETE_NOUN = {
     concept    = "room concept",
     collection = "collection",
 }
-local function _deleteConfirmText(id)
+-- Returns dialog id + text. The id carries the noun because UI.Confirm memoizes
+-- a dialog's text per id: one id for every kind meant the first kind deleted in
+-- a session set the wording for all of them ("Delete style ...? Items return to
+-- Unassigned." on a shopping list). Found 2026-09-11.
+local function _deleteConfirm(id)
     local prefix = type(id) == "string" and id:match("^(%w+):") or nil
     local noun   = _DELETE_NOUN[prefix] or "collection"
+    local dialogID = "HDGR_DELETE_STYLE_" .. string.upper(prefix or "collection")
     if prefix == "style" then
-        return 'Delete ' .. noun .. ' "%s"? Items return to Unassigned.'
+        return dialogID, 'Delete ' .. noun .. ' "%s"? Items return to Unassigned.'
     end
-    return 'Delete ' .. noun .. ' "%s"?'
+    return dialogID, 'Delete ' .. noun .. ' "%s"?'
+end
+
+-- The ONE accept handler both delete sites (landing card, curator row) hand to
+-- UI.Confirm: they share dialog ids per noun, and the memoized dialog keeps the
+-- first caller's closure, so the closure must be the same function from both.
+local function _dispatchStyleDelete(_, collectionID)
+    HDG.Store:Dispatch({
+        type    = HDG.Constants.ACTIONS.STYLES_DELETE_STYLE,
+        payload = { collectionID = collectionID },
+    })
 end
 
 -- ===== _wireLandingCard ======================================================
@@ -491,19 +506,15 @@ local function _wireLandingCard(row, ed)
         local displayName = ed.displayName or collectionID
         btns.delete:SetScript("OnClick", function()
             if not collectionID then return end
+            local dialogID, text = _deleteConfirm(collectionID)
             HDG.UI.Confirm({
-                id       = "HDGR_DELETE_STYLE_LANDING",
-                text     = _deleteConfirmText(collectionID),
+                id       = dialogID,
+                text     = text,
                 textArg1 = displayName,
                 accept   = "Delete",
                 cancel   = "Cancel",
                 data     = collectionID,
-                onAccept = function(_, data)
-                    HDG.Store:Dispatch({
-                        type    = HDG.Constants.ACTIONS.STYLES_DELETE_STYLE,
-                        payload = { collectionID = data },
-                    })
-                end,
+                onAccept = _dispatchStyleDelete,
             })
         end)
     end
@@ -769,13 +780,15 @@ local function _onRenameClick(targetID, displayName)
             cancel     = "Cancel",
             input      = true,
             maxLetters = 64,
-            data       = targetID,
+            -- prefill: the box opens on the current name (UI.Confirm's OnShow reads
+            -- data.prefill); a bare id here left it empty, unlike the category rename.
+            data       = { collectionID = targetID, prefill = displayName },
             onAccept   = function(value, data)
                 local name = HDG.Format.Trim(value)
                 if name == "" then return end
                 HDG.Store:Dispatch({
                     type    = HDG.Constants.ACTIONS.STYLES_RENAME_STYLE,
-                    payload = { collectionID = data, displayName = name },
+                    payload = { collectionID = data.collectionID, displayName = name },
                 })
             end,
         })
@@ -793,19 +806,15 @@ end
 
 local function _onDeleteClick(targetID, displayName)
     return function()
+        local dialogID, text = _deleteConfirm(targetID)
         HDG.UI.Confirm({
-            id       = "HDGR_DELETE_STYLE",
-            text     = _deleteConfirmText(targetID),
+            id       = dialogID,
+            text     = text,
             textArg1 = displayName,
             accept   = "Delete",
             cancel   = "Cancel",
             data     = targetID,
-            onAccept = function(_, data)
-                HDG.Store:Dispatch({
-                    type    = HDG.Constants.ACTIONS.STYLES_DELETE_STYLE,
-                    payload = { collectionID = data },
-                })
-            end,
+            onAccept = _dispatchStyleDelete,
         })
     end
 end

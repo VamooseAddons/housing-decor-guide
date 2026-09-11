@@ -26,7 +26,9 @@
 --   statusRailPanel -- bottom status bar visible in every view
 --   chrome.body / chrome.spacer sections
 --   status.body section
---   Chrome tab strip + close button (generated from HDG.Constants.TABS)
+--   Chrome strip widgets: title, version, essence, lumber/shopping toggles, close
+--   (navigation is the tree in the `left` slot -- HDG-ADR-025; nothing here is
+--   generated from HDG.Constants.TABS)
 
 HDG = HDG or {}
 

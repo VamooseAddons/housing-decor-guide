@@ -157,6 +157,15 @@ local function NewAccountUI()
         nav             = {
             collapsedGroups = {},
         },
+        -- Blueprints picker: which of the two list sections ("pasted" | "catalog")
+        -- are folded. Sparse set, persisted, like nav.collapsedGroups.
+        blueprints      = {
+            collapsedSections = {},
+            -- Library: leave the game's automatic saves out of the All list. On by
+            -- default -- four "Automatic Save" rows buried the owner's own list on
+            -- first use; the Backups chip still shows them on request.
+            hideBackups = true,
+        },
         -- Styles tab Browse list: which sections and which categories are open.
         -- Persisted so the tree survives /reload; a category that has never been
         -- toggled is absent = collapsed, which is the "collapsed on first render"
@@ -594,7 +603,12 @@ local function NewBlueprintsSession()
         -- false at mint on ALL builds (keeps golden-state build-independent);
         -- BlueprintObserver dispatches BLUEPRINT_AVAILABLE_SET(true) at enable on 12.1.
         available       = false,
-        slots           = { used = 0, max = 0 },   -- from COLLECTION_RECEIVED
+        -- used/max is the 50-slot catalog budget. An import's automatic save
+        -- lands in a separate "Backups" group that does NOT spend a catalog
+        -- slot, so it needs its own pair. All four arrive from
+        -- COLLECTION_RECEIVED, which replaces this table wholesale -- the
+        -- observer has to send all four or the backup pair reads nil.
+        slots           = { used = 0, max = 0 },
         groups          = {},                      -- HousingBlueprintInfo rows, grouped
         manifests       = {},                      -- [shareCode] = { status, reasonCode?, requestedAt?, raw? }
         selectedCode    = nil,
@@ -632,8 +646,23 @@ local function NewBlueprintsSessionUI()
     -- shopping preference. Choosing who a shared list is written for is a
     -- decision about that export, and it must not quietly change where your own
     -- shopping list sends you.
+    --
+    -- Library mode (design 2026-09-11, D5-D7): the sub-view, the filter text,
+    -- the source chip and the table sort are all session-only; a reload lands
+    -- on the picker. subView / libraryQuery / libraryChip are written by
+    -- UI_SET_TRANSIENT; the sort has its own action because a header click
+    -- flips or resets, which is reducer logic.
+    --
+    -- librarySelectedKey: the ENTRY key of the Library row last clicked (nil =
+    -- resolve the detail strip by code alone). The selected CODE is shared with
+    -- the picker, but one code can render two Library rows -- an own blueprint
+    -- pasted back in -- and only the clicked row's source says whether "remove"
+    -- means Forget or Delete.
     return { missingOnly = false, collapsedGroups = {}, pasteError = false,
-             exportNeighborhood = "" }
+             exportNeighborhood = "",
+             subView = "inspect", libraryQuery = "", libraryChip = "all",
+             librarySortCol = "date", librarySortDir = "desc",
+             librarySelectedKey = nil }
 end
 
 local function NewSessionUI()
@@ -1401,6 +1430,12 @@ local function EnsureStateShape(state)
     state.account.blueprints.pasted      = state.account.blueprints.pasted      or {}  -- exception(boundary): SV migration
     state.account.blueprints.pastedTypes = state.account.blueprints.pastedTypes or {}  -- exception(boundary): SV migration
     state.account.blueprints.factions    = state.account.blueprints.factions    or {}  -- exception(boundary): SV migration (shareCode -> "Alliance"|"Horde")
+    state.account.blueprints.pastedAt    = state.account.blueprints.pastedAt    or {}  -- exception(boundary): SV migration (shareCode -> time())
+    state.account.blueprints.notes       = state.account.blueprints.notes       or {}  -- exception(boundary): SV migration (shareCode -> note text)
+    state.account.blueprints.applied     = state.account.blueprints.applied     or {}  -- exception(boundary): SV migration (shareCode -> { at, houseGUID, houseLabel })
+    state.account.ui.blueprints = state.account.ui.blueprints or { collapsedSections = {} }  -- exception(boundary): SV migration
+    state.account.ui.blueprints.collapsedSections = state.account.ui.blueprints.collapsedSections or {}  -- exception(boundary): SV migration
+    if state.account.ui.blueprints.hideBackups == nil then state.account.ui.blueprints.hideBackups = true end  -- exception(boundary): SV migration (false is a real value)
     state.account.recentActivity.houses = state.account.recentActivity.houses or {}
     state.account.ui.houseTab = state.account.ui.houseTab or NewHouseTabAccountUI()
     state.account.ui.houseTab.enabled         = state.account.ui.houseTab.enabled         or {}
@@ -4934,12 +4969,14 @@ HDG.Actions:Register{ name = "BLUEPRINT_SELECT", persists = false,
     end }
 
 HDG.Actions:Register{ name = "BLUEPRINT_PASTE_ADD", persists = true,
-    invalidates = { "account.blueprints.pasted", "account.blueprints.pastedTypes" },
+    invalidates = { "account.blueprints.pasted", "account.blueprints.pastedTypes", "account.blueprints.pastedAt" },
     reduce = function(state, payload)
         local ab = state.account.blueprints
         if payload.blueprintType then ab.pastedTypes[payload.shareCode] = payload.blueprintType end
         for i = 1, #ab.pasted do if ab.pasted[i] == payload.shareCode then return end end
         ab.pasted[#ab.pasted + 1] = payload.shareCode
+        -- First paste wins the stamp: a re-paste of a known code is a no-op above.
+        if payload.pastedAt then ab.pastedAt[payload.shareCode] = payload.pastedAt end  -- exception(optional): callers that predate the stamp (tests, API) omit it
     end }
 
 HDG.Actions:Register{ name = "BLUEPRINT_SET_TARGET_HOUSE", persists = false,
@@ -4955,17 +4992,67 @@ HDG.Actions:Register{ name = "BLUEPRINT_SET_LABEL", persists = true,
 -- ONLY on pasted rows (controller), so there is no HDG path to delete a saved blueprint.
 HDG.Actions:Register{ name = "BLUEPRINT_FORGET", persists = true,
     invalidates = { "account.blueprints.pasted", "account.blueprints.pastedTypes",
-                    "account.blueprints.labels", "session.blueprints.selectedCode",
-                    "session.blueprints.manifests" },
+                    "account.blueprints.labels", "account.blueprints.factions",
+                    "account.blueprints.pastedAt", "account.blueprints.notes",
+                    "account.blueprints.applied",
+                    "session.blueprints.selectedCode", "session.blueprints.manifests" },
     reduce = function(state, payload)
         local ab, sb, np = state.account.blueprints, state.session.blueprints, {}
         for i = 1, #ab.pasted do if ab.pasted[i] ~= payload.shareCode then np[#np + 1] = ab.pasted[i] end end
         ab.pasted = np
         ab.pastedTypes[payload.shareCode] = nil
         ab.labels[payload.shareCode] = nil
+        ab.factions[payload.shareCode] = nil
+        ab.pastedAt[payload.shareCode] = nil
+        ab.notes[payload.shareCode]    = nil
+        ab.applied[payload.shareCode]  = nil
         sb.manifests[payload.shareCode] = nil
         if sb.selectedCode == payload.shareCode then sb.selectedCode = np[1] end  -- exception(nullable): may be no codes left
     end }
+
+-- Picker fold sections ("Pasted codes" / "Your catalog"). Sparse set: only
+-- folded sections are present, so a never-toggled section reads open.
+HDG.Actions:Register{ name = "BLUEPRINT_TOGGLE_SECTION", persists = true,
+    retainsScroll = true,  -- a section header is clicked mid-list; yanking to the top loses the user's place
+    invalidates = { "account.ui.blueprints.collapsedSections" },
+    reduce = function(state, payload)
+        _toggleSetMember(state.account.ui.blueprints.collapsedSections, payload.section)
+    end }
+
+-- Library preference: leave automatic saves out of the All list.
+HDG.Actions:Register{ name = "BLUEPRINT_SET_HIDE_BACKUPS", persists = true,
+    invalidates = { "account.ui.blueprints.hideBackups" },
+    reduce = function(state, payload) state.account.ui.blueprints.hideBackups = payload.hide == true end }
+
+-- Library column-header click: same column flips direction, a new column
+-- resets to the first sort direction declared for it on
+-- HDG.Constants.BLUEPRINT_LIBRARY_COLUMNS (text ascending, dates newest first).
+HDG.Actions:Register{ name = "BLUEPRINT_LIBRARY_SET_SORT", persists = false,
+    invalidates = { "session.ui.blueprints.librarySortCol", "session.ui.blueprints.librarySortDir" },
+    reduce = function(state, payload)
+        local ui = state.session.ui.blueprints
+        if ui.librarySortCol == payload.col then
+            ui.librarySortDir = (ui.librarySortDir == "desc") and "asc" or "desc"
+        else
+            ui.librarySortCol = payload.col
+            -- The column table owns each column's first direction, so this
+            -- reducer and the header widgets can never disagree about it.
+            for _, c in ipairs(HDG.Constants.BLUEPRINT_LIBRARY_COLUMNS) do
+                if c.col == payload.col then ui.librarySortDir = c.firstDir end
+            end
+        end
+    end }
+
+-- Free-text note per share code, edited in the Library detail pane. An emptied
+-- box dispatches CLEAR rather than SET "" (Mech.WireNoteBox), so `notes` only
+-- ever holds codes that still carry text.
+HDG.Actions:Register{ name = "BLUEPRINT_SET_NOTE", persists = true,
+    invalidates = { "account.blueprints.notes" },
+    reduce = function(state, payload) state.account.blueprints.notes[payload.shareCode] = payload.text end }
+
+HDG.Actions:Register{ name = "BLUEPRINT_CLEAR_NOTE", persists = true,
+    invalidates = { "account.blueprints.notes" },
+    reduce = function(state, payload) state.account.blueprints.notes[payload.shareCode] = nil end }
 
 HDG.Actions:Register{ name = "BLUEPRINT_EXPORT_SUCCESS", persists = false,
     invalidates = { "session.blueprints.selectedCode", "account.blueprints.labels" },

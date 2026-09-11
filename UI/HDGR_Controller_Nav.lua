@@ -2,7 +2,7 @@
 -- ============================================================================
 -- Sidebar nav (per ADR-025). treeList bound to nav.tree; click payload dispatches:
 --   view -> setView | action -> setView + Dispatch | transient -> setView + SetUITransientView
---   launcher -> Dispatch only
+--   launcher -> Dispatch only | toggleGroup -> NAV_TOGGLE_GROUP (fold a group)
 
 HDG = HDG or {}
 HDG.NavController = HDG.NavController or {}
@@ -31,6 +31,8 @@ local function dispatchClick(click)
         HDG.ControllerHelpers.Mechanics.SetUITransientView(t.view, t.key, t.value)
     elseif k == "launcher" then
         HDG.Store:Dispatch({ type = HDG.Constants.ACTIONS[click.action] })
+    elseif k == "toggleGroup" then
+        HDG.Store:Dispatch({ type = HDG.Constants.ACTIONS.NAV_TOGGLE_GROUP, payload = { view = click.view } })
     end
 end
 
@@ -51,12 +53,18 @@ local function _paintNavAtlas(tex, ic)
     end
 end
 
--- Tooltip for the group-icon collapse toggle. Reads per-init stamps on the icon
--- button (stable module-level def + stamps -> safe with idempotent TooltipEngine:Attach).
-local function _navIconTipDef(self_)
+-- Tooltip for the fold chevron. Reads per-init stamps on the chevron button
+-- (stable module-level def + stamps -> safe with idempotent TooltipEngine:Attach).
+local function _navFoldTipDef(self_)
     if not self_._hubView then return nil end
     return { title = (self_._navTipCollapsed and "Expand " or "Collapse ")
                      .. (self_._navTipLabel or "group") }
+end
+
+-- Fold chevron glyph: ">" folded / "v" open -- the text-chevron idiom the Styles
+-- and Trainers category rows already use.
+local function _foldGlyph(collapsed)
+    return collapsed and ">" or "v"
 end
 
 -- ===== Cell kind: navNode =====================================================
@@ -73,23 +81,35 @@ HDG.TreeList:RegisterCellKind("navNode", {
                 icon:SetPoint("LEFT", frame, "LEFT", 7, 0)
                 icon:Hide()
                 frame._navIcon = icon
-                -- Clickable collapse toggle over the group icon (shown on hub rows
-                -- only). 17px hit-area at the icon; the row's own OnClick (label /
-                -- body) still navigates -- the child button captures only its region.
-                local iconBtn = CreateFrame("Button", nil, frame)
-                iconBtn:SetSize(17, 17)
-                iconBtn:SetPoint("LEFT", frame, "LEFT", 6, 0)
-                iconBtn:RegisterForClicks("LeftButtonUp")
-                iconBtn:SetScript("OnClick", function(self_)
+                -- Fold chevron at the row's RIGHT edge on group rows (hubs + the
+                -- House home node). It used to be an unpainted 17px hitbox over the
+                -- group icon: it worked, but nothing on screen said the groups fold,
+                -- so nobody found it (Soul, Discord 2026-09-10). The row's own
+                -- OnClick (icon / label / body) still navigates -- the child button
+                -- captures only its region.
+                local foldBtn = CreateFrame("Button", nil, frame)
+                foldBtn:SetSize(16, 20)
+                foldBtn:SetPoint("RIGHT", frame, "RIGHT", -4, 0)
+                foldBtn:RegisterForClicks("LeftButtonUp")
+                foldBtn:SetScript("OnClick", function(self_)
                     if not self_._hubView then return end
                     HDG.Store:Dispatch({
                         type    = HDG.Constants.ACTIONS.NAV_TOGGLE_GROUP,
                         payload = { view = self_._hubView },
                     })
                 end)
-                iconBtn:Hide()
-                HDG.TooltipEngine:Attach(iconBtn, _navIconTipDef)
-                frame._navIconBtn = iconBtn
+                -- Body font + brighten on hover: the same weight and feedback as the
+                -- Blueprints row `x`, so the one affordance added to be SEEN is not
+                -- the dimmest mark on the row.
+                local glyph = HDG.UI.RowText(foldBtn, "body", "TextDim", "CENTER")
+                glyph:SetAllPoints()
+                foldBtn._glyph = glyph
+                foldBtn:SetAlpha(0.6)
+                foldBtn:SetScript("OnEnter", function(self_) self_:SetAlpha(1) end)
+                foldBtn:SetScript("OnLeave", function(self_) self_:SetAlpha(0.6) end)
+                foldBtn:Hide()
+                HDG.TooltipEngine:Attach(foldBtn, _navFoldTipDef)
+                frame._navFoldBtn = foldBtn
                 -- Indent guide: 1px line; flush rows stack into a continuous connector.
                 local guide = frame:CreateTexture(nil, "ARTWORK", nil, 1)
                 guide:SetTexture("Interface\\Buttons\\WHITE8x8")
@@ -126,10 +146,11 @@ HDG.TreeList:RegisterCellKind("navNode", {
                 or (data.label or ""))
 
             -- Label X: headers=8, top-level=26 (icon col), leaves=40 (manual indent, tree indent=0).
+            -- Group rows stop short of the fold chevron on the right.
             local labelX = isHeader and 8 or (tier == "leaf" and 40 or 26)
             frame._navLabelFs:ClearAllPoints()
             frame._navLabelFs:SetPoint("LEFT",  frame, "LEFT",  labelX, 0)
-            frame._navLabelFs:SetPoint("RIGHT", frame, "RIGHT", -4, 0)
+            frame._navLabelFs:SetPoint("RIGHT", frame, "RIGHT", data.groupKey and -20 or -4, 0)
 
             -- Category icon: top-level rows. iconActive/iconPressed stashed for pressed handlers.
             if frame._navIcon then
@@ -141,17 +162,19 @@ HDG.TreeList:RegisterCellKind("navNode", {
                 _paintNavAtlas(frame._navIcon,
                     (frame._navActive and frame._navIconActive) or frame._navIconDefault)
             end
-            -- Collapse toggle: enable + stamp the icon button on hub rows (parent
-            -- groups with children); hidden elsewhere so clicks pass to the row.
-            if frame._navIconBtn then
-                if data.tier == "hub" then
-                    frame._navIconBtn._hubView         = data.groupKey   -- collapse key (= view, or "tools")
-                    frame._navIconBtn._navTipLabel     = data.label
-                    frame._navIconBtn._navTipCollapsed = data.isCollapsed and true or false
-                    frame._navIconBtn:Show()
+            -- Fold chevron: paint + stamp on group rows (any node carrying a
+            -- groupKey -- hubs and the House home node); hidden elsewhere so
+            -- clicks pass to the row.
+            if frame._navFoldBtn then
+                if data.groupKey then
+                    frame._navFoldBtn._hubView         = data.groupKey   -- collapse key (= view, or "tools")
+                    frame._navFoldBtn._navTipLabel     = data.label
+                    frame._navFoldBtn._navTipCollapsed = data.isCollapsed and true or false
+                    frame._navFoldBtn._glyph:SetText(_foldGlyph(data.isCollapsed))
+                    frame._navFoldBtn:Show()
                 else
-                    frame._navIconBtn._hubView = nil
-                    frame._navIconBtn:Hide()
+                    frame._navFoldBtn._hubView = nil
+                    frame._navFoldBtn:Hide()
                 end
             end
             -- Indent guide: leaves only.
@@ -191,7 +214,7 @@ HDG.TreeList:RegisterCellKind("navNode", {
 -- `left` slot to the fill view's height), and every nav.tree rebuild discards the
 -- scroll offset (TreeList:SetItems -> DiscardScrollPosition). So switching to a
 -- short view both resets the tree to the top AND cuts it short: Move Planner's
--- 502px body fits 19 of the 28 rows, and "Move Planner" is row 21 -- the
+-- 502px body fits 19 of the 30 rows, and "Move Planner" is row 21 -- the
 -- destination the user just clicked lands below the fold. Scroll it back.
 --
 -- Deepest-active, not first-active: a leaf click lights its hub too, and

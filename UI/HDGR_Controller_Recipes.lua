@@ -645,7 +645,7 @@ function RecipesController:Wire(rootFrame)
     local recipeList = HDG.UI.W(rootFrame, "recipesListPanel.list")
     if recipeList and recipeList.WireStoreSelectionSync then
         recipeList:WireStoreSelectionSync("session.ui.recipes.selectedRecipeID",
-            function(ed, id) return ed and ed.recipeID == id end)
+            function(ed, id) return id ~= nil and ed.recipeID == id end)   -- nil id: profession headers carry no recipeID and must not match
     end
 
     -- Dynamic group breadcrumb: reflects the GROUP at the TOP of the visible list.
@@ -718,7 +718,7 @@ function RecipesController:Wire(rootFrame)
     local queueList = HDG.UI.W(rootFrame, "recipesQueuePanel.list")
     if queueList and queueList.WireStoreSelectionSync then
         queueList:WireStoreSelectionSync("session.ui.recipes.queueSelectedRecipeID",
-            function(ed, id) return ed and ed.recipeID == id end)
+            function(ed, id) return id ~= nil and ed.recipeID == id end)
     end
 
     -- Search editbox: every keystroke dispatches RECIPES_SET_SEARCH.

@@ -72,7 +72,10 @@ end
 -- missingCount counts ACQUIRABLE entries (Decor=3/Dye=4) with numMissing>0 --
 -- fixtures/rooms/house types can't be routed or bought, so the number the
 -- verdict shows matches what Route to Shopping actually adds (UX review #5).
--- Per-group header counts still cover every type.
+-- missingTotal is the PIECE sum of numMissing over that same set: a blueprint
+-- with six planters missing is one entry but six pieces, and the headline the
+-- player reads as "how much do I still have to get" has to be the pieces
+-- (Soul, Discord 2026-09-10). Per-group header counts still cover every type.
 Selectors:Register("blueprints.inspector", {
     reads = { "session.blueprints.selectedCode", "session.blueprints.manifests",
               "session.ui.blueprints.missingOnly", "session.ui.blueprints.collapsedGroups",
@@ -83,14 +86,19 @@ Selectors:Register("blueprints.inspector", {
         if not code then return nil end                      -- exception(nullable): empty state pre-selection
         local m = sb.manifests[code]
         if not m or m.status ~= "received" then
-            return { shareCode = code, status = m and m.status or "idle", groups = {}, missingCount = 0 }
+            return { shareCode = code, status = m and m.status or "idle", groups = {},
+                     entryCount = 0, missingCount = 0, missingTotal = 0 }
         end
         local ui = state.session.ui.blueprints
-        local groups, missing = {}, 0
+        local groups, missing, missingPieces, entryCount = {}, 0, 0, 0
         for _, g in ipairs(m.raw.contentGroups) do
             local items = {}
             for _, e in ipairs(_byName(g.entries)) do
-                if e.numMissing > 0 and (g.contentType == 3 or g.contentType == 4) then missing = missing + 1 end
+                entryCount = entryCount + 1   -- every entry, before the display filter
+                if e.numMissing > 0 and (g.contentType == 3 or g.contentType == 4) then
+                    missing = missing + 1
+                    missingPieces = missingPieces + e.numMissing
+                end
                 if not ui.missingOnly or e.numMissing > 0 then
                     local itemID, srcKind, srcName = _resolveAcq(e, nil)
                     items[#items + 1] = {
@@ -109,7 +117,38 @@ Selectors:Register("blueprints.inspector", {
             end
         end
         return { shareCode = code, status = "received", groups = groups,
-                 missingCount = missing, shownMissingOnly = ui.missingOnly }
+                 entryCount = entryCount, missingCount = missing, missingTotal = missingPieces,
+                 shownMissingOnly = ui.missingOnly }
+    end,
+})
+
+-- ===== Import as Set source ==================================================
+-- Every decor entry at its FULL blueprint quantity, resolved to an itemID, plus
+-- the count that could not be resolved. Reads the raw manifest, NOT the
+-- inspector: the inspector's groups honour the Missing-only filter, and a
+-- furnishing set built from the filtered view silently dropped every piece the
+-- player already owned (found 2026-09-11).
+Selectors:Register("blueprints.setDecor", {
+    reads = { "session.blueprints.selectedCode", "session.blueprints.manifests",
+              "session.resolvers.catalog.tick" },
+    fn = function(state)
+        local sb = state.session.blueprints
+        local m = sb.selectedCode and sb.manifests[sb.selectedCode]
+        if not m or m.status ~= "received" then return nil end  -- exception(nullable): nothing inspected yet
+        local decor, skipped = {}, 0
+        for _, g in ipairs(m.raw.contentGroups) do
+            if g.contentType == 3 then
+                for _, e in ipairs(_byName(g.entries)) do
+                    local itemID = _resolveAcq(e, nil)
+                    if itemID then
+                        decor[#decor + 1] = { id = itemID, count = e.total }
+                    else
+                        skipped = skipped + 1
+                    end
+                end
+            end
+        end
+        return { decor = decor, skipped = skipped }
     end,
 })
 
@@ -354,55 +393,318 @@ Selectors:Register("blueprints.displayName", {
     end,
 })
 
--- ===== Collection browser rows ==============================================
--- Flat scrollbox projection: group-header rows (kind="header") + entry rows
--- (kind="row"). Pasted & shared first (forget-eligible), then the player's own
--- saved blueprints in their server groups.
-
 local BP_TYPE_LABEL = { [1] = "House", [2] = "Room", [3] = "Interior", [4] = "Exterior" }
 
-Selectors:Register("blueprints.collectionRows", {
-    reads = { "session.blueprints.groups", "account.blueprints.pasted",
-              "session.blueprints.selectedCode", "session.blueprints.manifests",
+-- ===== Normalised entries (both populations) ================================
+-- ONE list the picker and the Library both project: pasted codes (HDG's own
+-- store) first, then Blizzard's catalog entries (manual + auto-backups), each
+-- with a source tag. Pasted and catalog rows keep DISTINCT keys because the
+-- same code can legitimately appear in both (an own blueprint pasted back in --
+-- PTR key-collision 2026-07-12).
+--
+-- The word the Source column prints. Separate from `src` (the state tag the row
+-- factory themes by) so the displayed text stays selector-owned and can change
+-- without touching a paint path -- cookbook 04, selectors compose display text.
+local SRC_LABEL = { pasted = "pasted", mine = "mine", backup = "auto" }
+
+Selectors:Register("blueprints.entries", {
+    -- perf: one Library click wakes ~15 bound widgets and every one of them
+    -- calls this selector, so unmemoized the normaliser rebuilds ~1,200 entry
+    -- tables per click on a 50-code catalog plus 30 pasted codes. Invalidation
+    -- is path-driven off the reads below, so a paste, a rename or a collection
+    -- refresh still rebuilds. The entry tables are therefore SHARED: consumers
+    -- project them into fresh rows and never stamp a field on one.
+    memoized = true,
+    reads = { "session.blueprints.groups", "session.blueprints.selectedCode",
+              "session.blueprints.manifests", "account.blueprints.pasted",
               "account.blueprints.pastedTypes", "account.blueprints.labels",
-              "account.blueprints.factions" },
+              "account.blueprints.factions", "account.blueprints.pastedAt",
+              "account.blueprints.notes", "account.blueprints.applied" },
     fn = function(state)
-        local sb, ab, rows = state.session.blueprints, state.account.blueprints, {}
-        if #ab.pasted > 0 then
-            rows[#rows + 1] = { kind = "header", label = "Pasted codes" }
-            for _, code in ipairs(ab.pasted) do
-                rows[#rows + 1] = {
-                    kind = "row", shareCode = code,
-                    name = _displayName(state, code),
-                    typeLabel = BP_TYPE_LABEL[ab.pastedTypes[code]],  -- exception(nullable): pre-stamp pastes have no type
-                    faction = ab.factions[code],  -- exception(nullable): only House/Exterior, only after inspect
-                    isPasted = true, isSelected = (code == sb.selectedCode),
+        local sb, ab, out = state.session.blueprints, state.account.blueprints, {}
+        for _, code in ipairs(ab.pasted) do
+            out[#out + 1] = {
+                key = "bpPasted:" .. code, shareCode = code,
+                src = "pasted", srcLabel = SRC_LABEL.pasted,
+                name = _displayName(state, code), hasLabel = ab.labels[code] ~= nil,
+                blueprintType = ab.pastedTypes[code],           -- exception(nullable): pre-stamp pastes have no type
+                typeLabel = BP_TYPE_LABEL[ab.pastedTypes[code]], -- exception(nullable): same
+                isAuto = false,
+                faction = ab.factions[code],  -- exception(nullable): only House/Exterior, only after inspect
+                date = ab.pastedAt[code],     -- exception(nullable): codes pasted before the stamp existed sort last
+                applied = ab.applied[code],   -- exception(nullable): never applied
+                note = ab.notes[code] or "",  -- exception(nullable): no note yet
+                isSelected = (code == sb.selectedCode),
+            }
+        end
+        for _, g in ipairs(sb.groups) do
+            local groupName = g.name or "My blueprints"  -- exception(boundary): server payload
+            for _, e in ipairs(g.entries or {}) do  -- exception(boundary): server payload shape
+                local isAuto = e.isAutoSave == true
+                local src = isAuto and "backup" or "mine"
+                out[#out + 1] = {
+                    key = "bpColl:" .. tostring(e.blueprintID or e.shareCode),  -- exception(nullable): blueprintID nil on pre-68569 rows
+                    shareCode = e.shareCode, src = src, srcLabel = SRC_LABEL[src],
+                    name = _displayName(state, e.shareCode), hasLabel = true,
+                    blueprintID = e.blueprintID, blueprintType = e.blueprintType,
+                    typeLabel = BP_TYPE_LABEL[e.blueprintType], isAuto = isAuto,
+                    groupName = groupName,
+                    faction = ab.factions[e.shareCode],  -- exception(nullable): only House/Exterior, only after inspect
+                    date = e.creationTime,
+                    applied = ab.applied[e.shareCode],   -- exception(nullable): never applied
+                    note = ab.notes[e.shareCode] or "",  -- exception(nullable): no note yet
+                    isSelected = (e.shareCode == sb.selectedCode),
                 }
             end
         end
-        local catalogShown = false
-        for _, g in ipairs(sb.groups) do
-            local entries = g.entries or {}  -- exception(boundary): server payload shape
-            if #entries > 0 then
-                if not catalogShown then  -- one zone divider, before the first non-empty group
-                    rows[#rows + 1] = { kind = "divider", label = "Your catalog" }
-                    catalogShown = true
+        return out
+    end,
+})
+
+-- ===== Picker projection ====================================================
+-- Two FOLD sections ("Pasted codes", "Your catalog") with counts + cap text,
+-- the catalog's server groups as sub-headers, then rows. Folds persist in
+-- account.ui.blueprints.collapsedSections (design D3). The old footer slots
+-- label is gone: its numbers live on the fold rows now.
+local BP_CAP_WARN_FREE = 5
+
+Selectors:Register("blueprints.collectionRows", {
+    reads = { "account.ui.blueprints.collapsedSections", "session.blueprints.slots" },
+    calls = { "blueprints.entries" },
+    fn = function(state, ctx)
+        local entries = Selectors:Call("blueprints.entries", state, ctx)
+        local folded  = state.account.ui.blueprints.collapsedSections
+        local slots   = state.session.blueprints.slots
+        local rows, pasted, catalog = {}, {}, {}
+        for _, e in ipairs(entries) do
+            if e.src == "pasted" then pasted[#pasted + 1] = e else catalog[#catalog + 1] = e end
+        end
+        local function row(e)
+            rows[#rows + 1] = { kind = "row", shareCode = e.shareCode, blueprintID = e.blueprintID,
+                name = e.name, typeLabel = e.typeLabel, faction = e.faction, isAuto = e.isAuto,
+                isPasted = e.src == "pasted", isSelected = e.isSelected }
+        end
+        rows[#rows + 1] = { kind = "fold", section = "pasted", label = "Pasted codes", count = #pasted,
+                            capText = "no limit", capWarn = false, collapsed = folded.pasted == true }
+        if not folded.pasted then
+            for _, e in ipairs(pasted) do row(e) end
+        end
+        local free = slots.max - slots.used
+        -- `count` is slots.used, not #catalog: this fold reports the MANUAL slot cap,
+        -- and auto-backups spend a separate one (shown on the Backups group header),
+        -- so it can read "2 / 50" above three rows.
+        -- countMax nil until the collection lands: slots mint 0 / 0 before the
+        -- round-trip (and a collection that FAILS never fills them), and the row
+        -- factory renders a bare count when countMax is nil -- "0" reads as
+        -- nothing saved yet, where "0 / 0" reads as a broken cap.
+        rows[#rows + 1] = { kind = "fold", section = "catalog", label = "Your catalog",
+                            count = slots.used, countMax = slots.max > 0 and slots.max or nil,
+                            capText = slots.max > 0 and (free .. " slots free") or "",
+                            capWarn = slots.max > 0 and free <= BP_CAP_WARN_FREE,
+                            collapsed = folded.catalog == true }
+        if not folded.catalog then
+            local lastGroup
+            for _, e in ipairs(catalog) do
+                if e.groupName ~= lastGroup then
+                    lastGroup = e.groupName
+                    -- The server names its own groups; HDG adds nothing. The
+                    -- auto-saves carry no slot budget here: the game declares a
+                    -- backup maximum but never surfaces or enforces one a player
+                    -- can act on, and they cannot be deleted anyway, so counting
+                    -- them against a cap invented a chore (owner, 2026-09-11).
+                    rows[#rows + 1] = { kind = "header", label = e.groupName }
                 end
-                rows[#rows + 1] = { kind = "header", label = g.name or "My blueprints" }  -- exception(boundary): server payload
-                for _, e in ipairs(entries) do
-                    rows[#rows + 1] = {
-                        kind = "row", shareCode = e.shareCode,
-                        blueprintID = e.blueprintID,   -- unique numeric ID (distinct from shareCode)
-                        name = _displayName(state, e.shareCode),
-                        typeLabel = BP_TYPE_LABEL[e.blueprintType],
-                        faction = ab.factions[e.shareCode],  -- exception(nullable): only House/Exterior, only after inspect
-                        isAuto = e.isAutoSave == true,
-                        isPasted = false, isSelected = (e.shareCode == sb.selectedCode),
-                    }
-                end
+                row(e)
             end
         end
         return rows
+    end,
+})
+
+-- ===== Library mode (design 2026-09-11) =====================================
+
+Selectors:DefineEnum("blueprints.isSubView", "session.ui.blueprints.subView", { "inspect", "library" })
+
+local SRC_ORDER = { pasted = 1, mine = 2, backup = 3 }
+
+-- Sort keys per column. Undated entries (codes pasted before the stamp existed)
+-- sort as 0, i.e. last under the default newest-first order.
+local LIB_SORT_KEY = {
+    name    = function(e) return e.name:lower() end,
+    source  = function(e) return SRC_ORDER[e.src] end,
+    type    = function(e) return e.typeLabel or "" end,  -- exception(nullable): pre-stamp pastes have no type
+    date    = function(e) return e.date or 0 end,        -- exception(nullable): undated pastes
+    -- Sorting by note means "show me the ones I annotated": the "0"/"1" prefix
+    -- groups noted rows ahead of bare ones, then alphabetically within each.
+    note    = function(e) return (e.note == "" and "1" or "0") .. e.note:lower() end,
+}
+
+-- The table: entries filtered by chip + query, sorted by the header state.
+-- `out` is this selector's OWN array of references, so sorting it never
+-- reorders anything stored (the _byName rule). The entry tables inside it are
+-- shared with every other consumer of the memoized blueprints.entries and are
+-- read-only here -- every displayed field, srcLabel included, is stamped at the
+-- one place that mints them.
+Selectors:Register("blueprints.libraryRows", {
+    reads = { "session.ui.blueprints.libraryQuery", "session.ui.blueprints.libraryChip",
+              "session.ui.blueprints.librarySortCol", "session.ui.blueprints.librarySortDir",
+              "account.ui.blueprints.hideBackups" },
+    calls = { "blueprints.entries" },
+    fn = function(state, ctx)
+        local ui = state.session.ui.blueprints
+        local hideBackups = state.account.ui.blueprints.hideBackups
+        local q = ui.libraryQuery:lower()
+        local out = {}
+        for _, e in ipairs(Selectors:Call("blueprints.entries", state, ctx)) do
+            local chipOK = ui.libraryChip == "all" or e.src == ui.libraryChip
+            -- The preference hides backups from the All list only: picking the
+            -- Backups chip is an explicit ask and overrides it.
+            local hideOK = not (hideBackups and ui.libraryChip == "all" and e.src == "backup")
+            local qOK = q == "" or e.name:lower():find(q, 1, true) ~= nil
+                or e.shareCode:lower():find(q, 1, true) ~= nil or e.note:lower():find(q, 1, true) ~= nil
+            if chipOK and hideOK and qOK then
+                out[#out + 1] = e
+            end
+        end
+        local keyOf, asc = LIB_SORT_KEY[ui.librarySortCol], ui.librarySortDir == "asc"
+        table.sort(out, function(a, b)
+            local ka, kb = keyOf(a), keyOf(b)
+            if ka ~= kb then
+                if asc then return ka < kb end
+                return ka > kb
+            end
+            return a.key < b.key   -- total order: table.sort is not stable
+        end)
+        return out
+    end,
+})
+
+Selectors:Register("blueprints.libraryChipCounts", {
+    calls = { "blueprints.entries" },
+    fn = function(state, ctx)
+        local c = { all = 0, pasted = 0, mine = 0, backup = 0 }
+        for _, e in ipairs(Selectors:Call("blueprints.entries", state, ctx)) do
+            c.all = c.all + 1
+            c[e.src] = c[e.src] + 1
+        end
+        return c
+    end,
+})
+-- The tick box beside the chips. Orthogonal to them: it only bites on "all".
+Selectors:Register("blueprints.libraryHideBackups", {
+    reads = { "account.ui.blueprints.hideBackups" },
+    fn = function(state) return state.account.ui.blueprints.hideBackups == true end,
+})
+for _, chip in ipairs(HDG.Constants.BLUEPRINT_LIBRARY_CHIPS) do
+    local value, label = chip.value, chip.label
+    Selectors:Register("blueprints.libraryChipText_" .. value, {
+        calls = { "blueprints.libraryChipCounts" },
+        fn = function(state, ctx)
+            return ("%s (%d)"):format(label, Selectors:Call("blueprints.libraryChipCounts", state, ctx)[value])
+        end,
+    })
+    Selectors:Register("blueprints.libraryChipActive_" .. value, {
+        reads = { "session.ui.blueprints.libraryChip" },
+        fn = function(state) return state.session.ui.blueprints.libraryChip == value end,
+    })
+end
+for _, c in ipairs(HDG.Constants.BLUEPRINT_LIBRARY_COLUMNS) do
+    local col, label = c.col, c.label
+    Selectors:Register("blueprints.librarySortHeader_" .. col, {
+        reads = { "session.ui.blueprints.librarySortCol", "session.ui.blueprints.librarySortDir" },
+        fn = function(state)
+            local ui = state.session.ui.blueprints
+            if ui.librarySortCol ~= col then return label end
+            return label .. (ui.librarySortDir == "asc" and " ^" or " v")
+        end,
+    })
+    Selectors:Register("blueprints.librarySortActive_" .. col, {
+        reads = { "session.ui.blueprints.librarySortCol" },
+        fn = function(state) return state.session.ui.blueprints.librarySortCol == col end,
+    })
+end
+
+-- Detail strip: the selected entry. A CLICKED Library row wins outright (its
+-- key is pinned in session state), because a code present in both populations
+-- renders two rows and the strip's remove verb differs between them. With no
+-- clicked row -- the picker selected the code, or the clicked row is gone --
+-- the catalog row wins: rename and delete need its blueprintID.
+Selectors:Register("blueprints.libraryDetail", {
+    reads = { "session.blueprints.selectedCode", "session.ui.blueprints.librarySelectedKey" },
+    calls = { "blueprints.entries" },
+    fn = function(state, ctx)
+        local code = state.session.blueprints.selectedCode
+        if not code then return nil end  -- exception(nullable): nothing selected yet
+        local clickedKey = state.session.ui.blueprints.librarySelectedKey  -- exception(nullable): no Library row clicked this session
+        local found
+        for _, e in ipairs(Selectors:Call("blueprints.entries", state, ctx)) do
+            if e.shareCode == code then
+                if e.key == clickedKey then return e end
+                if not found or e.src ~= "pasted" then found = e end
+            end
+        end
+        return found  -- exception(nullable): a selected code with no entry (forgotten mid-session) shows no strip
+    end,
+})
+local function _detail(state, ctx) return Selectors:Call("blueprints.libraryDetail", state, ctx) end
+Selectors:Register("blueprints.libraryHasDetail", { calls = { "blueprints.libraryDetail" },
+    fn = function(state, ctx) return _detail(state, ctx) ~= nil end })
+Selectors:Register("blueprints.libraryDetailCode", { calls = { "blueprints.libraryDetail" },
+    fn = function(state, ctx) local d = _detail(state, ctx); return d and d.shareCode or "" end })  -- exception(nullable): no selection
+Selectors:Register("blueprints.libraryDetailNote", { calls = { "blueprints.libraryDetail" },
+    fn = function(state, ctx) local d = _detail(state, ctx); return d and d.note or "" end })  -- exception(nullable): no selection
+Selectors:Register("blueprints.libraryDetailNameEditable", { calls = { "blueprints.libraryDetail" },
+    fn = function(state, ctx) local d = _detail(state, ctx); return d ~= nil and d.src ~= "backup" end })
+-- Removable = a pasted code (forget) or an own catalog blueprint that has an id
+-- to delete BY. Backups are read-only, and a catalog row with no id has no
+-- removal at all -- its only one would be DeleteBlueprint(nil).
+Selectors:Register("blueprints.libraryCanRemove", { calls = { "blueprints.libraryDetail" },
+    fn = function(state, ctx)
+        local d = _detail(state, ctx)
+        if d == nil then return false end  -- exception(nullable): no selection
+        return d.src == "pasted" or (d.src == "mine" and d.blueprintID ~= nil)  -- exception(nullable): blueprintID nil on pre-68569 catalog rows
+    end })
+local NAME_LABEL  = { pasted = "Label (HDG only)", mine = "Name (renames in your catalog)", backup = "Name (read-only backup)" }
+local REMOVE_TEXT = { pasted = "Forget code", mine = "Delete blueprint", backup = "" }
+Selectors:Register("blueprints.libraryDetailNameLabel", { calls = { "blueprints.libraryDetail" },
+    fn = function(state, ctx) local d = _detail(state, ctx); return d and NAME_LABEL[d.src] or "" end })  -- exception(nullable): no selection
+Selectors:Register("blueprints.libraryRemoveText", { calls = { "blueprints.libraryDetail" },
+    fn = function(state, ctx) local d = _detail(state, ctx); return d and REMOVE_TEXT[d.src] or "" end })  -- exception(nullable): no selection
+-- "Pasted 09 Sep 2026  --  applied 09 Sep 2026 to 47 Twilight Bluffs"
+Selectors:Register("blueprints.libraryDetailMeta", { calls = { "blueprints.libraryDetail" },
+    fn = function(state, ctx)
+        local d = _detail(state, ctx)
+        if not d then return "" end  -- exception(nullable): no selection
+        local verb = d.src == "pasted" and "Pasted" or "Saved"
+        local text = d.date and (verb .. " " .. HDG.Format.ShortDate(d.date)) or (verb .. " --")  -- exception(nullable): undated paste
+        if d.applied then
+            text = text .. "  --  applied " .. HDG.Format.ShortDate(d.applied.at) .. " to " .. d.applied.houseLabel
+        end
+        return text
+    end })
+
+-- "Manual blueprints 2 / 50 -- Backups 1 / 10 -- Pasted codes 2 (no limit)
+--  -- 5 of 5 shown" (design section 5). The two cap clauses drop out entirely
+-- until the collection lands: slots mint 0 / 0 before the round-trip, and a
+-- footer that says "Manual blueprints 0 / 0" states a cap the player does not
+-- have. The pasted count is HDG's own state and is true immediately.
+Selectors:Register("blueprints.libraryFooterText", {
+    reads = { "session.blueprints.slots" },
+    calls = { "blueprints.libraryChipCounts", "blueprints.libraryRows" },
+    fn = function(state, ctx)
+        local s = state.session.blueprints.slots
+        local c = Selectors:Call("blueprints.libraryChipCounts", state, ctx)
+        local rows = Selectors:Call("blueprints.libraryRows", state, ctx)
+        local parts = {}
+        if s.max > 0 then
+            parts[#parts + 1] = ("Manual blueprints %d / %d"):format(s.used, s.max)
+        end
+        -- A count, not a budget: only the manual 50 is a ceiling the player can
+        -- hit and manage.
+        parts[#parts + 1] = ("Automatic saves %d"):format(c.backup)
+        parts[#parts + 1] = ("Pasted codes %d (no limit)"):format(c.pasted)
+        parts[#parts + 1] = ("%d of %d shown"):format(#rows, c.all)
+        return table.concat(parts, "  --  ")
     end,
 })
 
@@ -419,9 +721,12 @@ Selectors:Register("blueprints.houseMenuItems", {
     fn = function(state)
         local items = {}
         for guid, h in pairs(state.session.house.ownedHouses) do
+            -- `h.name` is the NEIGHBOURHOOD (ownedHouses stamps neighborhoodName
+            -- there); an unnamed house is labelled by where it is and says so,
+            -- rather than passing the neighbourhood off as its name.
             items[#items + 1] = {
                 value = guid,
-                text = h.houseName or h.name or guid,  -- exception(boundary): HouseInfo fields nilable (_SIGNATURES gotcha)
+                text = h.houseName or (h.name and ("House in " .. h.name)) or guid,  -- exception(boundary): HouseInfo fields nilable (_SIGNATURES gotcha)
             }
         end
         table.sort(items, function(a, b) return a.text < b.text end)
@@ -433,10 +738,19 @@ Selectors:Register("blueprints.houseMenuItems", {
 -- Blizzard's real name; rename hits the catalog) or a pasted code (HDG label
 -- overlay). Drives the name box's text AND which rename mechanism it commits to.
 Selectors:Register("blueprints.selectedEntry", {
-    reads = { "session.blueprints.selectedCode", "session.blueprints.groups", "account.blueprints.labels" },
+    reads = { "session.blueprints.selectedCode", "session.blueprints.groups", "account.blueprints.labels",
+              "session.ui.blueprints.librarySelectedKey" },
     fn = function(state)
         local code = state.session.blueprints.selectedCode
         if not code then return nil end  -- exception(nullable): empty pre-selection
+        -- A pinned PASTED Library row wins over the catalog: the rest of that
+        -- strip (name label, remove verb) already follows the clicked row via
+        -- libraryDetail, and the name box must edit the same thing they name --
+        -- the HDG label, not a rename of the catalog blueprint behind it.
+        -- _CloseLibrary clears the pin, so the picker keeps the catalog rule.
+        if state.session.ui.blueprints.librarySelectedKey == "bpPasted:" .. code then
+            return { isOwn = false, label = state.account.blueprints.labels[code] }  -- exception(nullable): unlabelled paste
+        end
         for _, g in ipairs(state.session.blueprints.groups) do
             for _, e in ipairs(g.entries or {}) do  -- exception(boundary): server payload shape
                 if e.shareCode == code then
@@ -536,10 +850,12 @@ Selectors:Register("blueprints.contentRows", {
         if not insp or insp.status ~= "received" then return {} end
         local rows = {}
         for _, g in ipairs(insp.groups) do
-            local gm = 0
-            for _, it in ipairs(g.items) do if it.numMissing > 0 then gm = gm + 1 end end
+            local gm, gp = 0, 0
+            for _, it in ipairs(g.items) do
+                if it.numMissing > 0 then gm = gm + 1; gp = gp + it.numMissing end
+            end
             rows[#rows + 1] = { kind = "header", ct = g.ct, label = g.ctLabel,
-                                count = #g.items, missing = gm, collapsed = g.collapsed }
+                                count = #g.items, missing = gm, missingPieces = gp, collapsed = g.collapsed }
             if not g.collapsed then
                 for _, it in ipairs(g.items) do
                     rows[#rows + 1] = { kind = "item", ct = g.ct, name = it.name,
@@ -625,7 +941,10 @@ Selectors:Register("blueprints.meterTextExteriorPet", {
     fn = function(state, ctx) return _meterText(_meterByKey(state, ctx, "exteriorPet")) end,
 })
 
--- Fit verdict pill line ("Fits this house -- N items to acquire first").
+-- Fit verdict pill line ("Fits this house -- N pieces to acquire first"). Pieces,
+-- not entries: "17 items" read as 17 things to buy when it was 17 kinds with
+-- several copies each (Soul, Discord 2026-09-10). The entry count stays on the
+-- counts label beside the filter buttons.
 Selectors:Register("blueprints.fitVerdict", {
     calls = { "blueprints.budgetFit", "blueprints.inspector" },
     fn = function(state, ctx)
@@ -633,9 +952,9 @@ Selectors:Register("blueprints.fitVerdict", {
         if not insp or insp.status ~= "received" then return "" end
         local b = Selectors:Call("blueprints.budgetFit", state, ctx)
         if not b.fits then return b.blockingText end
-        if insp.missingCount > 0 then
-            return ("Fits this house -- %d item%s to acquire first"):format(
-                insp.missingCount, insp.missingCount == 1 and "" or "s")
+        if insp.missingTotal > 0 then
+            return ("Fits this house -- %d piece%s to acquire first"):format(
+                insp.missingTotal, insp.missingTotal == 1 and "" or "s")
         end
         return "Fits this house -- you have everything"
     end,
@@ -699,25 +1018,18 @@ Selectors:Register("blueprints.filterMissingActive", {
     fn = function(state) return state.session.ui.blueprints.missingOnly == true end,
 })
 
--- "N items - M missing" (controls-row right).
+-- "N items -- M missing (P pieces)" (controls-row right). Items = manifest
+-- entries, pieces = copies still to acquire. All three numbers describe the
+-- BLUEPRINT, not the rows on screen: entryCount is counted before the
+-- Missing-only filter, like missingCount / missingTotal, so toggling the filter
+-- changes the rows and not the label. One shape always.
 Selectors:Register("blueprints.itemCountText", {
     calls = { "blueprints.inspector" },
     fn = function(state, ctx)
         local insp = Selectors:Call("blueprints.inspector", state, ctx)
         if not insp or insp.status ~= "received" then return "" end
-        local total = 0
-        for _, g in ipairs(insp.groups) do total = total + #g.items end
-        return ("%d items -- %d missing"):format(total, insp.missingCount)
-    end,
-})
-
--- "Blueprint slots  used / max" (browser footer).
-Selectors:Register("blueprints.slotsText", {
-    reads = { "session.blueprints.slots" },
-    fn = function(state)
-        local s = state.session.blueprints.slots
-        if s.max <= 0 then return "" end
-        return ("Blueprint slots  %d / %d"):format(s.used, s.max)
+        return ("%d items -- %d missing (%d piece%s)"):format(
+            insp.entryCount, insp.missingCount, insp.missingTotal, insp.missingTotal == 1 and "" or "s")
     end,
 })
 

@@ -573,7 +573,7 @@ function AcquisitionController:Wire(rootFrame)
     local itemList = HDG.UI.W(rootFrame, "acquisitionListPanel.itemList")
     if itemList and itemList.WireStoreSelectionSync then
         itemList:WireStoreSelectionSync("session.ui.acquisition.selectedItemID",
-            function(ed, id) return ed and ed.itemID == id end)
+            function(ed, id) return id ~= nil and ed.itemID == id end)
     end
 
     -- Find Decor + Recipes scroll list (shares acq.list cell). Recipe rows wire
@@ -582,13 +582,24 @@ function AcquisitionController:Wire(rootFrame)
     local recipeList = HDG.UI.W(rootFrame, "acquisitionListPanel.recipeList")
     if recipeList and recipeList.WireStoreSelectionSync then
         recipeList:WireStoreSelectionSync("session.ui.acquisition.selectedItemID",
-            function(ed, id) return ed and ed.itemID == id end)
+            function(ed, id) return id ~= nil and ed.itemID == id end)
     end
 
     local vendorList = HDG.UI.W(rootFrame, "acquisitionListPanel.vendorList")
     if vendorList and vendorList.WireStoreSelectionSync then
+        -- Same identity rule as acq.selectedVendor and the auto-select guard in
+        -- Refresh: npcID when set; for npcID-less vendors (catalog-only NPCs,
+        -- the synthetic World Vendors groupings) the (name, zone) SelectVendor
+        -- stamps. A bare `ed.npcID == id` with a nil id matched the FIRST
+        -- npcID-less row -- a wrong highlight, and now a wrong scroll.
         vendorList:WireStoreSelectionSync("session.ui.acquisition.selectedNpcID",
-            function(ed, id) return ed and ed.npcID == id end)
+            function(ed, id)
+                if id ~= nil then return ed.npcID == id end
+                local ui = HDG.Store:GetState().session.ui.acquisition  -- exception(false-positive): top-level controller read, not a row factory
+                if ui.selectedVendorName == nil then return false end
+                return ed.npcID == nil and ed.name == ui.selectedVendorName
+                    and (ed.catalogZone or ed.zone) == ui.selectedVendorZone  -- exception(nullable): catalogZone is the catalog's zone when known, zone the augment's
+            end)
     end
 
     -- Search editbox: every keystroke dispatches. Filters acq.vendors via

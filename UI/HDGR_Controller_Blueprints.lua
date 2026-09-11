@@ -15,8 +15,30 @@ local function _selectedCode()
     return HDG.Store:GetState().session.blueprints.selectedCode  -- exception(false-positive): top-level controller read, not a row factory
 end
 
+-- The game's own blueprint-name limits, read from the client rather than
+-- guessed. Live 12.1 is 3..50 (Constants.HousingConsts, probed 2026-09-11);
+-- HDG's save dialog used to allow 64, so a longer name reached the server and
+-- came back as HousingResult 8 "Invalid Blueprint name" with nothing on screen
+-- to say which rule it broke.
+-- The fields are live on 12.1 but absent from the LS stubs (pinned at 12.0.7),
+-- hence the suppressions -- delete them when the stub set regenerates. Same
+-- pair as Modules/HDGR_BlueprintObserver.lua's cap read.
+---@diagnostic disable-next-line: undefined-field
+local function _nameMax() return _G.Constants.HousingConsts.BlueprintNameMaxCharacters end  -- exception(boundary): Blizzard constants table
+---@diagnostic disable-next-line: undefined-field
+local function _nameMin() return _G.Constants.HousingConsts.BlueprintNameMinCharacters end  -- exception(boundary): Blizzard constants table
+
 local function _targetHouse()
     return HDG.Store:GetState().session.blueprints.targetHouseGUID  -- exception(false-positive): top-level controller read, not a row factory
+end
+
+-- The name the two name boxes show and _CommitName edits: the Blizzard catalog
+-- name for an own blueprint, the HDG label for a pasted code. ONE reader, so
+-- the box, the Escape restore and the commit can never resolve a different
+-- entry than the strip's name label and remove verb do.
+local function _shownName()
+    local entry = HDG.Selectors:Call("blueprints.selectedEntry", HDG.Store:GetState(), {})  -- exception(false-positive): top-level controller read, not a row factory
+    return (entry and (entry.isOwn and entry.name or entry.label)) or ""  -- exception(nullable): nothing selected / unlabelled paste
 end
 
 -- Select a code and fetch its manifest unless one is already cached OR already
@@ -31,11 +53,50 @@ local function _selectAndFetch(shareCode)
     end
 end
 
+-- Library mode (design 2026-09-11): a session-only sub-view; the picker and
+-- inspector panels hide and the library panel shows (LayoutConfig `visible`).
+function C:_OpenLibrary()
+    HDG.Store:Dispatch({ type = A.UI_SET_TRANSIENT, payload = { view = "blueprints", key = "subView", value = "library" } })
+end
+function C:_CloseLibrary()
+    HDG.Store:Dispatch({ type = A.UI_SET_TRANSIENT, payload = { view = "blueprints", key = "subView", value = "inspect" } })
+    -- Drop the clicked-row pin on the way out. The picker selects by CODE and
+    -- has no second row to disambiguate, so a pin left behind would outlive the
+    -- only screen that can set it.
+    HDG.Store:Dispatch({ type = A.UI_SET_TRANSIENT, payload = { view = "blueprints", key = "librarySelectedKey", value = nil } })
+end
+
+-- Inspect from the Library: fetch the selected code's manifest (cached ones
+-- don't re-request) and return to the picker; the selection is shared state,
+-- so the picker reveals the row and the inspector fills.
+function C:_InspectFromLibrary()
+    local code = _selectedCode()
+    if code then _selectAndFetch(code) end  -- exception(nullable): nothing selected
+    self:_CloseLibrary()
+end
+
+-- Remove the selected entry the way its source allows: pasted -> forget (HDG
+-- state only), own catalog -> delete (Blizzard catalog), backup -> nothing.
+-- Both confirms are the existing ones. The source comes from libraryDetail,
+-- which follows the row the player clicked -- the same code can sit in both
+-- populations, and the two rows do NOT mean the same thing here.
+function C:_RemoveSelected()
+    local d = HDG.Selectors:Call("blueprints.libraryDetail", HDG.Store:GetState(), {})  -- exception(false-positive): top-level controller read, not a row factory
+    if not d or d.src == "backup" then return end  -- exception(nullable): no selection / read-only backup
+    if d.src == "pasted" then
+        self:_ConfirmForget(d.shareCode, d.name)
+    else
+        self:_ConfirmDelete(d.blueprintID, d.name)
+    end
+end
+
 -- ===== Row factory: blueprintCollectionRow ==================================
--- Two shapes (ed.kind): "header" group label / "row" blueprint entry with
--- selected chrome, AUTO/type tag, and a Forget button on pasted rows ONLY.
+-- Three shapes (ed.kind): "fold" section fold row (glyph + label + count + cap
+-- text, click toggles the section) / "header" group label / "row" blueprint
+-- entry with selected chrome, AUTO/type tag, and a remove `x` on pasted rows
+-- (Forget) and own manual catalog rows (Delete). Both confirm.
 -- SAFETY: Forget dispatches BLUEPRINT_FORGET (HDG-state-only) -- it never
--- touches Blizzard's blueprint catalog, and collection rows get no button.
+-- touches Blizzard's blueprint catalog; Delete is the real catalog delete.
 
 local function _layoutCollectionRow(row)
     HDG.UI:EnsureRowChrome(row)
@@ -44,22 +105,6 @@ local function _layoutCollectionRow(row)
     headerFs:SetPoint("RIGHT", row, "RIGHT", -8, 0)
     headerFs:SetWordWrap(false)   -- long names truncate, never wrap into the next row
     row._headerFs = headerFs
-
-    -- Zone divider ("Your catalog") -- centered white label with a hairline
-    -- underneath, marking where the saved catalog begins.
-    local dividerFs = HDG.UI.RowText(row, "caption", "Text", "CENTER")
-    dividerFs:SetPoint("LEFT", row, "LEFT", 8, 0)
-    dividerFs:SetPoint("RIGHT", row, "RIGHT", -8, 0)
-    dividerFs:SetWordWrap(false)
-    row._dividerFs = dividerFs
-
-    local dividerLine = row:CreateTexture(nil, "ARTWORK", nil, 2)
-    dividerLine:SetHeight(1)
-    dividerLine:SetPoint("BOTTOMLEFT", row, "BOTTOMLEFT", 8, 3)
-    dividerLine:SetPoint("BOTTOMRIGHT", row, "BOTTOMRIGHT", -8, 3)
-    HDG.Theme:Register(dividerLine, "Divider")  -- repaints on scheme switch
-    dividerLine:Hide()
-    row._dividerLine = dividerLine
 
     local forgetBtn = CreateFrame("Button", nil, row)
     forgetBtn:SetSize(16, 16)
@@ -72,7 +117,7 @@ local function _layoutCollectionRow(row)
     forgetBtn:SetScript("OnEnter", function(self) self:SetAlpha(1) end)
     forgetBtn:SetScript("OnLeave", function(self) self:SetAlpha(0.4) end)
     -- Hover tooltip names WHICH remove this is BEFORE the click: catalog rows
-    -- delete permanently, pasted rows just forget the code (UX review #4).
+    -- delete permanently, pasted rows forget the code (UX review #4).
     -- Attach hooks (doesn't clobber the alpha scripts above).
     HDG.TooltipEngine:Attach(forgetBtn, function(self)
         if self._deleteBID then
@@ -82,9 +127,9 @@ local function _layoutCollectionRow(row)
     end)
     forgetBtn:SetScript("OnClick", function(self)
         if self._deleteBID then
-            HDG.Controller_Blueprints:_ConfirmDelete(self._deleteBID, self._deleteName)
+            HDG.Controller_Blueprints:_ConfirmDelete(self._deleteBID, self._rowName)
         elseif self._shareCode then
-            HDG.Store:Dispatch({ type = A.BLUEPRINT_FORGET, payload = { shareCode = self._shareCode } })
+            HDG.Controller_Blueprints:_ConfirmForget(self._shareCode, self._rowName)
         end
     end)
     row._forgetBtn = forgetBtn
@@ -104,27 +149,33 @@ local function _layoutCollectionRow(row)
 end
 
 local function _paintCollectionRow(row, ed)
-    if ed.kind == "divider" then
-        row._dividerFs:Show()
-        row._dividerLine:Show()
-        row._headerFs:Hide()
+    if ed.kind == "fold" then
+        -- Section fold row: "- Pasted codes  (4)" with the cap text right-aligned
+        -- ("no limit" / "48 slots free", warning tone near the cap). Same glyph
+        -- idiom as the content-group headers beside it.
         row._nameFs:Hide()
-        row._tagFs:Hide()
         row._forgetBtn:Hide()
-        row._dividerFs:SetText(ed.label)
+        row._headerFs:Show()
+        row._tagFs:Show()
+        local count = ed.countMax and (ed.count .. " / " .. ed.countMax) or tostring(ed.count)
+        row._headerFs:SetText(HDG.UI.CollapsePrefix(ed.collapsed) .. ed.label .. "  (" .. count .. ")")
+        row._tagFs:SetText(ed.capText)
+        HDG.Theme:Register(row._tagFs, ed.capWarn and "TextWarning" or "TextDim")
+        HDG.Theme:Register(row._headerFs, "TextStatus")  -- a pooled frame can arrive from a warning group header
         HDG.Theme:Register(row, "RowChrome", { header = true })
     elseif ed.kind == "header" then
-        row._dividerFs:Hide()
-        row._dividerLine:Hide()
         row._headerFs:Show()
         row._nameFs:Hide()
         row._tagFs:Hide()
         row._forgetBtn:Hide()
         row._headerFs:SetText(ed.label)
+        -- ed.warn is unused today (the auto-save cap is no longer shown); the
+        -- carries the tone, so the role is re-registered either way -- a pooled
+        -- frame that last painted a full Backups header must not keep the
+        -- warning on a plain group name.
+        HDG.Theme:Register(row._headerFs, ed.warn and "TextWarning" or "TextStatus")
         HDG.Theme:Register(row, "RowChrome", { header = true })
     else
-        row._dividerFs:Hide()
-        row._dividerLine:Hide()
         row._headerFs:Hide()
         row._nameFs:Show()
         row._tagFs:Show()
@@ -135,34 +186,40 @@ local function _paintCollectionRow(row, ed)
             (ed.faction == "Alliance" and "TextAlliance")
             or (ed.faction == "Horde" and "TextHorde") or "Text")
         row._tagFs:SetText(ed.isAuto and "AUTO" or (ed.typeLabel or (ed.isPasted and "shared" or "")))
-        -- Row remove `x`: pasted rows FORGET (HDG-list-only, no confirm);
-        -- own MANUAL blueprints DELETE from the catalog (confirm dialog).
+        HDG.Theme:Register(row._tagFs, "TextDim")  -- a pooled frame can arrive from a fold row wearing TextWarning
+        -- Row remove `x`: pasted rows FORGET (HDG-list-only); own MANUAL
+        -- blueprints DELETE from the catalog. Both confirm -- the dialog names
+        -- the row, so the name is stamped for either kind.
         -- Auto-backups are read-only, so they get no `x`.
         local canForget = ed.isPasted == true
         local canDelete = (not ed.isPasted) and ed.blueprintID ~= nil and ed.isAuto ~= true
         row._forgetBtn:SetShown(canForget or canDelete)
         row._forgetBtn._shareCode  = canForget and ed.shareCode or nil
         row._forgetBtn._deleteBID  = canDelete and ed.blueprintID or nil
-        row._forgetBtn._deleteName = canDelete and ed.name or nil
+        row._forgetBtn._rowName    = ed.name
         HDG.Theme:Register(row, "RowChrome", { selected = ed.isSelected })
     end
     row._edKind    = ed.kind
     row._shareCode = ed.shareCode
+    row._section   = ed.section
 end
 
 local function _wireCollectionRow(row)
     row:SetScript("OnClick", function(self)
+        if self._edKind == "fold" then
+            HDG.Store:Dispatch({ type = A.BLUEPRINT_TOGGLE_SECTION, payload = { section = self._section } })
+            return
+        end
         if self._edKind ~= "row" or not self._shareCode then return end
         _selectAndFetch(self._shareCode)
     end)
 end
 
 local function _resetCollectionRow(row)
-    HDG.UI.ClearRowText(row, "_headerFs", "_dividerFs", "_nameFs", "_tagFs")
-    row._dividerLine:Hide()
+    HDG.UI.ClearRowText(row, "_headerFs", "_nameFs", "_tagFs")
     row._forgetBtn:Hide()
-    row._forgetBtn._shareCode, row._forgetBtn._deleteBID, row._forgetBtn._deleteName = nil, nil, nil
-    row._edKind, row._shareCode = nil, nil
+    row._forgetBtn._shareCode, row._forgetBtn._deleteBID, row._forgetBtn._rowName = nil, nil, nil
+    row._edKind, row._shareCode, row._section = nil, nil, nil
 end
 
 local function _collectionRowFactory(_def)
@@ -185,11 +242,140 @@ HDG.Rows:Register("blueprintCollectionRow", {
         -- are real entries; PTR key-collision 2026-07-12). Collection rows key
         -- on blueprintID (unique numeric); pasted rows on the code.
         if not ed then return "bpColl:?" end
-        if ed.kind == "divider" then return "bpCollDiv" end  -- no shareCode/blueprintID; must not fall through to "bpColl:nil"
+        -- Fold + header rows carry no shareCode/blueprintID; they must not fall
+        -- through to "bpColl:nil" and collide with each other.
+        if ed.kind == "fold" then return "bpCollFold:" .. tostring(ed.section) end
         if ed.kind == "header" then return "bpCollHdr:" .. tostring(ed.label) end
         if ed.isPasted then return "bpPasted:" .. tostring(ed.shareCode) end
         return "bpColl:" .. tostring(ed.blueprintID or ed.shareCode)  -- exception(nullable): blueprintID nil on pre-68569 rows
     end,
+})
+
+-- ===== Row factory: blueprintLibraryRow =====================================
+-- One flat row per entry: name | source | type | date | applied | x. Column
+-- x-offsets come from HDG.Constants.BLUEPRINT_LIBRARY_COLUMNS (the header
+-- buttons use the same widths, gap "sm" = 4) so the text lines up under its
+-- header.
+local LIB_COL_X = {}
+do
+    local x = 8
+    for _, c in ipairs(HDG.Constants.BLUEPRINT_LIBRARY_COLUMNS) do
+        LIB_COL_X[c.col] = { x = x, w = c.width - 8 }
+        x = x + c.width + 4
+    end
+end
+local LIB_SRC_ROLE = { pasted = "TextInfo", mine = "TextSuccess", backup = "TextDim" }
+
+-- One line of the note for the table cell. A note is free text and may carry
+-- newlines, which a single-line FontString renders as a break that bursts the
+-- 22px row -- so collapse every run of whitespace. The detail strip below shows
+-- the note in full.
+local function _notePreview(note)
+    return HDG.Format.Trim((note:gsub("%s+", " ")))
+end
+
+local function _layoutLibraryRow(row)
+    HDG.UI:EnsureRowChrome(row)
+    local function col(name, fontRole, textRole)
+        local fs = HDG.UI.RowText(row, fontRole, textRole, "LEFT")
+        fs:SetPoint("LEFT", row, "LEFT", LIB_COL_X[name].x, 0)
+        fs:SetWidth(LIB_COL_X[name].w)
+        fs:SetWordWrap(false)
+        return fs
+    end
+    row._nameFs    = col("name",    "body",    "Text")
+    row._srcFs     = col("source",  "caption", "TextDim")
+    row._typeFs    = col("type",    "small",   "TextMuted")
+    row._dateFs    = col("date",    "small",   "TextDim")
+    row._noteFs    = col("note",    "small",   "TextMuted")
+    local removeBtn = CreateFrame("Button", nil, row)
+    removeBtn:SetSize(16, 16)
+    removeBtn:SetPoint("RIGHT", row, "RIGHT", -6, 0)
+    local x = HDG.UI.RowText(removeBtn, "body", "TextDim", "CENTER")
+    x:SetAllPoints()
+    x:SetText("x")
+    removeBtn:SetAlpha(0.4)  -- quiet until hovered; always present on removable rows (visible affordance)
+    removeBtn:SetScript("OnEnter", function(self) self:SetAlpha(1) end)
+    removeBtn:SetScript("OnLeave", function(self) self:SetAlpha(0.4) end)
+    -- The row `x` acts on THIS ROW's source, never through the detail strip: an
+    -- own blueprint pasted back in renders two rows for one code, and reading
+    -- the verb off the selection would offer Delete on the pasted one.
+    removeBtn:SetScript("OnClick", function(self)
+        if self._src == "pasted" then
+            HDG.Controller_Blueprints:_ConfirmForget(self._shareCode, self._name)
+        elseif self._src == "mine" then
+            HDG.Controller_Blueprints:_ConfirmDelete(self._blueprintID, self._name)
+        end
+    end)
+    row._removeBtn = removeBtn
+    row._laidOut = true
+end
+
+local function _paintLibraryRow(row, ed)
+    row._nameFs:SetText(ed.name)
+    HDG.UI.applyFontRole(row._nameFs, ed.hasLabel and "body" or "small")
+    HDG.Theme:Register(row._nameFs,
+        (ed.faction == "Alliance" and "TextAlliance") or (ed.faction == "Horde" and "TextHorde")
+        or (ed.hasLabel and "Text" or "TextDim"))
+    row._srcFs:SetText(ed.srcLabel)
+    HDG.Theme:Register(row._srcFs, LIB_SRC_ROLE[ed.src])
+    row._typeFs:SetText(ed.typeLabel or "")  -- exception(nullable): pre-stamp pastes have no type
+    row._dateFs:SetText(HDG.Format.ShortDate(ed.date) or "--")  -- exception(nullable): undated paste; the strip's meta line says pasted/saved
+    -- Blank, not "--": an absent note is nothing to report, where an undated
+    -- paste (the "--" above) is a fact we genuinely do not have.
+    row._noteFs:SetText(_notePreview(ed.note))
+    -- Same rule as blueprints.libraryCanRemove, which gates the strip's button:
+    -- backups are read-only, and a catalog row with no id has nothing to delete BY.
+    row._removeBtn:SetShown(ed.src == "pasted" or (ed.src == "mine" and ed.blueprintID ~= nil))  -- exception(nullable): blueprintID nil on pre-68569 catalog rows
+    row._removeBtn._shareCode   = ed.shareCode
+    row._removeBtn._src         = ed.src
+    row._removeBtn._blueprintID = ed.blueprintID  -- exception(nullable): pasted rows carry no catalog id
+    row._removeBtn._name        = ed.name
+    HDG.Theme:Register(row, "RowChrome", { selected = ed.isSelected })
+    row._shareCode = ed.shareCode
+    row._entryKey  = ed.key
+end
+
+-- Clicking a row selects its CODE (shared with the picker and inspector) and
+-- pins WHICH of that code's rows the detail strip follows -- the two are
+-- different facts whenever a code sits in both populations.
+local function _selectLibraryRow(row)
+    HDG.Store:Dispatch({ type = A.BLUEPRINT_SELECT, payload = { shareCode = row._shareCode } })
+    HDG.Store:Dispatch({ type = A.UI_SET_TRANSIENT,
+        payload = { view = "blueprints", key = "librarySelectedKey", value = row._entryKey } })
+end
+
+local function _wireLibraryRow(row)
+    row:SetScript("OnClick", function(self) _selectLibraryRow(self) end)
+    row:SetScript("OnDoubleClick", function(self)
+        _selectLibraryRow(self)
+        HDG.Controller_Blueprints:_InspectFromLibrary()
+    end)
+end
+
+local function _resetLibraryRow(row)
+    HDG.UI.ClearRowText(row, "_nameFs", "_srcFs", "_typeFs", "_dateFs", "_noteFs")
+    row._removeBtn:Hide()
+    row._removeBtn._shareCode, row._removeBtn._src = nil, nil
+    row._removeBtn._blueprintID, row._removeBtn._name = nil, nil
+    row._shareCode, row._entryKey = nil, nil
+end
+
+local function _libraryRowFactory(_def)
+    return {
+        Configure = function(rowFrame, ed)
+            if not rowFrame._laidOut then _layoutLibraryRow(rowFrame) end
+            _paintLibraryRow(rowFrame, ed)
+            _wireLibraryRow(rowFrame)
+        end,
+        Reset = function(rowFrame) _resetLibraryRow(rowFrame) end,
+    }
+end
+
+HDG.Rows:Register("blueprintLibraryRow", {
+    font = "body", height = 22,
+    factory = _libraryRowFactory,
+    key = function(ed) return "bpLib:" .. ed.key end,
 })
 
 -- ===== Row factory: blueprintContentRow =====================================
@@ -246,7 +432,10 @@ local function _paintContentRow(row, ed)
     if ed.kind == "header" then
         row._headerFs:Show()
         row._nameFs:Hide(); row._ownFs:Hide(); row._needFs:Hide(); row._chipFs:Hide()
-        local suffix = (ed.missing > 0) and ("  --  " .. ed.missing .. " missing") or ""
+        -- Entry count + piece sum, same shape as the counts label above the list.
+        local suffix = (ed.missing > 0)
+            and ("  --  %d missing (%d piece%s)"):format(ed.missing, ed.missingPieces, ed.missingPieces == 1 and "" or "s")
+            or ""
         row._headerFs:SetText(HDG.UI.CollapsePrefix(ed.collapsed) .. ed.label .. "  (" .. ed.count .. ")" .. suffix)
         -- Headers carrying missing items escalate so a scroll down the group
         -- bars alone shows where the gaps are (UX review #12).
@@ -338,6 +527,7 @@ function C:_SubmitPaste(text)
     HDG.Store:Dispatch({ type = A.BLUEPRINT_PASTE_ADD, payload = {
         shareCode = code,
         blueprintType = HDG.BlueprintObserver:GetBlueprintTypeForCode(code),
+        pastedAt = HDG.ControllerHelpers.Mechanics.Now(),  -- exception(boundary): time()
     } })
     _selectAndFetch(code)
 end
@@ -349,6 +539,63 @@ function C:_OnTargetChanged()
     if code then
         HDG.BlueprintObserver:RequestContents(code, _targetHouse())
     end
+end
+
+-- Library mode wiring: header search, chips, sort headers, detail actions.
+function C:_wireLibrary(root)
+    HDG.UI.WireSearchBox(root, "blueprintsLibraryPanel.search", "blueprints", "libraryQuery")
+    HDG.UI.OnClick(root, "blueprintsLibraryPanel.backBtn", function() C:_CloseLibrary() end)
+    for _, chip in ipairs(HDG.Constants.BLUEPRINT_LIBRARY_CHIPS) do
+        local value = chip.value
+        HDG.UI.OnClick(root, "blueprintsLibraryPanel.chip_" .. value, function()
+            HDG.Store:Dispatch({ type = A.UI_SET_TRANSIENT, payload = { view = "blueprints", key = "libraryChip", value = value } })
+        end)
+    end
+    for _, c in ipairs(HDG.Constants.BLUEPRINT_LIBRARY_COLUMNS) do
+        local col = c.col
+        HDG.UI.OnClick(root, "blueprintsLibraryPanel.col_" .. col, function()
+            HDG.Store:Dispatch({ type = A.BLUEPRINT_LIBRARY_SET_SORT, payload = { col = col } })
+        end)
+    end
+    HDG.UI.OnClick(root, "blueprintsLibraryPanel.hideBackups", function()
+        local hide = HDG.Selectors:Call("blueprints.libraryHideBackups", HDG.Store:GetState(), {})  -- exception(false-positive): top-level controller read, not a row factory
+        HDG.Store:Dispatch({ type = A.BLUEPRINT_SET_HIDE_BACKUPS, payload = { hide = not hide } })
+    end)
+    -- The code itself is the copy affordance -- no separate Copy button to
+    -- crowd the 130px action column. Same contract as the inspector's box:
+    -- click selects all, Ctrl+C copies, user edits revert (no clipboard API --
+    -- see the inspector's codeBox comment).
+    local libCodeBox = HDG.UI.W(root, "blueprintsLibraryPanel.code")
+    libCodeBox:HookScript("OnEditFocusGained", function(box) box:HighlightText() end)
+    libCodeBox:HookScript("OnTextChanged", function(box, userInput)
+        if userInput then
+            box:SetText(HDG.Selectors:Call("blueprints.libraryDetailCode", HDG.Store:GetState(), {}))  -- exception(false-positive): top-level controller read, not a row factory
+            box:HighlightText()
+        end
+    end)
+    HDG.UI.OnClick(root, "blueprintsLibraryPanel.inspectBtn", function() C:_InspectFromLibrary() end)
+    HDG.UI.OnClick(root, "blueprintsLibraryPanel.linkBtn",    function() C:_LinkInChat() end)
+    HDG.UI.OnClick(root, "blueprintsLibraryPanel.removeBtn",  function() C:_RemoveSelected() end)
+    -- Name box: same commit contract as the inspector's (focus-lost commits
+    -- user-typed edits via _CommitName; Escape restores). Text is pushed in
+    -- Refresh, never bound, so a re-render cannot clobber typing.
+    local nameBox = HDG.UI.W(root, "blueprintsLibraryPanel.nameBox")
+    nameBox:HookScript("OnTextChanged", function(box, userInput)
+        if userInput then box._dirty = true end
+    end)
+    nameBox:HookScript("OnEditFocusLost", function(box) C:_CommitName(box) end)
+    nameBox:SetScript("OnEscapePressed", function(box)
+        box._dirty = nil
+        box:SetText(_shownName())
+        box:ClearFocus()
+    end)
+    -- Note box: bound text in, user edits out. WireNoteBox keys its race guard
+    -- on THIS container -- the frame the binding calls SetText on -- so an edit
+    -- arriving while the box still holds the previous code's text is dropped
+    -- rather than saved onto the newly selected code.
+    HDG.ControllerHelpers.Mechanics.WireNoteBox(
+        HDG.UI.W(root, "blueprintsLibraryPanel.noteBox"),
+        _selectedCode, "shareCode", "BLUEPRINT_CLEAR_NOTE", "BLUEPRINT_SET_NOTE")
 end
 
 -- ===== Controller contract ===================================================
@@ -406,21 +653,30 @@ function C:Wire(root)
     -- OnTextChanged/OnEditFocus* for the placeholder overlay + focus ring, and
     -- SetScript wiped that chain (PTR 2026-07-13: "Name this blueprint..."
     -- ghosting under real text). Enter already ClearFocus()es via the factory.
+    -- Both name boxes stop at the game's maximum, so an over-long name cannot
+    -- be typed at all rather than being refused by the server after the fact.
+    for _, id in ipairs({ "blueprintsDetailPanel.nameBox", "blueprintsLibraryPanel.nameBox" }) do
+        HDG.UI.W(root, id):SetMaxLetters(_nameMax())
+    end
+
     local nameBox = HDG.UI.W(root, "blueprintsDetailPanel.nameBox")
     nameBox:HookScript("OnTextChanged", function(box, userInput)
         if userInput then box._dirty = true end
     end)
     nameBox:HookScript("OnEditFocusLost", function(box) C:_CommitName(box) end)
     nameBox:SetScript("OnEscapePressed", function(box)
-        box._dirty = nil  -- discard the typed edit...
-        local entry = HDG.Selectors:Call("blueprints.selectedEntry", HDG.Store:GetState(), {})  -- exception(false-positive): top-level controller read
-        box:SetText((entry and (entry.isOwn and entry.name or entry.label)) or "")  -- ...and restore the shown name
+        box._dirty = nil                -- discard the typed edit...
+        box:SetText(_shownName())       -- ...and restore the shown name
         box:ClearFocus()
     end)
 
-    -- Share-code box: read-only, click-to-select (the standard share-code
-    -- pattern -- no clipboard API). Programmatic SetText happens in Refresh;
-    -- user edits revert instantly.
+    -- Share-code box: read-only, click-to-select-all, Ctrl+C to copy. There is
+    -- NO addon-callable clipboard API: `CopyToClipboard` is declared
+    -- HasRestrictions in OsDocumentation, so an addon calling it -- even from a
+    -- click -- takes ADDON_ACTION_FORBIDDEN (live 12.1, 2026-09-11). Blizzard's
+    -- own blueprint UI calls it because their code is untainted, which is not a
+    -- path we can borrow. Programmatic SetText happens in Refresh; user edits
+    -- revert instantly.
     local codeBox = HDG.UI.W(root, "blueprintsDetailPanel.codeBox")
     codeBox:HookScript("OnEditFocusGained", function(box) box:HighlightText() end)  -- hook: keep the factory's focus ring
     codeBox:HookScript("OnTextChanged", function(box, userInput)
@@ -447,14 +703,17 @@ function C:Wire(root)
     HDG.UI.OnClick(root, "blueprintsDetailPanel.setBtn", function() C:_ImportAsSet() end)
     HDG.UI.OnClick(root, "blueprintsDetailPanel.architectBtn", function(btn) C:_OpenInArchitect(btn) end)
     HDG.UI.OnClick(root, "blueprintsListPanel.saveBtn", function(btn) C:_SaveBlueprint(btn) end)
+    HDG.UI.OnClick(root, "blueprintsListPanel.libraryBtn", function() C:_OpenLibrary() end)
     HDG.UI.OnClick(root, "blueprintsDetailPanel.copyReqsBtn", function() C:_CopyRequirements() end)
+
+    self:_wireLibrary(root)
 
     if not self._popupsRegistered then
         self._popupsRegistered = true
         HDG.UI:RegisterInputDialog("HDGR_BLUEPRINT_SAVE", {
             text       = "Name this blueprint:",
             accept     = "Save",
-            maxLetters = 64,
+            maxLetters = _nameMax(),
             onAccept   = function(value, data)
                 if not (value and value ~= "" and data and data.blueprintType) then return end
                 HDG.BlueprintObserver:Export(data.blueprintType, value)
@@ -501,7 +760,10 @@ function C:_RouteMissingToShopping()
     if skipped > 0 then
         HDG.Log:Info("blueprints", skipped .. " item(s) not in the catalog yet were skipped")
     end
-    HDG.Log:Info("blueprints", ("Shopping list %q updated: %d missing item(s)"):format(name, #items))
+    -- Entries AND pieces, the tab's vocabulary: one routed line may carry six copies.
+    local pieces = 0
+    for _, it in ipairs(items) do pieces = pieces + it.qty end
+    HDG.Log:Info("blueprints", ("Shopping list %q updated: %d missing item(s), %d piece(s)"):format(name, #items, pieces))
     -- Show the result: open the shopping widget on the routed list (design doc
     -- seams: "Widget switches to the list"; UX review #9). Toggle-only when closed.
     if HDG.Store:GetState().account.ui.shoppingWidgetShown ~= true then
@@ -513,20 +775,12 @@ end
 -- code and land the player on the unified Import-a-Build view, parsed and
 -- titled -- one Commit click away (the flow owns naming/dedupe).
 function C:_ImportAsSet()
-    local insp = HDG.Selectors:Call("blueprints.inspector", HDG.Store:GetState(), {})  -- exception(false-positive): top-level controller read
-    if not insp or insp.status ~= "received" then return end
-    local decor, skipped = {}, 0
-    for _, g in ipairs(insp.groups) do
-        if g.ct == 3 then
-            for _, it in ipairs(g.items) do
-                if it.itemID then
-                    decor[#decor + 1] = { id = it.itemID, count = it.total }
-                else
-                    skipped = skipped + 1
-                end
-            end
-        end
-    end
+    -- blueprints.setDecor, not the inspector: the inspector's groups honour the
+    -- Missing-only filter, and a set built from that view dropped every piece
+    -- the player already owned.
+    local src = HDG.Selectors:Call("blueprints.setDecor", HDG.Store:GetState(), {})  -- exception(false-positive): top-level controller read
+    if not src then return end
+    local decor, skipped = src.decor, src.skipped
     if #decor == 0 then
         HDG.Log:Warn("blueprints", "No catalog-resolvable decor in this blueprint yet")
         return
@@ -667,7 +921,6 @@ function C:Refresh(rootFrame, _ctx)
     -- RefreshAll runs once per WINDOW; skip windows that don't host the view.
     local codeBox = HDG.UI.W(rootFrame, "blueprintsDetailPanel.codeBox")
     if not codeBox then return end  -- exception(nullable): this window doesn't host the Blueprints view
-    local nameBox = HDG.UI.W(rootFrame, "blueprintsDetailPanel.nameBox")
 
     -- Bindings render everything textual; the two imperative reconciles are the
     -- meter fill colors (state-driven skinner re-registration) and the
@@ -686,29 +939,58 @@ function C:Refresh(rootFrame, _ctx)
     if not codeBox:HasFocus() then
         codeBox:SetText(_selectedCode() or "")
     end
-    -- Name box shows the SELECTED entry's name (own -> Blizzard catalog name;
-    -- pasted -> HDG label), per-row not last-typed. Never clobber mid-edit.
-    if not nameBox:HasFocus() then
-        local entry = HDG.Selectors:Call("blueprints.selectedEntry", HDG.Store:GetState(), {})  -- exception(false-positive): top-level controller read
-        nameBox:SetText((entry and (entry.isOwn and entry.name or entry.label)) or "")
-        -- Programmatic SetText: poke the placeholder overlay (OnTextChanged-
-        -- via-SetText isn't guaranteed; same belt the binding dispatch wears).
-        if nameBox._hdgrPlaceholderRefresh then nameBox._hdgrPlaceholderRefresh() end
+    -- Name boxes (inspector + library detail) show the SELECTED entry's name
+    -- (own -> Blizzard catalog name; pasted -> HDG label), per-row not
+    -- last-typed. Never clobber mid-edit. Same commit contract on both.
+    local shownName = _shownName()
+    for _, id in ipairs({ "blueprintsDetailPanel.nameBox", "blueprintsLibraryPanel.nameBox" }) do
+        local box = HDG.UI.W(rootFrame, id)
+        if not box:HasFocus() then
+            box:SetText(shownName)
+            -- Programmatic SetText: poke the placeholder overlay (OnTextChanged-
+            -- via-SetText isn't guaranteed; same belt the binding dispatch wears).
+            if box._hdgrPlaceholderRefresh then box._hdgrPlaceholderRefresh() end
+        end
     end
 end
 
 -- Delete an OWN manual blueprint from Blizzard's catalog, with a confirm. This
 -- is a real catalog delete (never wired into Forget, which is HDG-list-only);
 -- the row `x` only exposes it on own manual blueprints, never auto-backups.
+--
+-- name + id travel as textArg1 + data, never baked into the closure: UI.Confirm
+-- memoizes the dialog per id, so the FIRST call's text and onAccept are the
+-- ones every later show runs.
+--
+-- All three callers stamp a non-nil id and a name. The picker row gates on
+-- `ed.blueprintID ~= nil` itself; the Library's two (the strip's Remove and the
+-- row `x`) are gated by blueprints.libraryCanRemove and the matching
+-- `_removeBtn:SetShown` condition, which both require src == "mine" AND an id.
 function C:_ConfirmDelete(blueprintID, name)
-    if not blueprintID then return end
     HDG.UI.Confirm({
         id       = "HDGR_BLUEPRINT_DELETE",
         text     = "Delete blueprint \"%s\" from your catalog? This can't be undone.",
         accept   = "Delete", cancel = "Cancel",
-        textArg1 = name or "Blueprint", data = blueprintID,
+        textArg1 = name, data = blueprintID,
         onAccept = function(_, bid)
-            if bid then HDG.BlueprintObserver:Delete(bid) end
+            HDG.BlueprintObserver:Delete(bid)
+        end,
+    })
+end
+
+-- Forget a PASTED code, with a confirm. HDG-state-only (the code keeps working
+-- and can be pasted again), but the private label the player typed goes with
+-- it and the list is the only place the code string lives -- one mis-click on
+-- a code pasted from a Discord message weeks ago is unrecoverable (Soul,
+-- Discord 2026-09-10). Own id: the dialog text is memoized per id.
+function C:_ConfirmForget(shareCode, name)
+    HDG.UI.Confirm({
+        id       = "HDGR_BLUEPRINT_FORGET_CODE",
+        text     = "Forget pasted code \"%s\"? It leaves your list and its name is lost. The code itself keeps working -- paste it again any time.",
+        accept   = "Forget", cancel = "Cancel",
+        textArg1 = name, data = shareCode,
+        onAccept = function(_, code)
+            HDG.Store:Dispatch({ type = A.BLUEPRINT_FORGET, payload = { shareCode = code } })
         end,
     })
 end
@@ -736,7 +1018,16 @@ function C:_CommitName(box)
                 box:SetText(entry.name or "")
             end
         elseif entry.blueprintID and text ~= entry.name then
-            -- Own saved blueprint: rename in Blizzard's catalog.
+            -- Own saved blueprint: rename in Blizzard's catalog. Too short and
+            -- the server refuses with HousingResult 8, which surfaces as a bare
+            -- "Invalid Blueprint name" toast -- name the rule here instead and
+            -- keep the old name. (A PASTED code's label is HDG's own, so the
+            -- branch below is deliberately unbounded.)
+            if #text < _nameMin() then
+                HDG.Log:Warn("blueprints", ("A blueprint name needs at least %d characters"):format(_nameMin()))
+                box:SetText(entry.name or "")  -- exception(nullable): own entries always carry the catalog name
+                return
+            end
             HDG.BlueprintObserver:Rename(entry.blueprintID, text)
         end
     elseif text ~= (entry and entry.label) then
@@ -784,7 +1075,7 @@ end
 
 function C:_LinkInChat()
     local code = _selectedCode()
-    if not code then return end
+    if not code then return end  -- exception(nullable): nothing selected
     local link = HDG.BlueprintObserver:GetHyperlink(code)
     if not link then return end  -- exception(nullable): hyperlink may be unavailable
     local CFU = _G.ChatFrameUtil

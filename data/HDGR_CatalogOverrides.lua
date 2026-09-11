@@ -97,6 +97,24 @@ HDGR_CatalogOverrides = {
     [257723] = { notSoldBy = { "Ransa Greyfeather" } },  -- Skyhorn Eagle Kite
     [260698] = { notSoldBy = { "Ransa Greyfeather" } },  -- Kobold Trassure Pile
 
+    -- ===== Neighbourhood pet decor vendors: Perry Winkles / Agratha ============
+    -- The catalog gives these eight no source line at all (sourceType 0, blank
+    -- sourceName in the 12.1 catalog scan), yet both <Pet Decor Vendor> NPCs stock
+    -- every one of them for 50 gold: Perry Winkles in Founder's Point and Agratha
+    -- in Razorwind Shores (KevinW on CurseForge, 2026-09-09, with a /way for each;
+    -- Wowhead's merchant lists for the two NPCs agree). The ninth thing on their
+    -- counters, Mechanically Indistinguishable Pepe, is left out on purpose: it
+    -- needs the Pepe decor collected first, so it is a spare copy for people who
+    -- already have one, not a way to get it.
+    [263880] = { sources = { { type = 5, name = 'Perry Winkles', detail = "Founder's Point", cost = { gold = 500000 } }, { type = 5, name = 'Agratha', detail = 'Razorwind Shores' } } },  -- Cherished Pet's Rug
+    [277121] = { sources = { { type = 5, name = 'Perry Winkles', detail = "Founder's Point", cost = { gold = 500000 } }, { type = 5, name = 'Agratha', detail = 'Razorwind Shores' } } },  -- Cozy Bird Nest
+    [277138] = { sources = { { type = 5, name = 'Perry Winkles', detail = "Founder's Point", cost = { gold = 500000 } }, { type = 5, name = 'Agratha', detail = 'Razorwind Shores' } } },  -- Silvermoon Dragonhawk Incubator
+    [277142] = { sources = { { type = 5, name = 'Perry Winkles', detail = "Founder's Point", cost = { gold = 500000 } }, { type = 5, name = 'Agratha', detail = 'Razorwind Shores' } } },  -- Westfall Pet Cage
+    [277144] = { sources = { { type = 5, name = 'Perry Winkles', detail = "Founder's Point", cost = { gold = 500000 } }, { type = 5, name = 'Agratha', detail = 'Razorwind Shores' } } },  -- Crossroads Pet Cage
+    [277149] = { sources = { { type = 5, name = 'Perry Winkles', detail = "Founder's Point", cost = { gold = 500000 } }, { type = 5, name = 'Agratha', detail = 'Razorwind Shores' } } },  -- Crude Pet Cage
+    [277160] = { sources = { { type = 5, name = 'Perry Winkles', detail = "Founder's Point", cost = { gold = 500000 } }, { type = 5, name = 'Agratha', detail = 'Razorwind Shores' } } },  -- Cozy Lightbloom Lilypad
+    [277163] = { sources = { { type = 5, name = 'Perry Winkles', detail = "Founder's Point", cost = { gold = 500000 } }, { type = 5, name = 'Agratha', detail = 'Razorwind Shores' } } },  -- Loyal Companion's Plinth
+
     -- Wooden Mug
     [239162] = { sources = { { type = 5, name = 'Peter', detail = 'Lunarfall', cost = { gold = 500000, currencies = { { id = 824, amount = 100 } } } }, { type = 5, name = 'Vora Strongarm', detail = 'Frostwall' } } },
     -- Elodor Barrel

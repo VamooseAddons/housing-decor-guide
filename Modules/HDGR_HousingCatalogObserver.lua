@@ -772,8 +772,7 @@ end
 -- 3,168 ms (2026-09-03): the whole "3 s freeze". Names are matched offline
 -- now, never in the client.
 function R:_bakeItemAugmentBackfill(row)
-    local aug = HDG.StaticData.ItemAugment
-                and HDG.StaticData.ItemAugment:Get(row.itemID)
+    local aug = HDG.StaticData.ItemAugment:Get(row.itemID)
     for _, s in ipairs((aug and aug.sources) or {}) do
         if s.type == 1 and s.name and s.name ~= "" then
             -- Name: catalog parse wins for display; only fill when absent.
@@ -1164,6 +1163,39 @@ local function _composeSourceText(rec)
     return rec.source
 end
 
+-- Curated source type -> SOURCE_KINDS entry, shared by both bakes. WorldQuest
+-- (3) chips and headlines as QUEST; Profession (11) belongs to the recipe DB and
+-- yields nothing here. Any other code must be a donor code: a curated source
+-- carrying one the table does not know is data drift, and errors.
+local function _kindForSourceType(code)
+    if code == 3  then return HDG.Constants.SOURCE_KIND_BY_KEY.QUEST end
+    if code == 11 then return nil end
+    local kind = HDG.Constants.SOURCE_KIND_BY_DONOR[code]
+    if not kind then
+        error(("curated source type %s has no SOURCE_KINDS entry"):format(tostring(code)))
+    end
+    return kind
+end
+
+-- The first curated source that can stand as the headline: CatalogOverrides
+-- first (they are the corrections), then ItemAugment. Vendors are skipped
+-- because VendorRank already chose among them once _bakeVendors folded the
+-- override vendors in, and Craft because _bakeRecipe answers it. Returns the
+-- source and its kind, or nothing.
+local function _curatedHeadline(row)
+    local aug = HDG.StaticData.ItemAugment:Get(row.itemID)
+    -- exception(nullable): both stores are sparse; no entry is the common case
+    for _, list in ipairs({ row.sources or {}, aug and aug.sources or {} }) do
+        for _, src in ipairs(list) do
+            local kind = _kindForSourceType(src.type)
+            if kind and kind.key ~= "VENDOR" and kind.key ~= "CRAFT" then
+                return src, kind
+            end
+        end
+    end
+    return nil
+end
+
 -- _bakeSourceTypes: the "Source: X" label -- one concrete answer to "where do I
 -- get this?". Priority: Vendor > Quest > Ach > Crafted.
 --
@@ -1214,7 +1246,21 @@ function R:_bakeSourceTypes(row)
     elseif row.promo then
         row.sourceType, row.sourceName = 10, ""
     else
-        row.sourceType, row.sourceName = 0, ""
+        -- Nothing in the catalog's own text. Only curated VENDORS reached this
+        -- label before (through _bakeVendors and VendorRank), so a quest or a
+        -- drop the catalog never mentions -- the Elodor Barrel's missive, the
+        -- Last Architect's weekly gift -- chipped [QUST] or [DROP] and then named
+        -- nothing: in the Decor panel, the catalog tooltip and a copied blueprint
+        -- list alike (KevinW on CurseForge, 2026-09-09). The curated source is
+        -- the answer the chip was already pointing at.
+        local src, kind = _curatedHeadline(row)
+        if src then
+            row.sourceType = kind.donorCode
+            -- exception(optional): a bare curated source carries a kind and no name, like the catalog's Shop/Promotion lines
+            row.sourceName = src.name and _composeSourceText({ source = src.name, zone = src.detail }) or ""
+        else
+            row.sourceType, row.sourceName = 0, ""
+        end
     end
 end
 
@@ -1256,7 +1302,7 @@ local function _repTagEntry(row, aug)
 end
 
 function R:_bakeSourceTags(row)
-    local aug = HDG.StaticData.ItemAugment and HDG.StaticData.ItemAugment:Get(row.itemID)
+    local aug = HDG.StaticData.ItemAugment:Get(row.itemID)
     local byKind = {}     -- {[kind] = entry} -- dedupes per-kind contributions
     local order  = {}     -- insertion order; re-sorted by priority at end
 
@@ -1296,19 +1342,12 @@ function R:_bakeSourceTags(row)
     if row.shop      then emit("SHOP",     {}) end   -- catalog bare "Shop"/"In-Game Shop" line
     if row.promo     then emit("PROMO",    {}) end   -- catalog bare "Promotion" line
 
-    -- type->kind mapper: type 3 (WQ) -> QUEST; type 11 (PROFESSION) dropped; else donor index.
-    local function fromSourceType(code)
-        if code == 3  then return "QUEST" end
-        if code == 11 then return nil end
-        local kind = HDG.Constants.SOURCE_KIND_BY_DONOR[code]
-        return kind and kind.key
-    end
-
     -- ItemAugment signals: catalog-undetectable kinds (SHOP/PROMO/TREASURE/DROP/etc).
     -- VENDOR is chip-only. emit() dedupes per kind (catalog signal wins).
     if aug and aug.sources then
         for _, s in ipairs(aug.sources) do
-            local k = s.type and fromSourceType(s.type)
+            local kind = _kindForSourceType(s.type)
+            local k = kind and kind.key
             if k == "VENDOR" then
                 emit(k, {})
             elseif k then
@@ -1324,7 +1363,8 @@ function R:_bakeSourceTags(row)
     -- VENDOR chip-only; other kinds carry the override's name+zone text.
     if row.sources then
         for _, s in ipairs(row.sources) do
-            local k = s.type and fromSourceType(s.type)
+            local kind = _kindForSourceType(s.type)
+            local k = kind and kind.key
             if k == "VENDOR" then
                 emit(k, {})
             elseif k then

@@ -22,13 +22,39 @@ HDG.Constants = {
     PET_CHARACTER_HEIGHT = 2.242,
     -- Generic bullet/blip dot glyph (tone varies per site; the atlas never does).
     BULLET_DOT_ATLAS = "PlayerPartyBlip",
-    BLUEPRINT_SLOT_MAX = 50,  -- HousingConsts: 50 blueprints per Bnet account
     BLUEPRINT_REQUEST_TIMEOUT = 30,  -- s; big manifests take 5-10s, and some requests are silently dropped (no event at all)
     -- Currencies shown inline on the detail cost badge before "+N more". The
     -- badge shares a 22px band with the fit verdict, and a real build priced in
     -- 11 currencies ran off the panel's right edge; the hover tooltip carries
     -- the full list, so the badge only needs enough to read as "a price".
     BLUEPRINT_COST_BADGE_MAX = 3,
+    -- Library (design 2026-09-11): one table drives the chip widgets, the chip
+    -- selectors and the controller clicks; likewise for the sortable columns.
+    -- Column widths are the header-button widths AND the row anchors.
+    -- `firstDir` is the direction a column sorts when it BECOMES the sort column
+    -- (text reads ascending, dates newest-first). It lives here so the reducer,
+    -- the header selectors and the widgets all read one declaration.
+    BLUEPRINT_LIBRARY_CHIPS = {
+        { value = "all",    label = "All"     },
+        { value = "pasted", label = "Pasted"  },
+        { value = "mine",   label = "Mine"    },
+        -- "Auto saves", not "Backups": the tick box beside these chips says
+        -- "Hide automatic saves" and the picker tags the rows AUTO, so the chip
+        -- that shows only them says the same thing. (The picker's own group
+        -- header still reads "Backups" -- that string is the server's, not ours.)
+        { value = "backup", label = "Auto saves" },
+    },
+    BLUEPRINT_LIBRARY_COLUMNS = {
+        { col = "name",    label = "Name",    width = 320, firstDir = "asc"  },
+        { col = "source",  label = "Source",  width = 64,  firstDir = "asc"  },
+        { col = "type",    label = "Type",    width = 70,  firstDir = "asc"  },
+        { col = "date",    label = "Date",    width = 100, firstDir = "desc" },
+        -- Note, not Applied: nothing writes account.blueprints.applied yet, so an
+        -- Applied column is a column of dashes, while notes are the one thing in
+        -- the strip a player cannot see without selecting each row. The apply
+        -- date still shows in the detail strip's meta line.
+        { col = "note",    label = "Note",    width = 250, firstDir = "asc"  },
+    },
     -- Catalog row schema version. Bump when the observer row shape changes.
     -- No migration needed -- catalog is fully re-fetched from C_HousingCatalog on every sweep.
     CATALOG_SCHEMA_VERSION = 3,
@@ -700,8 +726,9 @@ HDG.Constants = {
         { kind = "divider" },
         -- Tools: a collapsible group (like the hubs above) but with NO navigable
         -- view -- collapseKey "tools" backs its collapse state; noNavigate -> the
-        -- label doesn't switch views (only the icon toggles collapse). Children are
-        -- launcher (dispatch-only) + config view-switches + the debug-gated row.
+        -- row has no view, so clicking anywhere on it folds the group (the chevron
+        -- does the same on every group row). Children are launcher (dispatch-only)
+        -- + config view-switches + the debug-gated row.
         { kind = "parent", collapseKey = "tools", noNavigate = true, label = "Tools",
           icon = "decor-controls-inspect-default", iconActive = "decor-controls-inspect-active",
           iconPressed = "decor-controls-inspect-pressed", children = {
@@ -1116,6 +1143,11 @@ HDG.Constants = {
         BLUEPRINT_SET_TARGET_HOUSE    = "HDGR_BLUEPRINT_SET_TARGET_HOUSE",    -- payload: { houseGUID } (session-scoped "Opaque-N")
         BLUEPRINT_SET_LABEL           = "HDGR_BLUEPRINT_SET_LABEL",           -- payload: { shareCode, label } (persisted)
         BLUEPRINT_FORGET              = "HDGR_BLUEPRINT_FORGET",              -- payload: { shareCode } (HDG-state-only; never touches Blizzard's catalog)
+        BLUEPRINT_TOGGLE_SECTION      = "HDGR_BLUEPRINT_TOGGLE_SECTION",      -- payload: { section = "pasted"|"catalog" }; flips account.ui.blueprints.collapsedSections[section]
+        BLUEPRINT_LIBRARY_SET_SORT    = "HDGR_BLUEPRINT_LIBRARY_SET_SORT",    -- payload: { col }; same col flips dir, new col resets (text cols asc, date cols desc)
+        BLUEPRINT_SET_HIDE_BACKUPS    = "HDGR_BLUEPRINT_SET_HIDE_BACKUPS",    -- payload: { hide } -> account.ui.blueprints.hideBackups (persisted Library preference)
+        BLUEPRINT_SET_NOTE            = "HDGR_BLUEPRINT_SET_NOTE",            -- payload: { shareCode, text } (persisted; WireNoteBox shape)
+        BLUEPRINT_CLEAR_NOTE          = "HDGR_BLUEPRINT_CLEAR_NOTE",          -- payload: { shareCode }
         BLUEPRINT_EXPORT_SUCCESS      = "HDGR_BLUEPRINT_EXPORT_SUCCESS",      -- payload: { shareCode }
 
         -- ===== Projects: shipping crates =====

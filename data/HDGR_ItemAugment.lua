@@ -13,7 +13,7 @@
 --       },
 --   }
 -- Sparse: items with no augmentable field have NO entry.
--- Generated 2026-09-03 08:47:24 by housingdecorguide-tools/itemaugment/rebuild_item_augment.lua
+-- Generated 2026-09-09 19:23:51 by housingdecorguide-tools/itemaugment/rebuild_item_augment.lua
 -- ============================================================================
 
 HDGR_ItemAugment = {
@@ -181,6 +181,7 @@ HDGR_ItemAugment = {
     [245533] = { sources = { { type = 2, questID = 93082, name = "Decor Treasure Hunt", detail = "Razorwind Shores" } } },
     [245534] = { sources = { { type = 11, name = "Draenor Inscription (80)" } } },
     [245535] = { sources = { { type = 2, questID = 86973, name = "Halting Harm in Har'mara" } } },
+    [245539] = { sources = { { type = 2, name = "A Curated Gift", detail = "The Last Architect, weekly; random from the Arcanostorage Sphere" } } },
     [245545] = { sources = { { type = 2, questID = 93083, name = "Decor Treasure Hunt", detail = "Razorwind Shores" } } },
     [245546] = { sources = { { type = 2, questID = 93084, name = "Decor Treasure Hunt", detail = "Razorwind Shores" } } },
     [245547] = { sources = { { type = 2, questID = 92981, name = "Decor Treasure Hunt", detail = "Founder's Point" } } },
@@ -306,6 +307,7 @@ HDGR_ItemAugment = {
     [246880] = { sources = { { type = 2, questID = 93104, name = "Decor Treasure Hunt", detail = "Razorwind Shores" } } },
     [246882] = { sources = { { type = 2, questID = 93133, name = "Decor Treasure Hunt", detail = "Razorwind Shores" } } },
     [246883] = { sources = { { type = 2, questID = 93105, name = "Decor Treasure Hunt", detail = "Razorwind Shores" } } },
+    [246958] = { sources = { { type = 2, name = "A Curated Gift", detail = "The Last Architect, weekly; random from the Arcanostorage Sphere" } } },
     [247220] = { sources = { { type = 11, name = "Pandaria Cooking (60)" } } },
     [247221] = { sources = { { type = 2, questID = 93106, name = "Decor Treasure Hunt", detail = "Razorwind Shores" } } },
     [247222] = { sources = { { type = 11, name = "Dragon Isles Cooking (80)" } } },
@@ -426,6 +428,7 @@ HDGR_ItemAugment = {
     [249518] = { sources = { { type = 1, achievementID = 60982, name = "Raise an Army for the Fel Hammer" } } },
     [249549] = { sources = { { type = 2, questID = 72515, name = "Augmenting a Dragon", detail = "The Forbidden Reach" } } },
     [249690] = { sources = { { type = 1, achievementID = 60963, name = "Legendary Research of the Illidari" } } },
+    [249923] = { sources = { { type = 2, name = "A Curated Gift", detail = "The Last Architect, weekly; random from the Arcanostorage Sphere" } } },
     [250111] = { sources = { { type = 1, achievementID = 60964, name = "Legendary Research of the Dreamgrove" } } },
     [250112] = { sources = { { type = 1, achievementID = 60981, name = "Raise an Army for Acherus" } } },
     [250115] = { sources = { { type = 1, achievementID = 42270, name = "The Deathlord's Campaign" } } },
@@ -551,12 +554,14 @@ HDGR_ItemAugment = {
     [253250] = { sources = { { type = 11, name = "Classic Enchanting (240)" } } },
     [253252] = { sources = { { type = 11, name = "Khaz Algar Engineering (80)" } } },
     [253253] = { sources = { { type = 11, name = "Khaz Algar Jewelcrafting (80)" } } },
+    [253397] = { sources = { { type = 2, name = "A Curated Gift", detail = "The Last Architect, weekly; random from the Arcanostorage Sphere" } } },
     [253441] = { sources = { { type = 2, questID = 93005, name = "Decor Treasure Hunt", detail = "Founder's Point" } } },
     [253443] = { sources = { { type = 2, questID = 88999, name = "Sky's Hope" } } },
     [253451] = { sources = { { type = 4, name = "Ziekket", detail = "The Blinding Vale" } } },
     [253457] = { sources = { { type = 11, name = "Midnight Leatherworking (80)", detail = "Trainer - Jan'zel / Zavahi / Talmar / Sathein, Silvermoon City / Zul'Aman" } } },
     [253467] = { sources = { { type = 2, questID = 86867, name = "Into the Lightbloom" } } },
     [253479] = { sources = { { type = 2, questID = 93006, name = "Decor Treasure Hunt", detail = "Founder's Point" } } },
+    [253481] = { sources = { { type = 2, name = "A Curated Gift", detail = "The Last Architect, weekly; random from the Arcanostorage Sphere" } } },
     [253485] = { sources = { { type = 2, questID = 90493, name = "The Heart of Tranquillien" } } },
     [253490] = { sources = { { type = 2, questID = 93002, name = "Decor Treasure Hunt", detail = "Founder's Point" } } },
     [253493] = { sources = { { type = 2, questID = 93147, name = "Decor Treasure Hunt", detail = "Razorwind Shores" } } },
@@ -571,6 +576,7 @@ HDGR_ItemAugment = {
     [253598] = { sources = { { type = 2, questID = 92321, name = "A Frostbitten Tally" } } },
     [254319] = { sources = { { type = 2, questID = 86866, name = "Can We Heal This?" } } },
     [254417] = { sources = { { type = 12, name = "In-Game Shop" } } },
+    [254561] = { sources = { { type = 2, name = "A Curated Gift", detail = "The Last Architect, weekly; random from the Arcanostorage Sphere" } } },
     [254773] = { sources = { { type = 1, achievementID = 62288, name = "Eversong Woods: The Highest Peaks" } } },
     [254878] = { sources = { { type = 2, questID = 86891, name = "A Last Resort" } } },
     [255648] = { sources = { { type = 2, questID = 86693, name = "De Legend of de Hash'ey" } } },
@@ -900,7 +906,7 @@ HDGR_ItemAugment = {
     [264338] = { sources = { { type = 4, name = "Lothraxion", detail = "Nexus-Point Xenas" } } },
     [264340] = { sources = { { type = 2, questID = 86540 } } },
     [264342] = { sources = { { type = 4, name = "Midnight Delves", detail = "Shadow Enclave" } } },
-    [264343] = { sources = { { type = 4, name = "Victorious Stormarion Pinnacle Cache", detail = "Weekly cache, Midnight Season 1" } } },
+    [264343] = { sources = { { type = 4, name = "Victorious Stormarion Cache / Pinnacle Cache", detail = "Weekly cache, Midnight" } } },
     [264349] = { sources = { { type = 2, questID = 30612, name = "The Leader Hozen", detail = "Kun-Lai Summit" } } },
     [264362] = { sources = { { type = 2, questID = 30000, name = "The Jade Serpent", detail = "The Jade Forest" } } },
     [264384] = { sources = { { type = 10, name = "Shop" } } },

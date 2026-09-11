@@ -417,6 +417,27 @@ PIPELINE_STAGES[#PIPELINE_STAGES + 1] = {
     end,
 }
 
+-- Stage 6c: SELECTION_REVEAL -- scroll a Store-selected row into view, for every
+-- WireStoreSelectionSync list (vendor / item / recipe / decor / material lists).
+-- Same two-phase shape as NavReveal: the selection sync runs in Bind (SetItems)
+-- or from a Store subscriber, both before Layout has sized the list, so it only
+-- queues; this flushes against the final extent. This is the same-frame fast
+-- path -- the queue also drains itself next frame (UI.QueueSelectionReveal), so a
+-- pass that skips this stage (combat, MAIN_WINDOW_OPENING, subscriber order)
+-- cannot leave a reveal behind. Skips LOG_PUSH like Layout does: nothing was laid
+-- out on that pass. A vendor jumped to from the zone scanner, the shopping list
+-- or a decor source landed highlighted but off screen (ReganB, Discord 2026-09-11).
+PIPELINE_STAGES[#PIPELINE_STAGES + 1] = {
+    name = "SelectionReveal",
+    predicate = function(ctx)
+        return _paintsMainWindow(ctx)
+           and ctx.actionType ~= HDG.Constants.ACTIONS.LOG_PUSH
+    end,
+    run = function(_ctx)
+        HDG.UI.FlushSelectionReveals()
+    end,
+}
+
 -- Stage 7: THEME -- terminal paint stage per spec section 6. Paint is
 -- event-driven today (Theme:Register at build, Theme:SetState during Bind),
 -- so this stage is a documented no-op until a paint-dirty queue exists.

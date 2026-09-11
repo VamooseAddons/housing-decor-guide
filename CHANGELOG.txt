@@ -1,3 +1,75 @@
+## [3.33.0] - 2026-09-11 (September 2026)
+
+### Added
+- **A Blueprint Library.** The Library button on the Blueprints tab opens every code you have
+  pasted and every blueprint in your catalog as one list you can search and sort by name,
+  source, type or date. A tick box keeps the game's automatic saves out of it. Each row shows
+  when the blueprint was pasted or saved and the note you left on it, and the notes field
+  takes whatever you want to remember about a build. The picker beside it is tidier too:
+  "Pasted codes" and "Your catalog" now fold away and carry their counts, Save a Blueprint
+  sits under the list instead of crowding the header, and the 50-blueprint limit is read from
+  the game rather than assumed. Reported by Soul.
+- **Shift-click an item in the Shopping List to search the Auction House for it.** With the
+  Auction House open on a Buy tab, the item's name lands in the search bar, the same gesture
+  the Warehouse and Recipes materials lists already have. Right-click still opens the item menu.
+- **The neighbourhood pet decor vendors' eight pieces now show where to buy them.** The
+  Cherished Pet's Rug, Cozy Bird Nest, Silvermoon Dragonhawk Incubator, the Westfall, Crossroads
+  and Crude Pet Cages, the Cozy Lightbloom Lilypad and the Loyal Companion's Plinth had no
+  source at all. Perry Winkles in Founder's Point and Agratha in Razorwind Shores each sell all
+  eight for 50 gold, and Agratha now has a map pin. Reported by KevinW.
+- **The six pieces inside the Last Architect's weekly gift now name the quest.** The Ogre
+  Champion's Prized Skull, Sin'dorei Golden Welcome, Masterful Sin'dorei Gravestone, Elegant
+  Enchanted Vanity, Mastercrafted Fungal Row Planter and Revered Deepstone Table each come
+  from "A Curated Gift", the weekly quest at The Last Architect, whose Arcanostorage Sphere
+  holds one of the six at random. Reported by KevinW.
+- **The Cosmic Void Gravitational Orb now names both caches it can drop from,** the Victorious
+  Stormarion Cache as well as the Pinnacle Cache.
+
+### Changed
+- **The sidebar shows which groups fold.** Every group in the left nav has been collapsible
+  all along, but the toggle was an unmarked click on the group icon. A chevron now sits at the
+  right edge of each group row, House folds like the others, and the Tools row folds when
+  clicked anywhere. Reported by Soul.
+
+### Fixed
+- **Clicking a vendor now scrolls the vendor list to them.** From the zone scanner, the
+  shopping list or a decor item's source, the jump highlighted the vendor but left the list
+  wherever it was, so a vendor near the bottom meant scrolling and remembering the name. The
+  row now scrolls into view, the vendor's goods appear straight away instead of after a second
+  click, and the jump also clears any Shop by Vendor filters that would have hidden that vendor,
+  which used to land you on a different vendor's goods instead. Reported by ReganB.
+- **A blueprint's missing count now says how many pieces, not how many kinds.** "17 items to
+  acquire first" meant 17 kinds of decor, some needed six times over. The verdict now counts
+  pieces, the list header shows both, and each group header carries its piece count. Reported
+  by Soul.
+- **Forgetting a pasted blueprint code now asks first,** the same as deleting a saved
+  blueprint. The code keeps working and can be pasted again, but the name you gave it goes
+  with it, and the list was the only place the code was kept. Reported by Soul.
+- **Import as Set no longer drops the decor you already own when Missing only is on.** The
+  furnishing set was built from the filtered view, so it held only the missing pieces.
+- **Deleting a second character from the Alts list in one session no longer names and deletes
+  the first one.** The confirmation dialog kept its first character.
+- **Deleting a layout or a what-if design now asks first.** Both the Layouts view's Delete
+  button and the Architect's version menu removed the design outright; a design has no way
+  back in, so they confirm like every other delete. Clearing a shopping list asks too, the
+  same as deleting one.
+- **The blueprint house picker no longer shows a neighbourhood as a house name.** An unnamed
+  house now reads "House in Founder's Point" instead of borrowing the neighbourhood's name.
+- **Delete confirmations on the Styles tab name the right kind of collection.** The first kind
+  deleted in a session set the wording for every kind after it.
+- **Rename boxes open on the current name.** Renaming a design in Projects, a layout in the
+  Layouts view or a style opened an empty box; each now starts from the name it has.
+- **Arrow keys through a list no longer re-centre it on every keypress** when the next row is
+  already on screen.
+- **A source only HDG knows about is now named, not just chipped.** The Elodor Barrel and
+  the Draenei Farmer's Trellis showed a bare [QUST] in the Decor panel with no quest behind
+  it, and every quest, drop or treasure the game's catalog leaves blank did the same. The
+  source line, the catalog tooltip and a copied blueprint list now carry the name, as they
+  already did for vendors. Reported by KevinW.
+- **The Apply to House tooltip no longer claims the Automatic Save uses a blueprint slot.** The
+  game's automatic backup of your previous layout sits outside the 50 slots, and HDG's slot
+  counter already left it out.
+
 ## [3.32.3] - 2026-09-07 (September 2026)
 
 ### Added

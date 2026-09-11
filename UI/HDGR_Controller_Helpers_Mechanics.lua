@@ -65,12 +65,6 @@ function Mech.SetUITransientView(view, key, value)
     })
 end
 
--- Cross-window vendor deep-link: open the main window on Acquire > Shop by
--- Vendor with this vendor selected. Callable from any window (shopping widget /
--- zone popup vendor rows). Clears the vendor search so the list actually shows
--- the selection; the search editbox reconciles from state in acquisition
--- Refresh. npcID is authoritative when set; (name, zone) is the fallback
--- identity for npcID-less vendors (mirrors acq.selectedVendor).
 -- Select a vendor in the acquisition view: the five-transient sequence every
 -- selection path shares (row click, auto-select, cross-window jump). npcID is
 -- authoritative; (name, zone) is the npcID-less fallback identity (hygiene A23).
@@ -82,13 +76,45 @@ function Mech.SelectVendor(npcID, name, zone)
     Mech.SetUITransientView("acquisition", "selectedRecipeItemID", nil)
 end
 
+-- Delete a design version (a what-if layout), with a confirm. Shared by the
+-- Layouts view's Delete button and the Architect's version menu -- one dialog,
+-- one wording. A version has no re-import path, so it confirms like every other
+-- persisted delete (a mis-click used to remove it outright). Name, ids AND the
+-- caller's afterAccept travel in textArg1 + data: UI.Confirm memoizes the dialog
+-- per id, so anything the onAccept closure captured at the FIRST call would run
+-- for every later one (the two callers pass different follow-ups).
+function Mech.ConfirmDeleteVersion(houseID, versionID, name, afterAccept)
+    HDG.UI.Confirm({
+        id       = "HDGR_PROJECTS_DELETE_VERSION",
+        text     = "Delete layout \"%s\"? Its rooms and their furnishings stay in your library; only this arrangement goes.",
+        accept   = "Delete", cancel = "Cancel",
+        textArg1 = name, data = { houseID = houseID, versionID = versionID, afterAccept = afterAccept },
+        onAccept = function(_, d)
+            HDG.Store:Dispatch({ type = HDG.Constants.ACTIONS.PROJECTS_DELETE_VERSION,
+                payload = { houseID = d.houseID, versionID = d.versionID, ts = Mech.Now() } })  -- exception(boundary): time()
+            d.afterAccept()
+        end,
+    })
+end
+
+-- Vendor deep-link: open the main window on Acquire > Shop by Vendor with this
+-- vendor selected. Callable from any window (shopping widget / zone popup vendor
+-- rows / the Decor source hyperlink). Resets EVERY acquisition filter, not just
+-- the search: a zone / source / faction filter or Missing-only that excludes
+-- this vendor leaves it out of acq.vendors, and AcquisitionController:Refresh
+-- then auto-selects the first vendor that IS listed -- the player landed on
+-- someone else's goods (ReganB, Discord 2026-09-11). The search editbox
+-- reconciles from state in acquisition Refresh. npcID is authoritative when
+-- set; (name, zone) is the fallback identity for npcID-less vendors (mirrors
+-- acq.selectedVendor). The selected row scrolls into view via the selection
+-- reveal queue (UI.QueueSelectionReveal).
 function Mech.JumpToVendor(npcID, name, zone)
     if Mech.GetState().account.ui.mainWindowShown ~= true then
         Mech.Dispatch(HDG.Constants.ACTIONS.MAIN_WINDOW_TOGGLE)
     end
     Mech.SetUIPersistent("view", "acquisition")
     Mech.SetUITransientView("acquisition", "viewMode", "vendor")
-    Mech.SetUITransientView("acquisition", "searchQuery", "")
+    Mech.Dispatch(HDG.Constants.ACTIONS.UI_FILTER_RESET, { tab = "acquisition" })
     Mech.SelectVendor(npcID, name, zone)
 end
 
@@ -100,12 +126,17 @@ end
 -- no longer matches the selection (else a fast selection switch writes one
 -- entity's note onto another). getSelectedID returns the current id;
 -- clearAction/setAction are ACTION NAMES; idField keys the payload.
+--
+-- The stamp lives on the captured `noteBox`, NEVER on the handler's `self`: a
+-- multiline box forwards OnTextChanged to its inner EditBox (UI.EditBox), so
+-- `self` inside the handler is not the frame SetText was hooked on. Keyed on
+-- `self`, the stamp reads nil forever and the guard below never fires.
 function Mech.WireNoteBox(noteBox, getSelectedID, idField, clearAction, setAction)
     if not (noteBox and noteBox.SetScript) then return end  -- exception(boundary): widget may be absent in this window
     noteBox._lastBoundNoteID = nil
     if not noteBox._setTextHooked then
-        hooksecurefunc(noteBox, "SetText", function(self)
-            self._lastBoundNoteID = getSelectedID()
+        hooksecurefunc(noteBox, "SetText", function()
+            noteBox._lastBoundNoteID = getSelectedID()
         end)
         noteBox._setTextHooked = true
     end
@@ -113,7 +144,7 @@ function Mech.WireNoteBox(noteBox, getSelectedID, idField, clearAction, setActio
         if not userInput then return end
         local id = getSelectedID()
         if not id then return end
-        if self._lastBoundNoteID ~= nil and self._lastBoundNoteID ~= id then return end  -- selection switch in progress
+        if noteBox._lastBoundNoteID ~= nil and noteBox._lastBoundNoteID ~= id then return end  -- selection switch in progress
         local text = (self.GetText and self:GetText()) or ""
         if text == "" then
             Mech.DispatchNamed(clearAction, { [idField] = id })

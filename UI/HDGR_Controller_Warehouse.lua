@@ -286,7 +286,7 @@ function WarehouseController:Wire(rootFrame)
     -- selection read so clicks don't rebuild the list.
     if matsList.WireStoreSelectionSync then  -- exception(optional): WireStoreSelectionSync is an optional protocol; not all list widgets implement it
         matsList:WireStoreSelectionSync("session.ui.warehouse.selectedMaterialID",
-            function(ed, id) return ed and ed.itemID == id end)
+            function(ed, id) return id ~= nil and ed.itemID == id end)
     end
 
     -- Auto-show-on-harvest toggle (title bar). Same flag the LumberObserver reads.

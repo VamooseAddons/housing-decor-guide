@@ -430,7 +430,7 @@ do
                 elseif child.view then
                     addCall("nav.isActive_" .. child.view)
                 end
-                if child.gatedBy then addCall(child.gatedBy) end   -- gated child (Debug under Tools; Blueprints under House)
+                if child.gatedBy then addCall(child.gatedBy) end   -- gated child (Debug under Tools)
             end
         end
         if node.gatedBy then addCall(node.gatedBy) end   -- e.g. config.debug gates a gated parent row
@@ -492,16 +492,23 @@ local function _navHomeNode(node, state, ctx)
                 sectionActive = true
             end
         end
+        -- Folds like a hub, keyed by the view (NAV_TOGGLE_GROUP + account.ui.nav):
+        -- a collapsed House keeps its row + spine and hides the leaves.
+        local collapsed = state.account.ui.nav.collapsedGroups[node.view] == true
         local children = {}
-        for _, child in ipairs(node.children) do
-            local leaf = _navLeafNode(node.view, child, state, ctx)
-            if leaf then   -- nil when gated out (Blueprints on live: blueprints.available=false)
-                leaf.spine = sectionActive or nil
-                children[#children + 1] = leaf
+        if not collapsed then
+            for _, child in ipairs(node.children) do
+                local leaf = _navLeafNode(node.view, child, state, ctx)
+                if leaf then   -- nil when a child is gated out
+                    leaf.spine = sectionActive or nil
+                    children[#children + 1] = leaf
+                end
             end
         end
         home.children = children
         home.spine = sectionActive or nil
+        home.isCollapsed = collapsed
+        home.groupKey = node.view
     end
     return home
 end
@@ -542,7 +549,7 @@ local function _navParentNode(node, state, ctx)
     local groupKey = node.view or node.collapseKey
     -- Collapsed groups omit their children (honored even when the group is the
     -- active section -- the hub stays highlighted, children just hide). Toggled
-    -- via the group icon (NAV_TOGGLE_GROUP); persisted in account.ui.nav.
+    -- by the row's fold chevron (NAV_TOGGLE_GROUP); persisted in account.ui.nav.
     local collapsed = state.account.ui.nav.collapsedGroups[groupKey] == true
     -- Active-section spine: flag hub + every child so the accent bar stacks
     -- into one continuous parent->child spine.
@@ -560,8 +567,10 @@ local function _navParentNode(node, state, ctx)
              iconActive = node.iconActive, iconPressed = node.iconPressed, label = node.label,
              active = hubActive, spine = hubActive or nil, isCollapsed = collapsed,
              groupKey = groupKey,
-             -- noNavigate hubs (Tools) have no view -> the label doesn't navigate; only the icon toggles.
-             click = (not node.noNavigate) and { kind = "view", view = hub } or nil,
+             -- noNavigate hubs (Tools) have no view -> the whole row toggles the fold
+             -- instead of navigating (the chevron does the same on every group row).
+             click = (not node.noNavigate) and { kind = "view", view = hub }
+                 or { kind = "toggleGroup", view = groupKey },
              children = children, key = "hub_" .. groupKey }
 end
 
@@ -575,7 +584,7 @@ local _navBuilders = {
 }
 
 Selectors:Register("nav.tree", {
-    reads = { "account.ui.nav.collapsedGroups" },   -- _navParentNode reads it for collapse
+    reads = { "account.ui.nav.collapsedGroups" },   -- _navParentNode + _navHomeNode read it for collapse
     calls = _navTreeCalls,
     fn = function(state, ctx)
         local roots = {}

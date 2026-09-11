@@ -21,7 +21,7 @@ F.BRAND_PREFIX = "|cff0070dd[HDG]|r"
 function F.FriendlyDate(d)
     if d == nil or d == "" then return nil end
     local n = tonumber(d)
-    if n and n > 1000000000 and _G.date then  -- exception(boundary): unix ts -> date(); date() absent in headless tests
+    if n and n > 1000000000 and _G.date then  -- exception(boundary): unix ts rendered through WoW's `date` global (os.date alias)
         return _G.date("%Y-%m-%d", n)
     end
     return tostring(d)
@@ -256,4 +256,13 @@ function F.LocalItemName(itemID, baked)
     if not itemID then return baked or "?" end
     local name, resolved = HDG.ItemNameResolver:ResolveName(itemID)
     return (resolved and name) or baked or name
+end
+
+-- Day month year ("09 Sep 2026") for list rows: the year matters once a
+-- library holds codes from more than one season. nil in, nil out: `date` with
+-- no timestamp renders TODAY, and an undated blueprint (pasted before the
+-- stamp existed) showing today's date is invented data, not a blank.
+function F.ShortDate(ts)
+    if ts == nil then return nil end
+    return _G.date("%d %b %Y", ts)  -- exception(boundary): WoW's `date` global
 end

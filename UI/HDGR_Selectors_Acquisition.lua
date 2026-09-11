@@ -1904,34 +1904,29 @@ end
 
 Selectors:Register("acq.selected.items", {
     memoized = true,
-    calls = {"decor.isCollected"},
+    calls = {"decor.isCollected", "acq.selectedVendor"},
     reads = {
         "session.resolvers.staticData.tick",  -- ADR-003c StaticData marker (sweep rule 4c)
         "session.resolvers.catalog.tick",
-        "session.ui.acquisition.selectedVendorName",  -- synthetic-vendor fallback
-        "session.ui.acquisition.selectedVendorZone",
         -- gate-met chip-dim signals (questDone/achEarned/repMet stamped per item below)
         "session.resolvers.questStatus.tick", "session.resolvers.achievementStatus.tick",
         "account.questCompletions", "session.resolvers.rep.tick",
     },
     fn = function(state, ctx)
-        -- Synthetic catalog vendors ("Draenor World Vendors" etc.) have no
-        -- npcID -- the row click stamps selectedVendorName / Zone in
-        -- transient UI state which we read below. byVendor is keyed by
-        -- (name, zone) composite, populated at sweep time.
-        -- Resolve vendor identity via the stamped (name, catalogZone) the
-        -- row click placed in transient UI state. catalogZone is the zone
-        -- string byVendor is keyed by (catalog Zone: line) -- which can
-        -- diverge from VendorAugment.zone (catalog ships parent map names
-        -- like "Zuldazar" where VendorAugment has the city "Dazar'alor").
-        -- VendorAugment is only consulted for coords / faction display,
-        -- NOT for the items list lookup.
-        local acqUI = state.session.ui.acquisition
-        local vendorName = acqUI.selectedVendorName
-        local vendorZone = acqUI.selectedVendorZone
-        local vendorEntry = vendorName
-            and HDG.HousingCatalogObserver:GetItemsByVendor(vendorName, vendorZone)
-        if not vendorEntry then return {} end
+        -- ONE identity rule for the selected vendor: acq.selectedVendor resolves
+        -- npcID first, then the (name, zone) a row click stamps for npcID-less
+        -- vendors. This selector used to read the stamps directly, so a jump
+        -- from another window -- which carries the npcID and no zone -- painted
+        -- the vendor's header but an empty goods list until the row was clicked
+        -- by hand (Vamoose, 2026-09-11). byVendor is keyed by (name, catalogZone):
+        -- the catalog's zone string, which can diverge from VendorAugment.zone
+        -- (catalog ships parent map names like "Zuldazar" where VendorAugment
+        -- has the city "Dazar'alor"), so the key comes from the resolved record,
+        -- never from the augment.
+        local vendor = Selectors:Call("acq.selectedVendor", state, ctx)
+        if not vendor then return {} end  -- exception(nullable): nothing selected yet
+        local vendorEntry = HDG.HousingCatalogObserver:GetItemsByVendor(vendor.name, vendor.catalogZone or vendor.zone)
+        if not vendorEntry then return {} end  -- exception(nullable): catalog-only vendor whose bucket the observer has not baked yet
         local isColl = Selectors:Call("decor.isCollected", state, ctx)
         local out = {}
         for _, itemID in ipairs(vendorEntry.items) do

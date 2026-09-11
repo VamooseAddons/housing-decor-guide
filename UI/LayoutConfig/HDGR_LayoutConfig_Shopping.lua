@@ -137,9 +137,10 @@ LC.widgets["shoppingHeaderPanel.spacer"] = {
 }
 -- Mouse-action hints: right of the slack spacer, just left of [X].
 LC.widgets["shoppingHeaderPanel.clickHints"] = {
-    tooltip = false,   -- self-owned tooltip, composed from leftText/rightText
+    tooltip = false,   -- self-owned tooltip, composed from leftText/shiftText/rightText
     kind = "clickHints", ["in"] = "shoppingHeaderPanel", slot = "header",
     leftText  = "locale:SHOP_HINT_LEFT",
+    shiftText = "locale:SHOP_HINT_SHIFT",
     rightText = "locale:SHOP_HINT_RIGHT",
     width = 34, height = 16, order = 90,
 }

@@ -3140,6 +3140,55 @@ function HDG.UI._ReinitSelectionRow(scrollBox, elementData)
     view:InvokeInitializer(frame, initializer)
 end
 
+
+-- ===== Selection reveal ======================================================
+-- Scroll a Store-selected row into view. Two-phase, like NavController:
+-- RevealActive: WireStoreSelectionSync's sync runs from the BIND stage (SetItems)
+-- and from a Store subscriber, both BEFORE the LAYOUT stage has sized the list,
+-- and scrolling against the outgoing extent picks the wrong offset -- so the
+-- sync only QUEUES the host here. Two drains, one queue: MainFrame's
+-- SelectionReveal stage flushes after Layout on the same pass (same-frame reveal
+-- when a pass follows), and a coalesced RunNextFrame flush guarantees the drain
+-- regardless -- Store subscribers fan out in pairs() order, so the sync can run
+-- AFTER the pipeline subscriber for its notification, and a pass under combat
+-- lockdown or the MAIN_WINDOW_OPENING pass skips the stage entirely. Without the
+-- next-frame drain a queued reveal outlived its frame and yanked a list the
+-- player had since scrolled. Hidden lists are dropped, not scrolled: their
+-- extent is stale until their view is shown. Keyed by host; the predicate
+-- re-resolves the row at flush time because a SetItems in between may have
+-- replaced the provider and its eds.
+local _pendingReveals, _revealFlushScheduled = {}, false
+
+function HDG.UI.QueueSelectionReveal(host, predicate)
+    _pendingReveals[host] = predicate
+    if _revealFlushScheduled then return end
+    _revealFlushScheduled = true
+    _G.RunNextFrame(HDG.UI.FlushSelectionReveals)
+end
+
+function HDG.UI.FlushSelectionReveals()
+    _revealFlushScheduled = false
+    local pending = _pendingReveals
+    _pendingReveals = {}
+    for host, predicate in pairs(pending) do
+        if host.scrollBox:IsVisible() then
+            -- AlignNearest = shortest hop, and a no-op when the row is already fully
+            -- in view. noInterpolation: the row was selected by a click, the list
+            -- should be there, not travelling.
+            host.scrollBox:ScrollToElementDataByPredicate(predicate, ScrollBoxConstants.AlignNearest, 0, true)
+        end
+    end
+end
+
+-- Does an invalidation list name `path` itself (not "*", not a parent)?
+local function _invalidationNames(invalidation, path)
+    if type(invalidation) ~= "table" then return false end
+    for _, p in ipairs(invalidation) do
+        if p == path then return true end
+    end
+    return false
+end
+
 function HDG.UI:ScrollBox(parent, opts)
     opts = opts or {}
 
@@ -3265,9 +3314,10 @@ function HDG.UI:ScrollBox(parent, opts)
     -- update with the returned ed (the behavior-side selection already
     -- happened atomically; Store-side dispatch then re-syncs us via
     -- WireStoreSelectionSync, which is a no-op because ed is unchanged).
-    -- Auto-scrolls the new selection into view via ScrollToElementData
-    -- (cheaper than ScrollToNearest -- ScrollBox handles the visibility
-    -- check internally). Replaces hand-rolled navigateList helpers.
+    -- Scrolls the new selection into view with AlignNearest: the default
+    -- alignment is AlignCenter, which re-centred the list on EVERY keypress
+    -- even when the row was already visible. Replaces hand-rolled
+    -- navigateList helpers.
     --
     -- Wrap policy: at the first item, Up jumps to the last; at the last
     -- item, Down jumps to the first. Matches HDG_DecorPreviewTab legacy
@@ -3300,8 +3350,8 @@ function HDG.UI:ScrollBox(parent, opts)
                 ed = b:SelectPreviousElementData()
             end
         end
-        if ed and sb.ScrollToElementData then
-            sb:ScrollToElementData(ed)
+        if ed then
+            sb:ScrollToElementData(ed, ScrollBoxConstants.AlignNearest, 0, true)
         end
         return ed
     end
@@ -3312,6 +3362,17 @@ function HDG.UI:ScrollBox(parent, opts)
     --   (b) every Store invalidation of `statePath` re-syncs the behavior
     --       (handles a Store-driven selection change without a data refresh
     --       -- e.g. row click -> dispatch action -> we land here).
+    -- Both seams also REVEAL the selected row (UI.QueueSelectionReveal).
+    -- SelectElementData only stamps + highlights; it never scrolls, so a vendor
+    -- jumped to from another window sat highlighted ten screens down (ReganB,
+    -- Discord 2026-09-11). Reveal rule, both seams: the selection MOVED (id
+    -- differs from the one last revealed), or the Store notification names this
+    -- very path (a re-select of the same row from another window). A "*" or
+    -- parent-path invalidation (window open, a filter reset, a layout delete)
+    -- with the same id is a re-push that kept the selection -- as is a search
+    -- keystroke or a catalog tick -- and never yanks the list back to it.
+    -- `matchFn` must return false for a nil id: "nothing selected" matches
+    -- nothing (a bare `ed.x == id` matched header rows that carry no id).
     -- `statePath` is the dotted Store path (e.g. "session.ui.decor.selectedItemID").
     -- `matchFn(ed, id)` returns true if the elementData represents the id.
     -- Caller pins the returned subscribe token to a frame's lifetime via
@@ -3327,16 +3388,22 @@ function HDG.UI:ScrollBox(parent, opts)
             end
             return node
         end
-        local function sync()
+        local function sync(invalidation)   -- nil on the provider re-push seam
             local id = read()
-            self:SyncSelection(function(ed) return matchFn(ed, id) end)
+            local predicate = function(ed) return matchFn(ed, id) end
+            local match = self:SyncSelection(predicate)
+            if not match then return end
+            if id ~= self._revealedSelectionID or _invalidationNames(invalidation, statePath) then
+                self._revealedSelectionID = id
+                HDG.UI.QueueSelectionReveal(self, predicate)
+            end
         end
         -- (a) Hook the provider-swap path. hooksecurefunc on the host method.
-        hooksecurefunc(self, "SetItems", sync)
-        hooksecurefunc(self, "Refresh", sync)
+        hooksecurefunc(self, "SetItems", function() sync(nil) end)
+        hooksecurefunc(self, "Refresh", function() sync(nil) end)
         -- (b) Store invalidation path. HDG.Paths.MatchesAny handles "*" too.
         self._selectionStoreToken = HDG.Store:Subscribe(function(_, invalidation)
-            if HDG.Paths.MatchesAny({ statePath }, invalidation) then sync() end
+            if HDG.Paths.MatchesAny({ statePath }, invalidation) then sync(invalidation) end
         end)
     end
 
@@ -3795,9 +3862,12 @@ function HDG.UI:RegisterInputDialog(key, spec)
         hasEditBox   = true,
         maxLetters   = spec.maxLetters or 256,  -- exception(optional): spec field default (validator-guarded)
         editBoxWidth = spec.editBoxWidth,
-        OnShow = function(self)
+        -- Per-show `data.prefill` wins over the registration-time initialText --
+        -- the same contract UI.Confirm honours -- so a rename box opens on the
+        -- current name instead of empty (Projects / Layouts rename, found 2026-09-11).
+        OnShow = function(self, data)
             local eb = editBoxOf(self)
-            eb:SetText(spec.initialText or "")
+            eb:SetText((data and data.prefill) or spec.initialText or "")  -- exception(optional): both prefill sources are optional dialog inputs
             eb:HighlightText()
             eb:SetFocus()
         end,

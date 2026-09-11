@@ -366,21 +366,26 @@ local function _onCharHideClick(capturedKey)
     end
 end
 
--- Delete-button click handler.
+-- Delete-button click handler. Name + key travel as textArg1 + data: UI.Confirm
+-- memoizes the dialog per id, so a text or closure baked at the first call is
+-- what every later show runs -- the second deletion in a session named and
+-- deleted the FIRST character (found 2026-09-11).
 local function _onCharDelClick(capturedKey, displayName)
     return function()
-        local label = displayName or capturedKey
+        local label = displayName or capturedKey  -- exception(nullable): a character with no resolved display name falls back to its key
         HDG.UI.Confirm({
             id   = "HDGR_ALTS_DELETE_CHAR",
-            text = ("Delete |cffffd200%s|r from the alts list?\nThis removes saved professions + lumber awareness. Cannot be undone."):format(label),
+            text = "Delete |cffffd200%s|r from the alts list?\nThis removes saved professions + lumber awareness. Cannot be undone.",
             accept = "Delete",
             cancel = "Cancel",
-            onAccept = function()
+            textArg1 = label,
+            data     = { charKey = capturedKey, label = label },
+            onAccept = function(_, d)
                 HDG.Store:Dispatch({
                     type    = HDG.Constants.ACTIONS.CHARACTER_DELETED,
-                    payload = { charKey = capturedKey },
+                    payload = { charKey = d.charKey },
                 })
-                HDG.Log:Info("alts_action", "Removed " .. label .. " from the alts list")
+                HDG.Log:Info("alts_action", "Removed " .. d.label .. " from the alts list")
             end,
         })
     end
