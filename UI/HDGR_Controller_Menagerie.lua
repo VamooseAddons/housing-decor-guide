@@ -259,6 +259,16 @@ HDG.Rows:Register("menagerieRow", {
 -- returns nil and the handler is never attached. Wiring is LAZY against
 -- HDG.mainFrame on first Refresh instead, where the widget table is populated.
 local LAZY = {
+    -- Selection highlight is owned by the list's SelectionBehaviorMixin and
+    -- re-applied from the Store after any re-push; the rows selector no longer
+    -- bakes it (2026-09-13 allocation audit), so without this a search or a
+    -- pets tick would drop the highlight. Same wiring as the Decor list.
+    list = { id = "menagerieListPanel.list", attach = function(w)
+        if w.WireStoreSelectionSync then
+            w:WireStoreSelectionSync("session.ui.menagerie.selectedSpeciesID",
+                function(ed, id) return id ~= nil and ed.speciesID == id end)
+        end
+    end },
     search = { id = "menagerieListPanel.search", attach = function(w)
         local function set(text)
             HDG.ControllerHelpers.Mechanics.SetUITransientView("menagerie", "search", text)

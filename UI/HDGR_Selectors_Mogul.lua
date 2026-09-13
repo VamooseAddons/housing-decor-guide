@@ -441,9 +441,28 @@ Selectors:Register("mogul.matsRows", {
 
 -- ===== Goblin sub-view =====================================================
 -- Per-decor profit table with profession/knowledge/queue/auction filters + sortable columns.
+-- The scored profit table, memoised on the price inputs alone: goblin.rows used
+-- to rescore every recipe (1.4 MB, ~10 ms) on every bag tick, name resolve and
+-- filter change while Mogul was open (2026-09-13). Each row is its own
+-- metatable so goblin.rows can stamp per-view fields on a light proxy.
+Selectors:Register("goblin.profitData", {
+    memoized = true,
+    calls = { "recipes.db" },
+    reads = {
+        "account.prices",  -- resolver-facade contract (sweep rule 4c)
+        "session.resolvers.prices.tick",
+        "account.config.preferredPriceAddon",
+    },
+    fn = function(state, ctx)
+        local data = HDG.Goblin:BuildProfitData(Selectors:Call("recipes.db", state, ctx))
+        for _, row in ipairs(data) do row.__index = row end
+        return data
+    end,
+})
+
 Selectors:Register("goblin.rows", {
     memoized = true,
-    calls = { "goblin.isTSMActive", "recipes.db" },
+    calls = { "goblin.isTSMActive", "recipes.db", "goblin.profitData" },
     reads = {
         "account.prices",  -- resolver-facade contract (sweep rule 4c)
         "session.itemNames.names",  -- row.name localised via _localName -> re-fire when names resolve
@@ -486,7 +505,7 @@ Selectors:Register("goblin.rows", {
         end
         local auctionSet = state.account.prices.ownedAuctions
 
-        local data = HDG.Goblin:BuildProfitData(Selectors:Call("recipes.db", state, ctx))
+        local data = Selectors:Call("goblin.profitData", state, ctx)
         -- Per-lumber-type quantity already committed by the craft queue (each queued
         -- craft's need x remaining). The Lumber column rolls this into each row's need
         -- (held vs need+queued), and the "Have lumber" filter hides what held can't cover.
@@ -503,10 +522,13 @@ Selectors:Register("goblin.rows", {
             end
         end
         local out = {}
-        for _, row in ipairs(data) do
+        for _, base in ipairs(data) do
+            -- A proxy per row: every stamp below (name, listing, lumber, kind)
+            -- lands here, never on the memoised profit row.
+            local row = setmetatable({}, base)
             -- Localise the crafted-item name (catalog/live API; baked stays as cold placeholder).
             -- Done before the filters so search + sort + display all read the client-language name.
-            row.name = _localName(row.itemID, row.name)
+            row.name = _localName(base.itemID, base.name)
             local keep = true
             -- Profession filter ("All" passes).
             if keep and profFilter ~= "All" and row.profession ~= profFilter then

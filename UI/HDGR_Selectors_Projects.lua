@@ -1041,6 +1041,10 @@ Selectors:Register("projects.roomInLayoutsText", {
 -- Auto-assign gate: any unassigned SHAPED room in the active layout.
 Selectors:Register("projects.hasUnassignedRooms", {
     reads = { "account.projects.houses", "account.projects.layouts", "account.rooms" },
+    -- Memoized: _activeRooms builds a ~20 KB layout view per call to answer a
+    -- boolean, and this is a visibility selector, so it ran on every layout
+    -- pass (356 calls, 7 MB in one session -- 2026-09-13 allocation profile).
+    memoized = true,
     fn = function(state)
         for _, rec in pairs(_activeRooms(state)) do
             if rec.unassigned and rec.shape then return true end

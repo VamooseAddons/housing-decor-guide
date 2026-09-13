@@ -24,7 +24,11 @@ Selectors:Register("decor.allItems", {
         HDG.HousingCatalogObserver:IterateRows(function(itemID, row)
             local iconTex, iconAtl = HDG.Format.CoerceIconPair(
                 row.iconTexture, row.iconAtlas)
-            items[#items + 1] = {
+            -- Each item is its own metatable (__index = itself): the rows
+            -- decor.items derives from it are small tables of per-view fields
+            -- that inherit these, instead of a full copy per row (and per dyed
+            -- variant) -- 6 MB per rebuild of the Decor list before (2026-09-13).
+            local item = {
                 itemID                = itemID,
                 decorID               = row.decorID,
                 name                  = row.name,
@@ -43,6 +47,8 @@ Selectors:Register("decor.allItems", {
                 iconAtlas             = iconAtl,
                 firstAcquisitionBonus = row.firstAcquisitionBonus,
             }
+            item.__index = item
+            items[#items + 1] = item
         end)
         table.sort(items, function(a, b)
             if a.name == b.name then return (a.itemID or 0) < (b.itemID or 0) end
@@ -113,15 +119,19 @@ local function _decorRowPasses(item, f)
 end
 
 -- Shallow-copy the shared (memoized) row before stamping to avoid mutating the cache.
+-- A list row: the per-view fields, inheriting everything else from the
+-- decor.allItems item (its own metatable). A row factory's writes (selection
+-- stamps) land on the row, never on the shared item.
 local function _stampDecorRow(item, f)
     local id = item.itemID
-    local stamped = {}
-    for k, v in pairs(item) do stamped[k] = v end
-    stamped.isFavorite       = f.isFavorite(id)
-    stamped.craftableState   = f.craftableState(id)
-    stamped.isCollected      = f.isCollected(id)
-    stamped.inStoredMode     = f.onlyStored == true
-    stamped.destroyableCount = f.destroyableCount(id)
+    local stamped = setmetatable({
+        isFavorite       = f.isFavorite(id),
+        craftableState   = f.craftableState(id),
+        isCollected      = f.isCollected(id),
+        inStoredMode     = f.onlyStored == true,
+        destroyableCount = f.destroyableCount(id),
+    }, item)
+    stamped.__index = stamped   -- the variant rows below inherit from the base row
     return stamped
 end
 
@@ -142,17 +152,16 @@ local function _emitDecorRows(out, stamped, activeTag)
     end
     if not hasDyed then return end
     for _, dv in ipairs(dyedVariants) do
-        local vrow = {}
-        for k, v in pairs(stamped) do vrow[k] = v end
-        vrow.isVariantRow       = true
-        vrow.variantIdentifier  = dv.variantIdentifier
-        vrow.variantKey         = tostring(id) .. ":" .. tostring(dv.variantIdentifier)
-        vrow.dyeColorIDs        = dv.dyeColorIDs
-        vrow.dyeColorsByChannel = dv.dyeColorsByChannel
-        vrow.numStored          = dv.numStored
-        vrow.destroyableCount   = dv.numStored
-        vrow.entryID            = dv.entryID   -- per-variant destroy identity (else destroy hits the base stack)
-        out[#out + 1] = vrow
+        out[#out + 1] = setmetatable({
+            isVariantRow       = true,
+            variantIdentifier  = dv.variantIdentifier,
+            variantKey         = tostring(id) .. ":" .. tostring(dv.variantIdentifier),
+            dyeColorIDs        = dv.dyeColorIDs,
+            dyeColorsByChannel = dv.dyeColorsByChannel,
+            numStored          = dv.numStored,
+            destroyableCount   = dv.numStored,
+            entryID            = dv.entryID,   -- per-variant destroy identity (else destroy hits the base stack)
+        }, stamped)
     end
 end
 
@@ -295,7 +304,6 @@ Selectors:Register("decor.selectedItem", {
             destroyableInstanceCount = vDestroyable,
             firstAcquisitionBonus    = row.firstAcquisitionBonus or 0,  -- exception(boundary): catalog struct field sparse
             dataTagsByID             = row.dataTagsByID,
-            variants                 = row.variants,
             entryID                  = vEntryID,
         }
     end,

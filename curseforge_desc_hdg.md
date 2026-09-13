@@ -12,19 +12,14 @@
 
 ---
 
-## What's New in v3.33.0
+## What's New in v3.33.1
 
-- **A Blueprint Library.** The Blueprints tab has a Library button that opens every share code you have pasted and every blueprint in your catalog as a single list. Filter it by name, code or note, and sort it by clicking a column: Name, Source, Type, Date or Note. A tick box keeps the game's automatic saves out of the list, and a chip row narrows it to just your pasted codes, just your own saved blueprints, or just the automatic saves.
-- Each blueprint row carries a **free-text note** you write once and see from then on, so a code someone sent you can say what it is and what it still needs.
-- The blueprint picker now folds. "Pasted codes" and "Your catalog" each collapse with their own count, Save a Blueprint has moved below the list, and the 50-blueprint limit is read from the game instead of assumed.
-- A blueprint's missing count now reports **pieces rather than kinds**. "17 items to acquire first" meant 17 kinds of decor, several of them needed six times over; the verdict now counts what you actually have to buy, and the list header shows both figures.
-- Clicking a vendor from the zone scanner, the shopping list or a decor item's source now **scrolls the vendor list to that vendor** and shows their goods straight away, instead of highlighting a row somewhere off screen. The jump also clears any Shop by Vendor filter that would have hidden them.
-- The left sidebar shows which groups fold. Every group has always collapsed, but nothing said so; a chevron now sits at the right of each group row.
-- Forgetting a pasted code, deleting a layout or a saved design, and clearing a shopping list all ask for confirmation first.
-- **The neighbourhood pet decor vendors' eight pieces now show where to buy them.** The Cherished Pet's Rug, Cozy Bird Nest, Silvermoon Dragonhawk Incubator, the Westfall, Crossroads and Crude Pet Cages, the Cozy Lightbloom Lilypad and the Loyal Companion's Plinth had no source at all. Perry Winkles in Founder's Point and Agratha in Razorwind Shores each sell all eight for 50 gold.
-- The six pieces inside the Last Architect's weekly gift now name the quest they come from, and the Cosmic Void Gravitational Orb names both caches that can drop it.
-- A quest, drop or treasure source that the game's catalog leaves blank is now named in the decor panel, the catalog tooltip and a copied blueprint list, where it used to show a bare source tag.
-- Shift-clicking an item in the Shopping List searches the Auction House for it, the same gesture the Warehouse and Recipes material lists already have.
+- **HDG uses less memory.** It allocates about 40% less over a session and its peak is a third lower. The window is now built the first time you open it, so a session where you never open HDG carries 13 MB less from login. Nothing on screen changes.
+- **The House tab no longer leaks memory while it is open.** Its dashboard cards now repaint in place instead of building new frames on every refresh.
+- The Wowhead button in the Acquire tab's vendor header shows again whenever a vendor is selected.
+- The Decor detail card no longer cuts off its bottom rows when a piece shows all seven detail rows at once.
+- A decor you learn just after a failed catalog load is no longer left marked as needed until you reload.
+- Hovering a dye in a blueprint now explains its count. The number comes from the game and only includes dyes in your bags, so dyes in your Warband Bank aren't counted. Move them to your bags before importing.
 
 ## The Decor Catalog
 
@@ -115,7 +110,7 @@ A companion window injects into Blizzard's House Editor so you can **place decor
 ---
 
 **Author:** Vamoose
-**Version:** 3.33.0
+**Version:** 3.33.1
 **Game Version:** 12.1.0 (Midnight)
 **Source / Issues:** https://github.com/VamooseAddons/housing-decor-guide
 **Discord:** https://discord.gg/RWZaxJaHFP

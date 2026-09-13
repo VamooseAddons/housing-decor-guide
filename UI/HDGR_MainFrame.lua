@@ -243,7 +243,14 @@ PIPELINE_STAGES[#PIPELINE_STAGES + 1] = {
         local desired = s.account.ui.mainWindowShown == true
         local isShown = frame:IsShown()
         if desired and not isShown then
-            frame:Show()
+            -- Every bound widget's OnShow push stays silent for this Show: the "*"
+            -- Bind below paints all of them once (see Engine:ShowForPipeline).
+            HDG.BindingEngine:ShowForPipeline(frame)
+            -- Widgets are born hidden and Layout below is what shows the active
+            -- view's; their OnShow hooks paint them once shown. Anything a stage
+            -- skipped because its widget was still hidden (a controller's imperative
+            -- paint) is caught by one coalesced wildcard pass next frame.
+            HDG:RequestReflow()
             -- Open transition: THIS pass does the full catch-up repaint. Escalate the
             -- narrow MAIN_WINDOW_TOGGLE invalidation ({mainWindowShown}) to "*" so Bind
             -- paints everything now. MAIN_WINDOW_OPENING below is then purely a module-wake
@@ -372,22 +379,21 @@ PIPELINE_STAGES[#PIPELINE_STAGES + 1] = {
     -- Skip the placement walk for LOG_PUSH -- a log append changes no widget
     -- size/visibility, so layout is unchanged (perf: a standalone LOG_PUSH was a
     -- full layout pass for nothing). The status rail still repaints via Bind.
+    -- Skip it too when the dispatch touches nothing the composed views' layout
+    -- reads (visibility selectors, dynamic tracks, auto-sized bindings): the
+    -- same reads gate the satellite windows have always had.
     predicate = function(ctx)
-        return _paintsMainWindow(ctx)
-           and HDG.Layout ~= nil
-           and ctx.actionType ~= HDG.Constants.ACTIONS.LOG_PUSH
+        if not (_paintsMainWindow(ctx) and HDG.Layout ~= nil
+                and ctx.actionType ~= HDG.Constants.ACTIONS.LOG_PUSH) then
+            return false
+        end
+        if ctx.invalidation == "*" then return true end
+        local interest = HDG.Layout:WindowInterest(ctx.config, "main", ctx.state)
+        return HDG.Paths.MatchesAny(interest, ctx.invalidation)
     end,
     run = function(ctx)
         local frame = ctx.frame
-        local intrinsics
-        if frame.widgets then
-            intrinsics = {}
-            for id, widget in pairs(frame.widgets) do
-                if widget._intrinsicWidth or widget._intrinsicHeight then
-                    intrinsics[id] = { width = widget._intrinsicWidth, height = widget._intrinsicHeight }
-                end
-            end
-        end
+        local intrinsics = HDG.Layout:HarvestIntrinsics(frame, ctx.config)
         -- Compose the `main` window from its slot map (HDG-ADR-025). STEP 2 is
         -- fill-only: ComposeWindow resolves the @view fill (= ctx.view) and
         -- delegates to Compute. No viewOriginX -- the view grid starts at x=0
@@ -467,13 +473,14 @@ local function runPipeline(frame, invalidation, actionType)
     local timed = perf and perf:Enabled()
     for _, stage in ipairs(PIPELINE_STAGES) do
         if not stage.predicate or stage.predicate(ctx) then
-            local t0 = timed and _G.debugprofilestop() or nil
+            local t0, k0
+            if timed then t0, k0 = perf:Open() end
             -- Strict call (ADR-042): the per-stage pcall was the isolation
             -- class -- a Bind-stage throw used to leave LATER stages running
             -- on a half-bound frame (deterministic-but-wrong paint). A throw
             -- now aborts the pipeline and surfaces via the outer ErrorBoundary.
             stage.run(ctx)
-            if timed then perf:RecordStage(stage.name, _G.debugprofilestop() - t0) end
+            if timed then perf:RecordStage(stage.name, t0, k0) end
         end
     end
 end

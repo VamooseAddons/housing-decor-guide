@@ -11,6 +11,7 @@ local HA = HDG.HouseAggregator
 
 HA.DEBOUNCE_SECONDS = 0.1
 HA._scheduled = HA._scheduled or false
+HA._dirty     = HA._dirty or false   -- a trigger landed while no consuming view was showing
 
 -- Log tag for Blizzard API boundary failures inside this module's pcalls.
 -- Surfaces silent SECRET-value / cold-cache / API-unavailable cases.
@@ -60,14 +61,12 @@ end
 
 -- Recent activity: last 5 "learned" craft-history entries with name+icon joined
 -- from the catalog inside the snapshot (so renderers never read Store mid-paint).
-local function _recentActivitySnapshot(state, catalog)
+-- Every catalog lookup below reads the observer's byItemID instead of building a
+-- private itemID index: four such indexes cost 805 KB per snapshot (2026-09-13).
+local function _recentActivitySnapshot(state)
     local entries = state.account.craft.history.entries  -- strict: NewCraft seeds history.entries (EnsureCraft migrates)
     if type(entries) ~= "table" then return {} end
-    -- Reverse catalog by itemID for O(1) name+icon resolution per entry.
-    local byItemID = {}
-    for _, row in pairs(catalog) do
-        if row.itemID and not byItemID[row.itemID] then byItemID[row.itemID] = row end
-    end
+    local byItemID = HDG.HousingCatalogObserver.byItemID   -- the observer's own index; the rows are the same tables as byDecorID
     local out = {}
     for i = #entries, 1, -1 do
         local e = entries[i]
@@ -138,15 +137,14 @@ end
 -- event vendor (npcID). Event vendors are placeholder-hidden in row.vendors and
 -- surfaced via override sources; the catalog observer indexes BOTH into byVendor
 -- and stamps each entry's resolved npcID -- so we match by ID, no name matching.
--- cbi is BuildSnapshot's per-itemID index: [itemID] = { row, owned }.
 -- Add one vendor item to the event-card snapshot once (dedup via `seen`),
--- stamping owned/icon/name from the collected-by-item map (cbi).
-local function _accumulateEventItem(out, seen, itemID, cbi)
+-- stamping owned/icon/name from the observer's row.
+local function _accumulateEventItem(out, seen, itemID)
     if seen[itemID] then return end
     seen[itemID] = true
-    local c     = cbi[itemID]
-    local owned = (c and c.owned) == true
-    local row   = c and c.row
+    local R     = HDG.HousingCatalogObserver
+    local row   = R.byItemID[itemID]   -- exception(nullable): a vendor item the catalog has no row for
+    local owned = row ~= nil and R:IsOwned(row)
     out.items[#out.items + 1] = {
         itemID = itemID, owned = owned,
         iconID = row and row.iconTexture,
@@ -155,14 +153,14 @@ local function _accumulateEventItem(out, seen, itemID, cbi)
     if owned then out.collected = out.collected + 1 end
 end
 
-local function _eventCardSnapshot(npcID, cbi)
+local function _eventCardSnapshot(npcID)
     local out = { items = {}, collected = 0, total = 0, pct = 0 }
     if not npcID then return out end
     local seen = {}
     for _, ven in pairs(HDG.HousingCatalogObserver.byVendor) do
         if ven.npcID == npcID then
             for _, itemID in ipairs(ven.items) do
-                _accumulateEventItem(out, seen, itemID, cbi)
+                _accumulateEventItem(out, seen, itemID)
             end
         end
     end
@@ -322,54 +320,63 @@ local function _nextRewardsSnapshot(state)
 end
 
 -- Themed sets: top 4 by completion ratio (incomplete-first, then highest pct).
-local function _themedSetsSnapshot(catalog, owned)
+-- One definition's pattern test. `includes` is OR, `excludes` overrides.
+local function _nameMatches(name, includes, excludes)
+    local hit = false
+    if includes then
+        for i = 1, #includes do
+            if name:find(includes[i], 1, true) then hit = true; break end
+        end
+    end
+    if not hit then return false end
+    if excludes then
+        for i = 1, #excludes do
+            if name:find(excludes[i], 1, true) then return false end
+        end
+    end
+    return true
+end
+
+local function _themedSetsSnapshot(catalog)
     local defs = _collectionDefsOrNil()
     if type(defs) ~= "table" then return {} end
+    local R = HDG.HousingCatalogObserver
 
-    -- Build name index for the catalog so we can do substring matches once.
-    local catalogByName = {}
-    for decorID, row in pairs(catalog) do
-        if row.name then
-            catalogByName[#catalogByName + 1] = {
-                decorID = decorID, name = row.name, owned = HDG.HousingCatalogObserver:IsOwned(row),
-            }
-        end
-    end
-
-    local function nameMatches(name, includes, excludes)
-        local hit = false
-        for _, p in ipairs(includes or {}) do
-            if name:find(p, 1, true) then hit = true; break end
-        end
-        if not hit then return false end
-        for _, p in ipairs(excludes or {}) do
-            if name:find(p, 1, true) then return false end
-        end
-        return true
-    end
-
+    -- One accumulator per definition, then a single catalog walk that tests every
+    -- row against every definition. The previous shape indexed the catalog into
+    -- 2,000 scratch rows and minted two empty tables per test: 385 KB a snapshot.
     local sets = {}
     for key, def in pairs(defs) do
-        local total, got = 0, 0
-        for _, c in ipairs(catalogByName) do
-            if nameMatches(c.name, def.namePatterns, def.excludePatterns) then
-                total = total + 1
-                if c.owned then got = got + 1 end
+        sets[#sets + 1] = {
+            id = key, name = def.displayName or key, icon = def.icon,
+            collected = 0, total = 0, pct = 0, def = def,
+        }
+    end
+    for _, row in pairs(catalog) do
+        local name = row.name
+        if name then
+            local owned = R:IsOwned(row)
+            for i = 1, #sets do
+                local s = sets[i]
+                if _nameMatches(name, s.def.namePatterns, s.def.excludePatterns) then
+                    s.total = s.total + 1
+                    if owned then s.collected = s.collected + 1 end
+                end
             end
         end
-        if total >= 5 then
-            sets[#sets + 1] = {
-                id          = key,
-                name        = def.displayName or key,
-                icon        = def.icon,
-                collected   = got,
-                total       = total,
-                pct         = (total > 0) and (got / total) or 0,
-            }
+    end
+
+    local kept = {}
+    for i = 1, #sets do
+        local s = sets[i]
+        if s.total >= 5 then
+            s.def = nil
+            s.pct = s.collected / s.total
+            kept[#kept + 1] = s
         end
     end
     -- Sort: incomplete (pct < 1) first, by gap ascending; then full.
-    table.sort(sets, function(a, b)
+    table.sort(kept, function(a, b)
         local aFull = a.pct >= 1
         local bFull = b.pct >= 1
         if aFull ~= bFull then return not aFull end
@@ -377,7 +384,7 @@ local function _themedSetsSnapshot(catalog, owned)
         return (a.total - a.collected) < (b.total - b.collected)
     end)
     local out = {}
-    for i = 1, math.min(4, #sets) do out[i] = sets[i] end
+    for i = 1, math.min(4, #kept) do out[i] = kept[i] end
     return out
 end
 
@@ -492,11 +499,7 @@ local function _featuredSnapshot(catalog, owned)
     local seed = tonumber((_G.date and _G.date("%Y%W")) or "0") or 0
     local stride = math.max(1, math.floor(n / 4))
     local out = {}
-    -- Build a decorID->row lookup keyed by itemID (we sorted by itemID above).
-    local byItemID = {}
-    for _, row in pairs(catalog) do
-        if row.itemID then byItemID[row.itemID] = row end
-    end
+    local byItemID = HDG.HousingCatalogObserver.byItemID
     for i = 0, 3 do
         local idx = ((seed + i * stride) % n) + 1
         local itemID = collectedIDs[idx]
@@ -692,7 +695,7 @@ function HA:BuildSnapshot(state)
     local housingNeed = {}
 
     -- Single-pass walk: produces bySource/byExp/closeBuckets/hotPicksRaw/
-    -- topStylesAccum/trophyAccum + cbi (event card index) in one iteration.
+    -- topStylesAccum/trophyAccum in one iteration.
     local collectedAll, totalAll = 0, 0
     local trophiesTotal, trophiesCollected = 0, 0
     local uniques, prey = {}, {}
@@ -701,7 +704,6 @@ function HA:BuildSnapshot(state)
     local hotPicksRaw = {}
     local styleTagsOwned = {}     -- [tagName] = collected count
     local styleTagsTotal = {}     -- [tagName] = total count
-    local cbi = {}                -- [itemID] = { row, owned } for event card snapshots
 
     for _, row in pairs(catalog) do
         totalAll = totalAll + 1
@@ -711,8 +713,6 @@ function HA:BuildSnapshot(state)
         local itemName = row.name or ""
         local itemID   = row.itemID
         local srcType, expName, catalogRow = _classifyRow(itemID)
-
-        if itemID then cbi[itemID] = { row = row, owned = isOwned } end
 
         if not isOwned then _accumulateHousingNeed(row, housingNeed) end
         _accumulateSourceExp(row, isOwned, srcType, expName, bySource, byExp)
@@ -793,14 +793,14 @@ function HA:BuildSnapshot(state)
         capacity          = _capacitySnapshot(),
         velocity          = velocity,
         favorites         = _favoritesSnapshot(catalog, owned, favorites),
-        themedSets        = _themedSetsSnapshot(catalog, owned),
+        themedSets        = _themedSetsSnapshot(catalog),
         topVendors        = _topVendorsSnapshot(catalog, owned),
-        recentActivity    = _recentActivitySnapshot(state, catalog),
+        recentActivity    = _recentActivitySnapshot(state),
         walletLumber      = wallet.lumber,
         walletHousing     = wallet.housing,
-        ritualSites       = _eventCardSnapshot(eventNPCs.ritualSites,  cbi),
-        abyssAnglers      = _eventCardSnapshot(eventNPCs.abyssAnglers, cbi),
-        decorDuels        = _eventCardSnapshot(eventNPCs.decorDuels,   cbi),
+        ritualSites       = _eventCardSnapshot(eventNPCs.ritualSites),
+        abyssAnglers      = _eventCardSnapshot(eventNPCs.abyssAnglers),
+        decorDuels        = _eventCardSnapshot(eventNPCs.decorDuels),
         nextRewards       = _nextRewardsSnapshot(state),
         craftableNow      = _craftableNowSnapshot(),
         goblinTopLumber   = _goblinTopLumberSnapshot(),
@@ -812,26 +812,40 @@ end
 -- Dispatch + Store subscription.
 -- ============================================================================
 
+-- The persisted capacity cache is what the buy picker reads, at a merchant, with
+-- the HDG window usually closed. It is refreshed on every trigger (three sync
+-- API reads) and dispatched only when the reading changed, so it stays live
+-- even while the dashboard build below is gated off.
+function HA:_RefreshCapacityCache(state)
+    local cap = _capacitySnapshot()
+    if not (cap and cap.max > 0) then return end   -- max==0 is a cold reading, not a real cap -> don't cache it
+    local cache = state.account.houseCapacityCache   -- exception(nullable): false until first capture
+    if cache and cache.owned == cap.owned and cache.max == cap.max then return end
+    HDG.Store:Dispatch({
+        type    = HDG.Constants.ACTIONS.HOUSE_CAPACITY_CACHED,
+        payload = { owned = cap.owned, max = cap.max },
+    })
+end
+
+-- A dashboard build costs 1.2 to 1.6 MB and only the House and Projects views
+-- read the result, so a build runs only while one of them is on screen; a
+-- trigger that lands at any other time leaves the snapshot dirty and the next
+-- notify that finds a consuming view showing builds once (2026-09-13 audit).
 function HA:DispatchSnapshot()
     if self._scheduled then return end
     self._scheduled = true
     _G.C_Timer.After(self.DEBOUNCE_SECONDS, function()
         self._scheduled = false
         local state = HDG.Store:GetState()
+        self:_RefreshCapacityCache(state)
+        -- A build is owed (dirty) and someone is looking; otherwise the flag waits.
+        if not (self._dirty and HDG.HousingObserver.HouseLevelViewActive(state)) then return end
+        self._dirty = false
         local snapshot = self:BuildSnapshot(state)
         HDG.Store:Dispatch({
             type    = HDG.Constants.ACTIONS.HOUSE_SNAPSHOT_UPDATED,
             payload = { snapshot = snapshot },
         })
-        -- Mirror decor storage into the persisted cache so the buy picker can show
-        -- it after a reload (overwritten on every capacity-bearing snapshot).
-        local cap = snapshot.capacity
-        if cap and cap.max and cap.max > 0 then   -- max==0 is a cold reading, not a real cap -> don't cache it
-            HDG.Store:Dispatch({
-                type    = HDG.Constants.ACTIONS.HOUSE_CAPACITY_CACHED,
-                payload = { owned = cap.owned, max = cap.max },
-            })
-        end
     end)
 end
 
@@ -872,12 +886,22 @@ function HA:OnStoreNotify(actionType)
     -- dispatch alone is not enough -- the gate must cover all builds.
     -- See docs/COLD_CLIENT_CTD_INVESTIGATION.md.
     if actionConst == "MAIN_WINDOW_OPENING" then
-        self._windowReady = true
+        if not self._windowReady then
+            self._windowReady = true
+            self._dirty = true   -- nothing has been built yet
+        end
         self:DispatchSnapshot()
         return
     end
     if not self._windowReady then return end
     if SNAPSHOT_TRIGGERING_ACTIONS[actionConst] then
+        self._dirty = true
+        self:DispatchSnapshot()
+        return
+    end
+    -- Any other action can be the view switch or window open that puts a
+    -- consuming view on screen while a build is owed.
+    if self._dirty and HDG.HousingObserver.HouseLevelViewActive(HDG.Store:GetState()) then
         self:DispatchSnapshot()
     end
 end

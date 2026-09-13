@@ -1,3 +1,33 @@
+## [3.33.1] - 2026-09-14 (September 2026)
+
+### Changed
+- **Blueprint dye rows explain their counts.** Hovering a dye in a blueprint notes that the
+  count comes from the game and only includes dyes in your bags, so dyes in your Warband Bank
+  aren't counted. Move them to your bags before importing. Reported by Madailein Hatter.
+- **Memory tuning across the addon.** HDG allocates about 40% less over a session and its
+  peak is a third lower. The window itself is now built the first time you open it, so a
+  session where you never open HDG carries 13 megabytes less from login. Opening the window no longer paints every tab, only the one on screen;
+  the layout engine skips work that cannot change what you see; the Decor and Acquire lists
+  build much lighter rows; a tab you leave releases its cached lists after a few minutes; the
+  login catalog build runs once instead of twice and copies less; and a dozen smaller hot spots
+  (the pet index, the Goblin table, the Warehouse materials list, Map All, the placed-decor
+  search counter) do their work once instead of on every tick. Nothing on screen changes.
+
+### Fixed
+- **The House tab no longer leaks memory while it is open.** Every redraw of the dashboard
+  built a fresh set of frames for its cards and abandoned the old ones, which the game cannot
+  free. Each card now keeps its frames and repaints them in place. The dashboard is also only
+  rebuilt while the House tab or a Projects view is on screen, and a placement nudge that
+  changes no count no longer rebuilds the Decor list.
+- **The vendor header's Wowhead button is back.** In the Acquire tab's vendor view it had been
+  hidden for good. It shows again whenever a vendor is selected.
+- **The Decor detail card no longer clips its bottom rows.** A crafted piece that is also
+  tagged, stored and destroyable shows every meta row at once; the 3D preview gives up 28
+  pixels so all seven fit.
+- **A decor learned just after a failed catalog load no longer stays marked as needed.** HDG
+  kept waiting for a load that had already given up and held every later learn aside until a
+  reload. Those learns are now applied straight away.
+
 ## [3.33.0] - 2026-09-11 (September 2026)
 
 ### Added

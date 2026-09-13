@@ -231,8 +231,24 @@ local function _assertScrollboxKeyContract(widget, items, def)
     end
 end
 
+-- A list is re-pushed on every invalidation that touches its binding closure,
+-- and on the OnShow re-push, whether or not its items changed -- and a memoized
+-- selector hands back the SAME table on a hit. Rebuilding Blizzard's
+-- DataProvider for an identical table released and re-acquired every visible
+-- row for nothing (2026-09-13 allocation audit). Identity is the right test
+-- and the only one allowed: a selector that changed its answer returns a new
+-- table (purity), so a same-object push carries no new information. The
+-- provider already holds a reference to the items table, so remembering it on
+-- the widget retains nothing extra.
+local function _sameItems(widget, items)
+    if widget._hdgrLastItems == items then return true end
+    widget._hdgrLastItems = items
+    return false
+end
+
 local function dispatchScrollbox(widget, values)
     if values.items == nil or not widget.SetItems then return end
+    if _sameItems(widget, values.items) then return end
     -- Key-contract check is debug-only: O(N) walk is meaningful at ~2000 items.
     local def = widget._hdgrRowDef
     if def and def.key then
@@ -3523,6 +3539,7 @@ end
 
 local function dispatchCardGrid(widget, values, dispatchCtx)
     if values.items == nil or not widget._cardGridCfg then return end
+    if _sameItems(widget, values.items) then return end
     HDG.CardGrid:SetItems(widget, values.items, _shouldRetainScroll(dispatchCtx))
 end
 
@@ -3688,6 +3705,7 @@ HDG.WidgetTypes:Register("filmstrip", {
 --   }
 local function dispatchTreeList(widget, values, dispatchCtx)
     if values.items == nil or not widget._treeListCfg then return end
+    if _sameItems(widget, values.items) then return end
     if HDG.TreeList then  -- exception(false-positive): HDG.TreeList is TOC-guaranteed at runtime; headless test mock omits it
         local actionType = dispatchCtx and dispatchCtx.actionType
         local meta = actionType and HDG.Store:GetActionMeta(actionType)

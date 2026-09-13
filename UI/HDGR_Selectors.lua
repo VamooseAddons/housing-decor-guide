@@ -170,19 +170,28 @@ end
 -- there), so internal pcall here catches nothing legitimate. The
 -- ErrorBoundaryMiddleware still wraps the dispatch chain at the
 -- outer layer for crash-recovery on subscriber fan-out.
+-- Dispatch counter for memo aging: InvalidateMemos advances it once per
+-- dispatch and drops any memo whose last hit is older than
+-- Constants.MEMO_IDLE_DISPATCHES, so a view left behind stops pinning its
+-- derived copy of the catalog for the whole session.
+local _dispatchSeq = 0
+
 local function _callInner(def, state, ctx)
     -- Input-memo path: handles cache hit/miss via input-reference equality.
     -- Still subject to path-based InvalidateMemos clearing.
     if def._memo then
+        def._usedAt = _dispatchSeq
         return def._memo(state, ctx)
     end
     -- Memo hit: return cached result without re-running fn
     if def.memoized and def._cached ~= nil then
+        def._usedAt = _dispatchSeq
         return def._cached.value
     end
     local result = def.fn(state, ctx)
     if def.memoized then
         def._cached = { value = result }
+        def._usedAt = _dispatchSeq
     end
     return result
 end
@@ -195,9 +204,9 @@ function Selectors:Call(name, state, ctx)
     -- instrumentation, absent in early boot / headless tests.
     local perf = HDG.Perf
     if perf and perf:Enabled() then
-        local t0 = _G.debugprofilestop()
+        local t0, k0 = perf:Open()
         local result = _callInner(def, state, ctx)
-        perf:RecordSelector(name, _G.debugprofilestop() - t0)
+        perf:RecordSelector(name, t0, k0)
         return result
     end
     return _callInner(def, state, ctx)
@@ -281,23 +290,27 @@ end
 -- right before _Notify so subscribers (BindingEngine) read fresh values.
 -- Walks memoized selectors; clears any whose read-closure intersects the
 -- invalidation set. Wildcard invalidation wipes all caches.
+local function _dropMemo(def)
+    def._cached = nil
+    if def._memo and def._memo.Clear then def._memo:Clear() end
+end
+
 function Selectors:InvalidateMemos(invalidation)
+    _dispatchSeq = _dispatchSeq + 1
     if invalidation == "*" then
         for _, def in pairs(_registry) do
-            if def.memoized then
-                def._cached = nil
-                if def._memo and def._memo.Clear then def._memo:Clear() end
-            end
+            if def.memoized then _dropMemo(def) end
         end
         return
     end
     if type(invalidation) ~= "table" then return end
+    local idleLimit = HDG.Constants.MEMO_IDLE_DISPATCHES
     for name, def in pairs(_registry) do
         if def.memoized then
             local closure = computeReadsClosure(name)
-            if HDG.Paths.MatchesAny(closure, invalidation) then
-                def._cached = nil
-                if def._memo and def._memo.Clear then def._memo:Clear() end
+            if HDG.Paths.MatchesAny(closure, invalidation)
+               or (def._usedAt and _dispatchSeq - def._usedAt > idleLimit) then
+                _dropMemo(def)
             end
         end
     end

@@ -52,17 +52,93 @@ HDG.Controllers:Register("houseTab", HouseTabController)
 
 -- Inter-cell gap: same value used for both horizontal gap and LayoutConfig row spacing.
 local CELL_GAP = 1
+-- =============================================================================
+-- Cell kit: keyed mark/sweep child pools.
+--
+-- Every dashboard renderer used to CreateFrame / CreateTexture / CreateFontString
+-- on every paint and orphan the previous set with SetParent(nil), which WoW cannot
+-- free: 350-600 permanent widget objects and as many permanent Theme registry
+-- entries per repaint while the House tab was open, on every bag tick, catalog
+-- tick and house snapshot (2026-09-13 allocation audit). A renderer now ACQUIRES
+-- each child by a stable key: created on first use only, re-anchored and repainted
+-- on every pass, and hidden by the end of the pass if the pass did not touch it --
+-- which is how a card's "empty" label and its list rows trade places without
+-- either leaking. Scripts, tooltips, font roles and one-time theme roles are
+-- installed in the create branch, once. A theme role a renderer chooses per
+-- paint is re-registered only when it changed (Theme:Register repaints on the
+-- spot). Containers with a variable number of children run their own pass.
+-- =============================================================================
+local KIT = "_kit"
+
+local function _kitBegin(host) HDG.UI.BeginPoolPass(host, KIT) end
+local function _kitEnd(host)   HDG.UI.EndPoolPass(host, KIT) end
+
+-- An existing child for `key`: marked used, shown, unanchored. nil on first use.
+local function _take(host, key)
+    local pool = host[KIT]
+    local obj = pool and pool[key]
+    if not obj then return nil end  -- exception(nullable): first paint of this key
+    obj._used = true
+    obj:ClearAllPoints()
+    obj:Show()
+    return obj
+end
+
+local function _keep(host, key, obj)
+    local pool = host[KIT]
+    if not pool then pool = {}; host[KIT] = pool end
+    pool[key] = obj
+    obj._used = true
+    return obj
+end
+
+-- FontString. The theme role may legitimately change between paints (a count
+-- that goes dim at zero); the font role never does.
+local function _text(host, key, fontRole, themeRole, justify)
+    local fs = _take(host, key)
+    if fs then
+        if fs._kitRole ~= themeRole then
+            HDG.Theme:Register(fs, themeRole)
+            fs._kitRole = themeRole
+        end
+        return fs
+    end
+    fs = HDG.UI.RowText(host, fontRole, themeRole, justify)
+    fs._kitRole = themeRole
+    return _keep(host, key, fs)
+end
+
+local function _tex(host, key, layer, sublevel)
+    return _take(host, key) or _keep(host, key, host:CreateTexture(nil, layer or "ARTWORK", nil, sublevel))
+end
+
+local function _icon(host, key, size)
+    return _take(host, key) or _keep(host, key, HDG.UI.MakeCellIcon(host, size))
+end
+
+-- Frame of any type. `init(frame, host)` runs once, on creation: scripts,
+-- tooltips, backdrops, theme roles that never change.
+local function _frame(host, key, frameType, template, init)
+    local f = _take(host, key)
+    if f then return f end
+    f = CreateFrame(frameType or "Frame", nil, host, template)
+    if init then init(f, host) end
+    return _keep(host, key, f)
+end
+
+-- Static state tables for roles that carry one, so a per-paint Register does
+-- not mint a table (Theme keeps the state by reference).
+local BAR_SUCCESS = { variant = "success" }
+local BAR_ACCENT  = { variant = "accent"  }
+
+local DONUT_WEDGES = 90
 
 -- =============================================================================
 -- Donut: 90 textures, each painted as a wedge via SetVertexOffset (quad -> triangle).
 -- Inner hole = CircleMaskScalable-masked WHITE8x8 tinted to the panel bg.
 -- =============================================================================
 
-local DONUT_WEDGES = 90
-
-local function _buildDonut(parent, size, holeSize)
-    local frame = CreateFrame("Frame", nil, parent)
-    frame:SetSize(size, size)
+local function _initDonut(frame)
     frame.wedges = {}
     for i = 1, DONUT_WEDGES do
         local tex = frame:CreateTexture(nil, "ARTWORK")
@@ -74,10 +150,15 @@ local function _buildDonut(parent, size, holeSize)
     end
     frame.hole = frame:CreateTexture(nil, "OVERLAY")
     frame.hole:SetTexture("Interface\\Buttons\\WHITE8X8")
-    frame.hole:SetSize(holeSize, holeSize)
     frame.hole:SetPoint("CENTER", frame, "CENTER")
     HDG.UI._TintTexture(frame.hole, HDG.Theme:GetColor("surface.panel"))
     HDG.UI.CircleMask(frame.hole)
+end
+
+local function _donut(host, key, size, holeSize)
+    local frame = _frame(host, key, "Frame", nil, _initDonut)
+    frame:SetSize(size, size)
+    frame.hole:SetSize(holeSize, holeSize)
     return frame
 end
 
@@ -88,20 +169,21 @@ end
 local SEG_DEFAULT = 10
 
 -- segments: pip count. pct: 0..1. gradient: { from, to } (default warning -> success).
-local function _buildSegmentBar(parent, width, height, segments, pct, gradient)
+local function _segmentBar(host, key, width, height, segments, pct, gradient)
     segments = segments or SEG_DEFAULT
     pct = math.max(0, math.min(1, pct or 0))  -- exception(boundary): caller may pass nil
     local from = gradient and gradient.from or HDG.Theme:GetColor("semantic.warning")
     local to   = gradient and gradient.to   or HDG.Theme:GetColor("semantic.success")
 
-    local frame = CreateFrame("Frame", nil, parent)
+    local frame = _frame(host, key, "Frame")
     frame:SetSize(width, height)
 
     local gap = 2
     local pipW = math.max(2, (width - gap * (segments - 1)) / segments)
     local filled = pct * segments
+    _kitBegin(frame)
     for i = 1, segments do
-        local pip = frame:CreateTexture(nil, "ARTWORK")
+        local pip = _tex(frame, i, "ARTWORK")
         pip:SetTexture("Interface\\Buttons\\WHITE8X8")
         pip:SetSize(pipW, height)
         pip:SetPoint("LEFT", frame, "LEFT", (i - 1) * (pipW + gap), 0)
@@ -114,6 +196,7 @@ local function _buildSegmentBar(parent, width, height, segments, pct, gradient)
         local alpha = (fillPortion > 0) and (0.85 * fillPortion + 0.15) or 0.18
         pip:SetVertexColor(r, g, b, alpha)
     end
+    _kitEnd(frame)
     return frame
 end
 
@@ -154,6 +237,7 @@ end
 
 -- =============================================================================
 -- Per-widget renderers: (cell, ed) where cell is the sized+themed BackdropTemplate Frame.
+-- Every renderer is a PAINT: it may run any number of times on the same cell.
 -- =============================================================================
 
 -- decoratorProfile: level ring (HDGRHousingLevelRingTemplate) + title/house/bar/trophy.
@@ -260,34 +344,64 @@ local TROPHY_ICON_DROP = 2     -- icon overlap onto the wood shelf
 local TROPHY_PAD_X     = 6     -- inset between wood frame and first/last icon
 local TROPHY_PAD_Y     = 4
 
-local function _renderTrophyShelf(parent, items, _collected, _total)
-    -- ScrollFrame clips overflow; wood plank = bottom half; icons overlap 2px onto the shelf.
-    local shelfFrame = CreateFrame("Frame", nil, parent)
-    shelfFrame:SetPoint("TOPLEFT",     parent, "TOPLEFT",     0, 0)
-    shelfFrame:SetPoint("BOTTOMRIGHT", parent, "BOTTOMRIGHT", 0, 0)
+-- Positions the shelf's live icons (shelf._iconCount of them, in creation order)
+-- and sizes the scroll child. Called from the paint and from OnSizeChanged.
+local function _layoutTrophyIcons(shelf)
+    local scroll, content = shelf._scroll, shelf._content
+    local shelfH  = shelf:GetHeight() or 0  -- exception(boundary): frame geometry nil before first layout
+    local woodH   = math.floor(shelfH / 2)
+    local yOff    = math.max(0, woodH - TROPHY_ICON_DROP)
+    local stripY  = math.max(0, TROPHY_PAD_Y + yOff - 1)
 
-    local woodBg = shelfFrame:CreateTexture(nil, "BACKGROUND", nil, 1)
-    woodBg:SetPoint("BOTTOMLEFT",  shelfFrame, "BOTTOMLEFT",  0, 0)
-    woodBg:SetPoint("BOTTOMRIGHT", shelfFrame, "BOTTOMRIGHT", 0, 0)
+    shelf._edgeShadow:ClearAllPoints()
+    shelf._edgeShadow:SetPoint("BOTTOMLEFT",  shelf, "BOTTOMLEFT",  TROPHY_PAD_X,  stripY)
+    shelf._edgeShadow:SetPoint("BOTTOMRIGHT", shelf, "BOTTOMRIGHT", -TROPHY_PAD_X, stripY)
+    shelf._edgeShadow:SetHeight(2)
+
+    local count = shelf._iconCount or 0
+    local pool  = content[KIT]
+    for i = 1, count do
+        local b = pool[i]
+        b:ClearAllPoints()
+        b:SetPoint("BOTTOMLEFT", content, "BOTTOMLEFT",
+                   (i - 1) * (TROPHY_ICON_SIZE + TROPHY_ICON_GAP), yOff)
+    end
+
+    local contentW = math.max(1,
+        count * TROPHY_ICON_SIZE + math.max(0, count - 1) * TROPHY_ICON_GAP)
+    content:SetSize(contentW, math.max(TROPHY_ICON_SIZE, shelfH))
+    scroll:SetHorizontalScroll(0)
+end
+
+-- Built once per cell: wood, edge shadow, scroll frame and child, the wheel
+-- and size scripts. The icons are pooled on the scroll child per paint.
+local function _initTrophyShelf(shelf)
+    local woodBg = shelf:CreateTexture(nil, "BACKGROUND", nil, 1)
+    woodBg:SetPoint("BOTTOMLEFT",  shelf, "BOTTOMLEFT",  0, 0)
+    woodBg:SetPoint("BOTTOMRIGHT", shelf, "BOTTOMRIGHT", 0, 0)
     woodBg:SetHeight(1)   -- live-sized in OnSizeChanged
     woodBg:SetAtlas("housing-woodsign")
     woodBg:SetAlpha(0.65)
+    shelf._woodBg = woodBg
 
     -- Shelf-edge shadow at ARTWORK (BACKGROUND matched wood sublevel and vanished on some hosts).
-    local edgeShadow = shelfFrame:CreateTexture(nil, "ARTWORK", nil, 1)
+    local edgeShadow = shelf:CreateTexture(nil, "ARTWORK", nil, 1)
     HDG.Theme:Register(edgeShadow, "Shadow")
+    shelf._edgeShadow = edgeShadow
 
-    local scroll = CreateFrame("ScrollFrame", nil, shelfFrame)
-    scroll:SetPoint("TOPLEFT",     shelfFrame, "TOPLEFT",     TROPHY_PAD_X,  -TROPHY_PAD_Y)
-    scroll:SetPoint("BOTTOMRIGHT", shelfFrame, "BOTTOMRIGHT", -TROPHY_PAD_X,  TROPHY_PAD_Y)
+    local scroll = CreateFrame("ScrollFrame", nil, shelf)
+    scroll:SetPoint("TOPLEFT",     shelf, "TOPLEFT",     TROPHY_PAD_X,  -TROPHY_PAD_Y)
+    scroll:SetPoint("BOTTOMRIGHT", shelf, "BOTTOMRIGHT", -TROPHY_PAD_X,  TROPHY_PAD_Y)
+    shelf._scroll = scroll
 
-    local scrollContent = CreateFrame("Frame", nil, scroll)
-    scrollContent:SetSize(1, TROPHY_ICON_SIZE)
-    scroll:SetScrollChild(scrollContent)
+    local content = CreateFrame("Frame", nil, scroll)
+    content:SetSize(1, TROPHY_ICON_SIZE)
+    scroll:SetScrollChild(content)
+    shelf._content = content
 
     -- One-icon-per-step horizontal mouse-wheel scroll.
-    shelfFrame:EnableMouseWheel(true)
-    shelfFrame:SetScript("OnMouseWheel", function(_, delta)
+    shelf:EnableMouseWheel(true)
+    shelf:SetScript("OnMouseWheel", function(_, delta)
         local cur  = scroll:GetHorizontalScroll()
         local max  = scroll:GetHorizontalScrollRange() or 0  -- exception(boundary): frame geometry nil before first layout
         local step = TROPHY_ICON_SIZE + TROPHY_ICON_GAP
@@ -295,75 +409,77 @@ local function _renderTrophyShelf(parent, items, _collected, _total)
         scroll:SetHorizontalScroll(off)
     end)
 
-    -- Icon buttons: built once (cell rebuilt on every dispatch in the row factory).
-    local iconBtns = {}
-    for i, item in ipairs(items) do
-        local b = CreateFrame("Button", nil, scrollContent)
-        b:SetSize(TROPHY_ICON_SIZE, TROPHY_ICON_SIZE)
-
-        -- Contact shadow: oval that OVERLAPS the icon base by 1px so the
-        -- shadow reads as the trophy resting ON the shelf, not casting
-        -- through air. Width ~85% icon, height ~20%, alpha 0.65.
-        local shadow = b:CreateTexture(nil, "BACKGROUND", nil, 2)
-        shadow:SetAtlas("groupfinder-eye-highlight")   -- set before Register so Shadow tints via vertex color
-        HDG.Theme:Register(shadow, "Shadow")
-        shadow:SetBlendMode("BLEND")
-        shadow:SetSize(TROPHY_ICON_SIZE * 0.85,
-                       math.max(3, math.floor(TROPHY_ICON_SIZE * 0.20)))
-        shadow:SetPoint("BOTTOM", b, "BOTTOM", -3, -2)
-
-        local tex = b:CreateTexture(nil, "ARTWORK")
-        tex:SetAllPoints()
-        tex:SetTexCoord(unpack(HDG.Constants.ICON_CROP))
-        if item.iconID then tex:SetTexture(item.iconID) end
-        b._itemID = item.itemID
-        HDG.TooltipEngine:Attach(b, _itemTooltipDef)
-        iconBtns[i] = b
-    end
-
-    local function _layoutIcons()
-        local shelfH  = shelfFrame:GetHeight() or 0  -- exception(boundary): frame geometry nil before first layout
-        local woodH   = math.floor(shelfH / 2)
-        local yOff    = math.max(0, woodH - TROPHY_ICON_DROP)
-        local stripY  = math.max(0, TROPHY_PAD_Y + yOff - 1)
-
-        edgeShadow:ClearAllPoints()
-        edgeShadow:SetPoint("BOTTOMLEFT",  shelfFrame, "BOTTOMLEFT",  TROPHY_PAD_X,  stripY)
-        edgeShadow:SetPoint("BOTTOMRIGHT", shelfFrame, "BOTTOMRIGHT", -TROPHY_PAD_X, stripY)
-        edgeShadow:SetHeight(2)
-
-        for i, b in ipairs(iconBtns) do
-            b:ClearAllPoints()
-            b:SetPoint("BOTTOMLEFT", scrollContent, "BOTTOMLEFT",
-                       (i - 1) * (TROPHY_ICON_SIZE + TROPHY_ICON_GAP), yOff)
-        end
-
-        local count = #iconBtns
-        local contentW = math.max(1,
-            count * TROPHY_ICON_SIZE + math.max(0, count - 1) * TROPHY_ICON_GAP)
-        scrollContent:SetSize(contentW, math.max(TROPHY_ICON_SIZE, shelfH))
-        scroll:SetHorizontalScroll(0)
-    end
-
     -- OnSizeChanged: keep wood = half height + reposition icons. Fires once anchors resolve.
-    shelfFrame:SetScript("OnSizeChanged", function(_, _, h)
+    shelf:SetScript("OnSizeChanged", function(self, _, h)
         local woodH = math.max(1, math.floor((h or 0) / 2))
-        woodBg:SetHeight(woodH)
-        _layoutIcons()
+        self._woodBg:SetHeight(woodH)
+        _layoutTrophyIcons(self)
     end)
+end
+
+local function _initTrophyIcon(b)
+    b:SetSize(TROPHY_ICON_SIZE, TROPHY_ICON_SIZE)
+
+    -- Contact shadow: oval that OVERLAPS the icon base by 1px so the
+    -- shadow reads as the trophy resting ON the shelf, not casting
+    -- through air. Width ~85% icon, height ~20%, alpha 0.65.
+    local shadow = b:CreateTexture(nil, "BACKGROUND", nil, 2)
+    shadow:SetAtlas("groupfinder-eye-highlight")   -- set before Register so Shadow tints via vertex color
+    HDG.Theme:Register(shadow, "Shadow")
+    shadow:SetBlendMode("BLEND")
+    shadow:SetSize(TROPHY_ICON_SIZE * 0.85,
+                   math.max(3, math.floor(TROPHY_ICON_SIZE * 0.20)))
+    shadow:SetPoint("BOTTOM", b, "BOTTOM", -3, -2)
+
+    local tex = b:CreateTexture(nil, "ARTWORK")
+    tex:SetAllPoints()
+    tex:SetTexCoord(unpack(HDG.Constants.ICON_CROP))
+    b._tex = tex
+    HDG.TooltipEngine:Attach(b, _itemTooltipDef)
+end
+
+local function _paintTrophyShelf(parent, items)
+    -- ScrollFrame clips overflow; wood plank = bottom half; icons overlap 2px onto the shelf.
+    local shelf = _frame(parent, "shelf", "Frame", nil, _initTrophyShelf)
+    shelf:SetPoint("TOPLEFT",     parent, "TOPLEFT",     0, 0)
+    shelf:SetPoint("BOTTOMRIGHT", parent, "BOTTOMRIGHT", 0, 0)
+
+    local content = shelf._content
+    _kitBegin(content)
+    for i, item in ipairs(items) do
+        local b = _frame(content, i, "Button", nil, _initTrophyIcon)
+        b._tex:SetTexture(item.iconID)   -- nil clears a stale icon on a reused button
+        b._itemID = item.itemID
+    end
+    _kitEnd(content)
+    shelf._iconCount = #items
+    _layoutTrophyIcons(shelf)
+end
+
+local function _initLevelRing(ring, cell)
+    _adoptLevelRing(ring)
+    -- Replay animation on each Show (window close + reopen). Once per cell:
+    -- this init runs on the ring's creation only.
+    cell:HookScript("OnShow", function() ring:ResetForReplay() end)
+end
+
+local function _initTierTitle(fs)
+    HDG.UI.applyFontRole(fs, "heading")
+    -- TextStatus paints `semantic.accent` (matches HDG's `scheme.accent`
+    -- on the title label). TextShadow stacks on top -- both Skinners are
+    -- independent (one sets fg color, the other sets shadow color +
+    -- offset). Theme:Reload repaints both on scheme switch.
+    HDG.Theme:Register(fs, "TextStatus")
+    HDG.Theme:Register(fs, "TextShadow")
+    fs:SetJustifyH("LEFT")
 end
 
 local function _renderDecoratorProfile(cell, ed)
     local d = ed.data   -- selector contract; nil = selector bug, not a fallback case
 
     -- Left zone: Blizzard-templated level ring. Native 256x158; do NOT scale or re-anchor children.
-    local ring = _adoptLevelRing(CreateFrame("Frame", nil, cell, "HDGRHousingLevelRingTemplate"))
+    local ring = _frame(cell, "ring", "Frame", "HDGRHousingLevelRingTemplate", _initLevelRing)
     ring:SetPoint("LEFT", cell, "LEFT", 0, 0)
-
-    -- Replay animation on each Show (window close + reopen).
-    cell:HookScript("OnShow", function()
-        ring:ResetForReplay()
-    end)
 
     -- Drive ring from selector data. nil before HOUSE_LEVEL_UPDATED lands; SetLevel(nil) -> "0".
     ring:SetLevel(d.houseLevel)
@@ -381,25 +497,21 @@ local function _renderDecoratorProfile(cell, ed)
     end
 
     -- Right zone: titleLabel + houseName + progressChip + bar + ladder.
-    local rightZone = CreateFrame("Frame", nil, cell)
+    local rightZone = _frame(cell, "right", "Frame")
     rightZone:SetPoint("TOPLEFT",     ring, "TOPRIGHT", 8, 0)
     rightZone:SetPoint("BOTTOMRIGHT", cell, "BOTTOMRIGHT", -6, 6)
 
     -- Big tier title: TextStatus = semantic.accent; TextShadow stacks independently.
-    local titleLbl = rightZone:CreateFontString(nil, "OVERLAY")
-    HDG.UI.applyFontRole(titleLbl, "heading")
-    -- TextStatus paints `semantic.accent` (matches HDG's `scheme.accent`
-    -- on the title label). TextShadow stacks on top -- both Skinners are
-    -- independent (one sets fg color, the other sets shadow color +
-    -- offset). Theme:Reload repaints both on scheme switch.
-    HDG.Theme:Register(titleLbl, "TextStatus")
-    HDG.Theme:Register(titleLbl, "TextShadow")
+    local titleLbl = _take(rightZone, "title")
+    if not titleLbl then
+        titleLbl = _keep(rightZone, "title", rightZone:CreateFontString(nil, "OVERLAY"))
+        _initTierTitle(titleLbl)
+    end
     titleLbl:SetPoint("TOPLEFT", rightZone, "TOPLEFT", 4, -4)
-    titleLbl:SetJustifyH("LEFT")
     titleLbl:SetText(string.upper(d.title))
 
     -- House name: right-aligned, text.primary (faction tint deferred; not a scheme token yet).
-    local houseLbl = HDG.UI.RowText(rightZone, "subheading", "Text", "RIGHT")
+    local houseLbl = _text(rightZone, "house", "subheading", "Text", "RIGHT")
     houseLbl:SetPoint("TOPRIGHT", rightZone, "TOPRIGHT", -4, -4)
     houseLbl:SetWordWrap(false)
     if d.houseName then
@@ -409,7 +521,7 @@ local function _renderDecoratorProfile(cell, ed)
     end
 
     -- Progress chip: right-anchored, below house name.
-    local chip = HDG.UI.RowText(rightZone, "small", "TextDim", "RIGHT")
+    local chip = _text(rightZone, "chip", "small", "TextDim", "RIGHT")
     chip:SetPoint("TOPRIGHT", houseLbl, "BOTTOMRIGHT", 0, -2)
     if d.totalAll > 0 then
         local cText = HDG.Theme:ColorCode("text.primary")
@@ -417,15 +529,18 @@ local function _renderDecoratorProfile(cell, ed)
         local pct = math.floor(d.collectedAll / d.totalAll * 100 + 0.5)
         chip:SetText(string.format("%s%d|r %s/ %d  (%d%%)|r",
             cText, d.collectedAll, cDim, d.totalAll, pct))
+    else
+        chip:SetText("")
     end
 
     -- Within-tier progress bar.
-    local bar = CreateFrame("StatusBar", nil, rightZone)
-    bar:SetHeight(6)
+    local bar = _frame(rightZone, "bar", "StatusBar", nil, function(f)
+        f:SetHeight(6)
+        f:SetStatusBarTexture("Interface\\TargetingFrame\\UI-StatusBar")
+        HDG.Theme:Register(f, "progressbar", BAR_SUCCESS)
+    end)
     bar:SetPoint("TOPLEFT", titleLbl, "BOTTOMLEFT", 0, -4)
     bar:SetPoint("RIGHT",   chip, "LEFT", -10, 0)   -- stop short of the right-side progress numbers (no overlap)
-    bar:SetStatusBarTexture("Interface\\TargetingFrame\\UI-StatusBar")
-    HDG.Theme:Register(bar, "progressbar", { variant = "success" })
     local t = d.titleTier
     if t and t.next and t.current then
         -- HouseAggregator titleTier always stamps .threshold on current+next
@@ -441,7 +556,7 @@ local function _renderDecoratorProfile(cell, ed)
     end
 
     -- Tier ladder line: "prev > CURRENT > next" with theme-token color codes.
-    local ladder = HDG.UI.RowText(rightZone, "small", "TextDim", "LEFT")
+    local ladder = _text(rightZone, "ladder", "small", "TextDim", "LEFT")
     ladder:SetPoint("TOPLEFT", titleLbl, "BOTTOMLEFT", 0, -14)
     ladder:SetPoint("RIGHT",   rightZone, "RIGHT", -4, 0)
     ladder:SetWordWrap(false)
@@ -461,7 +576,7 @@ local function _renderDecoratorProfile(cell, ed)
     end
 
     -- Bestowed-title: populated by Modules/HDGR_Vamoose at onEnable. Hide when nil.
-    local bestowed = HDG.UI.RowText(rightZone, "small", "TextDim", "LEFT")
+    local bestowed = _text(rightZone, "bestowed", "small", "TextDim", "LEFT")
     bestowed:SetPoint("TOPLEFT", ladder, "BOTTOMLEFT", 0, -8)
     bestowed:SetPoint("RIGHT",   rightZone, "RIGHT", -4, 0)
     bestowed:SetWordWrap(false)
@@ -475,17 +590,17 @@ local function _renderDecoratorProfile(cell, ed)
     end
 
     -- Trophy shelf zone: bottom of right zone, ~56-60px height (icon 28 + overlap + wood + pads).
-    local trophyZone = CreateFrame("Frame", nil, rightZone)
+    local trophyZone = _frame(rightZone, "trophies", "Frame")
     trophyZone:SetPoint("BOTTOMLEFT",  rightZone, "BOTTOMLEFT",  0, 4)
     trophyZone:SetPoint("BOTTOMRIGHT", rightZone, "BOTTOMRIGHT", 0, 4)
     trophyZone:SetHeight(60)
-    _renderTrophyShelf(trophyZone, d.trophies, d.trophiesCollected, d.trophiesTotal)
+    _paintTrophyShelf(trophyZone, d.trophies)
 end
 
 -- styleAffinity: top-5 tags joined "NAME N/M (PCT%) - ..."
 local function _renderStyleAffinity(cell, ed)
     local d = ed.data
-    local fs = HDG.UI.RowText(cell, "small", "TextDim", "LEFT")
+    local fs = _text(cell, "line", "small", "TextDim", "LEFT")
     fs:SetPoint("TOPLEFT", cell, "TOPLEFT", 4, -2)
     fs:SetPoint("RIGHT",   cell, "RIGHT",  -2, 0)
     fs:SetWordWrap(false)
@@ -507,10 +622,18 @@ end
 -- Card title: the top-left subheading every HouseTab card starts with
 -- (hygiene A3 -- this exact block appeared 16x in this file).
 local function _cardTitle(cell, ed)
-    local title = HDG.UI.RowText(cell, "subheading", "Text")
+    local title = _text(cell, "title", "subheading", "Text")
     title:SetPoint("TOPLEFT", cell, "TOPLEFT", 8, -6)
     title:SetText(ed.title)
     return title
+end
+
+-- The centred "empty" label a list card shows in place of its rows.
+local function _emptyLabel(cell, text)
+    local empty = _text(cell, "empty", "small", "TextDim")
+    empty:SetPoint("CENTER", cell, "CENTER", 0, 0)
+    empty:SetText(text)
+    return empty
 end
 
 local function _renderDonutCard(cell, ed, paletteToken, labelFor, centerMain, centerSub)
@@ -521,7 +644,7 @@ local function _renderDonutCard(cell, ed, paletteToken, labelFor, centerMain, ce
     local cellH      = cell:GetHeight()
     local donutSize  = math.max(80, math.min(cellH - 28, cell:GetWidth() * 0.40))
     local holeSize   = math.floor(donutSize * 0.5)
-    local donut = _buildDonut(cell, donutSize, holeSize)
+    local donut = _donut(cell, "donut", donutSize, holeSize)
     donut:SetPoint("TOPLEFT", cell, "TOPLEFT", 6, -22)
 
     local segments = {}
@@ -537,15 +660,17 @@ local function _renderDonutCard(cell, ed, paletteToken, labelFor, centerMain, ce
     local mainText = centerMain and centerMain(d) or ""
     local subText  = centerSub  and centerSub(d)  or nil
 
-    local centerFs = HDG.UI.RowText(donut, "heading", "Text")
+    _kitBegin(donut)
+    local centerFs = _text(donut, "main", "heading", "Text")
     centerFs:SetPoint("CENTER", donut, "CENTER", 0, subText and 6 or 0)
     centerFs:SetText(mainText)
 
     if subText then
-        local sub = HDG.UI.RowText(donut, "small", "TextDim")
+        local sub = _text(donut, "sub", "small", "TextDim")
         sub:SetPoint("CENTER", donut, "CENTER", 0, -10)
         sub:SetText(subText)
     end
+    _kitEnd(donut)
 
     -- Legend on the right: tight rows so all expansions fit (13 needed).
     local legendX = 8 + donutSize + 8
@@ -556,19 +681,19 @@ local function _renderDonutCard(cell, ed, paletteToken, labelFor, centerMain, ce
         if -y > cellH - 4 then break end
         local color = HDG.Palette:GetColor(paletteToken(b))
 
-        local swatch = cell:CreateTexture(nil, "ARTWORK")
+        local swatch = _tex(cell, "sw" .. i, "ARTWORK")
         swatch:SetTexture("Interface\\Buttons\\WHITE8x8")
         swatch:SetSize(7, 7)
         swatch:SetPoint("TOPLEFT", cell, "TOPLEFT", legendX, y - 2)
         HDG.UI._TintTexture(swatch, color)
 
-        local lbl = HDG.UI.RowText(cell, "small", "Text")
+        local lbl = _text(cell, "lb" .. i, "small", "Text")
         lbl:SetPoint("TOPLEFT", cell, "TOPLEFT", legendX + 11, y)
         local labelW = cell:GetWidth() - legendX - 11 - 38
         lbl:SetWidth(labelW); lbl:SetJustifyH("LEFT"); lbl:SetWordWrap(false)
         lbl:SetText(labelFor(b))
 
-        local count = HDG.UI.RowText(cell, "small", "TextDim")
+        local count = _text(cell, "ct" .. i, "small", "TextDim")
         count:SetPoint("TOPRIGHT", cell, "TOPRIGHT", -8, y)
         count:SetText(tostring(b.collected))   -- HouseAggregator bySource/byExp guarantees b.collected
     end
@@ -615,53 +740,56 @@ local function _renderCloseCards(cell, ed)
 
     for i, b in ipairs(d.rows) do
         local y = -28 - (i - 1) * 32
-        local lbl = HDG.UI.RowText(cell, "body", "Text")
+        local lbl = _text(cell, "lb" .. i, "body", "Text")
         lbl:SetPoint("TOPLEFT", cell, "TOPLEFT", 8, y)
         lbl:SetText(string.format("%s > %s", b.categoryName, b.subcategoryName))
 
-        local bar = _buildSegmentBar(cell, cell:GetWidth() - 80, 8, 10, b.pct)  -- aggregator-stamped
+        local bar = _segmentBar(cell, "bar" .. i, cell:GetWidth() - 80, 8, 10, b.pct)  -- aggregator-stamped
         bar:SetPoint("TOPLEFT", lbl, "BOTTOMLEFT", 0, -3)
 
-        local tail = HDG.UI.RowText(cell, "small", "TextDim")
+        local tail = _text(cell, "tl" .. i, "small", "TextDim")
         tail:SetPoint("LEFT", bar, "RIGHT", 6, 0)
         tail:SetText(string.format("%d to go", b.gap))
     end
 end
 
 -- hotPicks: top-5 list with iconID + name + XP value.
+local function _initHotPickRow(row)
+    row:RegisterForClicks("LeftButtonUp")
+    row:SetScript("OnClick", function(self)
+        if not (self._itemID and _G.SetItemRef) then return end
+        local link = "item:" .. tostring(self._itemID)
+        _G.SetItemRef(link, link, "LeftButton")
+    end)
+    HDG.TooltipEngine:Attach(row, _itemTooltipDef)
+end
+
 local function _renderHotPicks(cell, ed)
     local d = ed.data
     _cardTitle(cell, ed)
 
     for i, item in ipairs(d.items) do
         local y = -28 - (i - 1) * 22
-        local row = CreateFrame("Button", nil, cell)
+        local row = _frame(cell, "hp" .. i, "Button", nil, _initHotPickRow)
         row:SetSize(cell:GetWidth() - 16, 20)
         row:SetPoint("TOPLEFT", cell, "TOPLEFT", 8, y)
-        row:RegisterForClicks("LeftButtonUp")
 
-        local icon = HDG.UI.MakeCellIcon(row, 18)  -- chrome-less: locally-created cell child, not a pooled row
+        local icon = _icon(row, "icon", 18)  -- chrome-less: locally-created cell child, not a pooled row
         icon:SetPoint("LEFT", row, "LEFT", 0, 0)
-        if item.iconID then icon:SetTexture(item.iconID) end
+        icon:SetTexture(item.iconID)   -- nil clears a stale icon on a reused row
 
-        local name = HDG.UI.RowText(row, "small", "Text")
+        local name = _text(row, "name", "small", "Text")
         name:SetPoint("LEFT", icon, "RIGHT", 4, 0)
         name:SetWidth(row:GetWidth() - 72); name:SetJustifyH("LEFT")
         name:SetWordWrap(false)
         name:SetText(item.name or "?")
 
-        local xp = HDG.UI.RowText(row, "small", "TextStatus")
+        local xp = _text(row, "xp", "small", "TextStatus")
         xp:SetPoint("RIGHT", row, "RIGHT", -2, 0)
         xp:SetText("+" .. tostring(item.xp or 0))
 
-        if item.itemID and _G.SetItemRef then
-            row:SetScript("OnClick", function()
-                local link = "item:" .. tostring(item.itemID)
-                _G.SetItemRef(link, link, "LeftButton")
-            end)
-            row._itemID = item.itemID
-            HDG.TooltipEngine:Attach(row, _itemTooltipDef)
-        end
+        -- The click and the tooltip read this live; nil makes both inert.
+        row._itemID = item.itemID
     end
 end
 
@@ -670,7 +798,7 @@ local function _renderVelocity(cell, ed)
     local d = ed.data
     _cardTitle(cell, ed)
 
-    local fs = HDG.UI.RowText(cell, "body", "Text", "CENTER")
+    local fs = _text(cell, "line", "body", "Text", "CENTER")
     fs:SetPoint("LEFT",  cell, "LEFT",   8, 0)   -- span the cell width so the long
     fs:SetPoint("RIGHT", cell, "RIGHT", -8, 0)   -- "(N days to ...)" line wraps instead of clipping
     fs:SetWordWrap(true)
@@ -707,17 +835,19 @@ local function _capacityColor(pct)
 end
 
 -- capacity: 10-segment bar (fill colour tracks how full you are) + label.
+local CAPACITY_GRADIENT = {}   -- reused: { from = col, to = col } per paint
 local function _renderCapacity(cell, ed)
     local d = ed.data
     _cardTitle(cell, ed)
 
     -- Whole fill is one pct-driven colour (green -> amber -> red as you near the cap).
     local col = _capacityColor(d.pct)
-    local bar = _buildSegmentBar(cell, cell:GetWidth() - 16, 12, 10,
-        d.pct, { from = col, to = col })   -- decorOwn selector stamps pct
+    CAPACITY_GRADIENT.from, CAPACITY_GRADIENT.to = col, col
+    local bar = _segmentBar(cell, "bar", cell:GetWidth() - 16, 12, 10,
+        d.pct, CAPACITY_GRADIENT)   -- decorOwn selector stamps pct
     bar:SetPoint("CENTER", cell, "CENTER", 0, 4)
 
-    local lbl = HDG.UI.RowText(cell, "small", "Text")
+    local lbl = _text(cell, "lbl", "small", "Text")
     lbl:SetPoint("TOP", bar, "BOTTOM", 0, -2)
     if d.available then
         lbl:SetText(string.format("%d / %d (%.0f%%)", d.owned, d.max, d.pct * 100))
@@ -727,6 +857,13 @@ local function _renderCapacity(cell, ed)
 end
 
 -- featured: 4 icon tiles in a horizontal row.
+local function _initFeaturedTile(btn)
+    local tex = btn:CreateTexture(nil, "ARTWORK")
+    tex:SetAllPoints(); tex:SetTexCoord(unpack(HDG.Constants.ICON_CROP))
+    btn._tex = tex
+    HDG.TooltipEngine:Attach(btn, _itemTooltipDef)
+end
+
 local function _renderFeatured(cell, ed)
     _cardTitle(cell, ed)
 
@@ -735,18 +872,13 @@ local function _renderFeatured(cell, ed)
     local tileGap  = 8
     for i, item in ipairs(d.items) do
         local x = 8 + (i - 1) * (tileSize + tileGap)
-        local btn = CreateFrame("Button", nil, cell)
+        local btn = _frame(cell, "tile" .. i, "Button", nil, _initFeaturedTile)
         btn:SetSize(tileSize, tileSize)
         btn:SetPoint("TOPLEFT", cell, "TOPLEFT", x, -28)
-
-        local tex = btn:CreateTexture(nil, "ARTWORK")
-        tex:SetAllPoints(); tex:SetTexCoord(unpack(HDG.Constants.ICON_CROP))
-        if item.iconID then tex:SetTexture(item.iconID) end
-
+        btn._tex:SetTexture(item.iconID)   -- nil clears a stale icon on a reused tile
         btn._itemID = item.itemID
-        HDG.TooltipEngine:Attach(btn, _itemTooltipDef)
 
-        local lbl = HDG.UI.RowText(cell, "small", "TextDim")
+        local lbl = _text(cell, "tl" .. i, "small", "TextDim")
         lbl:SetPoint("TOP", btn, "BOTTOM", 0, -2)
         lbl:SetWidth(tileSize); lbl:SetJustifyH("CENTER")
         lbl:SetWordWrap(true)
@@ -756,14 +888,20 @@ local function _renderFeatured(cell, ed)
 end
 
 -- multiHouse: 1-3 stacked cards. Each: faction-tinted 2px stripe + name + level + favor bar.
+local function _initHouseCard(card)
+    card:SetBackdrop({
+        bgFile = "Interface\\Buttons\\WHITE8x8",
+        edgeFile = "Interface\\Buttons\\WHITE8x8", edgeSize = 1,
+    })
+    HDG.Theme:Register(card, "ScrimCard")
+end
+
 local function _renderMultiHouse(cell, ed)
     _cardTitle(cell, ed)
 
     local d = ed.data
     if #d.houses == 0 then
-        local empty = HDG.UI.RowText(cell, "small", "TextDim")
-        empty:SetPoint("CENTER", cell, "CENTER", 0, 0)
-        empty:SetText("No owned houses")
+        _emptyLabel(cell, "No owned houses")
         return
     end
 
@@ -777,18 +915,13 @@ local function _renderMultiHouse(cell, ed)
         local y = startY - (i - 1) * (cardH + cardGap)
         if -y + cardH > cellH then break end  -- runs out of room
 
-        local card = CreateFrame("Frame", nil, cell, "BackdropTemplate")
+        local card = _frame(cell, "card" .. i, "Frame", "BackdropTemplate", _initHouseCard)
         card:SetSize(cardW, cardH)
         card:SetPoint("TOPLEFT", cell, "TOPLEFT", 8, y)
-        card:SetBackdrop({
-            bgFile = "Interface\\Buttons\\WHITE8x8",
-            edgeFile = "Interface\\Buttons\\WHITE8x8", edgeSize = 1,
-        })
-        HDG.Theme:Register(card, "ScrimCard")
 
         -- Faction stripe (2px left edge), tinted from the Palette faction brand
         -- colors via the shared _TintTexture rail (scheme-invariant brand identity).
-        local stripe = card:CreateTexture(nil, "ARTWORK")
+        local stripe = _tex(card, "stripe", "ARTWORK")
         stripe:SetTexture("Interface\\Buttons\\WHITE8x8")
         stripe:SetPoint("TOPLEFT", card, "TOPLEFT", 0, 0)
         stripe:SetPoint("BOTTOMLEFT", card, "BOTTOMLEFT", 0, 0)
@@ -797,20 +930,21 @@ local function _renderMultiHouse(cell, ed)
             HDG.Palette:GetColor("faction." .. (h.faction or "")) or HDG.Palette:GetColor("faction.Neutral"))
 
         -- House name (top line)
-        local name = HDG.UI.RowText(card, "small", "Text")
+        local name = _text(card, "name", "small", "Text")
         name:SetPoint("TOPLEFT", card, "TOPLEFT", 8, -4)
         name:SetWidth(cardW - 60); name:SetJustifyH("LEFT"); name:SetWordWrap(false)
         name:SetText(h.name or "?")
 
         -- Level badge (top right)
-        local level = HDG.UI.RowText(card, "small", "TextStatus")
+        local level = _text(card, "level", "small", "TextStatus")
         level:SetPoint("TOPRIGHT", card, "TOPRIGHT", -6, -4)
         level:SetText(h.level and ("Lvl " .. tostring(h.level)) or "...")
 
-        local bar = CreateFrame("StatusBar", nil, card)
+        local bar = _frame(card, "bar", "StatusBar", nil, function(f)
+            f:SetStatusBarTexture("Interface\\TargetingFrame\\UI-StatusBar")
+        end)
         bar:SetSize(cardW - 14, 6)
         bar:SetPoint("BOTTOMLEFT", card, "BOTTOMLEFT", 7, 4)
-        bar:SetStatusBarTexture("Interface\\TargetingFrame\\UI-StatusBar")
         local pct = 0
         if h.level and h.maxLevel and h.thresholds and h.level < h.maxLevel then
             -- h.thresholds is a sparse map [level] = required favor.
@@ -824,7 +958,7 @@ local function _renderMultiHouse(cell, ed)
             pct = 1
         end
         bar:SetMinMaxValues(0, 1); bar:SetValue(pct)
-        HDG.Theme:Register(bar, "progressbar", { variant = (pct >= 1) and "success" or "accent" })
+        HDG.Theme:Register(bar, "progressbar", (pct >= 1) and BAR_SUCCESS or BAR_ACCENT)
     end
 end
 
@@ -836,21 +970,19 @@ local function _renderFavorites(cell, ed)
 
     local items = d.items
     if #items == 0 then
-        local empty = HDG.UI.RowText(cell, "small", "TextDim")
-        empty:SetPoint("CENTER", cell, "CENTER", 0, 0)
-        empty:SetText("No favorites yet")
+        _emptyLabel(cell, "No favorites yet")
         return
     end
 
     for i, item in ipairs(items) do
         local y = -28 - (i - 1) * 22
         if item.iconID then
-            local icon = cell:CreateTexture(nil, "ARTWORK")
+            local icon = _tex(cell, "ic" .. i, "ARTWORK")
             icon:SetSize(16, 16)
             icon:SetPoint("TOPLEFT", cell, "TOPLEFT", 8, y)
             icon:SetTexture(item.iconID)
         end
-        local name = HDG.UI.RowText(cell, "small", item.isCollected and "Text" or "TextDim")
+        local name = _text(cell, "nm" .. i, "small", item.isCollected and "Text" or "TextDim")
         name:SetPoint("TOPLEFT", cell, "TOPLEFT", 28, y - 1)
         name:SetWidth(cell:GetWidth() - 36); name:SetJustifyH("LEFT")
         name:SetWordWrap(false)
@@ -865,9 +997,7 @@ local function _renderThemedSets(cell, ed)
 
     local sets = d.sets
     if #sets == 0 then
-        local empty = HDG.UI.RowText(cell, "small", "TextDim")
-        empty:SetPoint("CENTER", cell, "CENTER", 0, 0)
-        empty:SetText("No themed sets meet the threshold")
+        _emptyLabel(cell, "No themed sets meet the threshold")
         return
     end
 
@@ -876,17 +1006,17 @@ local function _renderThemedSets(cell, ed)
         if i > 4 then break end
         local x = 8 + (i - 1) * (barW + 4)
 
-        local name = HDG.UI.RowText(cell, "small", "Text")
+        local name = _text(cell, "nm" .. i, "small", "Text")
         name:SetPoint("TOPLEFT", cell, "TOPLEFT", x, -28)
         name:SetWidth(barW); name:SetJustifyH("LEFT")
         name:SetWordWrap(false)
         name:SetText(s.name)
 
         -- 10-segment bar: warning -> success (amber fills up to green).
-        local bar = _buildSegmentBar(cell, barW, 8, 10, s.pct)   -- HouseAggregator topStyles stamps pct
+        local bar = _segmentBar(cell, "bar" .. i, barW, 8, 10, s.pct)   -- HouseAggregator topStyles stamps pct
         bar:SetPoint("TOPLEFT", cell, "TOPLEFT", x, -46)
 
-        local count = HDG.UI.RowText(cell, "small", "TextDim")
+        local count = _text(cell, "ct" .. i, "small", "TextDim")
         count:SetPoint("TOPLEFT", cell, "TOPLEFT", x, -58)
         count:SetText(string.format("%d / %d", s.collected, s.total))
     end
@@ -899,29 +1029,27 @@ local function _renderTopVendors(cell, ed)
 
     local rows = d.rows
     if #rows == 0 then
-        local empty = HDG.UI.RowText(cell, "small", "TextDim")
-        empty:SetPoint("CENTER", cell, "CENTER", 0, 0)
-        empty:SetText("All vendor items collected")
+        _emptyLabel(cell, "All vendor items collected")
         return
     end
 
     for i, r in ipairs(rows) do
         local y = -28 - (i - 1) * 32
-        local name = HDG.UI.RowText(cell, "small", "Text")
+        local name = _text(cell, "nm" .. i, "small", "Text")
         name:SetPoint("TOPLEFT", cell, "TOPLEFT", 8, y)
         name:SetWidth(cell:GetWidth() - 56); name:SetJustifyH("LEFT")
         name:SetWordWrap(false)
         name:SetText(r.name)
 
         if r.zone then
-            local zone = HDG.UI.RowText(cell, "small", "TextDim")
+            local zone = _text(cell, "zn" .. i, "small", "TextDim")
             zone:SetPoint("TOPLEFT", cell, "TOPLEFT", 8, y - 14)
             zone:SetWidth(cell:GetWidth() - 56); zone:SetJustifyH("LEFT")
             zone:SetWordWrap(false)
             zone:SetText(r.zone)
         end
 
-        local count = HDG.UI.RowText(cell, "body", "TextStatus")
+        local count = _text(cell, "ct" .. i, "body", "TextStatus")
         count:SetPoint("TOPRIGHT", cell, "TOPRIGHT", -8, y - 4)
         count:SetText(tostring(r.uncollected))
     end
@@ -934,20 +1062,18 @@ local function _renderRecentActivity(cell, ed)
 
     local entries = d.entries
     if #entries == 0 then
-        local empty = HDG.UI.RowText(cell, "small", "TextDim")
-        empty:SetPoint("CENTER", cell, "CENTER", 0, 0)
-        empty:SetText("No recent decor learns")
+        _emptyLabel(cell, "No recent decor learns")
         return
     end
     for i, e in ipairs(entries) do
         local y = -28 - (i - 1) * 20
         if e.iconID then
-            local icon = cell:CreateTexture(nil, "ARTWORK")
+            local icon = _tex(cell, "ic" .. i, "ARTWORK")
             icon:SetSize(14, 14)
             icon:SetPoint("TOPLEFT", cell, "TOPLEFT", 8, y - 1)
             icon:SetTexture(e.iconID)
         end
-        local fs = HDG.UI.RowText(cell, "small", "Text")
+        local fs = _text(cell, "nm" .. i, "small", "Text")
         fs:SetPoint("TOPLEFT", cell, "TOPLEFT", 26, y - 1)
         fs:SetWidth(cell:GetWidth() - 34); fs:SetJustifyH("LEFT")
         fs:SetWordWrap(false)
@@ -961,19 +1087,21 @@ end
 -- uses the "Frame" Skinner so it picks up surface.panel + border.default
 -- on every scheme. Overflow that runs past the cell height is hidden via
 -- SetClipsChildren -- no bleed into the row below.
+local function _initChip(chip)
+    HDG.Theme:Register(chip, "Frame")
+end
+
 local function _renderChipStrip(cell, title, chips, opts)
     opts = opts or {}
     local chipH   = opts.chipHeight or 18  -- exception(optional): option default
     local chipGap = opts.chipGap or 4  -- exception(optional): option default
 
-    local titleFS = HDG.UI.RowText(cell, "subheading", "Text")
+    local titleFS = _text(cell, "title", "subheading", "Text")
     titleFS:SetPoint("TOPLEFT", cell, "TOPLEFT", 8, -6)
     titleFS:SetText(title)
 
     if #chips == 0 then
-        local empty = HDG.UI.RowText(cell, "small", "TextDim")
-        empty:SetPoint("CENTER", cell, "CENTER", 0, 0)
-        empty:SetText(opts.emptyLabel or "Empty")
+        _emptyLabel(cell, opts.emptyLabel or "Empty")
         return
     end
 
@@ -983,12 +1111,11 @@ local function _renderChipStrip(cell, title, chips, opts)
 
     if cell.SetClipsChildren then cell:SetClipsChildren(true) end  -- exception(boundary): SetClipsChildren may not exist on all WoW frame types
 
-    for _, c in ipairs(chips) do
-        local chip = CreateFrame("Frame", nil, cell, "BackdropTemplate")
+    for i, c in ipairs(chips) do
+        local chip = _frame(cell, "chip" .. i, "Frame", "BackdropTemplate", _initChip)
         chip:SetHeight(chipH)
-        HDG.Theme:Register(chip, "Frame")
 
-        local fs = HDG.UI.RowText(chip, "small", c.sufficient and "TextStatus" or "Text")
+        local fs = _text(chip, "fs", "small", c.sufficient and "TextStatus" or "Text")
         fs:SetWordWrap(false)
         fs:SetPoint("LEFT",  chip, "LEFT",   6, 0)
         fs:SetPoint("RIGHT", chip, "RIGHT", -6, 0)
@@ -1023,14 +1150,16 @@ local function _renderLumberWallet(cell, ed)
     end
     _renderChipStrip(cell, ed.title, chips, { emptyLabel = "No lumber in bags" })
     -- Top-right shortcut to the Crafting > Warehouse tab (where lumber is managed).
-    -- Created per render (cell is rebuilt + released on Reset, like the chips above).
-    local toWarehouse = HDG.UI:Button(cell, "Warehouse", "small")
-    toWarehouse:SetSize(72, 18)
+    local toWarehouse = _take(cell, "toWarehouse")
+    if not toWarehouse then
+        toWarehouse = _keep(cell, "toWarehouse", HDG.UI:Button(cell, "Warehouse", "small"))
+        toWarehouse:SetSize(72, 18)
+        toWarehouse:SetScript("OnClick", function()
+            HDG.Store:Dispatch({ type = HDG.Constants.ACTIONS.UI_SET_PERSISTENT,
+                payload = { key = "view", value = "warehouse" } })
+        end)
+    end
     toWarehouse:SetPoint("TOPRIGHT", cell, "TOPRIGHT", -6, -5)
-    toWarehouse:SetScript("OnClick", function()
-        HDG.Store:Dispatch({ type = HDG.Constants.ACTIONS.UI_SET_PERSISTENT,
-            payload = { key = "view", value = "warehouse" } })
-    end)
 end
 
 -- decorCurrency: housing currencies as chips. Name tinted by expansion;
@@ -1069,9 +1198,7 @@ local function _renderEventCard(cell, ed)
     _cardTitle(cell, ed)
 
     if d.total == 0 then
-        local empty = HDG.UI.RowText(cell, "small", "TextDim")
-        empty:SetPoint("CENTER", cell, "CENTER", 0, 0)
-        empty:SetText("Vendor data not loaded")
+        _emptyLabel(cell, "Vendor data not loaded")
         return
     end
 
@@ -1081,11 +1208,11 @@ local function _renderEventCard(cell, ed)
     local x, y     = 8, -28
     for i, item in ipairs(d.items) do
         if y - iconSize < -(cell:GetHeight() - 18) then break end
-        local icon = HDG.UI.MakeCellIcon(cell, iconSize)
+        local icon = _icon(cell, "ic" .. i, iconSize)
         icon:SetPoint("TOPLEFT", cell, "TOPLEFT", x, y)
         icon:SetTexture(item.iconID or "Interface\\Icons\\INV_Misc_QuestionMark")
         icon:SetAlpha(item.owned and 1.0 or 0.35)
-        if not item.owned then icon:SetDesaturated(true) end
+        icon:SetDesaturated(not item.owned)   -- both ways: a reused icon may have been the other
         x = x + iconSize + gap
         if x + iconSize > maxX then
             x = 8; y = y - iconSize - gap
@@ -1093,7 +1220,7 @@ local function _renderEventCard(cell, ed)
         if i >= 36 then break end
     end
 
-    local prog = HDG.UI.RowText(cell, "small", "TextDim")
+    local prog = _text(cell, "prog", "small", "TextDim")
     prog:SetPoint("BOTTOMLEFT", cell, "BOTTOMLEFT", 8, 4)
     prog:SetText(string.format("%d / %d  (%d%%)",
         d.collected, d.total, math.floor(d.pct * 100 + 0.5)))
@@ -1124,22 +1251,18 @@ local function _renderNextRewards(cell, ed)
     _cardTitle(cell, ed)
 
     if not d then
-        local fs = HDG.UI.RowText(cell, "small", "TextDim")
-        fs:SetPoint("CENTER", cell, "CENTER", 0, 0)
-        fs:SetText("No active house yet")
+        _emptyLabel(cell, "No active house yet")
         return
     end
 
     local chipText = d.atMax and string.format("Max Level (%d)", d.maxLevel)
                      or string.format("Lvl %d ->", d.targetLevel)
-    local chip = HDG.UI.RowText(cell, "small", "TextStatus")
+    local chip = _text(cell, "chip", "small", "TextStatus")
     chip:SetPoint("TOPRIGHT", cell, "TOPRIGHT", -8, -8)
     chip:SetText(chipText)
 
     if not d.rewards then
-        local fs = HDG.UI.RowText(cell, "small", "TextDim")
-        fs:SetPoint("CENTER", cell, "CENTER", 0, 0)
-        fs:SetText("Loading rewards...")
+        _emptyLabel(cell, "Loading rewards...")
         return
     end
 
@@ -1155,7 +1278,7 @@ local function _renderNextRewards(cell, ed)
         if i > 4 then break end
         local y = -28 - (i - 1) * rowH
 
-        local icon = HDG.UI.MakeCellIcon(cell, iconSz)
+        local icon = _icon(cell, "ic" .. i, iconSz)
         icon:SetPoint("TOPLEFT", cell, "TOPLEFT", 8, y)
         if r.iconTexture then
             icon:SetTexture(r.iconTexture)
@@ -1167,12 +1290,12 @@ local function _renderNextRewards(cell, ed)
             icon:SetTexture("Interface\\Icons\\INV_Misc_QuestionMark")
         end
 
-        local lineA = HDG.UI.RowText(cell, "small", "Text")
+        local lineA = _text(cell, "la" .. i, "small", "Text")
         lineA:SetPoint("TOPLEFT", icon, "TOPRIGHT", 6, 0)
         lineA:SetPoint("RIGHT", cell, "RIGHT", -8, 0)
         lineA:SetJustifyH("LEFT"); lineA:SetWordWrap(false)
 
-        local lineB = HDG.UI.RowText(cell, "small", "TextDim")
+        local lineB = _text(cell, "lb" .. i, "small", "TextDim")
         lineB:SetPoint("TOPLEFT", lineA, "BOTTOMLEFT", 0, -1)
         lineB:SetPoint("RIGHT", cell, "RIGHT", -8, 0)
         lineB:SetJustifyH("LEFT"); lineB:SetWordWrap(false)
@@ -1199,16 +1322,16 @@ local function _renderCraftableNow(cell, ed)
     _cardTitle(cell, ed)
 
     local n = d.canCraftNow  -- recipes.almostCraftable stamps canCraftNow (0-default fallback)
-    local big = HDG.UI.RowText(cell, "heading", n > 0 and "TextStatus" or "TextDim")
+    local big = _text(cell, "big", "heading", n > 0 and "TextStatus" or "TextDim")
     big:SetPoint("CENTER", cell, "CENTER", 0, 6)
     big:SetText(tostring(n))
 
-    local sub = HDG.UI.RowText(cell, "small", "Text")
+    local sub = _text(cell, "sub", "small", "Text")
     sub:SetPoint("TOP", big, "BOTTOM", 0, -2)
     sub:SetText(n > 0 and "decor items now" or "nothing in your bags")
 
     if (d.almostCraftable or 0) > 0 then
-        local extra = HDG.UI.RowText(cell, "small", "TextDim")
+        local extra = _text(cell, "extra", "small", "TextDim")
         extra:SetPoint("TOP", sub, "BOTTOM", 0, -2)
         extra:SetText(string.format("+%d almost craftable", d.almostCraftable))
     end
@@ -1221,9 +1344,7 @@ local function _renderGoblinTopLumber(cell, ed)
 
     local items = d.items
     if #items == 0 then
-        local empty = HDG.UI.RowText(cell, "small", "TextDim")
-        empty:SetPoint("CENTER", cell, "CENTER", 0, 0)
-        empty:SetText("No profit data yet")
+        _emptyLabel(cell, "No profit data yet")
         return
     end
 
@@ -1231,11 +1352,11 @@ local function _renderGoblinTopLumber(cell, ed)
     local iconSz  = 18
     for i, it in ipairs(items) do
         local y = -28 - (i - 1) * rowH
-        local icon = HDG.UI.MakeCellIcon(cell, iconSz)
+        local icon = _icon(cell, "ic" .. i, iconSz)
         icon:SetPoint("TOPLEFT", cell, "TOPLEFT", 8, y)
         icon:SetTexture(it.iconID or "Interface\\Icons\\INV_Misc_QuestionMark")
 
-        local name = HDG.UI.RowText(cell, "small", "Text")
+        local name = _text(cell, "nm" .. i, "small", "Text")
         name:SetPoint("LEFT", icon, "RIGHT", 4, 0)
         name:SetPoint("RIGHT", cell, "RIGHT", -50, 0)
         name:SetJustifyH("LEFT"); name:SetWordWrap(false)
@@ -1252,7 +1373,7 @@ local function _renderGoblinTopLumber(cell, ed)
         if v >= 10000 then chipText = string.format("%dg/lum", math.floor(v / 10000))
         elseif v >= 100  then chipText = string.format("%ds/lum", math.floor(v / 100))
         else                  chipText = string.format("%dc/lum", v) end
-        local chip = HDG.UI.RowText(cell, "small", "TextStatus")
+        local chip = _text(cell, "ch" .. i, "small", "TextStatus")
         chip:SetPoint("RIGHT", cell, "RIGHT", -8, 0)
         chip:SetPoint("TOP", icon, "TOP", 0, 0)
         chip:SetText(chipText)
@@ -1292,39 +1413,79 @@ local function _renderRecords(cell, ed)
 
     for i, line in ipairs(lines) do
         local y = -28 - (i - 1) * 16
-        local lbl = HDG.UI.RowText(cell, "small", "TextDim")
+        local lbl = _text(cell, "lb" .. i, "small", "TextDim")
         lbl:SetPoint("TOPLEFT", cell, "TOPLEFT", 8, y)
         lbl:SetText(line.label)
 
-        local val = HDG.UI.RowText(cell, "small", "TextStatus")
+        local val = _text(cell, "vl" .. i, "small", "TextStatus")
         val:SetPoint("TOPRIGHT", cell, "TOPRIGHT", -8, y)
         val:SetText(line.value)
     end
 end
 
 local function _renderEmptyCard(cell, ed)
-    local title = HDG.UI.RowText(cell, "subheading", "Text", "LEFT")
+    local title = _text(cell, "title", "subheading", "Text", "LEFT")
     title:SetPoint("TOPLEFT", cell, "TOPLEFT", 8, -6)
     title:SetText(ed.title or ed.id)
 
-    local badge = HDG.UI.RowText(cell, "small", "TextDim", "RIGHT")
+    local badge = _text(cell, "badge", "small", "TextDim", "RIGHT")
     badge:SetPoint("TOPRIGHT", cell, "TOPRIGHT", -8, -8)
     -- Placeholder debug badge -- "?" and 0 are visible missing-data
     -- markers so a future spec-fill pass can target the gaps.
     badge:SetText(string.format("%s  %dh", ed.width or "?", ed.height or 0))  -- exception(nullable): missing-data display marker
-    local idFs = HDG.UI.RowText(cell, "small", "TextDim")
+    local idFs = _text(cell, "id", "small", "TextDim")
     idFs:SetPoint("BOTTOMLEFT", cell, "BOTTOMLEFT", 8, 6)
     idFs:SetText(ed.id or "?")
 end
 
-local function _initDashboardRow(row, ed)
-    -- Clear children from prior elementData (frame reuse).
-    if row._cells then
-        for _, c in ipairs(row._cells) do c:Hide(); c:SetParent(nil) end
-    end
-    row._cells = {}
+-- Widget id -> renderer. Unknown ids fall through to the empty-card placeholder.
+local RENDERERS = {
+    decoratorProfile = _renderDecoratorProfile,
+    styleAffinity    = _renderStyleAffinity,
+    sourceDonut      = _renderSourceDonut,
+    expansionDonut   = _renderExpansionDonut,
+    closeCards       = _renderCloseCards,
+    hotPicks         = _renderHotPicks,
+    velocity         = _renderVelocity,
+    capacity         = _renderCapacity,
+    featured         = _renderFeatured,
+    multiHouse       = _renderMultiHouse,
+    favorites        = _renderFavorites,
+    themedSets       = _renderThemedSets,
+    topVendors       = _renderTopVendors,
+    recentActivity   = _renderRecentActivity,
+    lumberWallet     = _renderLumberWallet,
+    decorCurrency    = _renderDecorCurrency,
+    ritualSites      = _renderEventCard,
+    abyssAnglers     = _renderEventCard,
+    decorDuels       = _renderEventCard,
+    nextRewards      = _renderNextRewards,
+    craftableNow     = _renderCraftableNow,
+    goblinTopLumber  = _renderGoblinTopLumber,
+    records          = _renderRecords,
+}
 
-    HDG.Theme:Register(row, "RowChrome")
+local CELL_BACKDROP = {
+    bgFile   = "Interface\\Tooltips\\UI-Tooltip-Background",
+    edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
+    tile     = true, tileSize = 16, edgeSize = 10,
+    insets   = { left = 3, right = 3, top = 3, bottom = 3 },
+}
+
+local function _initCell(cell)
+    cell:SetBackdrop(CELL_BACKDROP)
+    HDG.Theme:Register(cell, "Frame")
+end
+
+-- One dashboard row: its cells are pooled on the row BY WIDGET ID, so a pooled
+-- row frame that shows the same widgets again repaints the same cells, and one
+-- that is handed a different row of the dashboard hides the cells it no longer
+-- shows and builds only the ones it has never shown. Nothing is ever orphaned.
+local function _paintDashboardRow(row, ed)
+    if not row._dashLaidOut then
+        row._dashLaidOut = true
+        HDG.Theme:Register(row, "RowChrome")
+    end
 
     -- Cell sizing: subtract actual gap budget for THIS row (one gap per join), divide by 3.
     -- Result: every row's last cell aligns to the panel right edge.
@@ -1335,49 +1496,27 @@ local function _initDashboardRow(row, ed)
     local available  = math.max(0, rowW - gapBudget)
     local unitW      = available / 3
 
+    _kitBegin(row)
     local cursorX = 0
-    for i, cellSpec in ipairs(ed.cells) do
+    for _, cellSpec in ipairs(ed.cells) do
         local w = unitW * cellSpec.units
-        local cell = CreateFrame("Frame", nil, row, "BackdropTemplate")
+        local cell = _frame(row, cellSpec.id, "Frame", "BackdropTemplate", _initCell)
         cell:SetSize(w, rowH)
         cell:SetPoint("TOPLEFT", row, "TOPLEFT", cursorX, 0)
-        cell:SetBackdrop({
-            bgFile   = "Interface\\Tooltips\\UI-Tooltip-Background",
-            edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
-            tile     = true, tileSize = 16, edgeSize = 10,
-            insets   = { left = 3, right = 3, top = 3, bottom = 3 },
-        })
-        HDG.Theme:Register(cell, "Frame")
-        -- Dispatch on cell.id; unknown ids fall through to empty-card placeholder.
-        local id = cellSpec.id
-        if     id == "decoratorProfile" then _renderDecoratorProfile(cell, cellSpec)
-        elseif id == "styleAffinity"    then _renderStyleAffinity(cell, cellSpec)
-        elseif id == "sourceDonut"      then _renderSourceDonut(cell, cellSpec)
-        elseif id == "expansionDonut"   then _renderExpansionDonut(cell, cellSpec)
-        elseif id == "closeCards"       then _renderCloseCards(cell, cellSpec)
-        elseif id == "hotPicks"         then _renderHotPicks(cell, cellSpec)
-        elseif id == "velocity"         then _renderVelocity(cell, cellSpec)
-        elseif id == "capacity"         then _renderCapacity(cell, cellSpec)
-        elseif id == "featured"         then _renderFeatured(cell, cellSpec)
-        elseif id == "multiHouse"       then _renderMultiHouse(cell, cellSpec)
-        elseif id == "favorites"        then _renderFavorites(cell, cellSpec)
-        elseif id == "themedSets"       then _renderThemedSets(cell, cellSpec)
-        elseif id == "topVendors"       then _renderTopVendors(cell, cellSpec)
-        elseif id == "recentActivity"   then _renderRecentActivity(cell, cellSpec)
-        elseif id == "lumberWallet"     then _renderLumberWallet(cell, cellSpec)
-        elseif id == "decorCurrency"    then _renderDecorCurrency(cell, cellSpec)
-        elseif id == "ritualSites"      then _renderEventCard(cell, cellSpec)
-        elseif id == "abyssAnglers"     then _renderEventCard(cell, cellSpec)
-        elseif id == "decorDuels"       then _renderEventCard(cell, cellSpec)
-        elseif id == "nextRewards"      then _renderNextRewards(cell, cellSpec)
-        elseif id == "craftableNow"     then _renderCraftableNow(cell, cellSpec)
-        elseif id == "goblinTopLumber"  then _renderGoblinTopLumber(cell, cellSpec)
-        elseif id == "records"          then _renderRecords(cell, cellSpec)
-        else _renderEmptyCard(cell, cellSpec)
-        end
-        row._cells[#row._cells + 1] = cell
+        _kitBegin(cell)
+        local render = RENDERERS[cellSpec.id] or _renderEmptyCard
+        render(cell, cellSpec)
+        _kitEnd(cell)
         cursorX = cursorX + w + CELL_GAP
     end
+    _kitEnd(row)
+end
+
+-- A row going back to the pool hides its cells and keeps them: the next
+-- element it shows reuses whatever widgets it shares.
+local function _resetDashboardRow(row)
+    _kitBegin(row)
+    _kitEnd(row)
 end
 
 HDG.Rows:Register("houseTabWidgetRow", {
@@ -1387,13 +1526,8 @@ HDG.Rows:Register("houseTabWidgetRow", {
     end,
     factory = function(_def)
         return {
-            Configure = _initDashboardRow,
-            Reset     = function(row)
-                if row._cells then
-                    for _, c in ipairs(row._cells) do c:Hide(); c:SetParent(nil) end
-                    row._cells = nil
-                end
-            end,
+            Configure = _paintDashboardRow,
+            Reset     = _resetDashboardRow,
         }
     end,
     key = function(ed)

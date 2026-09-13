@@ -216,11 +216,16 @@ LC.sections["decor.detailBody"] = {
     gap = "md",
     order = 10,
 }
--- 3D preview slot: 410h for real breathing room.
+-- 3D preview slot. 382 is what the 600px detail row leaves once the meta card
+-- below holds its widest case -- category, profession, recipe source, source,
+-- status, tags and the Destroy button all show at once on a crafted, tagged,
+-- stored, destroyable piece, 146px of rows in the 118px that 410 left them,
+-- so the bottom rows clipped (the over-spec test only saw it on 2026-09-13,
+-- once the selectors gating those rows were loaded into its harness).
 LC.sections["decor.previewSlot"] = {
     ["in"] = "decor.detailBody",
     layout = "vertical",
-    height = 410,
+    height = 382,
     order = 10,
 }
 -- Detail row 2: two sibling cards (detailCard=meta left, noteCard=note right).

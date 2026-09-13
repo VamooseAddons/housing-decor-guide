@@ -38,14 +38,29 @@ HDG.Theme.BACKDROP_NOEDGE = {
 
 -- Path resolution helpers ---------------------------------------------------
 
-local function resolvePath(root, path)
-    if not root or type(path) ~= "string" then return nil end
+local function _walkPath(root, path)
     local cursor = root
     for segment in path:gmatch("[^.]+") do
         if type(cursor) ~= "table" then return nil end
         cursor = cursor[segment]
     end
     return cursor
+end
+
+-- A resolved leaf is memoised per (root, path): the scheme tables are static
+-- once built and a scheme switch is a new root, so the gmatch iterator each
+-- GetColor / GetMetric minted (46 per layout pass, 2026-09-13 audit) is paid
+-- once per token. A miss is not cached so a bad path still fails loud upstream.
+local _resolveCache = setmetatable({}, { __mode = "k" })
+local function resolvePath(root, path)
+    if not root or type(path) ~= "string" then return nil end
+    local byPath = _resolveCache[root]
+    if not byPath then byPath = {}; _resolveCache[root] = byPath end
+    local hit = byPath[path]
+    if hit ~= nil then return hit end
+    local v = _walkPath(root, path)
+    if v ~= nil then byPath[path] = v end
+    return v
 end
 
 local function applyColor(setter, frame, color)

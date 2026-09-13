@@ -252,7 +252,7 @@ HDG.Rows:Register("blueprintCollectionRow", {
 })
 
 -- ===== Row factory: blueprintLibraryRow =====================================
--- One flat row per entry: name | source | type | date | applied | x. Column
+-- One flat row per entry: name | source | type | date | note | x. Column
 -- x-offsets come from HDG.Constants.BLUEPRINT_LIBRARY_COLUMNS (the header
 -- buttons use the same widths, gap "sm" = 4) so the text lines up under its
 -- header.

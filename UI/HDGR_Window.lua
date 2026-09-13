@@ -146,15 +146,7 @@ function W:_RefreshOne(name, invalidation, actionType)
     HDG.BindingEngine:Apply(frame, state, ctx, invalidation)
 
     -- LAYOUT: harvest intrinsics, compose, apply.
-    local intrinsics
-    if frame.widgets then
-        intrinsics = {}
-        for id, widget in pairs(frame.widgets) do
-            if widget._intrinsicWidth or widget._intrinsicHeight then
-                intrinsics[id] = { width = widget._intrinsicWidth, height = widget._intrinsicHeight }
-            end
-        end
-    end
+    local intrinsics = HDG.Layout:HarvestIntrinsics(frame, config)
     local placements = HDG.Layout:ComposeWindow(config, name, { state = state, intrinsics = intrinsics })
     frame.placements = placements
     HDG.Layout:Apply(frame, placements)

@@ -443,20 +443,43 @@ local function _matRowOwnedFirst(a, b)
     return a.name < b.name
 end
 
+-- The two bag-independent halves of the All Materials list, memoised so a bag
+-- tick (every loot, every vendor buy) re-reads counts against a stable reagent
+-- set instead of re-walking every filtered recipe: 20 ms and up to 800 KB a
+-- call before (2026-09-13 audit).
+Selectors:Register("warehouse.allMaterialsDistinct", {
+    memoized = true,
+    calls = {"recipes.filteredRecipes", "recipes.db"},
+    reads = {"session.itemNames.names"},
+    fn = function(state, ctx)
+        local recipes = Selectors:Call("recipes.filteredRecipes", state, ctx)
+        local rdb     = Selectors:Call("recipes.db", state, ctx)
+        return _collectDistinctBasicReagents(recipes, rdb)
+    end,
+})
+
+Selectors:Register("warehouse.queueNeedByMaterial", {
+    memoized = true,
+    calls = {"recipes.db"},
+    reads = {"account.craft.queue"},
+    fn = function(state, ctx)
+        local rdb = Selectors:Call("recipes.db", state, ctx)
+        return _buildNeedMapFromQueue(state.account.craft.queue, rdb)
+    end,
+})
+
 -- All Materials: distinct basic reagents from the current filtered recipe set
 -- (expansion/profession chips drive what shows). Search applied post-distinct.
 Selectors:Register("warehouse.allMaterialsRows", {
     -- selectedMaterialID retired: selection owned by SelectionBehaviorMixin.
     -- Cross-file calls dependency on filteredRecipes is intentional (scoped to recipe filter).
-    calls = {"recipes.filteredRecipes",
-             "warehouse.matSearch", "recipes.db"},
-    reads = {"session.resolvers.bag.tick", "account.craft.queue", "session.itemNames.names"},
+    calls = {"warehouse.allMaterialsDistinct", "warehouse.queueNeedByMaterial",
+             "warehouse.matSearch"},
+    reads = {"session.resolvers.bag.tick"},
     fn = function(state, ctx)
-        local recipes  = Selectors:Call("recipes.filteredRecipes",       state, ctx)
-        local query    = Selectors:Call("warehouse.matSearch",           state, ctx):lower()
-        local rdb      = Selectors:Call("recipes.db", state, ctx)
-        local distinct = _collectDistinctBasicReagents(recipes, rdb)
-        local need     = _buildNeedMapFromQueue(state.account.craft.queue, rdb)
+        local query    = Selectors:Call("warehouse.matSearch",              state, ctx):lower()
+        local distinct = Selectors:Call("warehouse.allMaterialsDistinct",   state, ctx)
+        local need     = Selectors:Call("warehouse.queueNeedByMaterial",    state, ctx)
         local counts   = HDG.BagObserver:GetCounts()
         local bo       = HDG.BagObserver
         local out = {}

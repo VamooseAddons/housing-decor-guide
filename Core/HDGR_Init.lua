@@ -86,7 +86,18 @@ HDG.Environment.SLOTS = {
     },
 }
 
+-- Heap readings at each boot step, beside the one HDGR_BootMark.lua took before
+-- the first file ran; the Perf profile prints the deltas as "Boot memory".
+HDG._bootHeap = HDG._bootHeap or {}   -- exception(false-positive): the BootMark file is first in the TOC; headless harnesses load neither
+local function _heapMark(name) HDG._bootHeap[name] = collectgarbage("count") end
+-- A measured span holds the collector so its delta is gross allocation, not
+-- allocation minus whatever a mid-span collection happened to free.
+local function _heapSpanBegin(name) _heapMark(name); collectgarbage("stop") end
+local function _heapSpanEnd(name)   _heapMark(name); collectgarbage("restart") end
+
 function HDG:OnInitialize()
+    _heapSpanEnd("files1")     -- every TOC file has run (BootMark.lua held the collector since the first)
+    collectgarbage("stop")     -- hold again across OnInitialize
     -- Stamp t-zero for perf timeline. Marks self-gate on the perf SV internally.
     if HDG.Perf then  -- exception(false-positive): boot orchestrator; Perf is removable instrumentation, absent in minimal/headless test harnesses
         HDG.Perf:SetEpoch()
@@ -94,6 +105,7 @@ function HDG:OnInitialize()
     end
     HDG_DB = HDG_DB or {}
     HDG.Store:LoadFromSavedVariables()
+    _heapMark("sv")
     HDG.Theme:Initialize()
     -- Snapshot WoW client locale for `binding = "locale:KEY"` resolution.
     HDG.Locale:Initialize()
@@ -179,13 +191,30 @@ function HDG:OnInitialize()
         HDG.Log:Info("boot", "SavedVariables migrated from HDG v2 -- collection/notes/favorites kept; caches + settings reset to fresh defaults")
     end
     HDG.Log:Debug("boot", "OnInitialize complete")
+    _heapSpanEnd("init")
 end
 
 function HDG:OnEnable()
-    HDG:CreateMainWindow()
+    _heapSpanBegin("enable0")
+    -- The main window -- 28 views, ~3,800 widgets, 13 MB -- is built on the
+    -- first open, not at login (2026-09-13 boot memory profile). It is built now
+    -- only when it was open at logout, since FrameVisibility would show it on
+    -- the first pass anyway. Until it exists every refresh returns at the door.
+    if HDG.Store:GetState().account.ui.mainWindowShown then
+        HDG:CreateMainWindow()
+    end
+    HDG.Store:Subscribe(function(actionType)
+        if actionType == HDG.Constants.ACTIONS.MAIN_WINDOW_TOGGLE
+           and not HDG.mainFrame
+           and HDG.Store:GetState().account.ui.mainWindowShown then
+            HDG:CreateMainWindow()   -- ends with the first RefreshMainWindow, which shows it
+        end
+    end)
+    _heapMark("mainWindow")
     -- Floating windows: CreateAll builds one frame per registered entry, wires Store for
     -- visibility/position reconciliation, and does an initial paint from SavedVariables state.
     if HDG.Window then HDG.Window:CreateAll() end  -- exception(false-positive): boot orchestrator; the UI/Window engine is absent in minimal/headless test harnesses, strict-read would force every boot-test to load the full UI stack
+    _heapSpanEnd("windows")
     -- Restore main window open/closed state (FrameVisibility reads account.ui.mainWindowShown).
     HDG:RefreshMainWindow()
 

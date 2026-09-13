@@ -195,18 +195,18 @@ function QP:_OnProgress()
     QP:_RenderStats()
 end
 
--- Resolve current decor-storage (owned, cap). Live snapshot if this session has
--- one, else the persisted cache, else unknown. A max of 0 is a cold/uninitialised
--- reading -- treated as UNKNOWN (math.huge = no storage gate), NOT a real zero cap
--- (which would block every quantity behind "Not enough decor storage"). Read live
--- on every refresh so a paced buy's landed units (resume) reflect in the headroom.
+-- Resolve current decor-storage (owned, cap) from the capacity cache, which the
+-- House aggregator refreshes on every storage, bag and catalog trigger whether or
+-- not the HDG window is open (the dashboard snapshot itself is only rebuilt while
+-- the House or Projects views show, so it is the staler of the two). Persisted, so
+-- the last session's reading stands in until the first trigger. A max of 0 is a
+-- cold/uninitialised reading -- treated as UNKNOWN (math.huge = no storage gate),
+-- NOT a real zero cap (which would block every quantity behind "Not enough decor
+-- storage"). Read on every refresh so a paced buy's landed units (resume) reflect
+-- in the headroom.
 function QP.ResolveCapacity(st)
-    local capData = HDG.Selectors:Call("house.capacityData", st, {})
-    if capData.available and capData.max > 0 then
-        return capData.owned, capData.max
-    end
-    local cache = st.account.houseCapacityCache   -- exception(nullable): false until first house snapshot captures capacity
-    if cache and cache.max and cache.max > 0 then
+    local cache = st.account.houseCapacityCache   -- exception(nullable): false until the first capture
+    if cache and cache.max > 0 then
         return cache.owned, cache.max
     end
     return 0, math.huge

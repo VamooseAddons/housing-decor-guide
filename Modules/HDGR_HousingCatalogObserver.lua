@@ -26,6 +26,13 @@ R.tagIDToGroup   = R.tagIDToGroup   or {}
 -- replayed by _CommitSweep against the swapped-in tables (see ReconcileEntry).
 R._sweepInFlight  = R._sweepInFlight  or false  -- exception(false-positive): idempotent module-load init
 R._pendingEntries = R._pendingEntries or {}     -- exception(false-positive): idempotent module-load init
+-- True from the moment a BUILT index is handed to the settle timer until that
+-- timer commits it. ReconcileFull coalesces a re-kick against this rather than
+-- against `_settleTimer`: the flag is set before the timer is armed and cleared
+-- inside the callback, so it reads correctly no matter when the timer fires --
+-- including in tests, where the mock fires synchronously and leaves a stale
+-- handle in `_settleTimer`.
+R._commitPending  = R._commitPending  or false  -- exception(false-positive): idempotent module-load init
 
 -- ===== Reconciler ============================================================
 -- Two entry points:
@@ -40,6 +47,7 @@ function R:GetClientVer()
 end
 
 function R:_CancelSettleTimer()
+    self._commitPending = false
     if self._settleTimer then
         if self._settleTimer.Cancel then self._settleTimer:Cancel() end  -- exception(boundary): C_Timer.After returns a handle; Cancel is the cancel API but handle shape varies
         self._settleTimer = nil
@@ -147,6 +155,22 @@ function R:ReconcileFull(reason)
     -- (A coalesce guard once lived here; it left slow-searcher characters stuck on
     -- "Scanning catalog..." forever, because the recovery re-kick was the thing it
     -- suppressed. Removed.)
+    -- ...but a re-kick that lands while a BUILT index is SETTLING is pure waste,
+    -- and that is a different case from the one above. The searcher has already
+    -- answered, the 95 ms / ~7 MB index exists, and _CommitSweep fires within the
+    -- settle window -- yet RunSearch's results would cancel that pending commit
+    -- (_CancelSettleTimer in _OnSearcherResults) and rebuild from scratch. Measured
+    -- at every login: two full 2044-entry builds 700 ms apart, only the second one
+    -- committing (2026-09-13 perf profile, chased down from a "memory leak" report).
+    -- The hang the removed coalesce guard caused was the SILENT-searcher case -- no
+    -- results, so no settle timer -- and that still falls straight through. Per-entry
+    -- ownership changes are unaffected either way: HOUSING_STORAGE_ENTRY_UPDATED goes
+    -- to ReconcileEntry, which parks and replays at commit.
+    if self._commitPending then
+        HDG.Log:Info("catalog_swept",
+            "sweep re-kick coalesced (by " .. (reason or "?") .. ") -- a built index is already settling")
+        return
+    end
     if HDG.Store:GetState().session.catalog.status ~= "ready" then
         self:_ConfigureSearcher(s)
     end
@@ -234,13 +258,19 @@ local SWEEP_STAGES = {
 -- one call per sourceText line. Reported on its own row, not part of the sum.
 local STRIP_STAGE = "parseSource.strip"
 local CLOCK_PROBE_READS = 1000
-local _sweepProf = nil   -- { ms = {stage=ms}, n = {stage=count} } during a timed sweep
+local _sweepProf = nil   -- { ms = {stage=ms}, kb = {stage=KB}, n = {stage=count} } during a timed sweep
 
-local function _lap(stage, t0)
-    local now = _G.debugprofilestop()
+-- One lap = the clock AND the heap, so every stage answers "how long" and "how
+-- much" from the same reading. The heap delta is true allocation, not net heap
+-- movement, because the enclosing RecordOp holds the collector for the whole
+-- sweep (HDG.Perf, Sampling). Returns both readings so the next lap starts
+-- where this one ended.
+local function _lap(stage, t0, k0)
+    local now, know = _G.debugprofilestop(), collectgarbage("count")
     _sweepProf.ms[stage] = (_sweepProf.ms[stage] or 0) + (now - t0)
+    _sweepProf.kb[stage] = (_sweepProf.kb[stage] or 0) + (know - k0)
     _sweepProf.n[stage]  = (_sweepProf.n[stage]  or 0) + 1
-    return now
+    return now, know
 end
 
 local function _clockFloorMs()
@@ -249,22 +279,25 @@ local function _clockFloorMs()
     return _G.debugprofilestop() - t0
 end
 
-local function _reportSweepStages(perf, totalMs, entries)
-    local lapped = 0
+local function _reportSweepStages(perf, totalMs, totalKB, entries)
+    local lappedMs, lappedKB = 0, 0
     for _, stage in ipairs(SWEEP_STAGES) do
         local n = _sweepProf.n[stage]
         if n then
-            perf:RecordOpQuiet(("catalog.sweep.%s (%d calls)"):format(stage, n), _sweepProf.ms[stage])
-            lapped = lapped + _sweepProf.ms[stage]
+            perf:RecordOpQuiet(("catalog.sweep.%s (%d calls)"):format(stage, n),
+                               _sweepProf.ms[stage], _sweepProf.kb[stage])
+            lappedMs = lappedMs + _sweepProf.ms[stage]
+            lappedKB = lappedKB + _sweepProf.kb[stage]
         end
     end
     local strips = _sweepProf.n[STRIP_STAGE]
     if strips then
         perf:RecordOpQuiet(("catalog.sweep.%s (%d calls, inside parseSource)"):format(STRIP_STAGE, strips),
-                           _sweepProf.ms[STRIP_STAGE])
+                           _sweepProf.ms[STRIP_STAGE], _sweepProf.kb[STRIP_STAGE])
     end
-    perf:RecordOpQuiet(("catalog.sweep.~unlapped (%d entries)"):format(entries), totalMs - lapped)
-    perf:RecordOpQuiet(("catalog.sweep.~clock (%d reads)"):format(CLOCK_PROBE_READS), _clockFloorMs())
+    perf:RecordOpQuiet(("catalog.sweep.~unlapped (%d entries)"):format(entries), totalMs - lappedMs, totalKB - lappedKB)
+    -- Reading the clock allocates nothing; the row is the ms floor only.
+    perf:RecordOpQuiet(("catalog.sweep.~clock (%d reads)"):format(CLOCK_PROBE_READS), _clockFloorMs(), 0)
 end
 
 -- Process one searcher entry: build the row, stamp the indexes, feed vendors.
@@ -312,9 +345,10 @@ local function _processEntry(acc, entry)
         acc.skippedPoisoned = (acc.skippedPoisoned or 0) + 1
         return
     end
-    local t = _sweepProf and _G.debugprofilestop()
+    local t, hk
+    if _sweepProf then t, hk = _G.debugprofilestop(), collectgarbage("count") end
     local info = _G.C_HousingCatalog.GetCatalogEntryInfo(entry)
-    if t then t = _lap("entryInfo", t) end
+    if t then t, hk = _lap("entryInfo", t, hk) end
     if not info then return end
     -- (12.0.5+ searcher rows have no subtypeIdentifier -- the old variant-placeholder
     -- filter is gone with the compound-entryID era.)
@@ -323,12 +357,12 @@ local function _processEntry(acc, entry)
     -- itself carries it via the searcher result.
     info.recordID = info.recordID or rid
     local row = R:BuildRow(info)   -- laps its own stages
-    if t then t = _G.debugprofilestop() end
+    if t then t, hk = _G.debugprofilestop(), collectgarbage("count") end
     acc.byItemID[row.itemID] = row
     acc.byDecorID[rid]       = row
     if row.isOwned then acc.owned[rid] = true end
     _indexVendorsFromRow(acc, row)
-    if t then _lap("index", t) end
+    if t then _lap("index", t, hk) end
 end
 
 function R:_OnSearcherResults(searcher)
@@ -362,8 +396,9 @@ function R:_OnSearcherResults(searcher)
     -- Perf: catalog-load cost (outside dispatch path; flush probe never sees it). boundary: Perf optional.
     local _perf  = HDG.Perf
     local _timed = _perf and _perf:Enabled()
-    local _t0    = _timed and _G.debugprofilestop() or nil
-    _sweepProf   = _timed and { ms = {}, n = {} } or nil
+    local _t0, _k0
+    if _timed then _t0, _k0 = _perf:Open() end
+    _sweepProf   = _timed and { ms = {}, kb = {}, n = {} } or nil
     for _, entry in ipairs(items) do
         _processEntry(acc, entry)
     end
@@ -372,9 +407,8 @@ function R:_OnSearcherResults(searcher)
             :format(acc.skippedPoisoned))
     end
     if _timed then
-        local totalMs = _G.debugprofilestop() - _t0
-        _perf:RecordOp("catalog.indexSweep (" .. #items .. " entries)", totalMs)
-        _reportSweepStages(_perf, totalMs, #items)
+        local totalMs, totalKB = _perf:RecordOp("catalog.indexSweep (" .. #items .. " entries)", _t0, _k0)
+        _reportSweepStages(_perf, totalMs, totalKB, #items)
         _sweepProf = nil
     end
     table.sort(acc.allVendorNames)
@@ -391,10 +425,24 @@ function R:_OnSearcherResults(searcher)
 
     -- Settle 0.5s: coalesces searcher multi-fire bursts (boundary: loading screens / login cascade).
     self:_CancelSettleTimer()
+    self._commitPending = true
     self._settleTimer = C_Timer.NewTimer(0.5, function()
+        self._commitPending = false
         self._settleTimer = nil
         R:_CommitSweep(result)
     end)
+end
+
+-- Replay the storage-entry events ReconcileEntry parked while a sweep was in
+-- flight. Both sweep endings drain, for different reasons: a commit drains after
+-- the atomic swap (so a patch lands on the new tables), a 0-entry abort drains
+-- immediately (nothing was replaced, so the parked patches are still valid).
+function R:_DrainParkedEntries()
+    local parked = R._pendingEntries
+    R._pendingEntries = {}
+    for _, p in ipairs(parked) do
+        R:_ApplyEntry(p.entryID, p.decorID, p.wasOwned)
+    end
 end
 
 -- _CommitSweep: atomic index swap + dispatch catalog-ready notifications.
@@ -404,6 +452,12 @@ function R:_CommitSweep(result)
     if itemCount == 0 then
         -- 0 entries = catalog not loaded yet (tag groups still streaming). Don't
         -- commit; storage/catalog events re-kick with the config once entries arrive.
+        -- The flag MUST clear on the way out: it is the thing that makes
+        -- ReconcileEntry park, so a sweep ending here without clearing it parked
+        -- every later storage event for the rest of the session -- an ever-growing
+        -- list, and a silently dropped learn on every decor acquired until reload.
+        R._sweepInFlight = false
+        R:_DrainParkedEntries()
         HDG.Log:Warn("catalog_error",
             "catalog search returned 0 entries; not loaded yet -- awaiting storage-event re-kick")
         return
@@ -446,12 +500,9 @@ function R:_CommitSweep(result)
     -- Storage-entry events parked during the sweep (ReconcileEntry) replay now,
     -- against the tables just swapped in and after BULK_LOAD has written the
     -- snapshot's owned set -- so a learn the snapshot predates is re-applied
-    -- rather than overwritten.
-    local parked = R._pendingEntries
-    R._pendingEntries = {}
-    for _, p in ipairs(parked) do
-        R:_ApplyEntry(p.entryID, p.decorID, p.wasOwned)
-    end
+    -- rather than overwritten. That ordering is why the drain sits HERE and not
+    -- earlier in the function.
+    R:_DrainParkedEntries()
 
     -- Rebuild category nav: the MAIN_WINDOW_OPENING build runs before the sweep
     -- completes; this ensures subcategory info (e.g. Furnishings) is populated.
@@ -494,6 +545,40 @@ function R:_UpdateVintage()
         HDG.Log:Info("catalog_refreshed",
             string.format("%d new decor detected (build %s)", #fresh, label))
     end
+end
+
+-- True when the five count scalars an entry event carries already match the row:
+-- Blizzard fires HOUSING_STORAGE_ENTRY_UPDATED for every placement nudge, and a
+-- signal for an unchanged row rebuilt the whole Decor projection (about 6 MB per
+-- event with the Decor view showing, 2026-09-13 audit).
+local function _countsMatch(row, counts)
+    return row.quantity                 == counts.quantity
+       and row.numPlaced                == counts.numPlaced
+       and row.remainingRedeemable      == counts.remainingRedeemable
+       and row.destroyableInstanceCount == counts.destroyableInstanceCount
+       and row.firstAcquisitionBonus    == counts.firstAcquisitionBonus
+end
+
+-- One COUNTS_UPDATED per frame for a burst of entry events (a parked-entry
+-- replay, a bulk destroy): the rows are already patched synchronously by the
+-- time the signal goes out, so every reader sees fresh rows whichever frame
+-- it runs in, and the projection rebuilds once instead of once per entry.
+R._countsPending = R._countsPending or nil   -- exception(false-positive): idempotent module-load init
+function R:_SignalCounts(decorID)
+    local pending = R._countsPending
+    if pending then
+        pending[#pending + 1] = decorID
+        return
+    end
+    R._countsPending = { decorID }
+    _G.RunNextFrame(function()
+        local ids = R._countsPending
+        R._countsPending = nil
+        HDG.Store:Dispatch({
+            type    = HDG.Constants.ACTIONS.COLLECTION_CATALOG_ROW_COUNTS_UPDATED,
+            payload = { decorIDs = ids },
+        })
+    end)
 end
 
 -- ReconcileEntry(entryVariantID): targeted update from HOUSING_STORAGE_ENTRY_UPDATED.
@@ -570,14 +655,12 @@ function R:_ApplyEntry(entryID, decorID, wasOwned)
     -- ownership TRANSITIONS too, not just the counts-only case (this was an
     -- `elseif` that skipped learn/remove -- the screen-update regression).
     --
-    -- CRITICAL ORDERING: PatchCounts the row SYNCHRONOUSLY here, THEN dispatch the
-    -- re-render signal. The dispatch's own Subscribe handler ALSO calls PatchCounts,
-    -- but it races the BindingEngine's Apply subscriber on the SAME dispatch -- if
-    -- Apply wins, catalog selectors (decor.items "only uncollected" filter, detail
-    -- status) re-run against the STALE row and the just-learned item stays
-    -- "uncollected" for that frame (the tooltip reads the row live at hover, AFTER
-    -- the patch lands -- which is why it showed owned while the list didn't). Mutate
-    -- before signalling -> the row is fresh no matter which subscriber fires first.
+    -- CRITICAL ORDERING: PatchCounts the row SYNCHRONOUSLY here, THEN signal the
+    -- re-render. Catalog selectors (decor.items "only uncollected" filter, detail
+    -- status) re-run on the signal and must see the fresh row, or the just-learned
+    -- item stays "uncollected" for that frame (the tooltip reads the row live at
+    -- hover, AFTER the patch lands -- which is why it showed owned while the list
+    -- didn't). Mutate before signalling -> the row is fresh whenever a reader runs.
     -- COUNTS_UPDATED still invalidates session.resolvers.catalog.tick
     -- (signal-only, bump=false: subscribers re-run without the generation
     -- advancing), the path every catalog-derived selector reads (LEARNED/
@@ -591,6 +674,7 @@ function R:_ApplyEntry(entryID, decorID, wasOwned)
         firstAcquisitionBonus    = info.firstAcquisitionBonus
                                      or row.firstAcquisitionBonus or 0,  -- exception(boundary): Blizzard struct field sparse
     }
+    local moved = isOwned ~= wasOwned or not _countsMatch(row, counts)
     R:PatchCounts(decorID, counts)
     -- Re-derive dye variants: destroying/acquiring a specific dyed stack changes
     -- per-variant numStored (and can empty a stack). PatchCounts touches only the
@@ -602,14 +686,12 @@ function R:_ApplyEntry(entryID, decorID, wasOwned)
             recordID = decorID, entryType = entryType,
         })
         if type(variants) == "table" then   -- exception(boundary): API returns nil on cold/invalidated cache
-            row.variants = variants
-            R:_bakeVariantDyes(row)
+            if R:_bakeVariantDyes(row, variants) then moved = true end
         end
     end
-    HDG.Store:Dispatch({
-        type    = A.COLLECTION_CATALOG_ROW_COUNTS_UPDATED,
-        payload = { decorID = decorID, counts = counts },
-    })
+    -- Nothing a reader can see moved: no signal, no projection rebuild.
+    if not moved then return end
+    R:_SignalCounts(decorID)
 end
 
 -- ===== Row builder ===========================================================
@@ -638,7 +720,8 @@ end
 -- Snapshots live state at sweep time; stale until next sweep/reload.
 -- Internal callers must never pass nil (strict read -- will throw on nil info).
 function R:BuildRow(info)
-    local t = _sweepProf and _G.debugprofilestop()
+    local t, hk
+    if _sweepProf then t, hk = _G.debugprofilestop(), collectgarbage("count") end
     local row = {
         -- identity
         itemID    = info.itemID,
@@ -669,8 +752,9 @@ function R:BuildRow(info)
 
         -- categorization
         -- categoryName / subcategoryName resolved at BuildRow time for direct render.
-        categoryIDs     = info.categoryIDs,
-        subcategoryIDs  = info.subcategoryIDs,
+        -- Only the FIRST category / subcategory id is read anywhere; the raw
+        -- arrays were kept on the row too and pinned Blizzard's per-sweep tables
+        -- for the session (2026-09-13 allocation audit).
         categoryID      = info.categoryIDs    and info.categoryIDs[1],  -- exception(boundary): Blizzard struct optional array field
         subcategoryID   = info.subcategoryIDs and info.subcategoryIDs[1],  -- exception(boundary): Blizzard struct optional array field
         categoryName    = resolveCategoryName(info.categoryIDs    and info.categoryIDs[1]),
@@ -688,33 +772,34 @@ function R:BuildRow(info)
         firstAcquisitionBonus    = info.firstAcquisitionBonus    or 0,  -- exception(boundary): Blizzard struct field sparse
 
         -- customization metadata
-        customizations = info.customizations,
-        dyeIDs         = info.dyeIDs,
     }
     -- isOwned: includes remainingRedeemable (unclaimed tokens count as owned).
     row.isOwned = (row.quantity + row.remainingRedeemable + row.numPlaced) > 0
-    if t then t = _lap("rowTable", t) end
+    if t then t, hk = _lap("rowTable", t, hk) end
 
     -- Dye variants for customizable items. API takes {recordID, entryType} table arg
     -- (not positional -- exception(boundary): positional args silently errored under old pcall).
+    -- The variant array is consumed by _bakeVariantDyes below and never read
+    -- again, so it is passed along rather than stored: kept on the row it
+    -- pinned one of Blizzard's per-sweep tables per customizable piece for the
+    -- whole session (2026-09-13 allocation audit).
+    local variants
     if row.canCustomize and _G.C_HousingCatalog
        and _G.C_HousingCatalog.GetAllVariantInfosForEntry then
         local entryType = info.entryType or 1  -- exception(boundary): Blizzard struct field sparse
-        local variants = _G.C_HousingCatalog.GetAllVariantInfosForEntry({
+        local fetched = _G.C_HousingCatalog.GetAllVariantInfosForEntry({
             recordID  = info.recordID,
             entryType = entryType,
         })
-        if type(variants) == "table" then
-            row.variants = variants
-        end
-        if t then t = _lap("variants", t) end
+        if type(fetched) == "table" then variants = fetched end
+        if t then t, hk = _lap("variants", t, hk) end
     end
 
     -- Parse sourceText into structured vendor/quest/achievement/category/
     -- factionGate fields. Sets row.vendors[], row.quest, row.achievement,
     -- row.category, row.factionGate. Pure; mutates row in place.
     R:_ParseSourceText(info.sourceText or "", row)
-    if t then t = _lap("parseSource", t) end
+    if t then t, hk = _lap("parseSource", t, hk) end
 
     -- Apply CatalogOverrides. Sparse: most items have no entry, :Get returns nil.
     -- Transparent to selectors: they see corrected rows directly without knowing
@@ -729,29 +814,29 @@ function R:BuildRow(info)
     -- Order matters: bakes that depend on others (gateLine reads gates,
     -- costLine reads costEntries) come after the producers.
     R:_bakeItemAugmentBackfill(row)  -- row.achievement / row.achievementID from aug.sources type=1
-    if t then t = _lap("overrides+augment", t) end
+    if t then t, hk = _lap("overrides+augment", t, hk) end
     R:_bakeTags(row)         -- row.expansion, row.sizeLabel, row.tags(+Label), row.dataTags
     R:_bakeCategory(row)     -- row.categoryLabel
     R:_bakePlacement(row)    -- row.placementLabel (budget icon prefixed)
-    if t then t = _lap("tags+category+placement", t) end
+    if t then t, hk = _lap("tags+category+placement", t, hk) end
     R:_bakeVendors(row)      -- per-vendor enrichment + row.vendorLines[]
-    if t then t = _lap("vendors", t) end
+    if t then t, hk = _lap("vendors", t, hk) end
     R:_bakeCost(row)         -- row.costEntries (unified) + row.costLine
-    if t then t = _lap("cost", t) end
+    if t then t, hk = _lap("cost", t, hk) end
     R:_bakeRecipe(row)       -- row.recipe + row.recipeLabel (MUST precede _bakeSourceTypes,
                              -- which reads row.recipe to assign sourceType=6 / CRAFTED)
     R:_bakeSourceTypes(row)  -- row.sourceType / sourceName / sourceDetail (vendor-first)
     R:_bakeBonusXp(row)      -- row.bonusXpLabel (first-acquisition reward chip)
-    if t then t = _lap("recipe+sourceTypes+bonus", t) end
-    R:_bakeVariantDyes(row)  -- row.dyedVariants[] (per-owned-variant dye derivation)
-    if t and row.variants then t = _lap("variantDyes", t) end   -- only rows that had variants to walk
+    if t then t, hk = _lap("recipe+sourceTypes+bonus", t, hk) end
+    R:_bakeVariantDyes(row, variants)  -- row.dyedVariants[] (per-owned-variant dye derivation)
+    if t and row.variants then t, hk = _lap("variantDyes", t, hk) end   -- only rows that had variants to walk
     -- Single canonical source/gate bake. Produces row.sourceTags[] in
     -- SOURCE_KIND_PRIORITY order; entries carry text + extras (factionPrefix,
     -- achievementID, ...) for kinds that have them, nothing for chip-only
     -- kinds (DROP, VENDOR, etc.). row.gateLine + row.primarySourceCode are
     -- thin derivations of sourceTags[1] kept for backward-compat consumers.
     R:_bakeSourceTags(row)
-    if t then _lap("sourceTags", t) end
+    if t then _lap("sourceTags", t, hk) end
 
     return row
 end
@@ -791,7 +876,7 @@ end
 
 -- _bakeTags: classify dataTagsByID into expansion / size / styles-or-factions / other.
 --   row.expansion / expansionLabel, sizeLabel, tags / tagsLabel (Styles+Factions),
---   dataTags / dataTagsLabel (full set). Expansion colors are Palette (scheme-invariant).
+--   dataTagsByID (verbatim). Expansion colors are Palette (scheme-invariant).
 -- _classifyTag: inner helper extracted from the loop to keep _bakeTags flat.
 local function _classifyTag(row, tagID, displayName, descriptive, styleFaction, getCategory)
     local group = R.tagIDToGroup[tagID]   -- tagIDToGroup is init'd to {} at load (line ~47), never nil
@@ -816,8 +901,7 @@ function R:_bakeTags(row)
         table.sort(descriptive)
         table.sort(styleFaction)
     end
-    row.dataTags      = descriptive
-    row.dataTagsLabel = table.concat(descriptive, ", ")
+    -- (dataTags / dataTagsLabel used to be stamped here too; nothing read them.)
     row.tags          = styleFaction
     row.tagsLabel     = table.concat(styleFaction, ", ")
     -- Palette-colored expansion label (scheme-invariant; safe to bake).
@@ -939,14 +1023,32 @@ end
 -- Emits row.dyedVariants[]: { variantIdentifier, numStored, dyeColorsByChannel (sparse
 -- 0/1/2), dyeColorIDs (flat), label, entryID }. entryID is what
 -- C_HousingBasicMode.StartPlacingNewDecor takes to place the dyed copy.
-function R:_bakeVariantDyes(row)
-    if not row.variants then return end
+-- Same dyed-variant list, entry for entry: identity, stored count and label.
+local function _sameDyedVariants(a, b)
+    if (a == nil) ~= (b == nil) then return false end
+    if a == nil or #a ~= #b then return a == nil end
+    for i = 1, #a do
+        local x, y = a[i], b[i]
+        if x.variantIdentifier ~= y.variantIdentifier or x.numStored ~= y.numStored
+           or x.label ~= y.label then
+            return false
+        end
+    end
+    return true
+end
+
+-- Returns true when the bake changed anything a reader can see (the undyed
+-- count or the dyed-variant list), so a storage event that moved nothing
+-- can skip the re-render signal.
+function R:_bakeVariantDyes(row, variants)
+    if not variants then return false end
+    local undyedBefore, dyedBefore = row.undyedNumStored, row.dyedVariants
     local dyed = {}
     -- Undyed base variant (variantIdentifier 0) is a first-class tile in Blizzard's
     -- catalog with its OWN numStored -- captured here so the base row reads its real
     -- undyed count, never the aggregate destroyableInstanceCount (off-by-one on the base).
     row.undyedNumStored = 0
-    for _, v in ipairs(row.variants) do
+    for _, v in ipairs(variants) do
         if v.entryVariantID.variantIdentifier == 0 then
             row.undyedNumStored = v.numStored
         end
@@ -976,6 +1078,7 @@ function R:_bakeVariantDyes(row)
         end
     end
     row.dyedVariants = dyed
+    return row.undyedNumStored ~= undyedBefore or not _sameDyedVariants(dyedBefore, dyed)
 end
 
 -- _bakeCost: unify vendor cost + override source cost into {currencyID, amount} entries
@@ -1053,15 +1156,26 @@ local function _costKey(entries)
 end
 
 -- Distinct cost variants across all vendor blocks (e.g. 30 coupons OR 500g = two options).
-local function _costVariants(row)
+-- headEntries / headLine are the head vendor's entries and formatted line that
+-- _bakeCost already built (nil when the head vendor carries no price), so the
+-- head is not copied and formatted a second time just to be hashed; and a row
+-- with one vendor can only ever yield that one line, so it skips the dedup pass
+-- entirely -- two thirds of the catalog (2026-09-13 allocation audit).
+local function _costVariants(row, headEntries, headLine)
+    local vendors = row.vendors
+    local n = vendors and #vendors or 0
+    if n <= 1 then
+        if headEntries and #headEntries > 0 then return { headLine } end
+        return {}
+    end
     local lines, seen = {}, {}
-    for _, vendor in ipairs(row.vendors or {}) do
-        local entries = _costFromVendor(vendor)
+    for i = 1, n do
+        local entries = (i == 1) and headEntries or _costFromVendor(vendors[i])
         if entries and #entries > 0 then
             local key = _costKey(entries)
             if not seen[key] then
                 seen[key] = true
-                lines[#lines + 1] = _formatCostLine(entries)
+                lines[#lines + 1] = (i == 1) and headLine or _formatCostLine(entries)
             end
         end
     end
@@ -1083,12 +1197,14 @@ function R:_bakeCost(row)
         return
     end
     local vendor = row.vendors and row.vendors[1]
-    local entries = _costFromVendor(vendor)
-                 or _costFromOverrideSources(row.sources, GOLD)
+    local vendorEntries = _costFromVendor(vendor)
+    local entries = vendorEntries or _costFromOverrideSources(row.sources, GOLD)
     row.costEntries = entries or {}
     row.costLine    = _formatCostLine(entries)
     -- Per-option lines (>=1 when any cost). Multi-option drives vendor list to show item once per option.
-    local variants = _costVariants(row)
+    -- Only the VENDOR-derived head feeds the variants: an override-sourced cost is
+    -- not a vendor option, exactly as before.
+    local variants = _costVariants(row, vendorEntries, vendorEntries and row.costLine or nil)
     if #variants == 0 and row.costLine ~= "" then variants = { row.costLine } end
     row.costVariants = variants
 end
@@ -1301,17 +1417,19 @@ local function _repTagEntry(row, aug)
     return nil
 end
 
+-- One source kind per row at most; the first contribution wins (catalog signal
+-- before augment before override, in call order below). File-local rather than
+-- a closure per row: the sweep runs this 2,052 times (2026-09-13 audit).
+local function _emitSourceTag(byKind, kind, entry)
+    if not kind or byKind[kind] then return end
+    entry.kind = kind
+    byKind[kind] = entry
+end
+
 function R:_bakeSourceTags(row)
     local aug = HDG.StaticData.ItemAugment:Get(row.itemID)
     local byKind = {}     -- {[kind] = entry} -- dedupes per-kind contributions
-    local order  = {}     -- insertion order; re-sorted by priority at end
-
-    local function emit(kind, entry)
-        if not kind or byKind[kind] then return end
-        entry.kind = kind
-        byKind[kind] = entry
-        order[#order+1] = kind
-    end
+    local function emit(kind, entry) _emitSourceTag(byKind, kind, entry) end
 
     local repEntry = _repTagEntry(row, aug)
     if repEntry then emit("REP", repEntry) end
@@ -1377,7 +1495,7 @@ function R:_bakeSourceTags(row)
     -- No source signal at all -> honest chip-only [UNKN], never [DROP].
     -- Defaulting to DROP masked catalog/data gaps; UNKN surfaces them (and is
     -- filterable). DROP now appears only when the data actually says "Drop:".
-    if #order == 0 then emit("UNKN", {}) end
+    if next(byKind) == nil then emit("UNKN", {}) end
 
     -- Sort by SOURCE_KIND_PRIORITY; head entry is highest-priority kind (gateLine + primarySourceCode).
     local tags = {}
@@ -1431,40 +1549,53 @@ end
 -- wrappers, leaving bare digits that say nothing about what they count.
 -- The catalog-embedded icon is always correct; avoids a stale hand-curated table
 -- and won't drop currencies outside it (boundary: any currency in Cost: IS a decor cost).
+-- Runs on every Cost: line of every row at sweep time. Each link shape is
+-- looked for with one plain find before its patterns run: a line carrying gold
+-- only paid for two link tables and four iterators it could not use, and the
+-- gold match copied the whole line to lowercase (2026-09-13 allocation audit).
+-- Output is identical; tests/test_catalog_cost_itemtoken.lua and
+-- tests/test_acquire_costvariants.lua pin the entry shapes.
 local function _extractCostEntries(raw)
-    local iconByID = {}
-    for cid, icon in raw:gmatch("|Hcurrency:(%d+)|h|T([^:|]+)") do
-        iconByID[tonumber(cid)] = icon
-    end
     local entries = {}
-    for amt, cid in raw:gmatch("([%d,]+)%s*|Hcurrency:(%d+)|h") do
-        local n  = tonumber((amt:gsub(",", "")))
-        local id = tonumber(cid)
-        if n and id then
-            entries[#entries + 1] = { currencyID = id, amount = n, icon = iconByID[id] }
+    if raw:find("|Hcurrency:", 1, true) then
+        local iconByID = {}
+        for cid, icon in raw:gmatch("|Hcurrency:(%d+)|h|T([^:|]+)") do
+            iconByID[tonumber(cid)] = icon
+        end
+        for amt, cid in raw:gmatch("([%d,]+)%s*|Hcurrency:(%d+)|h") do
+            local n  = tonumber((amt:gsub(",", "")))
+            local id = tonumber(cid)
+            if n and id then
+                entries[#entries + 1] = { currencyID = id, amount = n, icon = iconByID[id] }
+            end
         end
     end
     -- Item tokens: "1|Hitem:137642|h|T<icon>:0|t|h" (Mark of Honor, Dreamsurge
     -- Coalescence, ...). Same shape as the currency loop with the item's own ID;
     -- an item is not a currency, so the entry carries itemID and no currencyID.
-    local itemIconByID = {}
-    for iid, icon in raw:gmatch("|Hitem:(%d+)|h|T([^:|]+)") do
-        itemIconByID[tonumber(iid)] = icon
-    end
-    for amt, iid in raw:gmatch("([%d,]+)%s*|Hitem:(%d+)|h") do
-        local n  = tonumber((amt:gsub(",", "")))
-        local id = tonumber(iid)
-        if n and id then
-            entries[#entries + 1] = { itemID = id, amount = n, icon = itemIconByID[id] }
+    if raw:find("|Hitem:", 1, true) then
+        local itemIconByID = {}
+        for iid, icon in raw:gmatch("|Hitem:(%d+)|h|T([^:|]+)") do
+            itemIconByID[tonumber(iid)] = icon
+        end
+        for amt, iid in raw:gmatch("([%d,]+)%s*|Hitem:(%d+)|h") do
+            local n  = tonumber((amt:gsub(",", "")))
+            local id = tonumber(iid)
+            if n and id then
+                entries[#entries + 1] = { itemID = id, amount = n, icon = itemIconByID[id] }
+            end
         end
     end
     -- Gold is a money texture ("<amt>|TInterface\MoneyFrame\UI-GoldIcon...|t"), NOT a
     -- |Hcurrency: link, so the loop above misses it -- an item can charge a currency AND
-    -- gold (e.g. 2000 Order Resources + 1000g). Match the gold icon and emit a GOLD entry.
-    for amt in raw:lower():gmatch("([%d,]+)|t[^|]-moneyframe") do
-        local g = tonumber((amt:gsub(",", "")))
-        if g and g > 0 then
-            entries[#entries + 1] = { currencyID = HDG.Constants.CURRENCY_GOLD, amount = g }
+    -- gold (e.g. 2000 Order Resources + 1000g). Match the gold icon case-folded in
+    -- place and emit a GOLD entry.
+    if raw:find("[Mm][Oo][Nn][Ee][Yy][Ff][Rr][Aa][Mm][Ee]") then
+        for amt in raw:gmatch("([%d,]+)|[Tt][^|]-[Mm][Oo][Nn][Ee][Yy][Ff][Rr][Aa][Mm][Ee]") do
+            local g = tonumber((amt:gsub(",", "")))
+            if g and g > 0 then
+                entries[#entries + 1] = { currencyID = HDG.Constants.CURRENCY_GOLD, amount = g }
+            end
         end
     end
     return entries
@@ -1499,38 +1630,57 @@ local function _flushVendor(vendors, v)
     end
 end
 
+-- Next source-text line at or after `pos`, and the position after it: the
+-- catalog separates lines with the "|n" escape or a real newline, both split
+-- here, empty segments skipped. Walks the text in place; the old shape first
+-- copied the whole text (gsub "|n" -> newline) and then split the copy.
+local function _nextSourceLine(s, pos)
+    local n = #s
+    while pos <= n do
+        local a = s:find("|n", pos, true)
+        local b = s:find("\n", pos, true)
+        local stop = (a and b) and math.min(a, b) or a or b   -- exception(nullable): no separator left = last line
+        local finish = stop and (stop - 1) or n
+        local width = (stop and stop == a) and 2 or (stop and 1 or 0)
+        if finish >= pos then
+            return s:sub(pos, finish), finish + 1 + width
+        end
+        pos = finish + 1 + width
+    end
+    return nil
+end
+
 function R:_ParseSourceText(sourceText, row)
-    -- Always stamp row.vendors = {} so downstream ipairs(row.vendors) is safe.
-    -- exception(boundary): quest-only items have empty sourceText -> row.vendors was nil, exploding consumers.
     if sourceText == "" then row.vendors = {}; return end
-    -- Per-line walk: SHL gives display line for prefix matching; raw line kept for cost-entry
-    -- extraction (SHL nukes |Hcurrency:<id>|h even with maintainTextures=true).
-    local rawText = sourceText:gsub("|n", "\n")
     local SHL = _G.C_StringUtil.StripHyperlinks
     local SOURCE_TOKENS = HDG.Constants.CATALOG_SOURCE_TOKENS
 
     local vendors = {}
     local current = nil
-    -- Tracks the active Drop:/Treasure:/Event: record so the following Zone: line can fill .zone.
     local pendingZoneTarget = nil
-    for raw in rawText:gmatch("[^\n]+") do
-        local ts = _sweepProf and _G.debugprofilestop()
+    local raw, pos = _nextSourceLine(sourceText, 1)
+    while raw do
+        local ts, hks
+        if _sweepProf then ts, hks = _G.debugprofilestop(), collectgarbage("count") end
         local line = SHL(raw, false, false, false, false, false)
-        if ts then _lap(STRIP_STAGE, ts) end
-        line = line:match("^%s*(.-)%s*$") or line  -- trim
-        local vName    = line:match("^Vendors?:%s*(.+)")  -- matches Vendor: AND Vendors:
-        local zone     = line:match("^Zone:%s*(.+)")
-        local fac      = line:match("^Faction:%s*(.+)")
-        local renown   = line:match("^Renown:%s*(.+)")
-        local cost     = line:match("^Cost:%s*(.+)")
-        local quest    = line:match("^Quest:%s*(.+)")
-        local ach      = line:match("^Achievement:%s*(.+)")
-        local cat      = line:match("^Category:%s*(.+)")
-        local drop     = line:match("^Drop:%s*(.+)")
-        local treasure = line:match("^Treasure:%s*(.+)")
-        local event    = line:match("^Event:%s*(.+)")
-        -- Bare-line source (no colon): Shop / In-Game Shop. Other bare lines
-        -- (e.g. a stray "Profession") are not in the table -> nil -> ignored.
+        if ts then _lap(STRIP_STAGE, ts, hks) end
+        if line:find("^%s") or line:find("%s$") then   -- trim only a line that needs it (a copy otherwise)
+            line = line:match("^%s*(.-)%s*$") or line
+        end
+        -- One "Key: value" match, then the key decides: eleven per-line pattern
+        -- calls before, each a C call with its own pattern walk.
+        local key, val = line:match("^(%a+):%s*(.+)")
+        local vName    = (key == "Vendor" or key == "Vendors") and val or nil
+        local zone     = key == "Zone"        and val or nil
+        local fac      = key == "Faction"     and val or nil
+        local renown   = key == "Renown"      and val or nil
+        local cost     = key == "Cost"        and val or nil
+        local quest    = key == "Quest"       and val or nil
+        local ach      = key == "Achievement" and val or nil
+        local cat      = key == "Category"    and val or nil
+        local drop     = key == "Drop"        and val or nil
+        local treasure = key == "Treasure"    and val or nil
+        local event    = key == "Event"       and val or nil
         local bareKind = SOURCE_TOKENS[line]
         if vName then
             _flushVendor(vendors, current)
@@ -1588,13 +1738,14 @@ function R:_ParseSourceText(sourceText, row)
             row.achievement = ach
         elseif cat then
             row.category = cat
-        elseif current and (raw:match("|Hcurrency:") or raw:match("|Hitem:")) then
+        elseif current and (raw:find("|Hcurrency:", 1, true) or raw:find("|Hitem:", 1, true)) then
             -- Bare cost line (no "Cost:" prefix): achievement-vendor catalog format
             -- (e.g. "800|Hcurrency:3392|h"). Same handling as the Cost: branch.
             current.cost = line
             local entries = _extractCostEntries(raw)
             if next(entries) then current.costEntries = entries end
         end
+        raw, pos = _nextSourceLine(sourceText, pos)
     end
     _flushVendor(vendors, current)
     row.vendors = vendors
@@ -2145,10 +2296,8 @@ HDG.Modules:Declare({
                 if action and action.payload then
                     R:RemoveRow(action.payload.decorID)
                 end
-            elseif actionType == A.COLLECTION_CATALOG_ROW_COUNTS_UPDATED then
-                if action and action.payload then
-                    R:PatchCounts(action.payload.decorID, action.payload.counts)
-                end
+            -- COLLECTION_CATALOG_ROW_COUNTS_UPDATED: the rows were patched
+            -- synchronously in _ApplyEntry before the signal; nothing to do here.
             elseif actionType == A.COLLECTION_RESET then
                 R:ClearStore()
             -- COLLECTION_BULK_LOAD: handled reducer-side only (writes ownedDecorIDs).

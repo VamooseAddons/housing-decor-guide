@@ -88,10 +88,15 @@ Layout._resolveSpacing = resolveSpacing  -- exported for tests
 local function _padHorizontal(pad) return pad.left + pad.right end
 local function _padVertical(pad)   return pad.top  + pad.bottom end
 
-local function normalizePadding(p)
-    if p == nil then
-        return { top = 0, right = 0, bottom = 0, left = 0 }
-    end
+-- Normalised padding is memoised per padding value (a number, a spacing token
+-- or the spec's own table) for the life of the active scheme: the specs are
+-- static config and the tokens resolve through the scheme's metrics, so the
+-- answer only changes when the scheme does. Every layout pass used to mint 74
+-- of these (2026-09-13 audit). Callers only read the result.
+local NO_PADDING = { top = 0, right = 0, bottom = 0, left = 0 }
+local _padCache, _padCacheScheme = setmetatable({}, { __mode = "k" }), false
+
+local function _normalizePaddingUncached(p)
     if type(p) == "number" or type(p) == "string" then
         local n = resolveSpacing(p)
         return { top = n, right = n, bottom = n, left = n }
@@ -105,8 +110,22 @@ local function normalizePadding(p)
         }
     end
     -- Unexpected type (e.g. `padding = true` typo) -> loud-fail rather than silently
-    -- rendering with no padding. nil is already handled above (legit "no padding").
-    error(("normalizePadding: unexpected padding type %s (want nil / number / spacing-string / table)"):format(type(p)), 3)
+    -- rendering with no padding. nil is already handled by the caller (legit "no padding").
+    error(("normalizePadding: unexpected padding type %s (want nil / number / spacing-string / table)"):format(type(p)), 4)
+end
+
+local function normalizePadding(p)
+    if p == nil then return NO_PADDING end
+    local scheme = HDG.Theme:GetScheme()
+    if scheme ~= _padCacheScheme then
+        _padCache, _padCacheScheme = setmetatable({}, { __mode = "k" }), scheme
+    end
+    local pad = _padCache[p]
+    if not pad then
+        pad = _normalizePaddingUncached(p)
+        _padCache[p] = pad
+    end
+    return pad
 end
 
 local function specFor(config, id)
@@ -381,7 +400,7 @@ local function _computeLiveRowsCols(panels, view, viewSpec, ctx)
     local liveRows, liveCols = {}, {}
     for panelId, panelSpec in pairs(panels) do
         local visible = ctx == nil or ctx.panelVisible == nil
-            or ctx.panelVisible[panelId] ~= false  -- exception(false-positive): sparse map; absent entry = visible; only panels with visible-selector appear in the map
+            or ctx.panelVisible[panelId] ~= false  -- exception(false-positive): map is fully populated by Compute each pass; false = no cell in this view OR hidden by its own visibility selector
         local cellName = _resolvePanelCell(panelSpec, view)
         local cellSpec = cellName and (viewSpec.cells or {})[cellName] or nil
         if visible and cellSpec then
@@ -570,33 +589,81 @@ local function shouldRender(spec, view, state, ctx)
     return result ~= false and result ~= nil
 end
 
-local function buildChildIndex(config, view, state, ctx)
-    local index = {}
-    local function add(parentId, childId, order, slot)
+local _enclosingPanelOf  -- forward: defined beside findEnclosingPanel, which it walks
+
+-- `live` = the panel map Compute resolved for this pass: true only for a panel
+-- that has a cell in this view AND whose own visibility did not hide it. The
+-- placement loop only ever descends from live panels, so a section or widget
+-- under any other panel was resolved and indexed for nobody -- and that was
+-- most of the work: ~1,080 specs across every view of the addon walked per
+-- pass, 170 visibility selectors evaluated, ~2.4 MB allocated per dispatch,
+-- three quarters of everything the addon allocated in a session (2026-09-13
+-- allocation profile). Now a spec is looked at only when its enclosing panel
+-- is live. A spec whose in-chain reaches no panel is a validator error, not a
+-- layout case; it indexes nowhere either way.
+-- A registered spec the map does not know is either an in-chain that reaches
+-- no panel (the validator's job, at boot) or a spec registered AFTER the map
+-- was built. Both used to index silently under a parent nobody descends from;
+-- with the prune they would vanish from the screen silently instead. Say so.
+local function _panelOf(enclosing, id)
+    local panel = enclosing[id]
+    if panel == nil then
+        error(("Layout: spec %q has no enclosing panel in the layout map -- registered after the first Compute, or its in-chain reaches no panel"):format(tostring(id)), 2)
+    end
+    return panel
+end
+
+-- parentId -> slot -> { ids = {...}, specs = {...} }, every section and widget
+-- under its parent in `order`, built once per config (weak key, like the
+-- enclosing-panel map). The order is static config; sorting it on every pass,
+-- through a scratch entry per spec, was a third of the engine's own per-pass
+-- garbage (2026-09-13 audit).
+local _childrenCache = setmetatable({}, { __mode = "k" })
+local function _staticChildrenOf(config)
+    local map = _childrenCache[config]
+    if map then return map end
+    map = {}
+    local function add(parentId, childId, spec)
         if not parentId then return end
-        slot = slot or "body"
-        index[parentId] = index[parentId] or {}
-        index[parentId][slot] = index[parentId][slot] or {}
-        local bucket = index[parentId][slot]
-        bucket[#bucket + 1] = { id = childId, order = order }
+        local slot = spec.slot or "body"
+        map[parentId] = map[parentId] or {}
+        map[parentId][slot] = map[parentId][slot] or {}
+        local bucket = map[parentId][slot]
+        bucket[#bucket + 1] = { id = childId, spec = spec, order = spec.order }
     end
-
-    for id, spec in pairs(config.sections or {}) do
-        if shouldRender(spec, view, state, ctx) then add(spec["in"], id, spec.order, spec.slot) end
-    end
-    for id, spec in pairs(config.widgets or {}) do
-        if shouldRender(spec, view, state, ctx) then add(spec["in"], id, spec.order, spec.slot) end
-    end
-
-    for _, slots in pairs(index) do
-        for slotName, children in pairs(slots) do
-            table.sort(children, function(a, b) return a.order < b.order end)
-            local ordered = {}
-            for _, e in ipairs(children) do ordered[#ordered + 1] = e.id end
-            slots[slotName] = ordered
+    for id, spec in pairs(config.sections or {}) do add(spec["in"], id, spec) end
+    for id, spec in pairs(config.widgets  or {}) do add(spec["in"], id, spec) end
+    for _, slots in pairs(map) do
+        for slotName, entries in pairs(slots) do
+            table.sort(entries, function(a, b) return a.order < b.order end)
+            local ids, specs = {}, {}
+            for i, e in ipairs(entries) do ids[i], specs[i] = e.id, e.spec end
+            slots[slotName] = { ids = ids, specs = specs }
         end
     end
+    _childrenCache[config] = map
+    return map
+end
 
+local function buildChildIndex(config, view, state, ctx, live)
+    local index = {}
+    local enclosing = _enclosingPanelOf(config)
+    for parentId, slots in pairs(_staticChildrenOf(config)) do
+        for slotName, bucket in pairs(slots) do
+            local ids, specs, shown = bucket.ids, bucket.specs, nil
+            for i = 1, #ids do
+                local id = ids[i]
+                if live[_panelOf(enclosing, id)] and shouldRender(specs[i], view, state, ctx) then
+                    shown = shown or {}
+                    shown[#shown + 1] = id
+                end
+            end
+            if shown then
+                index[parentId] = index[parentId] or {}
+                index[parentId][slotName] = shown
+            end
+        end
+    end
     return index
 end
 
@@ -869,6 +936,133 @@ end
 
 -- Public API -----------------------------------------------------------------
 
+local _panelVisibleCache = setmetatable({}, { __mode = "k" })
+local function _panelVisibleScratch(config, view)
+    local byView = _panelVisibleCache[config]
+    if not byView then byView = {}; _panelVisibleCache[config] = byView end
+    local map = byView[view]
+    if not map then map = {}; byView[view] = map end
+    return map
+end
+
+-- Widget ids whose spec asks for an intrinsic ("auto" width or height), once
+-- per config. getAlong reads Layout._intrinsics for these ids and no other.
+local _autoSizedCache = setmetatable({}, { __mode = "k" })
+local function _autoSizedIds(config)
+    local ids = _autoSizedCache[config]
+    if ids then return ids end
+    ids = {}
+    for id, spec in pairs(config.widgets or {}) do
+        if spec.width == "auto" or spec.height == "auto" then ids[#ids + 1] = id end
+    end
+    _autoSizedCache[config] = ids
+    return ids
+end
+
+-- The intrinsics a Compute reads: id -> { width, height } for each auto-sized
+-- widget that has reported one, taken from the widget's _intrinsicWidth/Height
+-- (stamped by its dispatcher during Bind). One table per frame, entries reused
+-- in place: the previous shape harvested every widget on the frame into fresh
+-- tables each pass, 492 of them, 94% for ids no spec ever asked about.
+-- nil when the frame has no widget map (nothing built yet).
+function Layout:HarvestIntrinsics(frame, config)
+    local widgets = frame.widgets
+    if not widgets then return nil end
+    local out = frame._intrinsics
+    if not out then out = {}; frame._intrinsics = out end
+    for _, id in ipairs(_autoSizedIds(config)) do
+        local w = widgets[id]
+        local iw = w and w._intrinsicWidth
+        local ih = w and w._intrinsicHeight
+        if iw or ih then
+            local e = out[id]
+            if e then e.width, e.height = iw, ih
+            else out[id] = { width = iw, height = ih } end
+        else
+            out[id] = nil
+        end
+    end
+    return out
+end
+
+-- Every state path a layout pass for `view` can depend on: the active view,
+-- the view's dynamic track selectors, every `visible` selector of a panel with
+-- a cell in the view and of the sections and widgets under those panels, and
+-- the bindings of auto-sized widgets (their intrinsics move with their data).
+-- "*" when any of those reads "*". Static config, so once per (config, view).
+local _viewInterestCache = setmetatable({}, { __mode = "k" })
+local function _viewInterest(config, view)
+    local byView = _viewInterestCache[config]
+    if not byView then byView = {}; _viewInterestCache[config] = byView end
+    local interest = byView[view]
+    if interest then return interest end
+
+    interest = { "account.ui.view" }
+    local function addSelector(sel)
+        if interest ~= "*" and type(sel) == "string" then
+            interest = HDG.Paths.Union(interest, HDG.Selectors:GetReads(sel))
+        end
+    end
+    local function addBinding(binding)
+        if type(binding) == "string" then binding = { binding } end
+        if type(binding) ~= "table" then return end
+        for _, sel in pairs(binding) do
+            if type(sel) == "string" and sel:sub(1, 7) ~= "static:" and sel:sub(1, 7) ~= "locale:" then
+                addSelector(sel)
+            end
+        end
+    end
+
+    local viewSpec = config.window.views[view]
+    addSelector(viewSpec.dynamicColumns)
+    addSelector(viewSpec.dynamicRows)
+    local targets = {}
+    for panelId, panelSpec in pairs(config.panels or {}) do
+        if _resolvePanelCell(panelSpec, view) ~= nil then
+            targets[panelId] = true
+            addSelector(panelSpec.visible)
+        end
+    end
+    local enclosing = _enclosingPanelOf(config)
+    for id, spec in pairs(config.sections or {}) do
+        if targets[enclosing[id]] then addSelector(spec.visible) end
+    end
+    for id, spec in pairs(config.widgets or {}) do
+        if targets[enclosing[id]] then
+            addSelector(spec.visible)
+            if spec.width == "auto" or spec.height == "auto" then addBinding(spec.binding) end
+        end
+    end
+    byView[view] = interest
+    return interest
+end
+
+-- The interest set of a whole window pass: every slot view it composes. Keyed
+-- on the fill view (the edge slots are static per window). The main frame's
+-- Layout stage skips Compute when a dispatch touches none of it: before this
+-- gate every non-log dispatch ran a full solve, the 260 KB floor of every
+-- pipeline pass (2026-09-13 audit, item 5).
+local _windowInterestCache = setmetatable({}, { __mode = "k" })
+function Layout:WindowInterest(config, windowName, state)
+    config = config or HDG.LayoutConfig
+    local slots = resolveWindowSlots(config, windowName, state)
+    local byFill = _windowInterestCache[config]
+    if not byFill then byFill = {}; _windowInterestCache[config] = byFill end
+    local key = windowName .. "/" .. tostring(slots.fill)
+    local interest = byFill[key]
+    if interest then return interest end
+    interest = {}
+    for _, slot in ipairs({ "top", "bottom", "left", "right", "corner", "fill" }) do
+        local view = slots[slot]
+        if view then
+            interest = HDG.Paths.Union(interest, _viewInterest(config, view))
+            if interest == "*" then break end
+        end
+    end
+    byFill[key] = interest
+    return interest
+end
+
 function Layout:Compute(config, ctx)
     config = config or HDG.LayoutConfig
     if not config then error("Layout:Compute: no config (pass one or set HDG.LayoutConfig)", 2) end
@@ -885,10 +1079,18 @@ function Layout:Compute(config, ctx)
     -- panel.visible bindings (queue/materials/warehouse mode-toggle) were
     -- silently ignored. Populate ctx.panelVisible with the resolved bool
     -- so computeWindowCells + the placement loop both honor it.
-    ctx.panelVisible = ctx.panelVisible or {}
+    -- The map is fully repopulated below, so one table per (config, view)
+    -- serves every pass instead of four fresh 67-entry tables a pass.
+    ctx.panelVisible = ctx.panelVisible or _panelVisibleScratch(config, view)
     if config.panels then
         for panelId, panelSpec in pairs(config.panels) do
-            if shouldRender(panelSpec, view, ctx.state, ctx) then
+            -- A panel with no cell in this view cannot render here, so its
+            -- visibility selector is not consulted. After this loop the map
+            -- reads "live in this pass", which buildChildIndex uses to skip
+            -- every subtree the placement loop below would never reach.
+            if _resolvePanelCell(panelSpec, view) == nil then
+                ctx.panelVisible[panelId] = false
+            elseif shouldRender(panelSpec, view, ctx.state, ctx) then
                 ctx.panelVisible[panelId] = true
             else
                 ctx.panelVisible[panelId] = false
@@ -903,7 +1105,7 @@ function Layout:Compute(config, ctx)
     -- and excludes hidden entries from the index. layoutContainer then
     -- iterates only visible children, so the flex math allocates the full
     -- slot to siblings of a hidden child without any extra bookkeeping.
-    local index = buildChildIndex(config, view, ctx.state, ctx)
+    local index = buildChildIndex(config, view, ctx.state, ctx, ctx.panelVisible)
 
     -- _overSpecWarned dedupe persists across Compute passes (intentional).
     -- Earlier code reset this per-Compute; combined with Log:Warn routing
@@ -917,7 +1119,7 @@ function Layout:Compute(config, ctx)
 
     for panelId, panelSpec in pairs(config.panels or {}) do
         local cellName = _resolvePanelCell(panelSpec, view)
-        local visible = ctx.panelVisible == nil or ctx.panelVisible[panelId] ~= false  -- exception(false-positive): sparse map; absent entry = visible; only panels with visible-selector appear in the map
+        local visible = ctx.panelVisible == nil or ctx.panelVisible[panelId] ~= false  -- exception(false-positive): map is fully populated by Compute each pass; false = no cell in this view OR hidden by its own visibility selector
         local cellRect = cellName and cells[cellName] or nil
         if cellName and cellRect and visible then
             layoutContainer(panelId, cellRect, placements, config, index, true)
@@ -1021,6 +1223,23 @@ local function findEnclosingPanel(id, config)
         cursor = spec and spec["in"] or nil
     end
     return nil
+end
+
+-- id -> enclosing panel for every section and widget, built once per config
+-- and cached against the config table itself (weak key, so a test that builds
+-- a throwaway config does not pin it). LayoutConfig is assembled at file load
+-- and nothing writes its tables afterwards, so the map is as static as the
+-- specs it describes. Compute reads it every pass; walking the in-chains each
+-- pass instead would spend the pointer hops the prune exists to avoid.
+local _enclosingCache = setmetatable({}, { __mode = "k" })
+_enclosingPanelOf = function(config)
+    local map = _enclosingCache[config]
+    if map then return map end
+    map = {}
+    for id in pairs(config.sections or {}) do map[id] = findEnclosingPanel(id, config) end
+    for id in pairs(config.widgets  or {}) do map[id] = findEnclosingPanel(id, config) end
+    _enclosingCache[config] = map
+    return map
 end
 
 -- Walks up the in-chain returning the FIRST chromed section (or panel) that
@@ -1302,6 +1521,12 @@ local function _buildWidgets(config, rootFrame, buildKind, viewFilter, excludeSt
                 if widget then
                     widget.id = widgetId
                     rootFrame.widgets[widgetId] = widget
+                    -- Born hidden: Layout:Apply shows a widget the moment it has a
+                    -- placement, and its OnShow hook paints it then. Born shown, every
+                    -- widget of every view answered "shown" to the first open's
+                    -- wildcard Bind, which pushed all 769 of them before Layout had
+                    -- hidden the 27 views not on screen: 21 MB per open (2026-09-13).
+                    widget:Hide()
                 end
             end
         end

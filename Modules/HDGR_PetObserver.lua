@@ -44,6 +44,7 @@ P._attachable = {}
 P._bySpecies  = {}
 P._families   = {}
 P._pending    = false
+P._dirty      = true    -- the index is rebuilt on the first read after a journal change, not on the event
 P._summonedGUID = nil
 
 -- One owned pet -> index entry, or nil when it cannot ride decor.
@@ -112,21 +113,35 @@ end
 -- Lowest petID rather than first-seen because GetOwnedPetIDs' order is not a
 -- documented guarantee -- an order-dependent exemplar could change the displayed
 -- name between sessions when one copy is renamed and another is not.
-local function _keepAsExemplar(existing, candidate)
-    if not existing then return true end
-    return candidate.petID < existing.petID
-end
-
 -- Rebuild the whole index. Wholesale is cheap enough: one GetOwnedPetIDs plus a
 -- table read per pet, against a collection that tops out in the low thousands.
+-- Runs lazily: PET_JOURNAL_LIST_UPDATE fires in bursts at every login, for every
+-- player, and used to rebuild the ~1 MB index each time whether or not the Pets
+-- or Menagerie views ever read it (2026-09-13 audit). A journal change now only
+-- marks the index dirty and bumps the tick; the first reader after it rebuilds.
+function P:_Ensure()
+    if self._dirty then self:Rebuild() end
+end
+
 function P:Rebuild()
+    self._dirty = false
     local ids = _G.C_PetJournal.GetOwnedPetIDs() or {}  -- exception(boundary): nil before the journal populates
-    local bySpecies = {}
+    -- Pass 1: the exemplar per species (lowest petID) through the multi-return
+    -- read, which allocates no table. Pass 2 fetches the info TABLE -- the only
+    -- form that carries canAttachToDecor, ~3 KB a call -- for exemplars only,
+    -- never for a collector's second and third copies of a species.
+    local exemplar = {}
     for i = 1, #ids do
-        local entry = _entryFor(ids[i])
-        if entry and _keepAsExemplar(bySpecies[entry.speciesID], entry) then
-            bySpecies[entry.speciesID] = entry
+        local petID = ids[i]
+        local speciesID = _G.C_PetJournal.GetPetInfoByPetID(petID)  -- exception(boundary): nil on a GUID that just went stale
+        if speciesID and (exemplar[speciesID] == nil or petID < exemplar[speciesID]) then
+            exemplar[speciesID] = petID
         end
+    end
+    local bySpecies = {}
+    for speciesID, petID in pairs(exemplar) do
+        local entry = _entryFor(petID)
+        if entry then bySpecies[speciesID] = entry end
     end
     local list = {}
     for _, entry in pairs(bySpecies) do list[#list + 1] = entry end
@@ -181,10 +196,11 @@ function P:OnCompanionUpdate(companionType)
     HDG.Store:Dispatch({ type = HDG.Constants.ACTIONS.PETS_SUMMONED_CHANGED, payload = {} })
 end
 
-function P:GetAttachable() return self._attachable end
-function P:GetFamilies()   return self._families end
+function P:GetAttachable() self:_Ensure(); return self._attachable end
+function P:GetFamilies()   self:_Ensure(); return self._families end
 
 function P:GetBySpecies(speciesID)
+    self:_Ensure()
     return self._bySpecies[speciesID]   -- exception(nullable): the player may not own that species
 end
 
@@ -195,6 +211,7 @@ end
 -- shows its placeholder.
 function P:Resolve(speciesID)
     if not speciesID then return nil end
+    self:_Ensure()
     local entry = self._bySpecies[speciesID]
     if not entry then return nil end   -- exception(nullable): unowned / non-attachable species
     -- First return is the CARD scene, the one Blizzard's own pet grid uses. It is
@@ -245,7 +262,7 @@ function P:OnListUpdate()
     self._pending = true
     _G.C_Timer.After(REBUILD_DEBOUNCE, function()
         self._pending = false
-        self:Rebuild()
+        self._dirty = true
         HDG.Store:Dispatch({ type = HDG.Constants.ACTIONS.PETS_LIST_CHANGED, payload = {} })
     end)
 end

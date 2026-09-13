@@ -338,7 +338,9 @@ Selectors:Register("acq.allItems", {
             local exp = HDG.HousingCatalogObserver:GetExpansionForItem(itemID) or "?"
             -- First vendor entry for display (sourceName/sourceDetail in row list).
             local fv = row.vendors and row.vendors[1]
-            items[#items + 1] = {
+            -- Its own metatable: acq.items rows inherit these fields instead of
+            -- copying them (4.8 MB per rebuild before, 2026-09-13).
+            local item = {
                 itemID        = itemID,
                 decorID       = row.decorID,
                 name          = row.name or "Unknown",
@@ -355,6 +357,8 @@ Selectors:Register("acq.allItems", {
                 questID       = row.questID,
                 achievementID = row.achievementID,
             }
+            item.__index = item
+            items[#items + 1] = item
         end)
         table.sort(items, HDG.TableUtils.ByNameThenItemID)
         return items
@@ -738,12 +742,12 @@ Selectors:Register("acq.items", {
                                          repSet, zoneSet, factionSet, Aug)
             end
             if pass then
-                -- Shallow-copy + stamp: acq.allItems is memoized; mutating
-                -- its rows would corrupt the shared cache. Source chips: row
-                -- factories call UI.GateChips(ed.itemID, questDone, achEarned)
-                -- which reads row.sourceTags baked at BuildRow.
-                local stamped = {}
-                for k, v in pairs(item) do stamped[k] = v end
+                -- Inherit + stamp: acq.allItems is memoized, so the stamps land on
+                -- a row of their own that reads the item's fields through its
+                -- metatable. Source chips: row factories call
+                -- UI.GateChips(ed.itemID, questDone, achEarned), which reads
+                -- row.sourceTags baked at BuildRow.
+                local stamped = setmetatable({}, item)
                 stamped.isCollected = isColl and isColl(item.itemID) or false
                 _stampChipDim(stamped, item, state)
                 out[#out + 1] = stamped
@@ -1412,9 +1416,9 @@ Selectors:Register("acq.hasSelectedNpc", {
 -- view. In by-item view the header is the item -- its wowhead lives in the body
 -- (itemWowheadBtn); a vendor link there is wrong (esp. drop/quest items).
 Selectors:Register("acq.showVendorWowhead", {
-    calls = {"acq.isVendorView", "acq.hasSelectedNpc"},
+    calls = {"acq.isViewMode_vendor", "acq.hasSelectedNpc"},
     fn = function(state, ctx)
-        return Selectors:Call("acq.isVendorView", state, ctx)
+        return Selectors:Call("acq.isViewMode_vendor", state, ctx)
            and Selectors:Call("acq.hasSelectedNpc", state, ctx)
     end,
 })

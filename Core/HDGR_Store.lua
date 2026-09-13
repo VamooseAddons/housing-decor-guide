@@ -1432,7 +1432,10 @@ local function EnsureStateShape(state)
     state.account.blueprints.factions    = state.account.blueprints.factions    or {}  -- exception(boundary): SV migration (shareCode -> "Alliance"|"Horde")
     state.account.blueprints.pastedAt    = state.account.blueprints.pastedAt    or {}  -- exception(boundary): SV migration (shareCode -> time())
     state.account.blueprints.notes       = state.account.blueprints.notes       or {}  -- exception(boundary): SV migration (shareCode -> note text)
-    state.account.blueprints.applied     = state.account.blueprints.applied     or {}  -- exception(boundary): SV migration (shareCode -> { at, houseGUID, houseLabel })
+    -- 3.33.0 shipped an `applied` slice for an apply-history ledger that was
+    -- cancelled before anything wrote to it. Drop the orphan rather than carry
+    -- an empty table in every SavedVariables file forever.
+    state.account.blueprints.applied     = nil  -- exception(boundary): SV migration, removes a dead 3.33.0 slice
     state.account.ui.blueprints = state.account.ui.blueprints or { collapsedSections = {} }  -- exception(boundary): SV migration
     state.account.ui.blueprints.collapsedSections = state.account.ui.blueprints.collapsedSections or {}  -- exception(boundary): SV migration
     if state.account.ui.blueprints.hideBackups == nil then state.account.ui.blueprints.hideBackups = true end  -- exception(boundary): SV migration (false is a real value)
@@ -1536,7 +1539,8 @@ function HDG.Store:_Notify(actionType, invalidation, action)
         -- exception(boundary): Perf instrumentation is optional, may be absent in early boot / tests.
         local perf = HDG.Perf
         local timed = perf and perf:Enabled()
-        local t0 = timed and _G.debugprofilestop() or nil
+        local t0, k0
+        if timed then t0, k0 = perf:Open() end
 
         for _, n in ipairs(pending) do
             for _, fn in ipairs(snapshot) do
@@ -1545,7 +1549,7 @@ function HDG.Store:_Notify(actionType, invalidation, action)
         end
 
         if timed then
-            perf:RecordFlush(pending, _G.debugprofilestop() - t0, #snapshot)
+            perf:RecordFlush(pending, t0, k0, #snapshot)
         end
     end
 
@@ -1878,6 +1882,12 @@ HDG.Actions:Register{ name = "MAIN_WINDOW_TOGGLE",
 
 HDG.Actions:Register{ name = "NAV_TOGGLE_GROUP",
     persists = true,  combatUnsafe = false,
+    -- A fold changes one node's isCollapsed and nothing else, so the treeList
+    -- widget can mutate the live provider in place instead of rebuilding every
+    -- TreeNode (HDG.TreeList:SetItems honours this flag; it falls back to a full
+    -- rebuild if the root count changed). The path existed and no action ever
+    -- declared the flag, so every fold paid the rebuild (2026-09-13 audit).
+    treeCollapseOnly = true,
             invalidates = { "account.ui.nav.collapsedGroups" },
     reduce = function(state, payload)
         -- Flip a sidebar parent group's collapsed state (keyed by hub view).
@@ -4994,7 +5004,6 @@ HDG.Actions:Register{ name = "BLUEPRINT_FORGET", persists = true,
     invalidates = { "account.blueprints.pasted", "account.blueprints.pastedTypes",
                     "account.blueprints.labels", "account.blueprints.factions",
                     "account.blueprints.pastedAt", "account.blueprints.notes",
-                    "account.blueprints.applied",
                     "session.blueprints.selectedCode", "session.blueprints.manifests" },
     reduce = function(state, payload)
         local ab, sb, np = state.account.blueprints, state.session.blueprints, {}
@@ -5005,7 +5014,6 @@ HDG.Actions:Register{ name = "BLUEPRINT_FORGET", persists = true,
         ab.factions[payload.shareCode] = nil
         ab.pastedAt[payload.shareCode] = nil
         ab.notes[payload.shareCode]    = nil
-        ab.applied[payload.shareCode]  = nil
         sb.manifests[payload.shareCode] = nil
         if sb.selectedCode == payload.shareCode then sb.selectedCode = np[1] end  -- exception(nullable): may be no codes left
     end }

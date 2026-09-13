@@ -81,13 +81,16 @@ end
 -- Row envelopes carry name + kind ONLY (ruling 13: no size on rows; scale lives
 -- in the scene). Everything the row factory paints is stamped HERE so it never
 -- dives into state mid-paint (cookbook 03).
-local function _menagerieRow(row, ui, weight)
+-- No `selected` on the row: the list's SelectionBehaviorMixin stamps that onto
+-- the element itself and the controller re-syncs it from the Store after a
+-- re-push. Baking it here made every click rebuild the whole list to flip one
+-- boolean (1 MB a click, 2026-09-13 allocation audit).
+local function _menagerieRow(row, weight)
     return {
         kind      = "menagerieRow",
         speciesID = row.speciesID,
         name      = row.displayName,
         kindLabel = row.kind or "?",   -- exception(nullable): post-build species -- "?" is the honest mark
-        selected  = row.speciesID == ui.selectedSpeciesID,
         -- Only the Room axis ranks, so only its rows say how well they fit. The
         -- weight itself never reaches the row: the player is owed the judgement
         -- ("belongs here"), not the number behind it.
@@ -99,7 +102,7 @@ end
 Selectors:Register("menagerie.items", {
     memoized = true,
     reads = { "session.ui.menagerie.axis", "session.ui.menagerie.axval",
-              "session.ui.menagerie.search", "session.ui.menagerie.selectedSpeciesID",
+              "session.ui.menagerie.search",
               "session.resolvers.pets.tick", "session.resolvers.staticData.tick" },
     fn = function(state)
         local ui = state.session.ui.menagerie
@@ -125,7 +128,7 @@ Selectors:Register("menagerie.items", {
                 keep = row.displayName:lower():find(needle, 1, true) ~= nil
                     or (row.kind and row.kind:lower():find(needle, 1, true) ~= nil)
             end
-            if keep then out[#out + 1] = _menagerieRow(row, ui, weight) end
+            if keep then out[#out + 1] = _menagerieRow(row, weight) end
         end
 
         if ranked then

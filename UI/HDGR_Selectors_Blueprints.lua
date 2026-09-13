@@ -67,6 +67,18 @@ local function _byName(entries)
     return out
 end
 
+-- Dye counts are Blizzard's, and Blizzard counts only the dyes in your BAGS --
+-- the Warband Bank is ignored (Madailein Hatter, Discord 2026-09-14). HDG shows
+-- numMissing as the server sent it, so the dye row's tooltip says where the
+-- number comes from instead of HDG recounting it. Appended after any tooltip
+-- the server shipped for the entry.
+local function _entryTooltip(ct, e)
+    if ct ~= 4 then return e.tooltip end  -- exception(boundary): server tooltip is optional
+    local note = HDG.Locale:Get("TIP_BP_DYE_COUNT_NOTE")
+    if not e.tooltip then return note end  -- exception(boundary): server tooltip is optional
+    return e.tooltip .. "\n\n" .. note
+end
+
 -- The inspector envelope: manifest -> rendered groups with acquisition joins.
 -- nil when nothing is selected; a groupless envelope while pending/failed.
 -- missingCount counts ACQUIRABLE entries (Decor=3/Dye=4) with numMissing>0 --
@@ -79,7 +91,7 @@ end
 Selectors:Register("blueprints.inspector", {
     reads = { "session.blueprints.selectedCode", "session.blueprints.manifests",
               "session.ui.blueprints.missingOnly", "session.ui.blueprints.collapsedGroups",
-              "session.resolvers.catalog.tick" },
+              "session.resolvers.catalog.tick", "account.config.locale" },
     fn = function(state)
         local sb = state.session.blueprints
         local code = sb.selectedCode
@@ -103,7 +115,7 @@ Selectors:Register("blueprints.inspector", {
                     local itemID, srcKind, srcName = _resolveAcq(e, nil)
                     items[#items + 1] = {
                         name = e.name, total = e.total, numMissing = e.numMissing,
-                        invalid = e.invalid, tooltip = e.tooltip,
+                        invalid = e.invalid, tooltip = _entryTooltip(g.contentType, e),
                         itemID = itemID, srcKind = srcKind, srcName = srcName,
                     }
                 end
@@ -419,7 +431,7 @@ Selectors:Register("blueprints.entries", {
               "session.blueprints.manifests", "account.blueprints.pasted",
               "account.blueprints.pastedTypes", "account.blueprints.labels",
               "account.blueprints.factions", "account.blueprints.pastedAt",
-              "account.blueprints.notes", "account.blueprints.applied" },
+              "account.blueprints.notes" },
     fn = function(state)
         local sb, ab, out = state.session.blueprints, state.account.blueprints, {}
         for _, code in ipairs(ab.pasted) do
@@ -432,7 +444,6 @@ Selectors:Register("blueprints.entries", {
                 isAuto = false,
                 faction = ab.factions[code],  -- exception(nullable): only House/Exterior, only after inspect
                 date = ab.pastedAt[code],     -- exception(nullable): codes pasted before the stamp existed sort last
-                applied = ab.applied[code],   -- exception(nullable): never applied
                 note = ab.notes[code] or "",  -- exception(nullable): no note yet
                 isSelected = (code == sb.selectedCode),
             }
@@ -451,7 +462,6 @@ Selectors:Register("blueprints.entries", {
                     groupName = groupName,
                     faction = ab.factions[e.shareCode],  -- exception(nullable): only House/Exterior, only after inspect
                     date = e.creationTime,
-                    applied = ab.applied[e.shareCode],   -- exception(nullable): never applied
                     note = ab.notes[e.shareCode] or "",  -- exception(nullable): no note yet
                     isSelected = (e.shareCode == sb.selectedCode),
                 }
@@ -670,17 +680,13 @@ Selectors:Register("blueprints.libraryDetailNameLabel", { calls = { "blueprints.
     fn = function(state, ctx) local d = _detail(state, ctx); return d and NAME_LABEL[d.src] or "" end })  -- exception(nullable): no selection
 Selectors:Register("blueprints.libraryRemoveText", { calls = { "blueprints.libraryDetail" },
     fn = function(state, ctx) local d = _detail(state, ctx); return d and REMOVE_TEXT[d.src] or "" end })  -- exception(nullable): no selection
--- "Pasted 09 Sep 2026  --  applied 09 Sep 2026 to 47 Twilight Bluffs"
+-- "Pasted 09 Sep 2026" for a pasted code, "Saved 09 Sep 2026" for a catalog row.
 Selectors:Register("blueprints.libraryDetailMeta", { calls = { "blueprints.libraryDetail" },
     fn = function(state, ctx)
         local d = _detail(state, ctx)
         if not d then return "" end  -- exception(nullable): no selection
         local verb = d.src == "pasted" and "Pasted" or "Saved"
-        local text = d.date and (verb .. " " .. HDG.Format.ShortDate(d.date)) or (verb .. " --")  -- exception(nullable): undated paste
-        if d.applied then
-            text = text .. "  --  applied " .. HDG.Format.ShortDate(d.applied.at) .. " to " .. d.applied.houseLabel
-        end
-        return text
+        return d.date and (verb .. " " .. HDG.Format.ShortDate(d.date)) or (verb .. " --")  -- exception(nullable): undated paste
     end })
 
 -- "Manual blueprints 2 / 50 -- Backups 1 / 10 -- Pasted codes 2 (no limit)

@@ -147,9 +147,13 @@ local function _bindWidget(widget, id, spec)
 
     -- OnShow hook: becomes-visible -> push current state (HookScript preserves existing handler).
     -- Auto-sized widgets skipped at boot get a reflow request when their intrinsic changes.
+    -- Silent while the pipeline itself is showing the main frame: that pass binds
+    -- everything with "*" right after, so the hook's push was a second full paint
+    -- of every bound widget in every view (20 MB on each open, 2026-09-13 audit).
     if widget.HookScript then  -- exception(boundary): FontString labels lack HookScript; binding engine handles both frame and label widget types
         local autoSized = spec.width == "auto" or spec.height == "auto"
         widget:HookScript("OnShow", function(self)
+            if Engine._showingForPipeline then return end
             local bw, bh = self._intrinsicWidth, self._intrinsicHeight
             pushOne(self, HDG.Store:GetState(), { actionType = "ON_SHOW" })
             if autoSized and (self._intrinsicWidth ~= bw or self._intrinsicHeight ~= bh)
@@ -158,6 +162,17 @@ local function _bindWidget(widget, id, spec)
             end
         end)
     end
+end
+
+-- Show a frame on the pipeline's behalf: the OnShow hooks of every bound
+-- descendant stay silent because the same pass paints them all through Apply.
+-- Apply clears the flag too, so a handler that throws inside Show cannot
+-- leave every later OnShow push disabled for the session.
+Engine._showingForPipeline = false
+function Engine:ShowForPipeline(frame)
+    self._showingForPipeline = true
+    frame:Show()
+    self._showingForPipeline = false
 end
 
 -- Bind all widgets with a `binding` spec. Call once at build time.
@@ -204,6 +219,7 @@ end
 -- Push state to every bound widget. `invalidation` (path list or "*") scopes
 -- the walk; nil defaults to "*".
 function Engine:Apply(rootFrame, state, ctx, invalidation)
+    self._showingForPipeline = false   -- see ShowForPipeline
     if not (rootFrame and rootFrame.widgets and state) then return end
     invalidation = invalidation or "*"
 

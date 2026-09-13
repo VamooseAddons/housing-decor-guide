@@ -207,8 +207,9 @@ end
 -- active view AND the window is shown. (Favor/level fetching stays ungated -- it drives the
 -- ring and is harmless to the dashboard.) account.ui.view persists across closes, hence the
 -- mainWindowShown half. Mirrors the CATALOG_CONSUMING_TAB_VIEWS gate.
-local function _houseLevelViewActive()
-    local ui = HDG.Store:GetState().account.ui
+-- Shared with HouseAggregator, whose dashboard build is gated on the same views.
+function HO.HouseLevelViewActive(state)
+    local ui = state.account.ui
     return ui.mainWindowShown == true and HDG.Constants.HOUSE_LEVEL_VIEWS[ui.view] == true
 end
 
@@ -342,7 +343,7 @@ end
 -- rewards, once per level (RequestRewardsForLevel dedups on the cache). Self-gates on the view so
 -- it stays off Blizzard's dashboard reward track whenever HDG isn't actually displaying rewards.
 function HO:RequestRewardsForOwnedHouses()
-    if not _houseLevelViewActive() then return end
+    if not HO.HouseLevelViewActive(HDG.Store:GetState()) then return end
     for _, h in pairs(HDG.Store:GetState().session.house.ownedHouses) do
         if h.level and h.maxLevel then
             local target = (h.level < h.maxLevel) and (h.level + 1) or h.maxLevel

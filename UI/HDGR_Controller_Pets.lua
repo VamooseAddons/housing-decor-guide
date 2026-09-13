@@ -101,6 +101,16 @@ HDG.Rows:Register("petRow", {
 function PetsController:Wire(rootFrame)
     HDG.UI.WireSearchBox(rootFrame, "petPanel.search", "decor", "searchQuery")
 
+    -- Selection highlight is owned by the list's SelectionBehaviorMixin (the
+    -- click stamps ed.selected) and re-applied from the Store after any re-push
+    -- here -- the rows selector no longer bakes it, so a search or a pets tick
+    -- would otherwise drop the highlight. Same wiring as the Decor list.
+    local listBox = HDG.UI.W(rootFrame, "petPanel.list")
+    if listBox and listBox.WireStoreSelectionSync then
+        listBox:WireStoreSelectionSync("session.ui.decor.selectedSpeciesID",
+            function(ed, id) return id ~= nil and ed.speciesID == id end)
+    end
+
     -- Summon / Dismiss. Read the LATCHED summon state, not the live API: after a
     -- summon GetSummonedPetGUID reads nil for up to 1.5s, so deciding here from the
     -- live call would toggle the wrong way. The observer latches on

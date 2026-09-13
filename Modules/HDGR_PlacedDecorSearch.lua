@@ -90,8 +90,17 @@ local function _counts()
     return total, found
 end
 
+-- The counter is re-derived only when the query or the provider's size moved:
+-- at 10 Hz the full enumeration and a fresh string every tick were 7 KB/s for
+-- the whole decorating session (2026-09-13 audit).
+local _countedQuery, _countedSize = nil, nil
 local function _refreshCount()
     if not _countFs then return end
+    local p = _panel()
+    local dp = p and p.ScrollBox and p.ScrollBox:GetDataProvider()
+    local size = dp and dp:GetSize() or 0
+    if _query == _countedQuery and size == _countedSize then return end
+    _countedQuery, _countedSize = _query, size
     local total, found = _counts()
     if _query == "" then
         _countFs:SetText(("Total: %d"):format(total))

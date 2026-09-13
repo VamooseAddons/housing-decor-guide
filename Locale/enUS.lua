@@ -349,6 +349,7 @@ HDG.Locale:Register("enUS", {
     TIP_BP_FORGET_BODY          = "Remove this pasted code from HDG's list, along with any name you gave it. The code itself keeps working -- paste it again any time.",
     TIP_BP_MISSING_TITLE        = "Missing only",
     TIP_BP_MISSING_BODY         = "Hide everything you can already use for this house, leaving just the items to acquire.",
+    TIP_BP_DYE_COUNT_NOTE       = "|cffffd200Note:|r dye counts come from Blizzard and only include dyes in your bags -- dyes in your Warband Bank aren't counted. Move them to your bags before importing.",
     TIP_BP_ROUTE_TITLE          = "Route missing to Shopping",
     TIP_BP_ROUTE_BODY           = "Creates (or refreshes) a shopping list named after this blueprint with every missing item.",
     TIP_BP_SET_TITLE            = "Import as Furnishing Set",

@@ -584,6 +584,13 @@ local _navBuilders = {
 }
 
 Selectors:Register("nav.tree", {
+    -- Memoized: the sidebar is bound in every view, so every dispatch that
+    -- reached the pipeline re-pushed it and every call rebuilt all ~33 nodes
+    -- (26 KB a call, 42 calls in one scenario -- 2026-09-13 allocation audit).
+    -- The closure is complete: collapsedGroups plus the machine-built call
+    -- list below, which names every isActive / isLeafActive / gate selector
+    -- the builders can reach. Nothing here reads ctx, _G or the clock.
+    memoized = true,
     reads = { "account.ui.nav.collapsedGroups" },   -- _navParentNode + _navHomeNode read it for collapse
     calls = _navTreeCalls,
     fn = function(state, ctx)

@@ -37,7 +37,12 @@ Selectors:Register("pets.selectedSpeciesID", {
 
 -- One index entry -> row envelope. Everything the row factory paints is stamped
 -- HERE so it never dives into state or the observer mid-paint (cookbook 03).
-local function _petRow(entry, families, selectedID)
+-- No `selected` on the row: the list's SelectionBehaviorMixin stamps that onto
+-- the element itself, and the controller re-syncs it from the Store after any
+-- re-push. Baking it here made every click rebuild all ~1,950 envelopes to flip
+-- one boolean (1.9 MB a click, 2026-09-13 allocation audit). Same shape as
+-- decor.items and acq.items.
+local function _petRow(entry, families)
     return {
         speciesID   = entry.speciesID,
         petID       = entry.petID,
@@ -47,7 +52,6 @@ local function _petRow(entry, families, selectedID)
         icon        = entry.icon,
         familyLabel = families[entry.petType],   -- exception(nullable): an unknown petType has no family string
         height      = entry.height,
-        selected    = entry.speciesID == selectedID,
     }
 end
 
@@ -56,18 +60,17 @@ end
 Selectors:Register("pets.items", {
     memoized = true,
     reads = { "session.resolvers.pets.tick", "session.ui.decor.searchQuery" },
-    calls = { "pets.selectedSpeciesID", "decor.activeTag" },
+    calls = { "decor.activeTag" },
     fn = function(state, ctx)
         local entries    = HDG.PetObserver:GetAttachable()
         local families   = HDG.PetObserver:GetFamilies()
-        local selectedID = Selectors:Call("pets.selectedSpeciesID", state, ctx)
         local activeTag  = Selectors:Call("decor.activeTag", state, ctx)
         local q          = state.session.ui.decor.searchQuery
         local needle     = q ~= "" and q:lower() or nil
 
         local out = {}
         for i = 1, #entries do
-            local row = _petRow(entries[i], families, selectedID)
+            local row = _petRow(entries[i], families)
             local nameOk   = not needle or row.displayName:lower():find(needle, 1, true) ~= nil
             local familyOk = not activeTag or row.familyLabel == activeTag
             if nameOk and familyOk then out[#out + 1] = row end

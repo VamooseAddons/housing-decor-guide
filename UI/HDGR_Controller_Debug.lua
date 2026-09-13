@@ -47,7 +47,7 @@ local function _leafCount(t, seen)
 end
 
 -- { name, entries, leaves, bytes } sorted desc by bytes.
-local function _profileChildren(src)
+local function _profileChildren(src, seen)
     local rows = {}
     if type(src) ~= "table" then return rows end
     for k, v in pairs(src) do
@@ -56,7 +56,7 @@ local function _profileChildren(src)
                 name    = k,
                 entries = _entryCount(v),
                 leaves  = _leafCount(v, {}),
-                bytes   = _approxBytes(v, {}),
+                bytes   = _approxBytes(v, seen),
             }
         end
     end
@@ -66,7 +66,7 @@ end
 
 -- Catalog observer mirror rows.
 local OBSERVER_MIRRORS = {"byDecorID","byItemID","byVendor","byZone","byNpc","byRecipe","bySource"}
-local function _collectObserverRows()
+local function _collectObserverRows(seen)
     local obs = HDG.HousingCatalogObserver
     local rows = {}
     for _, key in ipairs(OBSERVER_MIRRORS) do
@@ -75,16 +75,18 @@ local function _collectObserverRows()
             rows[#rows + 1] = {
                 name    = key,
                 entries = _entryCount(t),
-                bytes   = _approxBytes(t, {}),
+                bytes   = _approxBytes(t, seen),
             }
         end
     end
-    table.sort(rows, function(a, b) return a.bytes > b.bytes end)
+    -- Report order, not size order: with one `seen` per report the second
+    -- mirror over the same rows (byItemID after byDecorID) shows only its own
+    -- keys, which is the honest reading.
     return rows
 end
 
 -- Static-data globals (_G.HDGR_*DB): tables with >=5 entries, excluding HDG/HDG_DB.
-local function _collectStaticDataRows()
+local function _collectStaticDataRows(seen)
     local rows = {}
     for k, v in pairs(_G) do
         if type(k) == "string" and k:match("^HDGR_") and type(v) == "table"
@@ -94,7 +96,7 @@ local function _collectStaticDataRows()
                 rows[#rows + 1] = {
                     name    = k,
                     entries = n,
-                    bytes   = _approxBytes(v, {}),
+                    bytes   = _approxBytes(v, seen),
                 }
             end
         end
@@ -125,12 +127,12 @@ local function _expandDeepNamespace(r, deep)
     end
 end
 
-local function _collectHdgrNamespaceRows()
+local function _collectHdgrNamespaceRows(seen)
     local rows, deep = {}, {}
     for k, v in pairs(HDG or {}) do
         if type(k) == "string" and type(v) == "table" and not HDGR_DEEP_EXCLUDE[k] then
             rows[#rows + 1] = { name = k, entries = _entryCount(v),
-                                bytes = _approxBytes(v, {}), ref = v }
+                                bytes = _approxBytes(v, seen), ref = v }
         end
     end
     table.sort(rows, function(a, b) return a.bytes > b.bytes end)
@@ -142,18 +144,30 @@ local function _collectHdgrNamespaceRows()
     return rows, deep
 end
 
--- Subscriber + selector cache stats.
-local function _collectSubscriberStats()
+-- Subscriber + selector memo stats.
+--
+-- Memos live on the REGISTRY ENTRIES -- `def._cached` for a plain memo, `def._memo`
+-- for an inputs memo -- never in a `Selectors._cache` table. This helper used to
+-- read that nonexistent field, so it always printed "0 entries", which reads as
+-- "nothing is cached" and sent a memory investigation down a wrong turn
+-- (2026-09-13). An inputs memo closes over its cached value, so no table walk can
+-- size it; those are counted separately rather than reported as zero bytes.
+local function _collectSubscriberStats(seen)
     local subN = 0
     local subT = HDG.Store._subscribers
     if type(subT) == "table" then for _ in pairs(subT) do subN = subN + 1 end end
-    local selBytes, selEntries = 0, 0
-    local selCache = HDG.Selectors and (HDG.Selectors._cache or HDG.Selectors.cache)
-    if type(selCache) == "table" then
-        selEntries = _entryCount(selCache)
-        selBytes   = _approxBytes(selCache, {})
+    local memoTotal, memoLive, memoBytes, memoOpaque = 0, 0, 0, 0
+    for _, def in pairs(HDG.Selectors:GetRegistry()) do
+        if def.memoized then
+            memoTotal = memoTotal + 1
+            if def._cached ~= nil then
+                memoLive  = memoLive + 1
+                memoBytes = memoBytes + _approxBytes(def._cached, seen)
+            end
+            if def._memo then memoOpaque = memoOpaque + 1 end
+        end
     end
-    return subN, selEntries, selBytes
+    return subN, memoTotal, memoLive, memoBytes, memoOpaque
 end
 
 -- Format the assembled memory snapshot into a copy-dialog-ready string.
@@ -194,9 +208,11 @@ local function _formatMemoryReport(snap)
         add("  %-32s %10d %12.1f", r.name, r.entries, kb(r.bytes))
     end
     add("")
-    add("Subscribers + selector cache:")
+    add("Subscribers + selector memos:")
     add("  Store._subscribers entries:          %d", snap.subN)
-    add("  Selectors._cache entries:            %d   (approx %.1f KB)", snap.selEntries, kb(snap.selBytes))
+    add("  Memoized selectors registered:       %d", snap.memoTotal)
+    add("    holding a live cached value:       %d   (approx %.1f KB)", snap.memoLive, kb(snap.memoBytes))
+    add("    inputs-memo (value not walkable):  %d", snap.memoOpaque)
     add("")
     add("HDG.* namespace deep dive (sorted by approx bytes):")
     add("  %-40s %10s %12s", "subsystem", "entries", "approx KB")
@@ -217,6 +233,8 @@ local function _formatMemoryReport(snap)
     add("Notes:")
     add("  - 'leaves' is total recursive leaf count (deep entry count).")
     add("  - 'approx KB' is serializable-bytes proxy; in-memory table overhead is 2-4x higher.")
+    add("  - A table reachable from two rows is counted once, on the row printed first")
+    add("    (catalog mirrors share their rows; byItemID shows only its own keys).")
     add("  - Lua heap includes ALL addons + Blizzard UI; per-addon mem is just HousingDecorGuide.")
     return table.concat(lines, "\n")
 end
@@ -224,21 +242,32 @@ end
 local function _snapshotMemory()
     if _G.UpdateAddOnMemoryUsage then _G.UpdateAddOnMemoryUsage() end  -- exception(boundary): UpdateAddOnMemoryUsage removed in Midnight; guard is API-version check
     local state = HDG.Store:GetState()  -- exception(false-positive): top-level debug helper, not a row factory
-    local subN, selEntries, selBytes = _collectSubscriberStats()
-    local hdgrRows, hdgrDeep         = _collectHdgrNamespaceRows()
+    -- ONE visited set for the whole report, threaded in report order, so a table
+    -- reachable from two places (the two catalog mirrors, the Theme registry and
+    -- the frame tree, the two pet indexes) is counted once. It used to be counted
+    -- from every root, which read the floor 3 to 5 MB high (2026-09-13 audit).
+    local seen = {}
+    local observer = _collectObserverRows(seen)
+    local account  = _profileChildren(state.account, seen)
+    local session  = _profileChildren(state.session, seen)
+    local globals  = _collectStaticDataRows(seen)
+    local subN, memoTotal, memoLive, memoBytes, memoOpaque = _collectSubscriberStats(seen)
+    local hdgrRows, hdgrDeep         = _collectHdgrNamespaceRows(seen)
     return {
         addonMem      = (_G.GetAddOnMemoryUsage and _G.GetAddOnMemoryUsage("HousingDecorGuide")) or 0,
         heap          = collectgarbage("count"),
         svBytes       = _G.HDG_DB and _approxBytes(_G.HDG_DB, {}) or 0,
         catalogStatus = state.session.catalog.status,
         catalogSweep  = state.session.resolvers.catalog.tick or 0,
-        observer      = _collectObserverRows(),
-        account       = _profileChildren(state.account),
-        session       = _profileChildren(state.session),
-        globals       = _collectStaticDataRows(),
+        observer      = observer,
+        account       = account,
+        session       = session,
+        globals       = globals,
         subN          = subN,
-        selEntries    = selEntries,
-        selBytes      = selBytes,
+        memoTotal     = memoTotal,
+        memoLive      = memoLive,
+        memoOpaque    = memoOpaque,
+        memoBytes     = memoBytes,
         hdgrRows      = hdgrRows,
         hdgrDeep      = hdgrDeep,
     }

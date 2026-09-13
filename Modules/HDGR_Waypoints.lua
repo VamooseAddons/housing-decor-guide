@@ -389,6 +389,9 @@ end
 -- Skips entries without valid coords (canWaypoint=false / mapID nil).
 -- Returns the count of pins placed.
 function HDG.Waypoints:SetMultiple(vendors)
+    -- Replace, never append: each Map All click used to add a second copy of
+    -- every pin and the pool grew with it for the session.
+    wipe(_pendingPins)
     local placed = 0
     for _, v in ipairs(vendors) do
         if v.mapID and v.x and v.y then

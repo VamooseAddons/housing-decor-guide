@@ -553,6 +553,13 @@ Selectors:Register("house.widgetRows", {
         "house.goblinTopLumberData",
         "house.recordsData",
     },
+    -- Memoized: this builds all 24 card envelopes and bin-packs them, ~38 KB a
+    -- call, and house.isBlank asks it a yes-or-no on every layout pass -- 714
+    -- calls and 27 MB in one session with the House tab never open (2026-09-13
+    -- allocation profile). Every read is declared above and the engine folds
+    -- the call list into the invalidation closure, so the one slot is safe;
+    -- ctx carries no data any of these selectors read.
+    memoized = true,
     fn = function(state, ctx)
         -- Readiness gate: snapshot {} until first build (deferred to window-open
         -- to dodge the cold-client housing-C CTD). Card renderers strict-read snapshot
