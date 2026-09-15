@@ -983,6 +983,26 @@ Selectors:Register("blueprints.hasManifest", {
         return m ~= nil and m.status == "received"
     end,
 })
+-- Stale = received before the last decor-storage change (BLUEPRINT_MANIFESTS_STALE).
+-- Drives the Refresh button: lit and worded as a warning only while the
+-- counts on screen are suspect; dim otherwise so it never invites a needless
+-- 5-10 s fetch.
+Selectors:Register("blueprints.manifestStale", {
+    reads = { "session.blueprints.selectedCode", "session.blueprints.manifests" },
+    fn = function(state)
+        local sb = state.session.blueprints
+        local m = sb.selectedCode and sb.manifests[sb.selectedCode]
+        return m ~= nil and m.status == "received" and m.stale == true
+    end,
+})
+Selectors:Register("blueprints.refreshText", {
+    reads = { "account.config.locale" },
+    calls = { "blueprints.manifestStale" },
+    fn = function(state, ctx)
+        local stale = Selectors:Call("blueprints.manifestStale", state, ctx)
+        return HDG.Locale:Get(stale and "BP_REFRESH_STALE" or "BP_REFRESH")
+    end,
+})
 Selectors:Register("blueprints.blankDetail", {
     reads = { "session.blueprints.selectedCode" },
     fn = function(state) return state.session.blueprints.selectedCode == nil end,

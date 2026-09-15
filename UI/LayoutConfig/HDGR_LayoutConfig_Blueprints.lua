@@ -102,6 +102,14 @@ LC.widgets["blueprintsListPanel.list"] = {
 LC.sections["blueprintsListPanel.footerRow"] = {
     ["in"] = "blueprintsListPanel", layout = "horizontal", height = 22, gap = "sm", order = 30,
 }
+-- Link in chat lives bottom-left, opposite Save (owner ruling 2026-09-15): it
+-- acts on the selected entry like Save does, and the code row was over-full
+-- once Refresh joined it.
+LC.widgets["blueprintsListPanel.linkBtn"] = {
+    tooltip = { recipe = "BlueprintLink" }, kind = "button", ["in"] = "blueprintsListPanel.footerRow",
+    font = "body", text = "locale:BP_LINK_LONG", width = 96, height = 22, order = 3,
+    binding = { enabled = "blueprints.hasSelection" },
+}
 LC.widgets["blueprintsListPanel.footerSpacer"] = {
     tooltip = false, kind = "spacer", ["in"] = "blueprintsListPanel.footerRow", width = "fill", height = 14, order = 5,
 }
@@ -135,9 +143,14 @@ LC.widgets["blueprintsDetailPanel.codeBox"] = {
     tooltip = { recipe = "BlueprintCopyCode" }, kind = "editbox", ["in"] = "blueprintsDetailPanel.codeRow",
     font = "small", height = 20, width = 200, order = 5, multiline = false,
 }
-LC.widgets["blueprintsDetailPanel.linkBtn"] = {
-    tooltip = { recipe = "BlueprintLink" }, kind = "button", ["in"] = "blueprintsDetailPanel.codeRow",
-    font = "small", text = "locale:BP_LINK", width = 46, height = 20, order = 7,
+-- Refresh: dim while the manifest is current; lit and reworded the moment
+-- decor storage changes under it, so a player working through several codes
+-- sees "out of date" before they buy off it. Rides the code row (the rename
+-- box is the fill slot and gives up the width) rather than its own row.
+LC.widgets["blueprintsDetailPanel.refreshBtn"] = {
+    tooltip = { recipe = "BlueprintRefresh" }, kind = "button", ["in"] = "blueprintsDetailPanel.codeRow",
+    variant = "tertiary", font = "small", width = "auto", height = 20, order = 8,
+    binding = { text = "blueprints.refreshText", enabled = "blueprints.manifestStale" },
 }
 LC.widgets["blueprintsDetailPanel.renameLabel"] = {
     tooltip = false, kind = "label", ["in"] = "blueprintsDetailPanel.codeRow",

@@ -41,16 +41,27 @@ local function _shownName()
     return (entry and (entry.isOwn and entry.name or entry.label)) or ""  -- exception(nullable): nothing selected / unlabelled paste
 end
 
--- Select a code and fetch its manifest unless one is already cached OR already
--- in flight (design's in-flight dedupe: re-firing a pending request resets
--- requestedAt, silently postponing the escalation copy and the timeout sweep).
--- Failed manifests DO re-request -- re-selecting the row is the retry path.
+-- Select a code and fetch its manifest unless a FRESH one is already cached OR
+-- one is already in flight (design's in-flight dedupe: re-firing a pending
+-- request resets requestedAt, silently postponing the escalation copy and the
+-- timeout sweep). Failed manifests re-request, and so do received ones the
+-- storage observer has marked stale -- selecting a row is the fetch moment,
+-- so a manifest fetched before a shopping trip cannot outlive the trip.
 local function _selectAndFetch(shareCode)
     HDG.Store:Dispatch({ type = A.BLUEPRINT_SELECT, payload = { shareCode = shareCode } })
     local m = HDG.Store:GetState().session.blueprints.manifests[shareCode]  -- exception(false-positive): top-level controller read
-    if not m or (m.status ~= "received" and m.status ~= "pending") then
+    local fresh = m and (m.status == "pending" or (m.status == "received" and not m.stale))
+    if not fresh then
         HDG.BlueprintObserver:RequestContents(shareCode, _targetHouse())
     end
+end
+
+-- The Refresh button: re-ask the server for the SELECTED manifest. Lit only
+-- while that manifest is stale (LayoutConfig `enabled` binding), so the
+-- click never races an in-flight request.
+function C:_RefreshManifest()
+    local code = _selectedCode()
+    if code then HDG.BlueprintObserver:RequestContents(code, _targetHouse()) end
 end
 
 -- Library mode (design 2026-09-11): a session-only sub-view; the picker and
@@ -514,13 +525,17 @@ HDG.Rows:Register("blueprintContentRow", {
 -- C_HousingBlueprint); a structurally-valid code then goes through the normal
 -- select+fetch path. pasteError drives the inline field state.
 
+-- Returns true when the code was accepted, so the caller can empty the box:
+-- the code now lives in the collection and leaving it behind meant the next
+-- paste appended to it (Soul, 2026-09-15). A rejected code stays put so it
+-- can be corrected next to the error line.
 function C:_SubmitPaste(text)
     local code = HDG.Format.Trim(text)
-    if code == "" then return end
+    if code == "" then return false end
     if not HDG.BlueprintObserver:IsShareCodeValid(code) then
         HDG.Store:Dispatch({ type = A.UI_SET_TRANSIENT,
             payload = { view = "blueprints", key = "pasteError", value = true } })
-        return
+        return false
     end
     HDG.Store:Dispatch({ type = A.UI_SET_TRANSIENT,
         payload = { view = "blueprints", key = "pasteError", value = false } })
@@ -530,6 +545,7 @@ function C:_SubmitPaste(text)
         pastedAt = HDG.ControllerHelpers.Mechanics.Now(),  -- exception(boundary): time()
     } })
     _selectAndFetch(code)
+    return true
 end
 
 -- Target-house change (picker dispatch) -> re-fetch the selected code against
@@ -616,12 +632,13 @@ function C:Wire(root)
     -- Paste: Enter in the box or the Inspect button.
     local pasteBox = HDG.UI.W(root, "blueprintsListPanel.pasteBox")
     pasteBox:SetScript("OnEnterPressed", function(box)
-        C:_SubmitPaste(box:GetText())
+        if C:_SubmitPaste(box:GetText()) then box:SetText("") end
         box:ClearFocus()
     end)
     HDG.UI.OnClick(root, "blueprintsListPanel.inspectBtn", function()
-        C:_SubmitPaste(pasteBox:GetText())
+        if C:_SubmitPaste(pasteBox:GetText()) then pasteBox:SetText("") end
     end)
+    HDG.UI.OnClick(root, "blueprintsDetailPanel.refreshBtn", function() C:_RefreshManifest() end)
 
     -- House-picker changes re-fetch the selection against the new target.
     if not self._targetSub then
@@ -689,7 +706,7 @@ function C:Wire(root)
     -- Link in chat: insert the blueprint's chat hyperlink (players link builds
     -- like items). Blizzard's own LinkItem pattern -- insert if a chat editbox
     -- is active, else open one prefilled.
-    HDG.UI.OnClick(root, "blueprintsDetailPanel.linkBtn", function() C:_LinkInChat() end)
+    HDG.UI.OnClick(root, "blueprintsListPanel.linkBtn", function() C:_LinkInChat() end)
 
     -- Import (pasted rows): open Blizzard's Import dialog prefilled with the
     -- code (its preview + confirm own the destructive apply).

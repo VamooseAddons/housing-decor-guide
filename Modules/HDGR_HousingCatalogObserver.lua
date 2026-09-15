@@ -22,8 +22,9 @@ R.byDecorID      = R.byDecorID      or {}  -- [decorID] = row (built alongside b
 R.byVendor       = R.byVendor       or {}
 R.allVendorNames = R.allVendorNames or {}
 R.tagIDToGroup   = R.tagIDToGroup   or {}
--- Storage-entry events that land while a sweep is in flight are parked here and
--- replayed by _CommitSweep against the swapped-in tables (see ReconcileEntry).
+-- Storage-entry events that land while a sweep is in flight -- or while nothing
+-- can tell whether the decor was already owned -- are parked here and replayed
+-- by _DrainParkedEntries (see ReconcileEntry, _priorOwnership).
 R._sweepInFlight  = R._sweepInFlight  or false  -- exception(false-positive): idempotent module-load init
 R._pendingEntries = R._pendingEntries or {}     -- exception(false-positive): idempotent module-load init
 -- True from the moment a BUILT index is handed to the settle timer until that
@@ -33,12 +34,17 @@ R._pendingEntries = R._pendingEntries or {}     -- exception(false-positive): id
 -- including in tests, where the mock fires synchronously and leaves a stale
 -- handle in `_settleTimer`.
 R._commitPending  = R._commitPending  or false  -- exception(false-positive): idempotent module-load init
+-- True when a re-kick was coalesced against that pending commit. Coalescing
+-- DEFERS the re-kick, it does not drop it: the settle callback replays it once
+-- the commit resolves, however many re-kicks it absorbed (_ReplayOwedRekick).
+R._rekickOwed     = R._rekickOwed     or false  -- exception(false-positive): idempotent module-load init
 
 -- ===== Reconciler ============================================================
 -- Two entry points:
 --   ReconcileFull                  -- cold sweep, atomic-rebuilds all indexes
 --   ReconcileEntry(entryVariantID) -- targeted update from HOUSING_STORAGE_ENTRY_UPDATED;
---                                     parked while a sweep is in flight, replayed at commit
+--                                     parked while a sweep is in flight (or prior
+--                                     ownership is unknown), replayed at commit
 -- Both mutate state via reducer dispatches (per ADR-012).
 
 function R:GetClientVer()
@@ -155,7 +161,7 @@ function R:ReconcileFull(reason)
     -- (A coalesce guard once lived here; it left slow-searcher characters stuck on
     -- "Scanning catalog..." forever, because the recovery re-kick was the thing it
     -- suppressed. Removed.)
-    -- ...but a re-kick that lands while a BUILT index is SETTLING is pure waste,
+    -- ...but a re-kick that lands while a BUILT index is SETTLING must not run NOW,
     -- and that is a different case from the one above. The searcher has already
     -- answered, the 95 ms / ~7 MB index exists, and _CommitSweep fires within the
     -- settle window -- yet RunSearch's results would cancel that pending commit
@@ -166,9 +172,14 @@ function R:ReconcileFull(reason)
     -- results, so no settle timer -- and that still falls straight through. Per-entry
     -- ownership changes are unaffected either way: HOUSING_STORAGE_ENTRY_UPDATED goes
     -- to ReconcileEntry, which parks and replays at commit.
+    -- Deferred, not dropped: the settle may be a 0-entry abort that is WAITING for
+    -- exactly this re-kick, and a commit's CATALOG_LOAD_COMPLETED clears the
+    -- refreshPending that would otherwise have remembered it. _ReplayOwedRekick
+    -- hands it back to the refresh routing once the commit resolves.
     if self._commitPending then
+        self._rekickOwed = true
         HDG.Log:Info("catalog_swept",
-            "sweep re-kick coalesced (by " .. (reason or "?") .. ") -- a built index is already settling")
+            "sweep re-kick deferred (by " .. (reason or "?") .. ") -- a built index is settling; replayed after it resolves")
         return
     end
     if HDG.Store:GetState().session.catalog.status ~= "ready" then
@@ -430,18 +441,58 @@ function R:_OnSearcherResults(searcher)
         self._commitPending = false
         self._settleTimer = nil
         R:_CommitSweep(result)
+        R:_ReplayOwedRekick()
     end)
 end
 
--- Replay the storage-entry events ReconcileEntry parked while a sweep was in
--- flight. Both sweep endings drain, for different reasons: a commit drains after
--- the atomic swap (so a patch lands on the new tables), a 0-entry abort drains
--- immediately (nothing was replaced, so the parked patches are still valid).
+-- A re-kick ReconcileFull deferred during the settle, handed back as the
+-- CATALOG_REFRESH_QUEUED it stood for, exactly once. The refresh routing then
+-- does what the re-kick would have done had it arrived a moment later: still
+-- "loading" (the settle was a 0-entry abort) sweeps now; "ready" leaves
+-- refreshPending set, so the rebuild runs straight away with a catalog view
+-- showing and on the next one otherwise -- no second full build at a login
+-- with the window closed.
+function R:_ReplayOwedRekick()
+    if not R._rekickOwed then return end
+    R._rekickOwed = false
+    HDG.Store:Dispatch({ type = HDG.Constants.ACTIONS.CATALOG_REFRESH_QUEUED,
+                         payload = { event = "deferred-rekick" } })
+end
+
+-- Was decorID owned BEFORE the storage event being reconciled? A built index
+-- answers from its row (no row: a decor the catalog has not shown us, so not
+-- owned). Before this session's first build, the persisted collection answers --
+-- the owned set the last commit wrote. nil when neither can: a first-ever load
+-- that has not landed, or just after a collection reset. Answering false there
+-- read every already-owned decor the player nudged during a failed first load
+-- as a fresh learn, and wrote a false "learned" craft-history entry for each.
+local function _priorOwnership(decorID)
+    if next(R.byDecorID) then
+        local row = R.byDecorID[decorID]  -- exception(nullable): entry not yet in the catalog
+        return row ~= nil and row.isOwned == true
+    end
+    local owned = HDG.Store:GetState().account.collection.ownedDecorIDs
+    if next(owned) then return owned[decorID] == true end
+    return nil
+end
+
+-- Replay the storage-entry events ReconcileEntry parked. Both sweep endings
+-- drain, for different reasons: a commit drains after the atomic swap (so a
+-- patch lands on the new tables), a 0-entry abort drains immediately (nothing
+-- was replaced, so the parked patches are still valid). An entry parked while
+-- nothing could tell whether it was owned takes its answer here -- after a
+-- commit, from the snapshot just swapped in -- and one that still has none (an
+-- abort before any build) stays parked for the first commit.
 function R:_DrainParkedEntries()
     local parked = R._pendingEntries
     R._pendingEntries = {}
     for _, p in ipairs(parked) do
-        R:_ApplyEntry(p.entryID, p.decorID, p.wasOwned)
+        if p.wasOwned == nil then p.wasOwned = _priorOwnership(p.decorID) end
+        if p.wasOwned == nil then
+            R._pendingEntries[#R._pendingEntries + 1] = p
+        else
+            R:_ApplyEntry(p.entryID, p.decorID, p.wasOwned)
+        end
     end
 end
 
@@ -594,13 +645,14 @@ function R:ReconcileEntry(entryID)
         HDG.Log:Warn("catalog_reconcile", "storage entry event carried no recordID: " .. tostring(entryID))
         return
     end
-    local row      = R.byDecorID[decorID]
-    local wasOwned = row and row.isOwned or false  -- exception(nullable): entry not yet in the catalog
+    local wasOwned = _priorOwnership(decorID)
     -- A sweep in flight builds a private snapshot and swaps it in wholesale at
     -- settle, so a patch made now lands in tables about to be replaced. Park the
     -- event for _CommitSweep to replay, keeping wasOwned from BEFORE the swap so
     -- the learned transition survives a snapshot that already shows it owned.
-    if R._sweepInFlight then
+    -- Park too when nothing can say yet whether the decor was owned (wasOwned
+    -- nil): applied now, a nudge of owned decor would read as a learn.
+    if R._sweepInFlight or wasOwned == nil then
         R._pendingEntries[#R._pendingEntries + 1] = { entryID = entryID, decorID = decorID, wasOwned = wasOwned }
         return
     end

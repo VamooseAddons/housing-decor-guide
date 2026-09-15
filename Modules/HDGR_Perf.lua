@@ -263,10 +263,11 @@ local function _appendSection(lines, title, bucket, showSubs, floor)
 end
 
 -- Boot memory: Lua heap deltas between the readings Init.lua and HDGR_BootMark.lua
--- took. Files and frames are exact (nothing else runs inside those spans); the
+-- took. The spans after the files are held only when perf was on at login; the
+-- files span is never held (saved variables, the perf flag, load after it). The
 -- gap between OnInitialize and OnEnable belongs to other addons and is not shown.
 local BOOT_MEMORY_STEPS = {
-    { "files0",  "files1",     "files + shipped data (TOC load; includes compile scratch the next collection frees)" },
+    { "files0",  "files1",     "files + shipped data (TOC load; never held -- net heap movement, a collection inside it reads low)" },
     { "files1",  "sv",         "saved variables" },
     { "sv",      "init",       "engines (theme, locale, modules, validators)" },
     { "enable0", "mainWindow", "main window frames (0 unless it was open at logout; built on first open)" },
@@ -276,7 +277,7 @@ local function _appendBootMemory(lines)
     local h = HDG._bootHeap
     if not (h and h.files0 and h.files1) then return end
     lines[#lines + 1] = ""
-    lines[#lines + 1] = "Boot memory (gross allocation per step, KB; the collector is held within each step):"
+    lines[#lines + 1] = "Boot memory (KB per step; with perf on at login the steps after the files hold the collector, so they read gross allocation):"
     local total = 0
     for _, step in ipairs(BOOT_MEMORY_STEPS) do
         local a, b = h[step[1]], h[step[2]]

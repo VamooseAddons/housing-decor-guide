@@ -4,13 +4,14 @@
 -- Perf profile prints the deltas as "Boot memory" -- the answer to "why is HDG
 -- N MB before the window has opened".
 --
--- The collector is HELD across each measured span (this file to OnInitialize,
--- OnInitialize itself, the window builds in OnEnable) so a delta is that span's
--- gross allocation and nothing else: a collection landing mid-span once freed
--- 45 MB of other addons' load garbage and read as "engines: -45 MB". Init.lua
--- restarts it at each span's end; the timer below is the backstop should boot
--- abort before it does.
+-- NO collector hold here. Init.lua holds it across OnInitialize and the window
+-- builds in OnEnable, and only for a developer with the profiler on (a mid-span
+-- collection once freed 45 MB of other addons' load garbage and read as
+-- "engines: -45 MB"). This span cannot know that: saved variables, and so the
+-- perf flag, load after every file has run. A hold here would pause collection
+-- for every player across every addon's file load, and a boot that aborted
+-- before Init released it would strand the whole client's collector for the
+-- session. So the files step reads net heap movement, and a collection landing
+-- inside it reads low.
 HDG = HDG or {}
 HDG._bootHeap = { files0 = collectgarbage("count") }
-collectgarbage("stop")
-C_Timer.After(15, function() collectgarbage("restart") end)

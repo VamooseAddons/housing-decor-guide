@@ -1148,6 +1148,7 @@ HDG.Constants = {
         BLUEPRINT_SET_NOTE            = "HDGR_BLUEPRINT_SET_NOTE",            -- payload: { shareCode, text } (persisted; WireNoteBox shape)
         BLUEPRINT_CLEAR_NOTE          = "HDGR_BLUEPRINT_CLEAR_NOTE",          -- payload: { shareCode }
         BLUEPRINT_EXPORT_SUCCESS      = "HDGR_BLUEPRINT_EXPORT_SUCCESS",      -- payload: { shareCode }
+        BLUEPRINT_MANIFESTS_STALE     = "HDGR_BLUEPRINT_MANIFESTS_STALE",     -- payload: none; decor storage changed -> every received manifest's counts are suspect
 
         -- ===== Projects: shipping crates =====
         -- Whole-house manifest snapshot. Controller builds the record; reducer just writes it.

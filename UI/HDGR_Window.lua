@@ -145,11 +145,8 @@ function W:_RefreshOne(name, invalidation, actionType)
                   actionType = actionType }
     HDG.BindingEngine:Apply(frame, state, ctx, invalidation)
 
-    -- LAYOUT: harvest intrinsics, compose, apply.
-    local intrinsics = HDG.Layout:HarvestIntrinsics(frame, config)
-    local placements = HDG.Layout:ComposeWindow(config, name, { state = state, intrinsics = intrinsics })
-    frame.placements = placements
-    HDG.Layout:Apply(frame, placements)
+    -- LAYOUT: harvest intrinsics, compose, apply (pushes the widgets it reveals).
+    HDG.Layout:LayoutWindow(frame, config, name, state)
 end
 
 -- ===== Reconcile (visibility + position, then refresh) ======================
@@ -175,7 +172,12 @@ function W:_ReconcileOne(name, invalidation, actionType)
                        and HDG.Config:Get("HIDE_IN_COMBAT") == true
     local shouldShow = HDG.Selectors:Call(win.shown, state, {}) and not combatHide
     if shouldShow and not wasShown then
-        frame:Show()
+        -- Open transition: _RefreshOne skips a hidden window, so its shown widgets
+        -- kept what they showed at close. Bind all of them with "*" in this pass,
+        -- as the main window's open does; ShowForPipeline keeps their OnShow
+        -- pushes silent so that pass paints each once.
+        HDG.BindingEngine:ShowForPipeline(frame)
+        invalidation = "*"
     elseif not shouldShow and wasShown then
         frame:Hide()
     end

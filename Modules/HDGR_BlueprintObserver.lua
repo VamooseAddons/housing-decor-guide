@@ -191,6 +191,14 @@ function BP:OnContentsFailure(shareCode, reasonCode)
         payload = { shareCode = shareCode, reasonCode = reasonCode } })
 end
 
+-- Storage changed under the cached manifests. The counts in a manifest are
+-- the server's answer at fetch time, so a purchase since then makes them
+-- lie -- Soul bought duplicates off a manifest fetched before the shopping
+-- trip (2026-09-15). Mark only; the re-fetch waits for a row select.
+function BP:OnStorageUpdated()
+    HDG.Store:Dispatch({ type = A.BLUEPRINT_MANIFESTS_STALE })
+end
+
 function BP:OnExportSuccess(shareCode)
     HDG.Store:Dispatch({ type = A.BLUEPRINT_EXPORT_SUCCESS,
         payload = { shareCode = shareCode, label = self._pendingExportName } })
@@ -249,6 +257,14 @@ HDG.Modules:Declare({
         HOUSING_BLUEPRINT_RENAME_FAILURE      = { handler = "OnRenameFailure" },
         HOUSING_BLUEPRINT_DELETE_SUCCESS      = { handler = "OnDeleteSuccess" },
         HOUSING_BLUEPRINT_DELETE_FAILURE      = { handler = "OnDeleteFailure" },
+        -- Not C_HousingBlueprint events; the catalog observer owns the sweeps
+        -- they trigger, these subscriptions only flag cached manifests stale.
+        -- BOTH are needed: a single purchase or learn-from-bag arrives ONLY as
+        -- the per-entry event (live 2026-09-15 -- the bulk event stayed silent
+        -- and the button never lit). Debounced because the handler ignores
+        -- its args, so a burst of a hundred entries is one mark.
+        HOUSING_STORAGE_UPDATED               = { handler = "OnStorageUpdated", debounce = 0.5 },
+        HOUSING_STORAGE_ENTRY_UPDATED         = { handler = "OnStorageUpdated", debounce = 0.5 },
     },
     -- BlizzardEvents resolves handlers ON THIS DEF TABLE (module = the def);
     -- delegate to the BP singleton, forwarding the event args (MerchantObserver idiom).
@@ -262,6 +278,7 @@ HDG.Modules:Declare({
     OnRenameFailure      = function(_, ...) BP:OnRenameFailure(...) end,
     OnDeleteSuccess      = function(_, ...) BP:OnDeleteSuccess(...) end,
     OnDeleteFailure      = function(_, ...) BP:OnDeleteFailure(...) end,
+    OnStorageUpdated     = function() BP:OnStorageUpdated() end,
     onEnable = function()
         -- available=false at state mint on all builds (golden-state stays
         -- build-independent); flip it here, where only a 12.1 client runs.

@@ -181,6 +181,7 @@ R.BlueprintLibraryBack    = { title = "locale:TIP_BP_LIBRARY_BACK_TITLE",    bod
 R.BlueprintLibraryInspect = { title = "locale:TIP_BP_LIBRARY_INSPECT_TITLE", body = "locale:TIP_BP_LIBRARY_INSPECT_BODY", anchor = "ANCHOR_TOP" }
 R.BlueprintLibraryHideBackups = { title = "locale:TIP_BP_LIBRARY_HIDE_TITLE", body = "locale:TIP_BP_LIBRARY_HIDE_BODY", anchor = "ANCHOR_TOP" }
 R.BlueprintLink        = { title = "locale:TIP_BP_LINK_TITLE",        body = "locale:TIP_BP_LINK_BODY",        anchor = "ANCHOR_TOP" }
+R.BlueprintRefresh     = { title = "locale:TIP_BP_REFRESH_TITLE",     body = "locale:TIP_BP_REFRESH_BODY",     anchor = "ANCHOR_TOP" }
 R.BlueprintImportHouse = { title = "locale:TIP_BP_IMPORT_HOUSE_TITLE", body = "locale:TIP_BP_IMPORT_HOUSE_BODY", anchor = "ANCHOR_TOP" }
 R.BlueprintCopyReqs    = { title = "locale:TIP_BP_COPY_REQS_TITLE",   body = "locale:TIP_BP_COPY_REQS_BODY",   anchor = "ANCHOR_TOP" }
 

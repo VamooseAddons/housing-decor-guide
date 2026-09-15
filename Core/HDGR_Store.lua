@@ -2144,7 +2144,8 @@ HDG.Actions:Register{ name = "COLLECTION_BULK_LOAD",
             invalidates = { "account.collection" },
     reduce = function(state, payload)
         -- Wholesale ownership replace. Catalog mirrors are observer-local;
-        -- only ownedDecorIDs persists (warm-start fallback seam; not currently read at runtime).
+        -- only ownedDecorIDs persists (warm-start seam: HousingCatalogObserver's
+        -- _priorOwnership reads it before the session's first build commits).
         state.account.collection.ownedDecorIDs = payload.owned
     end }
 
@@ -4966,6 +4967,18 @@ HDG.Actions:Register{ name = "BLUEPRINT_CONTENTS_FAILED", persists = false,
     reduce = function(state, payload)
         state.session.blueprints.manifests[payload.shareCode] =
             { status = "failed", reasonCode = payload.reasonCode, timedOut = payload.timedOut }
+    end }
+
+-- Decor storage changed (a purchase, a placement, a crate), so every cached
+-- manifest's "have/need" counts may now be wrong. Mark, never fetch: a player
+-- buying a hundred pieces one at a time fires this a hundred times, and the
+-- fetch belongs to the moment someone looks (row select / the Refresh button).
+HDG.Actions:Register{ name = "BLUEPRINT_MANIFESTS_STALE", persists = false,
+    invalidates = { "session.blueprints.manifests" },
+    reduce = function(state)
+        for _, m in pairs(state.session.blueprints.manifests) do
+            if m.status == "received" then m.stale = true end
+        end
     end }
 
 HDG.Actions:Register{ name = "BLUEPRINT_PENDING_TICK", persists = false,

@@ -21,9 +21,37 @@ HDG.Log:RegisterTags({
 -- (VFN's GetSelectedSet / GetSetTitle helpers dropped -- HDG has no
 -- libraries/sets concept. Tab-driven view selection is in PrepareContext.)
 
+-- Combat-deferred first build. CreateMainWindow refuses to build in combat, so
+-- the build waits for COMBAT_EXIT -- dispatched by CombatMiddleware on
+-- PLAYER_REGEN_ENABLED, the same transition that replays the refreshes
+-- RefreshMainWindow held. It builds only if the window is still wanted (opened
+-- and closed again inside the fight builds nothing); the build ends with
+-- RefreshMainWindow, which shows it. Every refused build in one fight shares one
+-- subscriber, which removes itself at combat end.
+local function _buildAfterCombat(self)
+    if self._mainWindowBuildDeferred then return end
+    local function onAction(actionType)
+        if actionType ~= HDG.Constants.ACTIONS.COMBAT_EXIT then return end
+        HDG.Store:Unsubscribe(onAction)
+        self._mainWindowBuildDeferred = nil
+        if HDG.Store:GetState().account.ui.mainWindowShown then
+            self:CreateMainWindow()
+        end
+    end
+    self._mainWindowBuildDeferred = true
+    HDG.Store:Subscribe(onAction)
+end
+
 function HDG:CreateMainWindow()
     if self.mainFrame then return self.mainFrame end
     if not CreateFrame then return nil end   -- exception(boundary): no frame environment (headless)
+    -- Never built in combat. SetPropagateKeyboardInput below is a restricted call
+    -- (SimpleFrameAPI HasRestrictions; protected in combat for addon frames, Aegis
+    -- TEST 147), and the window cannot show before combat ends anyway.
+    if InCombatLockdown() then   -- exception(boundary): Blizzard combat lockdown; the build waits for COMBAT_EXIT
+        _buildAfterCombat(self)
+        return nil
+    end
 
     local config = HDG.LayoutConfig
     local window = config.window
@@ -137,8 +165,9 @@ function HDG:CreateMainWindow()
 end
 
 function HDG:ToggleMainWindow()
+    -- nil in combat (the first build waits for combat end). The toggle still
+    -- dispatches, so that deferred build finds the window wanted.
     local frame = self.mainFrame or self:CreateMainWindow()
-    if not frame then return nil end
     -- SSoT: window shown-state lives in state.account.ui.mainWindowShown.
     -- Dispatching MAIN_WINDOW_TOGGLE flips it; the Store subscription
     -- triggers RefreshMainWindow, whose first stage (FrameVisibility) is
@@ -247,9 +276,10 @@ PIPELINE_STAGES[#PIPELINE_STAGES + 1] = {
             -- Bind below paints all of them once (see Engine:ShowForPipeline).
             HDG.BindingEngine:ShowForPipeline(frame)
             -- Widgets are born hidden and Layout below is what shows the active
-            -- view's; their OnShow hooks paint them once shown. Anything a stage
-            -- skipped because its widget was still hidden (a controller's imperative
-            -- paint) is caught by one coalesced wildcard pass next frame.
+            -- view's, pushing each bound one as it reveals it (PushIfStale).
+            -- Anything else a stage skipped because its widget was still hidden (a
+            -- controller's imperative paint) is caught by one coalesced wildcard
+            -- pass next frame.
             HDG:RequestReflow()
             -- Open transition: THIS pass does the full catch-up repaint. Escalate the
             -- narrow MAIN_WINDOW_TOGGLE invalidation ({mainWindowShown}) to "*" so Bind
@@ -392,19 +422,12 @@ PIPELINE_STAGES[#PIPELINE_STAGES + 1] = {
         return HDG.Paths.MatchesAny(interest, ctx.invalidation)
     end,
     run = function(ctx)
-        local frame = ctx.frame
-        local intrinsics = HDG.Layout:HarvestIntrinsics(frame, ctx.config)
-        -- Compose the `main` window from its slot map (HDG-ADR-025). STEP 2 is
-        -- fill-only: ComposeWindow resolves the @view fill (= ctx.view) and
-        -- delegates to Compute. No viewOriginX -- the view grid starts at x=0
-        -- (nav returns as a `left` slot in step 4). state enables `visible`
-        -- selector resolution; intrinsics carry "auto"-sized widget extents.
-        local placements = HDG.Layout:ComposeWindow(ctx.config, "main", {
-            state      = ctx.state,
-            intrinsics = intrinsics,
-        })
-        frame.placements = placements
-        HDG.Layout:Apply(frame, placements)
+        -- Compose the `main` window from its slot map (HDG-ADR-025): the @view
+        -- fill (= ctx.view) plus the edge slots. state enables `visible` selector
+        -- resolution; intrinsics carry "auto"-sized widget extents. Apply pushes
+        -- every bound widget it reveals stale, so a view switch paints the new
+        -- view in this pass.
+        HDG.Layout:LayoutWindow(ctx.frame, ctx.config, "main", ctx.state)
     end,
 }
 

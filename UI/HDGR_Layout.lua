@@ -1176,19 +1176,21 @@ end
 -- Primitive: apply placements to every (id -> widget) pair, hiding any
 -- with no placement and showing those that have one. Optional `onApplied`
 -- runs per-applied (widget, region) for per-collection extras like the
--- deferred-skinner logic on slot chromes.
+-- deferred-skinner logic on slot chromes. True when any onApplied returned true.
 local function _applyToPlaced(items, placements, onApplied)
-    if not items then return end
+    if not items then return false end
+    local flagged = false
     for id, widget in pairs(items) do
         local r = placements[id]
         if r then
             ApplyOne(widget, r)
             SetVisible(widget, true)
-            if onApplied then onApplied(id, widget, r) end
+            if onApplied and onApplied(id, widget, r) then flagged = true end
         else
             SetVisible(widget, false)
         end
     end
+    return flagged
 end
 
 -- Deferred skinner application -- runs ONCE per slot chrome, the first
@@ -1202,12 +1204,35 @@ local function _applyPendingSkin(_id, chrome, _region)
     chrome._pendingSkin = nil
 end
 
+-- A placed widget whose binding went stale while it was hidden (or was never
+-- pushed) is pushed in the pass that reveals it -- after its Show, so a Frame's
+-- OnShow hook gets there first and nothing is pushed twice.
+local function _pushStaleBinding(_id, widget, _region)
+    return HDG.BindingEngine:PushIfStale(widget)
+end
+
+-- Returns true when a revealed widget's push moved an auto-sized intrinsic,
+-- i.e. these placements were solved against a stale size.
 function Layout:Apply(rootFrame, placements)
     if not rootFrame or not placements then return end
     _applyToPlaced(rootFrame.panels,      placements)
     _applyToPlaced(rootFrame.sections,    placements)
     _applyToPlaced(rootFrame.slotChromes, placements, _applyPendingSkin)
-    _applyToPlaced(rootFrame.widgets,     placements)
+    return _applyToPlaced(rootFrame.widgets, placements, _pushStaleBinding)
+end
+
+-- One window's layout pass: harvest intrinsics, compose, apply. When Apply's
+-- reveal pushes moved an auto-sized intrinsic, solve once more; the second
+-- Apply finds every placed widget current, so this never loops.
+function Layout:LayoutWindow(frame, config, windowName, state)
+    for _ = 1, 2 do
+        local placements = self:ComposeWindow(config, windowName, {
+            state      = state,
+            intrinsics = self:HarvestIntrinsics(frame, config),
+        })
+        frame.placements = placements
+        if not self:Apply(frame, placements) then return end
+    end
 end
 
 -- Build phase ----------------------------------------------------------------

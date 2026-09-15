@@ -91,13 +91,19 @@ HDG.Environment.SLOTS = {
 HDG._bootHeap = HDG._bootHeap or {}   -- exception(false-positive): the BootMark file is first in the TOC; headless harnesses load neither
 local function _heapMark(name) HDG._bootHeap[name] = collectgarbage("count") end
 -- A measured span holds the collector so its delta is gross allocation, not
--- allocation minus whatever a mid-span collection happened to free.
-local function _heapSpanBegin(name) _heapMark(name); collectgarbage("stop") end
-local function _heapSpanEnd(name)   _heapMark(name); collectgarbage("restart") end
+-- allocation minus whatever a mid-span collection happened to free -- but ONLY
+-- with the profiler on. A held collector is the whole client's: an error
+-- escaping a span (a strict read in a window build) strands it for the session
+-- and every addon's memory climbs. With perf on that is the profiler's accepted
+-- trade (HDGR_Perf.lua, Sampling): any /hdgr perf command releases it.
+local function _profiling()
+    return HDG.Perf ~= nil and HDG.Perf:Enabled()   -- exception(false-positive): boot orchestrator; Perf is removable instrumentation, absent in minimal/headless test harnesses
+end
+local function _heapSpanBegin(name) _heapMark(name); if _profiling() then collectgarbage("stop") end end
+local function _heapSpanEnd(name)   _heapMark(name); if _profiling() then collectgarbage("restart") end end
 
 function HDG:OnInitialize()
-    _heapSpanEnd("files1")     -- every TOC file has run (BootMark.lua held the collector since the first)
-    collectgarbage("stop")     -- hold again across OnInitialize
+    _heapSpanBegin("files1")   -- every TOC file has run; OnInitialize is the next span
     -- Stamp t-zero for perf timeline. Marks self-gate on the perf SV internally.
     if HDG.Perf then  -- exception(false-positive): boot orchestrator; Perf is removable instrumentation, absent in minimal/headless test harnesses
         HDG.Perf:SetEpoch()

@@ -12,14 +12,15 @@
 
 ---
 
-## What's New in v3.33.1
+## What's New in v3.33.2
 
-- **HDG uses less memory.** It allocates about 40% less over a session and its peak is a third lower. The window is now built the first time you open it, so a session where you never open HDG carries 13 MB less from login. Nothing on screen changes.
-- **The House tab no longer leaks memory while it is open.** Its dashboard cards now repaint in place instead of building new frames on every refresh.
-- The Wowhead button in the Acquire tab's vendor header shows again whenever a vendor is selected.
-- The Decor detail card no longer cuts off its bottom rows when a piece shows all seven detail rows at once.
-- A decor you learn just after a failed catalog load is no longer left marked as needed until you reload.
-- Hovering a dye in a blueprint now explains its count. The number comes from the game and only includes dyes in your bags, so dyes in your Warband Bank aren't counted. Move them to your bags before importing.
+- **Blueprint counts stay honest after a shopping trip.** A blueprint's have/need counts are the game's answer at the moment you inspected it. If you inspected several codes and then bought decor, the earlier ones kept reporting pieces you now owned. Any change to your decor storage now marks every inspected blueprint out of date. Selecting one fetches it again, and a Refresh button beside the share code lights up with "manifest out of date" while the one on screen needs it.
+- **The paste box empties once a code is accepted**, so the next code no longer lands on the end of the last one. A rejected code stays put so you can correct it.
+- **Link in chat** now sits at the bottom of the blueprint list, opposite Save a Blueprint.
+- A catalog that failed its first load now recovers on its own instead of sitting at "loading" for the session.
+- Moving decor you already own in the editor no longer records it as newly learned in Recent activity.
+- Labels show their current values when a view is revealed, including floating windows on first open.
+- Opening HDG for the first time while in combat waits for combat to end instead of failing with an interface error.
 
 ## The Decor Catalog
 
@@ -110,7 +111,7 @@ A companion window injects into Blizzard's House Editor so you can **place decor
 ---
 
 **Author:** Vamoose
-**Version:** 3.33.1
+**Version:** 3.33.2
 **Game Version:** 12.1.0 (Midnight)
 **Source / Issues:** https://github.com/VamooseAddons/housing-decor-guide
 **Discord:** https://discord.gg/RWZaxJaHFP

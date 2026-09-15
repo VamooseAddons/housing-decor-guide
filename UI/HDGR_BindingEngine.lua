@@ -93,8 +93,9 @@ local function processResolveAsync(widget, resolved)
     end
 end
 
--- Resolve binding, run async middleware, call dispatcher.
--- Used by Engine:Apply AND by the OnShow hook (hidden-at-boot catch).
+-- Resolve binding, run async middleware, call dispatcher. The one push path:
+-- Engine:Apply, the OnShow hook and Engine:PushIfStale all land here, so a
+-- completed push always leaves the widget current (not stale).
 local function pushOne(widget, state, ctx)
     if not (widget._hdgrBound and widget._hdgrBinding and widget._hdgrDispatcher) then return end
     local resolved = {}
@@ -103,6 +104,7 @@ local function pushOne(widget, state, ctx)
     end
     processResolveAsync(widget, resolved)
     widget._hdgrDispatcher(widget, resolved, ctx or {})
+    widget._hdgrStale = false
 end
 
 -- ===== Public API =========================================================
@@ -140,6 +142,10 @@ local function _bindWidget(widget, id, spec)
     widget._hdgrBound        = true
     widget._hdgrId           = id   -- diagnostics: lets overflow/paint warns name the exact widget
     widget._hdgrReadsClosure = _computeReadsClosure(binding)
+    widget._hdgrAutoSized    = spec.width == "auto" or spec.height == "auto"
+    -- Never pushed yet: widgets are born hidden, so the Layout pass that first
+    -- places this one pushes it (Engine:PushIfStale).
+    widget._hdgrStale        = true
 
     if spec.resolveAsync then
         widget._hdgrResolveAsync = spec.resolveAsync
@@ -151,12 +157,11 @@ local function _bindWidget(widget, id, spec)
     -- everything with "*" right after, so the hook's push was a second full paint
     -- of every bound widget in every view (20 MB on each open, 2026-09-13 audit).
     if widget.HookScript then  -- exception(boundary): FontString labels lack HookScript; binding engine handles both frame and label widget types
-        local autoSized = spec.width == "auto" or spec.height == "auto"
         widget:HookScript("OnShow", function(self)
             if Engine._showingForPipeline then return end
             local bw, bh = self._intrinsicWidth, self._intrinsicHeight
             pushOne(self, HDG.Store:GetState(), { actionType = "ON_SHOW" })
-            if autoSized and (self._intrinsicWidth ~= bw or self._intrinsicHeight ~= bh)
+            if self._hdgrAutoSized and (self._intrinsicWidth ~= bw or self._intrinsicHeight ~= bh)
                and HDG.RequestReflow then
                 HDG:RequestReflow()
             end
@@ -173,6 +178,22 @@ function Engine:ShowForPipeline(frame)
     self._showingForPipeline = true
     frame:Show()
     self._showingForPipeline = false
+end
+
+-- Layout calls this for every widget it places, right after showing it. A bound
+-- widget is stale until its first push, and again whenever Apply skips it while
+-- hidden; the pass that reveals it pushes it here instead of waiting for a later
+-- reflow. A label is a FontString with no OnShow to hook, so this is its only
+-- reveal push; a Frame's OnShow hook has usually pushed it already, leaving
+-- nothing to do. Unbound widgets are never stale.
+-- Returns true when the push moved an auto-sized widget's intrinsic size: the
+-- solve that placed it is out of date (Layout:LayoutWindow re-solves).
+local REVEAL_CTX = { actionType = "ON_SHOW" }
+function Engine:PushIfStale(widget)
+    if not widget._hdgrStale then return false end
+    local bw, bh = widget._intrinsicWidth, widget._intrinsicHeight
+    pushOne(widget, HDG.Store:GetState(), REVEAL_CTX)
+    return widget._hdgrAutoSized and (widget._intrinsicWidth ~= bw or widget._intrinsicHeight ~= bh)
 end
 
 -- Bind all widgets with a `binding` spec. Call once at build time.
@@ -193,8 +214,12 @@ local function _applyWidget(widget, state, invalidation, dispatchCtx)
     if not (widget._hdgrBound and widget._hdgrBinding and widget._hdgrDispatcher) then return nil end
     local readsClosure = widget._hdgrReadsClosure   -- _bindWidget always sets this (strict read)
     if not HDG.Paths.MatchesAny(readsClosure, invalidation) then return "skipped" end
-    -- Skip hidden widgets (zero cost); OnShow hook catches becomes-visible transitions.
-    if widget.IsShown and not widget:IsShown() then return "skipped" end  -- exception(boundary): IsShown absent in headless test mock; FrameXML-only
+    -- Skip hidden widgets (zero cost) and mark them stale: the Layout pass that
+    -- reveals them pushes them (Engine:PushIfStale).
+    if widget.IsShown and not widget:IsShown() then  -- exception(boundary): IsShown absent in headless test mock; FrameXML-only
+        widget._hdgrStale = true
+        return "skipped"
+    end
     pushOne(widget, state, dispatchCtx)
     return "refreshed"
 end

@@ -1,3 +1,40 @@
+## [Unreleased]
+
+## [3.33.2] - 2026-09-15 (September 2026)
+
+### Fixed
+- **Blueprint counts no longer go stale after a shopping trip.** A blueprint's have/need
+  counts are the game's answer at the moment you inspected it. Working through several codes
+  and buying as you went, the ones inspected earlier kept reporting pieces you had since
+  bought, and buying off those counts meant duplicates. Now any change to your decor storage
+  marks every inspected blueprint out of date: selecting one re-fetches it, and a Refresh
+  button beside the share code lights up with "manifest out of date" while the one on screen
+  needs it. Reported by Soul.
+- **The paste box empties after a code is accepted.** Pasting a second code no longer lands
+  on the end of the first. A code that is rejected stays in the box so it can be corrected.
+  Reported by Soul.
+- **A catalog that failed its first load now recovers on its own.** In 3.33.1 a storage
+  change arriving while the first catalog build was still settling was thrown away instead of
+  kept, so a failed or empty first load could sit at "loading" for the session when only the
+  Merchant overlay or the editor companion was open. The rebuild is now remembered and run.
+- **Nudging decor you already own no longer records it as newly learned.** Storage events
+  parked during a failed first load were replayed against an index that had never been built,
+  so every owned piece you moved in the editor wrote a false "learned" entry into Recent
+  activity and the velocity estimates.
+- **Labels show current values when a view is revealed.** Since the window started building
+  on first open, a label could keep its build-time text on a view switch, on a revisit of a
+  view whose data changed while hidden, or on a floating window's first open.
+- **Opening HDG for the first time in combat waits for combat to end.** The window build
+  makes a call the game blocks for addons in combat, which surfaced as "Interface action
+  failed because of an AddOn". The build now runs when combat ends and the window shows then.
+- **An error during login can no longer stall the game's memory collector.** The boot memory
+  marks only hold the collector while the profiler is on, and release it even if a boot phase
+  errors.
+
+### Changed
+- **Link in chat moved to the bottom of the blueprint list**, opposite Save a Blueprint, and
+  it dims until a blueprint is selected. It was crowding the share-code row.
+
 ## [3.33.1] - 2026-09-14 (September 2026)
 
 ### Changed
