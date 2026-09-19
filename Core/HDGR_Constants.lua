@@ -640,6 +640,24 @@ HDG.Constants = {
         shoppingList = true,
         zoneScanner  = true,
         houseTab     = true,
+        -- Blueprints reads catalog rows for its joins, source chips, cost badge,
+        -- dye rows and Route to Shopping. Off this list, a refresh queued while it
+        -- showed waited for a switch to another tab, so a build made before the
+        -- game's storage data loaded (window open across a /reload) stayed on
+        -- screen with pieces reading unowned and undyeable (Vamoose, live 12.1,
+        -- 2026-09-19: refreshPending stuck true on Blueprints).
+        projectsBlueprints = true,
+        -- Audit 2026-09-19: every other tab bound to a selector that reads decor
+        -- ownership (quantity / numPlaced / isOwned / ownedDecorIDs, directly or
+        -- through `calls`). Each held a pending refresh the same way Blueprints
+        -- did. Tabs left off read no ownership (Pets, Trainers, Alts, Architect,
+        -- Layouts, Landing, Move Planner, Data, Debug, Config); the floating
+        -- lumber window is not a tab and is not covered by this gate.
+        styles         = true,
+        recipes        = true,
+        warehouse      = true,
+        mogul          = true,
+        projectsPicker = true,
     },
 
     -- Views that consume house level/favor/reward data (House tab + Projects/Architect
@@ -1063,6 +1081,8 @@ HDG.Constants = {
         SHOPPING_ITEM_REMOVE       = "HDGR_SHOPPING_ITEM_REMOVE",       -- payload: { listID?, itemID, npcID? }
         SHOPPING_ITEM_SET_QTY      = "HDGR_SHOPPING_ITEM_SET_QTY",      -- payload: { listID?, itemID, npcID?, qty }  (absolute; EditBox direct entry)
         SHOPPING_ITEM_ADJUST_QTY   = "HDGR_SHOPPING_ITEM_ADJUST_QTY",   -- payload: { listID?, itemID, npcID?, delta }  (relative; +/- buttons, removes at <=0)
+        SHOPPING_ITEM_PURCHASED    = "HDGR_SHOPPING_ITEM_PURCHASED",    -- payload: { itemID, qty }  (a merchant buy landed; ACTIVE list, any vendor row)
+        DECOR_DESTROY_PROGRESS     = "HDGR_DECOR_DESTROY_PROGRESS",     -- payload: { total, done, name, waiting }  (empty = no run)
         SHOPPING_RESOLVE_VENDORS   = "HDGR_SHOPPING_RESOLVE_VENDORS",   -- payload: { listID, resolutions = {[itemID]=npcID} }
         SHOPPING_SET_NEIGHBORHOOD  = "HDGR_SHOPPING_SET_NEIGHBORHOOD",  -- payload: { value = "alliance"|"horde" }
         SHOPPING_WIDGET_TOGGLE     = "HDGR_SHOPPING_WIDGET_TOGGLE",
@@ -1347,6 +1367,46 @@ HDG.Constants.MERCHANT_BUY_TICK_SECS    = 0     -- seconds between ticks (0 = ev
 -- flight is what stranded an item in bags). Generous so a merely slow-to-start signal
 -- (first landings lag 2-3s + a ~500ms catalog settle) never trips it.
 HDG.Constants.MERCHANT_BUY_TIMEOUT_SECS = 8
+-- How long a merchant buy may take to LAND before its claim on the shopping list
+-- lapses. Past this, a count rise is not credited to it: a failed buy must not
+-- claim a later, unrelated rise (decor picked back up from a house). Well past
+-- the 2-3s first-landing lag the watchdog above allows for.
+HDG.Constants.MERCHANT_PURCHASE_CREDIT_SECS = 15
+
+-- Destroy queue (Modules/HDGR_DestroyQueue.lua). The server takes a burst of
+-- destroys, then drops the rest without a word until it recovers, and only the
+-- item's owned total tells (live 12.1, 2026-09-19: three runs of 101 at 3 in
+-- flight each stopped landing at 26-28; the dropped ones never landed).
+-- IN_FLIGHT_MAX: destroys waiting on the server at once -- what a drop can cost.
+-- DROP_SECS: nothing landed for this long = the server dropped what is in flight.
+--   A landing takes ~0.4 s; ten times that keeps a slow connection's late
+--   landing from being written off and sent again.
+-- RETRY_SECS: the wait before the next single try while the server is paused.
+-- RETRY_LIMIT: tries in a row with nothing landing before the run gives up
+--   (~1.5 minutes at DROP_SECS + RETRY_SECS each).
+HDG.Constants.DESTROY_IN_FLIGHT_MAX = 3
+HDG.Constants.DESTROY_DROP_SECS     = 4
+HDG.Constants.DESTROY_RETRY_SECS    = 3
+HDG.Constants.DESTROY_RETRY_LIMIT   = 12
+
+-- The nine Housing Dye items, one per colour family. A blueprint's dye entries
+-- name these item IDs, and they are the only non-decor items a shopping list
+-- carries: the housing catalog has no row for them, so without this set the list
+-- import dropped a build's dyes on the way in. Live 12.1.0.69814 (wago): the
+-- DyeColor table maps all 77 colours onto exactly these nine ItemIDs, and
+-- ItemSparse Bonding is 0 on every one -- tradeable, so they shop in the Auction
+-- House lane (bought there, or crafted from herbs at the dye station).
+HDG.Constants.HOUSING_DYE_ITEM_IDS = {
+    [274464] = true,   -- Black
+    [274468] = true,   -- Blue
+    [274469] = true,   -- Brown
+    [274470] = true,   -- Green
+    [274471] = true,   -- Orange
+    [274472] = true,   -- Purple
+    [274473] = true,   -- Red
+    [274474] = true,   -- White
+    [274475] = true,   -- Yellow
+}
 
 -- Guild recipe harvest choreography (ProfessionScanner:StartGuildHarvest; timings
 -- ported from VWB RecipeHarvest -- functional throttles, not UI transitions).

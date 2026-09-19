@@ -67,31 +67,44 @@ local function _byName(entries)
     return out
 end
 
--- Dye counts are Blizzard's, and Blizzard counts only the dyes in your BAGS --
--- the Warband Bank is ignored (Madailein Hatter, Discord 2026-09-14). HDG shows
--- numMissing as the server sent it, so the dye row's tooltip says where the
--- number comes from instead of HDG recounting it. Appended after any tooltip
--- the server shipped for the entry.
-local function _entryTooltip(ct, e)
-    if ct ~= 4 then return e.tooltip end  -- exception(boundary): server tooltip is optional
-    local note = HDG.Locale:Get("TIP_BP_DYE_COUNT_NOTE")
-    if not e.tooltip then return note end  -- exception(boundary): server tooltip is optional
-    return e.tooltip .. "\n\n" .. note
+-- have / need for one manifest entry. Decor takes the server's figures.
+--
+-- DYES DO NOT. The server's numMissing for a dye only covers decor the target
+-- house already has, and counts only dyes in your bags, so it climbs as the
+-- build's decor is bought: 35 orange became 75 after 40 undyed pillars
+-- (Windgrace90, Reddit 2026-09-19). Live-probed the same day: a 792-piece gap
+-- read Red 141 total / 61 need with 1 in bags. The manifest never says which
+-- dye goes on which piece, so the one figure that holds still is the build's
+-- total against what you HOLD, across bags and every bank. `have` is capped at
+-- the total so the pair reads as coverage, the way decor's does.
+-- Known overstatement: dyes already on decor placed in the target house are
+-- inside the total too, so re-inspecting a build that is already up can ask
+-- for dyes it does not need. The row tooltip says so.
+-- Returns have, need, and for dyes held + the bag share of it: the row tooltip
+-- sets HDG's reading beside the server's, and the bag share is the one number
+-- an import can actually spend.
+local function _haveNeed(ct, e)
+    if ct ~= 4 then return e.total - e.numMissing, e.numMissing end
+    local bags, bank, warband = HDG.BagObserver:GetSplit(HDG.HousingCatalogObserver:ItemIDForEntry(e))
+    local held = bags + bank + warband
+    local have = math.min(held, e.total)
+    return have, e.total - have, held, bags
 end
 
 -- The inspector envelope: manifest -> rendered groups with acquisition joins.
 -- nil when nothing is selected; a groupless envelope while pending/failed.
--- missingCount counts ACQUIRABLE entries (Decor=3/Dye=4) with numMissing>0 --
+-- missingCount counts ACQUIRABLE entries (Decor=3/Dye=4) with need>0 --
 -- fixtures/rooms/house types can't be routed or bought, so the number the
 -- verdict shows matches what Route to Shopping actually adds (UX review #5).
--- missingTotal is the PIECE sum of numMissing over that same set: a blueprint
+-- missingTotal is the PIECE sum of need over that same set: a blueprint
 -- with six planters missing is one entry but six pieces, and the headline the
 -- player reads as "how much do I still have to get" has to be the pieces
 -- (Soul, Discord 2026-09-10). Per-group header counts still cover every type.
 Selectors:Register("blueprints.inspector", {
     reads = { "session.blueprints.selectedCode", "session.blueprints.manifests",
               "session.ui.blueprints.missingOnly", "session.ui.blueprints.collapsedGroups",
-              "session.resolvers.catalog.tick", "account.config.locale" },
+              "session.resolvers.catalog.tick", "session.resolvers.bag.tick",
+              "account.config.locale" },
     fn = function(state)
         local sb = state.session.blueprints
         local code = sb.selectedCode
@@ -107,15 +120,17 @@ Selectors:Register("blueprints.inspector", {
             local items = {}
             for _, e in ipairs(_byName(g.entries)) do
                 entryCount = entryCount + 1   -- every entry, before the display filter
-                if e.numMissing > 0 and (g.contentType == 3 or g.contentType == 4) then
+                local have, need, held, inBags = _haveNeed(g.contentType, e)
+                if need > 0 and (g.contentType == 3 or g.contentType == 4) then
                     missing = missing + 1
-                    missingPieces = missingPieces + e.numMissing
+                    missingPieces = missingPieces + need
                 end
-                if not ui.missingOnly or e.numMissing > 0 then
+                if not ui.missingOnly or need > 0 then
                     local itemID, srcKind, srcName = _resolveAcq(e, nil)
                     items[#items + 1] = {
-                        name = e.name, total = e.total, numMissing = e.numMissing,
-                        invalid = e.invalid, tooltip = _entryTooltip(g.contentType, e),
+                        name = e.name, total = e.total, have = have, need = need,
+                        held = held, inBags = inBags, serverNeed = e.numMissing,
+                        invalid = e.invalid, serverTip = e.tooltip,
                         itemID = itemID, srcKind = srcKind, srcName = srcName,
                     }
                 end
@@ -170,7 +185,7 @@ Selectors:Register("blueprints.setDecor", {
 -- commitment is invisible until they are already committed.
 --
 -- Prices the ACQUISITION GAP, not the whole build -- what you still need, at
--- numMissing each. Only Decor(3)/Dye(4) can be bought; rooms and fixtures are
+-- need each. Only Decor(3)/Dye(4) can be bought; rooms and fixtures are
 -- structural, which is the same set blueprints.inspector counts as missing.
 --
 -- A CURRENCY summary, not a gold total (owner ruling): housing decor is sold for
@@ -201,7 +216,7 @@ Selectors:Register("blueprints.acquisitionCost", {
         for _, g in ipairs(insp.groups) do
             if ACQUIRABLE_CT[g.ct] then
                 for _, it in ipairs(g.items) do
-                    if it.numMissing > 0 then
+                    if it.need > 0 then
                         out.missingCount = out.missingCount + 1
                         local row = it.itemID and HDG.HousingCatalogObserver:GetRow(it.itemID)  -- exception(nullable): uncatalogued entry
                         local entries = row and row.costEntries
@@ -215,7 +230,7 @@ Selectors:Register("blueprints.acquisitionCost", {
                                     byCurrency[key] = cur
                                     order[#order + 1] = cur
                                 end
-                                cur.total = cur.total + (e.amount or 0) * it.numMissing  -- exception(boundary): baked catalog cost may omit an amount
+                                cur.total = cur.total + (e.amount or 0) * it.need  -- exception(boundary): baked catalog cost may omit an amount
                             end
                         else
                             out.unpricedCount = out.unpricedCount + 1
@@ -858,15 +873,16 @@ Selectors:Register("blueprints.contentRows", {
         for _, g in ipairs(insp.groups) do
             local gm, gp = 0, 0
             for _, it in ipairs(g.items) do
-                if it.numMissing > 0 then gm = gm + 1; gp = gp + it.numMissing end
+                if it.need > 0 then gm = gm + 1; gp = gp + it.need end
             end
             rows[#rows + 1] = { kind = "header", ct = g.ct, label = g.ctLabel,
                                 count = #g.items, missing = gm, missingPieces = gp, collapsed = g.collapsed }
             if not g.collapsed then
                 for _, it in ipairs(g.items) do
-                    rows[#rows + 1] = { kind = "item", ct = g.ct, name = it.name,
-                        total = it.total, numMissing = it.numMissing, invalid = it.invalid,
-                        tooltip = it.tooltip, itemID = it.itemID, srcKind = it.srcKind, srcName = it.srcName }
+                    rows[#rows + 1] = { kind = "item", ct = g.ct, name = it.name, have = it.have,
+                        total = it.total, need = it.need, invalid = it.invalid,
+                        held = it.held, inBags = it.inBags, serverNeed = it.serverNeed,
+                        serverTip = it.serverTip, itemID = it.itemID, srcKind = it.srcKind, srcName = it.srcName }
                 end
             end
         end

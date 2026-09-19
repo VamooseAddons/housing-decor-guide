@@ -146,7 +146,8 @@ function C.Decode(encoded)
             if mapped then
                 e.itemID = mapped
                 resolved[#resolved + 1] = e
-            elseif obs:GetRow(e.itemID) then
+            elseif obs:GetRow(e.itemID) or HDG.Constants.HOUSING_DYE_ITEM_IDS[e.itemID] then
+                -- A housing dye has no catalog row but belongs on a build's list.
                 resolved[#resolved + 1] = e
             else
                 dropped[#dropped + 1] = e.itemID   -- neither a known decorID nor itemID

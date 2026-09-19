@@ -1822,6 +1822,25 @@ function R:GetRow(itemID)
     return R.byItemID[itemID]
 end
 
+-- ===== Destroying stored copies (HDGR_DestroyQueue) ==========================
+-- The observer owns C_HousingCatalog, so the one destroy call lives here.
+-- pcall: DestroyEntry can throw on a stale entry; the queue ends the run on the
+-- first failure and reports it, so the error is never swallowed.
+function R:DestroyEntry(entryID)
+    return pcall(_G.C_HousingCatalog.DestroyEntry, entryID, false)  -- exception(fire-forget): the queue logs the error and ends the run
+end
+
+-- What the server says you own of this item: stored + placed + redeemable.
+-- THE confirmation signal for a destroy. The client takes a copy off `quantity`
+-- the instant DestroyEntry is called, kept or not, but it holds this TOTAL at the
+-- server's figure and covers the gap with a temporary rise in `numPlaced` (live
+-- 12.1, 2026-09-19: 101 sent, 22 kept -- stored fell 101, placed rose 79, total
+-- fell 22, and a /reload agreed with the total).
+function R:OwnedTotal(itemID)
+    local row = R.byItemID[itemID]
+    return row.quantity + row.numPlaced + row.remainingRedeemable
+end
+
 -- THE ITEM A BLUEPRINT MANIFEST ENTRY REFERS TO, or nil when it is not a thing
 -- you can go and get. Blueprint contents name their pieces by `recordID`, and
 -- what that ID MEANS depends on the entry's contentType -- which is the join

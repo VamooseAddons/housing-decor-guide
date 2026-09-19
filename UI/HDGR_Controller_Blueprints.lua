@@ -391,7 +391,7 @@ HDG.Rows:Register("blueprintLibraryRow", {
 
 -- ===== Row factory: blueprintContentRow =====================================
 -- Two shapes (ed.kind): "header" collapsible group bar / "item" manifest entry
--- (name | owned/total | need-badge | source chip). Chip colors come from the
+-- (name | have/total | need-badge | source chip). Chip colors come from the
 -- existing SOURCE_KINDS system via Format.SourceChip -- no new roles.
 
 local function _toggleGroupCollapse(ct)
@@ -424,9 +424,11 @@ local function _layoutContentRow(row)
     needFs:SetWordWrap(false)
     row._needFs = needFs
 
+    -- 56 fits a four-figure build total ("1043/1128"): one captured
+    -- blueprint used 1128 dyes.
     local ownFs = HDG.UI.RowText(row, "caption", "TextDim", "RIGHT")
     ownFs:SetPoint("RIGHT", needFs, "LEFT", -6, 0)
-    ownFs:SetWidth(36)
+    ownFs:SetWidth(56)
     ownFs:SetWordWrap(false)
     row._ownFs = ownFs
 
@@ -435,6 +437,10 @@ local function _layoutContentRow(row)
     nameFs:SetPoint("RIGHT", ownFs, "LEFT", -4, 0)
     nameFs:SetWordWrap(false)
     row._nameFs = nameFs
+
+    -- Attached once per pooled frame; the recipe reads the ed stamped on paint,
+    -- so a re-acquired row can never show the previous entry's hover.
+    HDG.TooltipEngine:Attach(row, HDG.TooltipRecipes.BlueprintEntry)
 
     row._laidOut = true
 end
@@ -456,10 +462,10 @@ local function _paintContentRow(row, ed)
         row._headerFs:Hide()
         row._nameFs:Show(); row._ownFs:Show(); row._needFs:Show(); row._chipFs:Show()
         row._nameFs:SetText(ed.name)
-        HDG.Theme:Register(row._nameFs, ed.invalid and "TextError" or (ed.numMissing > 0 and "Text" or "TextDim"))
-        row._ownFs:SetText((ed.total - ed.numMissing) .. "/" .. ed.total)
-        if ed.numMissing > 0 then
-            row._needFs:SetText("need " .. ed.numMissing)
+        HDG.Theme:Register(row._nameFs, ed.invalid and "TextError" or (ed.need > 0 and "Text" or "TextDim"))
+        row._ownFs:SetText(ed.have .. "/" .. ed.total)
+        if ed.need > 0 then
+            row._needFs:SetText("need " .. ed.need)
             HDG.Theme:Register(row._needFs, "TextWarning")
         else
             -- Owned: the same green check the Decor/Acquire collected marks use.
@@ -467,8 +473,8 @@ local function _paintContentRow(row, ed)
             HDG.Theme:Register(row._needFs, "TextDim")
         end
         if ed.srcKind then
-            row._chipFs:SetText(HDG.Format.SourceChip(ed.srcKind, ed.numMissing == 0) .. " " .. (ed.srcName or ""))
-        elseif ed.numMissing > 0 and ed.itemID then
+            row._chipFs:SetText(HDG.Format.SourceChip(ed.srcKind, ed.need == 0) .. " " .. (ed.srcName or ""))
+        elseif ed.need > 0 and ed.itemID then
             row._chipFs:SetText("resolves at vendor")
         else
             row._chipFs:SetText("")
@@ -477,26 +483,20 @@ local function _paintContentRow(row, ed)
     end
     row._edKind = ed.kind
     row._ct     = ed.ct
-    row._tip    = ed.tooltip
+    row._tipEd  = (ed.kind == "item") and ed or nil
 end
 
 local function _wireContentRow(row)
+    -- OnClick only: hover belongs to the TooltipEngine hooks from layout, and a
+    -- SetScript("OnEnter") here would wipe them on every repaint.
     row:SetScript("OnClick", function(self)
         if self._edKind == "header" and self._ct then _toggleGroupCollapse(self._ct) end
     end)
-    row:SetScript("OnEnter", function(self)
-        if self._tip then
-            GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-            GameTooltip:SetText(self._tip, nil, nil, nil, nil, true)
-            GameTooltip:Show()
-        end
-    end)
-    row:SetScript("OnLeave", function() GameTooltip:Hide() end)
 end
 
 local function _resetContentRow(row)
     HDG.UI.ClearRowText(row, "_headerFs", "_nameFs", "_ownFs", "_needFs", "_chipFs")
-    row._edKind, row._ct, row._tip = nil, nil, nil
+    row._edKind, row._ct, row._tipEd = nil, nil, nil
 end
 
 local function _contentRowFactory(_def)
@@ -750,9 +750,9 @@ function C:_BuildMissingItems()
     for _, g in ipairs(insp.groups) do
         if g.ct == 3 or g.ct == 4 then
             for _, it in ipairs(g.items) do
-                if it.numMissing > 0 and it.itemID then
-                    items[#items + 1] = { itemID = it.itemID, npcID = 0, qty = it.numMissing }
-                elseif it.numMissing > 0 then
+                if it.need > 0 and it.itemID then
+                    items[#items + 1] = { itemID = it.itemID, npcID = 0, qty = it.need }
+                elseif it.need > 0 then
                     skipped = skipped + 1  -- no itemID: can't route
                 end
             end

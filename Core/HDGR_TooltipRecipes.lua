@@ -217,6 +217,81 @@ R.BlueprintCost = function()
     return { title = "Cost to build", anchor = "ANCHOR_TOP", extraLines = lines }
 end
 
+-- Blueprint content row (stamp: row._tipEd, the row's ed envelope; nil on
+-- group headers). Decor, room and fixture rows show the server's own tooltip
+-- when it sent one -- why a house type is invalid, say -- and nothing otherwise.
+--
+-- DYE rows translate. HDG counts the whole build against every dye you hold;
+-- Blizzard's import window counts only dyes in your bags, and only for decor
+-- you already have. A player holding the two windows side by side sees 28/141
+-- need 113 in one and 80/141 in the other, so the hover puts both readings in
+-- the row's own have/total shape, the counts behind HDG's, and the reason they
+-- part. When the game's shortfall can be met from your banks, it says how many
+-- to move: that bag count is the only stash an import spends.
+--
+-- Colours are Blizzard's own tooltip colours (GlobalColor DB2, live
+-- 12.1.0.69814), not the scheme's. HDG never re-skins GameTooltip, so its
+-- background is always near-black, and the light schemes' dark greens and
+-- teals would vanish on it. Everything unmarked stays tooltip white.
+local TIP_HDG      = "|cFFFFD200"   -- NORMAL_FONT_COLOR: HDG's reading
+local TIP_BLIZZARD = "|cFF82C5FF"   -- BATTLENET_FONT_COLOR: Blizzard's reading
+local TIP_GOOD     = "|cFF19FF19"   -- GREEN_FONT_COLOR: covered, and the thing to do
+local TIP_NEED     = "|cFFFF8040"   -- ORANGE_FONT_COLOR: still to get
+
+local function _tint(code, text) return code .. text .. "|r" end
+
+local function _dyePair(have, total, need)
+    local L = HDG.Locale
+    local tail = (need > 0)
+        and _tint(TIP_NEED, L:Get("TIP_BP_DYE_NEED"):format(need))
+        or  _tint(TIP_GOOD, L:Get("TIP_BP_DYE_COVERED"))
+    return ("%d/%d, "):format(have, total) .. tail
+end
+
+-- The game's shortfall is met from your banks first: whatever of it the banks
+-- hold is a move, not a purchase. Anything left over is inside HDG's own need.
+local function _dyeMoveLine(ed)
+    local move = math.min(ed.serverNeed, ed.held - ed.inBags)
+    if move <= 0 then return nil end
+    return _tint(TIP_GOOD, HDG.Locale:Get("TIP_BP_DYE_MOVE"):format(move))
+end
+
+local function _dyeLines(ed)
+    local L = HDG.Locale
+    local lines = {
+        { text = L:Get("TIP_BP_DYE_BUILD_USES"), right = tostring(ed.total) },
+        { text = L:Get("TIP_BP_DYE_YOU_HOLD"),   right = tostring(ed.held) },
+        { text = "    " .. L:Get("TIP_BP_DYE_IN_BAGS"),  right = tostring(ed.inBags) },
+        { text = "    " .. L:Get("TIP_BP_DYE_IN_BANKS"), right = tostring(ed.held - ed.inBags) },
+        { text = " " },
+        { text = _tint(TIP_HDG, L:Get("TIP_BP_DYE_HDG_SHOWS")),
+          right = _dyePair(ed.have, ed.total, ed.need) },
+        { text = _tint(TIP_BLIZZARD, L:Get("TIP_BP_DYE_BLIZZARD_SHOWS")),
+          right = _dyePair(ed.total - ed.serverNeed, ed.total, ed.serverNeed) },
+        { text = " " },
+    }
+    local move = _dyeMoveLine(ed)
+    if move then
+        lines[#lines + 1] = { text = move }
+        lines[#lines + 1] = { text = " " }
+    end
+    lines[#lines + 1] = { text = L:Get("TIP_BP_DYE_WHY"):format(
+        _tint(TIP_BLIZZARD, L:Get("TIP_BP_DYE_NAME_BLIZZARD")), _tint(TIP_HDG, L:Get("TIP_BP_DYE_NAME_HDG"))) }
+    lines[#lines + 1] = { text = " " }
+    lines[#lines + 1] = { text = L:Get("TIP_BP_DYE_PLACED") }
+    return lines
+end
+
+R.BlueprintEntry = function(self)
+    local ed = self._tipEd
+    if not ed then return nil end                  -- exception(nullable): group header rows carry no tooltip
+    if ed.ct == 4 then
+        return { title = ed.name, body = ed.serverTip, extraLines = _dyeLines(ed) }
+    end
+    if not ed.serverTip then return nil end        -- exception(optional): the server sends a tooltip for few entries
+    return { title = ed.name, body = ed.serverTip }
+end
+
 -- Recipes title: guild recipe scan.
 R.RecipesScanGuild = { title = "locale:TIP_REC_SCAN_GUILD_TITLE", body = "locale:TIP_REC_SCAN_GUILD_BODY" }
 
@@ -334,10 +409,11 @@ R.WarnClearPins = {
 -- Mouse-action hints shown on every decor row tooltip (same wording as the
 -- decor header clickHints; resolved live so a locale switch repaints them).
 local DECOR_ROW_HINTS = {
-    leftText  = "locale:DECOR_HINT_LEFT",
-    rightText = "locale:DECOR_HINT_RIGHT",
-    shiftText = "locale:DECOR_HINT_SHIFT",
-    ctrlText  = "locale:DECOR_HINT_CTRL",
+    leftText      = "locale:DECOR_HINT_LEFT",
+    rightText     = "locale:DECOR_HINT_RIGHT",
+    shiftText     = "locale:DECOR_HINT_SHIFT",
+    ctrlText      = "locale:DECOR_HINT_CTRL",
+    ctrlShiftText = "locale:DECOR_HINT_CTRL_SHIFT",
 }
 
 -- [icon] quality-colored name for a custom (non-item) tooltip title. Quality

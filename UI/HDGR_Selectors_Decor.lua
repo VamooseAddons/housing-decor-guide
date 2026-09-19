@@ -247,9 +247,45 @@ Selectors:Register("decor.selectedVariantKey", {
 })
 
 -- Observer is primary. Returns nil while catalog loads (layout shows loading panel).
+-- destroyTarget: what a destroy acts on for one Decor row -- that row's own
+-- variant. variantKey "<itemID>:<variantIdentifier>" names a dyed variant;
+-- anything else ("<itemID>:base", or nil) is the undyed stack. Returns the
+-- entryVariantID DestroyEntry takes and the stored copies of THAT variant: the
+-- base entry's aggregate destroyableInstanceCount is off by one, and a destroy
+-- through the base entry never touches dyed copies. nil when the catalog has no
+-- row. ONE rule for the detail panel's Destroy button and the browser's
+-- Ctrl-Shift-click, so the two can never disagree about which copies go.
+Selectors:Register("decor.destroyTarget", {
+    reads = {"session.resolvers.catalog.tick"},
+    fn = function(state, ctx)
+        local byItemID = HDG.HousingCatalogObserver.byItemID
+        return function(itemID, variantKey)
+            local row = byItemID[itemID]
+            if not row then return nil end   -- exception(nullable): catalog lookup can miss
+            if variantKey and row.dyedVariants then
+                for _, dv in ipairs(row.dyedVariants) do
+                    if variantKey == tostring(itemID) .. ":" .. tostring(dv.variantIdentifier) then
+                        return dv.entryID, dv.numStored
+                    end
+                end
+            end
+            return row.entryID, row.undyedNumStored or row.quantity or 0  -- exception(nullable): undyedNumStored nil for non-customizable decor -> all copies undyed
+        end
+    end,
+})
+
+-- destroyProgress: { total, done, name } while HDGR_DestroyQueue runs, nil
+-- otherwise. `done` is copies the server took, never copies merely sent.
+Selectors:Register("decor.destroyProgress", {
+    reads = {"session.destroying"},
+    fn = function(state, ctx)
+        return state.session.destroying   -- exception(nullable): nil = no run
+    end,
+})
+
 Selectors:Register("decor.selectedItem", {
     memoized = true,
-    calls = {"decor.selectedItemID", "decor.selectedVariantKey"},
+    calls = {"decor.selectedItemID", "decor.selectedVariantKey", "decor.destroyTarget"},
     reads = {"session.resolvers.catalog.tick"},
     fn = function(state, ctx)
         local id = Selectors:Call("decor.selectedItemID", state, ctx)
@@ -262,21 +298,9 @@ Selectors:Register("decor.selectedItem", {
         -- detail panel and the tooltip for one piece could name different sources.
         local firstVendor = row.vendors and row.vendors[1]
 
-        -- Destroy identity: base stack = the undyed (vid=0) variant. row.entryID is already
-        -- the vid=0 entry, and its destroyable count is the undyed numStored (real per-variant),
-        -- NOT the aggregate destroyableInstanceCount. A selected dyed variant overrides both
-        -- with its own entryVariantID + stored count.
-        local vEntryID = row.entryID
-        local vDestroyable = row.undyedNumStored or row.quantity or 0  -- exception(nullable): undyedNumStored nil for non-customizable decor -> all copies undyed
-        local variantKey = Selectors:Call("decor.selectedVariantKey", state, ctx)
-        if variantKey and row.dyedVariants then
-            for _, dv in ipairs(row.dyedVariants) do
-                if variantKey == tostring(id) .. ":" .. tostring(dv.variantIdentifier) then
-                    vEntryID, vDestroyable = dv.entryID, dv.numStored
-                    break
-                end
-            end
-        end
+        -- Destroy identity: the selected row's own variant (decor.destroyTarget).
+        local vEntryID, vDestroyable = Selectors:Call("decor.destroyTarget", state, ctx)(
+            id, Selectors:Call("decor.selectedVariantKey", state, ctx))
         return {
             itemID        = id,
             decorID       = row.decorID,

@@ -801,6 +801,7 @@ local function NewDefaultSession()
         zone           = NewZoneState(),
         catalog        = NewSessionCatalog(),
         merchant       = NewSessionMerchant(),
+        destroying     = nil,   -- { total, done, name, waiting } while HDGR_DestroyQueue runs; nil otherwise
         lumber         = NewLumberSession(),
         identity       = NewIdentitySession(),
         daily          = { bestowed = nil, orcQuote = nil },  -- seeded here; EnsureSession no longer needs or-guard
@@ -4738,6 +4739,34 @@ HDG.Actions:Register{ name = "SHOPPING_ITEM_ADJUST_QTY",
         end
     end }
 
+-- A merchant purchase LANDED (MerchantObserver's purchase credit): take it off
+-- the ACTIVE list -- the one on screen. An item can sit on several lists, and the
+-- list being shopped from is the one that was bought against. Entries match on
+-- itemID alone: the merchant's npcID is never read (a secret at instanced
+-- vendors), and the item may be listed under another vendor or as a wish. List
+-- order, until the bought quantity is used up; an entry at 0 is removed.
+HDG.Actions:Register{ name = "SHOPPING_ITEM_PURCHASED",
+    persists = true, combatUnsafe = false,
+            invalidates = { "account.vendorShoppingLists" },
+    reduce = function(state, payload)
+        local list = state.account.vendorShoppingLists[state.account.activeShoppingListId]
+        if not list then return end   -- exception(nullable): no list is active
+        local left, i = payload.qty, 1
+        while left > 0 and i <= #list.items do
+            local entry = list.items[i]
+            local have = entry.qty or 1   -- exception(boundary): legacy shopping entry pre-qty
+            if entry.itemID ~= payload.itemID then
+                i = i + 1
+            elseif have <= left then
+                left = left - have
+                table.remove(list.items, i)
+            else
+                entry.qty = have - left
+                left = 0
+            end
+        end
+    end }
+
 -- Resolve one npcID-less wishlist entry to `npc`: merge into an existing
 -- (itemID, npcID) vendor row if one exists (coalesce, mirroring ITEM_ADD) and
 -- drop the entry, else stamp the npcID onto it. Caller walks high->low so the
@@ -4857,6 +4886,21 @@ HDG.Actions:Register{ name = "MERCHANT_BUY_PROGRESS",
             state.session.merchant.buying = { total = payload.total, done = payload.done }  -- every _dispatchProgress(total, done) passes both -- strict
         else
             state.session.merchant.buying = nil
+        end
+    end }
+
+-- Destroy queue progress: `done` is copies the SERVER has taken (confirmed by the
+-- item's owned total), never copies merely sent; `waiting` = the server has paused
+-- taking them and the queue is retrying. Empty payload = the run ended.
+HDG.Actions:Register{ name = "DECOR_DESTROY_PROGRESS",
+    persists = false, combatUnsafe = false,
+    invalidates = { "session.destroying" },
+    reduce = function(state, payload)
+        if payload.total then
+            state.session.destroying = { total = payload.total, done = payload.done, name = payload.name,
+                                         waiting = payload.waiting }
+        else
+            state.session.destroying = nil
         end
     end }
 

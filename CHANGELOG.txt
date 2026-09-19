@@ -1,4 +1,45 @@
-## [Unreleased]
+## [3.34.0] - 2026-09-19 (September 2026)
+
+### Added
+- **Ctrl-Shift-click a decor row to destroy one stored copy.** With the Destroy decor filter
+  on, each Ctrl-Shift-click in the Decor browser destroys one copy of that row, plain or dyed,
+  with no dialog to confirm. Clicking faster than the game confirms simply queues more copies
+  of the same row. The row's tooltip lists it with the other clicks. Suggested by Soul.
+- **The destroy dialog steps by ten and by a hundred, and reaches every stored copy.** -100,
+  -10, +10 and +100 sit either side of the count, and the old limit of 99 at a time is gone,
+  so a big stack of stored copies can be cleared in a few clicks. Copies are destroyed at a
+  pace the game keeps up with, and the count only moves when the game confirms each one: the
+  dialog stays open with that live count, and Cancel becomes Stop. The game pauses after about
+  26 destroys in a row; the dialog says so and keeps trying every few seconds until the game
+  takes them again. If it never does, the run ends and says how many were really destroyed.
+
+### Fixed
+- **The bulk-buy picker's text stays inside its window.** A run that stopped early wrote its
+  reason on the same line as the count, running past both edges. The reason now sits on its own
+  line, and every line under the wheels wraps to fit.
+- **A blueprint's dyes now reach its shopping list.** Route to Shopping sent them, but the list
+  turned away anything that was not decor, so a build's dyes never showed up. They now land in
+  the Auction House section, where dyes are bought (or craft them from herbs at the dye station).
+  The Styles card for that list still shows only the decor.
+- **HDG's decor data refreshes on every tab that shows what you own.** With the window open
+  across a /reload, the Blueprints, Styles, Recipes, Warehouse, Mogul and Add Decor tabs could
+  keep HDG's first read of your collection, taken before the game had finished loading your
+  storage, until you switched to another tab.
+- **Shopping list items come off as you buy them, however you buy them.** Only Buy All used to
+  take items off the list: right-clicking at the vendor, splitting a stack or confirming an
+  expensive item left the list asking for pieces you already had. Now every purchase comes off
+  the list you have showing once it arrives. An item on several lists only comes off the one
+  you are shopping from, and a purchase that fails leaves the list alone. Reported by Soul.
+
+### Changed
+- **Blueprint dye counts now cover the whole build.** The game's count for a dye only covers
+  decor you already have, so it kept climbing as you bought the build's pieces: 35 orange
+  needed became 75 after buying 40 pillars. Each dye row now shows how many you hold out of
+  what the build uses, counting your bags and banks, and "need" is the rest. The missing
+  totals and the cost to build use the same numbers. Hovering a dye shows
+  how many are in your bags and banks, what the game's import window will say for the same
+  dye, and why the two differ. When the import window is short only because the dyes are
+  sitting in your bank, it tells you how many to move into your bags. Suggested by Windgrace90.
 
 ## [3.33.2] - 2026-09-15 (September 2026)
 

@@ -55,7 +55,9 @@ end
 local FRAME_W = 360
 local function _build()
     local f = HDG.UI:Frame(_G.UIParent)
-    f:SetSize(FRAME_W, 244)
+    -- 256 tall: room for a two-line decor name AND a two-line stopped-run note
+    -- above the buttons.
+    f:SetSize(FRAME_W, 256)
     f:SetPoint("CENTER")
     f:SetFrameStrata("DIALOG")
     f:EnableMouse(true)                     -- swallow clicks so the merchant behind doesn't get them
@@ -104,17 +106,26 @@ local function _build()
         f._numFS[i] = num
     end
 
+    -- Every line under the wheels is capped to the frame and wraps, like the
+    -- title: an unconstrained label ran straight past both edges when a stopped
+    -- run appended its reason (Vamoose, 2026-09-19).
     local total = HDG.UI:Label(f, "", "body", "CENTER", { role = "Text" })
     total:SetPoint("TOP", wheels, "BOTTOM", 0, -10)
+    total:SetWidth(FRAME_W - 32)
+    total:SetWordWrap(true)
     f._total = total
 
     local info = HDG.UI:Label(f, "", "small", "CENTER", { role = "TextInfo" })
     info:SetPoint("TOP", total, "BOTTOM", 0, -4)
+    info:SetWidth(FRAME_W - 32)
+    info:SetWordWrap(true)
     f._info = info
 
     -- Live progress line ("N items purchased in T.TTs"); empty until buying.
     local stats = HDG.UI:Label(f, "", "small", "CENTER", { role = "TextDim" })
     stats:SetPoint("TOP", info, "BOTTOM", 0, -4)
+    stats:SetWidth(FRAME_W - 32)
+    stats:SetWordWrap(true)
     f._stats = stats
 
     local buy = HDG.UI:Button(f, "", "body")
@@ -144,7 +155,9 @@ function QP:_RenderStats()
     -- A run that stopped short says so HERE. Without it the dialog showed
     -- "18 items purchased" beside wheels pre-filled with 1, and the only way to
     -- tell a stop from a miscount was to read the chat log or the wheels.
-    if f._stopReason then line = line .. "  --  " .. f._stopReason end
+    -- Its own line: the count and the reason read as two facts, and a long
+    -- reason wraps inside the frame instead of trailing the count.
+    if f._stopReason then line = line .. "\n" .. f._stopReason end
     f._stats:SetText(line)
 end
 

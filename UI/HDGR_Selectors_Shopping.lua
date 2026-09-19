@@ -225,11 +225,14 @@ end
 -- (gateFlagsForItem retired: replaced by HousingCatalogObserver._bakeSourceFlags.
 --  Chip rendering reads row.sourceFlags via UI.GateChips(itemID).)
 
--- Catalog decor guard (ADR-003a: byItemID is module-internal, not a Blizzard API call).
--- sweepGeneration == 0 (cold): pass all through to avoid discarding decor pre-load.
-local function _isCatalogDecor(itemID, sweepGeneration)
+-- What a shopping list carries: catalog decor, plus the nine Housing Dyes a
+-- blueprint's list needs (they have no catalog row). ADR-003a: byItemID is
+-- module-internal, not a Blizzard API call. sweepGeneration == 0 (cold): pass all
+-- through to avoid discarding decor pre-load.
+local function _isShoppable(itemID, sweepGeneration)
     if sweepGeneration == 0 then return true end  -- cold: pass through until sweep
     return HDG.HousingCatalogObserver.byItemID[itemID] ~= nil
+        or HDG.Constants.HOUSING_DYE_ITEM_IDS[itemID] == true
 end
 
 -- Display-time vendor resolution for wishlist items (no stored npcID): the live
@@ -273,9 +276,9 @@ Selectors:Register("shopping.activeListEntries", {
         for _, entry in ipairs(list.items) do
             -- Drop non-housing items (reagents, crafting mats) that may have
             -- been imported via Wowdb or pushed from the Recipes materials panel.
-            -- The shopping list is decor-only; non-catalog itemIDs are silent noise.
+            -- The shopping list is decor and housing dyes; anything else is noise.
             -- Cold-start (sweep == 0): pass through until catalog loads.
-            if _isCatalogDecor(entry.itemID, sweep) then
+            if _isShoppable(entry.itemID, sweep) then
                 -- Vendor coords from VendorAugment; wishlist (no npcID) meta is nil.
                 local meta = entry.npcID and HDG.StaticData.VendorAugment:Get(entry.npcID) or nil
                 out[#out + 1] = {
@@ -297,8 +300,10 @@ Selectors:Register("shopping.activeListEntries", {
                     } or nil,
                     -- Wishlist (no npcID) render hint: where the catalog says it sells.
                     availableFrom = (not entry.npcID) and _resolveWishlistVendor(entry.itemID, preferredMap) or nil,
-                    -- BoE = crafted (Professions) = the only AH-tradeable decor -> Auction House lane.
-                    isTradeable = HDG.HousingCatalogObserver:GetBindTypeForItem(entry.itemID) == "BoE",
+                    -- BoE = crafted (Professions) = the only AH-tradeable decor -> Auction House
+                    -- lane. Housing dyes never bind, and the AH is where they are bought.
+                    isTradeable = HDG.Constants.HOUSING_DYE_ITEM_IDS[entry.itemID] == true
+                        or HDG.HousingCatalogObserver:GetBindTypeForItem(entry.itemID) == "BoE",
                 }
             end
         end

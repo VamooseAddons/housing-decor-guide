@@ -71,6 +71,7 @@ function TE.ClickHintLines(spec)
     if spec.rightText then out[#out + 1] = GLYPH_RIGHT .. _loc(spec.rightText) end
     if spec.shiftText then out[#out + 1] = "Shift-" .. GLYPH_LEFT .. _loc(spec.shiftText) end
     if spec.ctrlText  then out[#out + 1] = "Ctrl-"  .. GLYPH_LEFT .. _loc(spec.ctrlText)  end
+    if spec.ctrlShiftText then out[#out + 1] = "Ctrl-Shift-" .. GLYPH_LEFT .. _loc(spec.ctrlShiftText) end
     return out
 end
 

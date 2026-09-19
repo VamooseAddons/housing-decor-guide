@@ -150,6 +150,13 @@ local function _wireDecorClicks(row, ed)
             -- so resolve it via the Professions reverse index); non-craftable
             -- decor toasts a "no recipe" note instead. Shift-click links the item
             -- in chat (active editbox, or opens chat). A plain click selects.
+            -- Ctrl-Shift-click destroys one stored copy of THIS row's variant with
+            -- no dialog (Soul, Discord 2026-09-19: "hover, hold ctrl+shift and
+            -- brrrr"). Checked first: it is also a Ctrl-click.
+            if IsControlKeyDown() and IsShiftKeyDown() then
+                DecorController:_DestroyOneFromRow(itemID, variantKey, ed.name)
+                return
+            end
             if IsControlKeyDown() then
                 local rid = HDG.StaticData.Recipes:Get(itemID) and itemID
                 if rid then
@@ -218,21 +225,33 @@ HDG.Rows:Register("decorRow", {
 -- ===== Controller lifecycle ==================================================
 
 -- ===== Destroy stored-copies dialog =========================================
--- Custom modal with 1-99 stepper. Destruction is irreversible; layered guards:
+-- Custom modal with a stepper from 1 to every stored copy:
+-- -100 / -10 / - / qty / + / +10 / +100. Asked for on Discord (2026-09-19):
+-- clearing 49 copies was 48 clicks, and Soul has 3000 small tiles to clear. The
+-- old 99 ceiling went with it -- a 3000-copy stack could never be emptied.
+-- DestroyEntry's destroyAll flag is documented as "deletes all entries within the
+-- stack", but Blizzard's own storage menu labels it "Destroy (5)"
+-- (Blizzard_HousingCatalogEntry.lua bulkDestroyAmount) -- unverified which, so
+-- every copy is its own call. The run belongs to Modules/HDGR_DestroyQueue.lua,
+-- which paces the calls and counts a copy only when the item's owned total
+-- confirms it (a 101-copy burst once kept 22 while the client counted all 101).
+-- The dialog stays open on the confirmed done/total counter, with Cancel turned
+-- into Stop, until the run ends.
+-- Destruction is irreversible; layered guards:
 --   1. Show: refuse without valid entryID + count.
---   2. Show: clamp max to min(99, destroyableInstanceCount).
---   3. +/-: re-check bounds before mutating qty.
+--   2. Show: max = destroyableInstanceCount (the per-variant stored copies).
+--   3. Steps: clamp into 1..max before mutating qty.
 --   4. Render: refreshDestroyDialog re-clamps qty each paint.
 --   5. Click: snapshot entryID/name/q into locals (HOUSING_STORAGE_ENTRY_UPDATED
 --      dispatches synchronously inside DestroyEntry -- can't read stale state).
 --   6. Click: type-validate q; math.floor.
 --   7. Click: re-resolve live destroyable count; clamp DOWN only.
---   8. Click: disable Destroy button for the loop (double-click guard).
---   9. Loop: pcall each DestroyEntry; API bounds naturally limit over-loop.
---  10. Hide: clear entryID + name to prevent stale reuse.
+--   8. Click: disable Destroy button for the run (double-click guard).
+--   9. Run: pcall each DestroyEntry; the first error stops sending (DestroyQueue).
+--  10. Hide: stops a run in progress, then clears entryID + name.
 
 local _destroyDialog
-local _destroyState = { qty = 1, max = 1, entryID = nil, name = nil }
+local _destroyState = { qty = 1, max = 1, entryID = nil, name = nil, itemID = nil, variantKey = nil }
 
 -- Snapshot destroy params; returns nil on any invalid input (destruction must not proceed ambiguously).
 local function validateDestroyArgs(entryID, q, max)
@@ -243,6 +262,17 @@ local function validateDestroyArgs(entryID, q, max)
     if q < 1 then return nil end
     if q > max then q = max end
     return q
+end
+
+-- One stepper button, placed by its offset from the quantity in the middle.
+local function _stepperButton(row, label, font, width, xOffset)
+    local b = HDG.UI:Button(row, label, font)
+    b._hdgrVariant = "tertiary"
+    HDG.Theme:Register(b, "Button")
+    b:SetSize(width, 32)
+    b:ClearAllPoints()
+    b:SetPoint("CENTER", row, "CENTER", xOffset, 0)
+    return b
 end
 
 local function buildDestroyDialog()
@@ -286,29 +316,24 @@ local function buildDestroyDialog()
 
     -- Stepper row: anchored from BOTTOM so position is fixed regardless of warning text wrap.
     local stepperRow = CreateFrame("Frame", nil, f)
-    stepperRow:SetSize(200, 32)
+    stepperRow:SetSize(380, 32)
     stepperRow:SetPoint("BOTTOM", 0, 76)
     f.stepperRow = stepperRow
 
-    f.minusBtn = HDG.UI:Button(stepperRow, "-", "heading")
-    f.minusBtn._hdgrVariant = "tertiary"
-    HDG.Theme:Register(f.minusBtn, "Button")
-    f.minusBtn:SetSize(32, 32)
-    f.minusBtn:ClearAllPoints()
-    f.minusBtn:SetPoint("CENTER", stepperRow, "CENTER", -56, 0)
+    f.minus100Btn = _stepperButton(stepperRow, "-100", "body", 50, -162)
+    f.minus10Btn  = _stepperButton(stepperRow, "-10",  "body", 44, -106)
+    f.minusBtn    = _stepperButton(stepperRow, "-",    "heading", 32, -56)
 
     f.qtyFs = stepperRow:CreateFontString(nil, "OVERLAY")
     HDG.UI.applyFontRole(f.qtyFs, "heading")
     HDG.Theme:Register(f.qtyFs, "Text")
     f.qtyFs:SetPoint("CENTER", stepperRow, "CENTER", 0, 0)
-    f.qtyFs:SetWidth(80)
+    f.qtyFs:SetWidth(200)   -- wide enough for a run's "3000/3000" counter
     f.qtyFs:SetJustifyH("CENTER")
 
-    f.plusBtn = HDG.UI:Button(stepperRow, "+", "heading")
-    f.plusBtn._hdgrVariant = "tertiary"
-    HDG.Theme:Register(f.plusBtn, "Button")
-    f.plusBtn:SetSize(32, 32)
-    f.plusBtn:SetPoint("CENTER", stepperRow, "CENTER", 56, 0)
+    f.plusBtn    = _stepperButton(stepperRow, "+",    "heading", 32, 56)
+    f.plus10Btn  = _stepperButton(stepperRow, "+10",  "body", 44, 106)
+    f.plus100Btn = _stepperButton(stepperRow, "+100", "body", 50, 162)
 
     f.stepperMaxFs = f:CreateFontString(nil, "OVERLAY")
     HDG.UI.applyFontRole(f.stepperMaxFs, "small")
@@ -329,11 +354,18 @@ local function buildDestroyDialog()
     HDG.Theme:Register(f.cancelBtn, "Button")
     f.cancelBtn:SetSize(140, 30)
     f.cancelBtn:SetPoint("BOTTOMRIGHT", -50, 24)
+    -- Hiding stops a run (OnHide below), so Cancel and Stop are the same click.
     f.cancelBtn:SetScript("OnClick", function() f:Hide() end)
 
-    -- OnHide: clear state + re-enable Destroy button (prevents stale reuse by future Show).
+    -- OnHide: stop any run in progress, then clear state + re-enable Destroy
+    -- (prevents stale reuse by a future Show). A dialog hidden by anything --
+    -- Cancel/Stop, or the whole UI toggled off -- must not keep destroying out
+    -- of sight with no Stop button on screen.
     f:SetScript("OnHide", function()
-        _destroyState.entryID = nil
+        HDG.DestroyQueue:Stop()
+        _destroyState.itemID     = nil
+        _destroyState.variantKey = nil
+        _destroyState.entryID    = nil
         _destroyState.name    = nil
         _destroyState.qty     = 1
         if f.destroyBtn and f.destroyBtn.SetEnabled then
@@ -344,34 +376,151 @@ local function buildDestroyDialog()
     return f
 end
 
-local function refreshDestroyDialog()
-    if not _destroyDialog then return end
-    local f   = _destroyDialog
-    local st  = _destroyState
+-- The six step buttons, shown for choosing and hidden while a run counts.
+local function _stepButtons(f)
+    return { f.minus100Btn, f.minus10Btn, f.minusBtn, f.plusBtn, f.plus10Btn, f.plus100Btn }
+end
+
+-- Choosing: "Destroy N copies of <Name>?" over the stepper.
+local function _paintDestroyStepper(f, st)
     -- Coerce garbage state: shouldn't happen via Show/+/- paths but guards future callers.
     if type(st.qty) ~= "number" then st.qty = 1 end
     if type(st.max) ~= "number" or st.max < 1 then st.max = 1 end
     if st.qty < 1       then st.qty = 1       end
     if st.qty > st.max  then st.qty = st.max  end
-    local accentCC  = HDG.Theme:ColorCode("semantic.accent")
-    local errorCC   = HDG.Theme:ColorCode("semantic.error")
-    -- Title: "Destroy N copy/copies of <Name>?"
     f.titleFs:SetText(string.format("Destroy %d %s of\n%s%s|r?",
-        st.qty,
-        st.qty == 1 and "copy" or "copies",
-        accentCC, st.name or "this decor"))
-    -- Big warning + sub-note. The warning is colored error and the sub-
-    -- note remains dim so the hierarchy reads loud-then-quiet.
-    f.bigWarnFs:SetText(errorCC .. "WARNING: This cannot be undone.|r")
+        st.qty, st.qty == 1 and "copy" or "copies",
+        HDG.Theme:ColorCode("semantic.accent"), st.name or "this decor"))
     f.subNoteFs:SetText(
         "Destroyed decor is gone permanently.\n" ..
         "If this was a mistake, Vamoose is very sorry -- there is nothing he can do.")
-    -- Stepper qty + live max caption.
     f.qtyFs:SetText(tostring(st.qty))
-    local maxPlural = st.max == 1 and "copy" or "copies"
-    f.stepperMaxFs:SetText(string.format("of %d stored %s", st.max, maxPlural))
-    f.minusBtn:SetEnabled(st.qty > 1)
-    f.plusBtn:SetEnabled(st.qty < st.max)
+    f.stepperMaxFs:SetText(string.format("of %d stored %s", st.max, st.max == 1 and "copy" or "copies"))
+    local canDown, canUp = st.qty > 1, st.qty < st.max
+    for i, b in ipairs(_stepButtons(f)) do   -- first three step down, last three up
+        b:Show()
+        if i <= 3 then b:SetEnabled(canDown) else b:SetEnabled(canUp) end
+    end
+    f.destroyBtn:Show()
+    f.cancelBtn:SetText("Cancel")
+end
+
+-- Running: the counter replaces the stepper, Destroy goes, and Cancel becomes
+-- Stop. While the server has paused taking destroys the note says so -- a
+-- counter standing still for seconds otherwise reads as stuck.
+local function _paintDestroyProgress(f, run)
+    f.titleFs:SetText(string.format("Destroying %d %s of\n%s%s|r",
+        run.total, run.total == 1 and "copy" or "copies",
+        HDG.Theme:ColorCode("semantic.accent"), run.name))
+    if run.waiting then
+        f.subNoteFs:SetText(HDG.Theme:ColorCode("semantic.warning") ..
+            "The game has paused destroys for a moment.|r\nHDG keeps trying every few seconds -- Stop ends the run.")
+    else
+        f.subNoteFs:SetText("Stop ends the run. Copies already destroyed stay destroyed.")
+    end
+    f.qtyFs:SetText(string.format("%d/%d", run.done, run.total))
+    f.stepperMaxFs:SetText("destroyed so far")
+    for _, b in ipairs(_stepButtons(f)) do b:Hide() end
+    f.destroyBtn:Hide()
+    f.cancelBtn:SetText("Stop")
+end
+
+local function refreshDestroyDialog()
+    if not _destroyDialog then return end
+    local f = _destroyDialog
+    -- The warning is coloured error so the hierarchy reads loud-then-quiet.
+    f.bigWarnFs:SetText(HDG.Theme:ColorCode("semantic.error") .. "WARNING: This cannot be undone.|r")
+    local run = HDG.Selectors:Call("decor.destroyProgress", HDG.Store:GetState(), {})  -- exception(false-positive): top-level controller read, not a row factory
+    if run then
+        _paintDestroyProgress(f, run)
+    else
+        _paintDestroyStepper(f, _destroyState)
+    end
+end
+
+-- ===== Destroy runs (Modules/HDGR_DestroyQueue.lua) =========================
+-- The queue sends and confirms. This controller starts runs, paints the dialog
+-- from session.destroying, and when a run ends clears a selection it emptied and
+-- closes the dialog. DecorController._destroyTarget = the row the running
+-- destroy belongs to, for that selection rule.
+
+-- Did the run empty the very row that is selected? Only then does the
+-- selection go: an emptied row drops out of the Stored list, and the row taking
+-- its place would read as selected. Another item, another variant of the same
+-- item, or copies left over (a Ctrl-Shift-click taking one of five) are the
+-- player's selection to keep -- and a run outlasts the click by seconds.
+local function _emptiedSelectedRow(target)
+    local state = HDG.Store:GetState()  -- exception(false-positive): top-level controller read, not a row factory
+    if HDG.Selectors:Call("decor.selectedItemID", state, {}) ~= target.itemID then return false end
+    if HDG.Selectors:Call("decor.selectedVariantKey", state, {}) ~= target.variantKey then return false end
+    local _, left = HDG.Selectors:Call("decor.destroyTarget", state, {})(target.itemID, target.variantKey)
+    return (left or 0) == 0  -- exception(nullable): no catalog row left = nothing left
+end
+
+-- target = { entryID, name, itemID, variantKey }. Starts a run, or adds to the
+-- running one for the same row. False, with a message, while another row's runs.
+function DecorController:_StartDestroy(target, count)
+    if not HDG.DestroyQueue:Start(target, count) then
+        HDG.Log:Info("decor_action", "Another destroy is still running -- let it finish or Stop it")
+        return false
+    end
+    self._destroyTarget = target
+    return true
+end
+
+-- The run ended (session.destroying went nil): clear a selection it emptied and
+-- close the dialog. Hiding the dialog re-enters OnHide -> DestroyQueue:Stop,
+-- which finds no run and does nothing.
+function DecorController:_OnDestroyEnded()
+    local target = self._destroyTarget
+    self._destroyTarget = nil
+    if target and _emptiedSelectedRow(target) then
+        CH.Mechanics.SetUITransientView("decor", "selectedItemID", nil)
+        CH.Mechanics.SetUITransientView("decor", "selectedVariantKey", nil)
+    end
+    if _destroyDialog then _destroyDialog:Hide() end
+end
+
+-- DECOR_DESTROY_PROGRESS: repaint while the run goes; tidy up once it ends. A
+-- frame later, because tidying up dispatches, and a dispatch may not run nested
+-- inside another action's subscriber.
+function DecorController:_OnDestroyProgress(payload)
+    if payload.total then return refreshDestroyDialog() end
+    C_Timer.After(0, function() DecorController:_OnDestroyEnded() end)
+end
+
+-- Subscribed at file load, like the quantity picker's: a Ctrl-Shift-click run
+-- has no dialog, and its end still has to be handled whether or not the main
+-- window was ever built.
+HDG.Store:Subscribe(function(actionType, _, action)
+    if actionType == HDG.Constants.ACTIONS.DECOR_DESTROY_PROGRESS then
+        DecorController:_OnDestroyProgress(action.payload)
+    end
+end)
+
+-- The browser's Ctrl-Shift-click: one copy of the clicked row's own variant, no
+-- dialog. Same gate as the Destroy button (Stored filter on), the same target
+-- rule (decor.destroyTarget) and the same queue, so it logs and confirms the same
+-- way. Clicking faster than the game confirms adds to the running destroy for
+-- that row; another row's run refuses it.
+function DecorController:_DestroyOneFromRow(itemID, variantKey, name)
+    local state = HDG.Store:GetState()  -- exception(false-positive): top-level controller method (not a row factory)
+    if HDG.Selectors:Call("decor.onlyStored", state, {}) ~= true then
+        HDG.Log:Info("decor_action", "Turn on the Destroy decor filter to destroy from the list")
+        return
+    end
+    if not HDG.Selectors:Call("decor.isStored", state, {})(itemID) then return end   -- nothing stored, or a unique trophy
+    local entryID, count = HDG.Selectors:Call("decor.destroyTarget", state, {})(itemID, variantKey)
+    if not entryID or count < 1 then return end   -- exception(nullable): this variant has no stored copy
+    self:_StartDestroy({ entryID = entryID, name = name, itemID = itemID, variantKey = variantKey }, 1)
+end
+
+-- Move the quantity by `delta`, clamped into 1..max: a +10 near the top lands on
+-- max rather than refusing, so the tens are always one click from either end.
+local function _stepDestroyQty(delta)
+    local st = _destroyState
+    st.qty = math.max(1, math.min(st.max, st.qty + delta))
+    refreshDestroyDialog()
 end
 
 local function ShowDestroyStepperDialog(sel)
@@ -379,65 +528,43 @@ local function ShowDestroyStepperDialog(sel)
     local entryID = sel.entryID
     local name    = sel.name or "this decor"
     -- Guard: nothing destroyable -> refuse. Belt-and-braces with decor.showDestroyButton binding.
-    local liveMax = math.min(99, math.floor(sel.destroyableInstanceCount or 0))
+    local liveMax = math.floor(sel.destroyableInstanceCount or 0)
     if not entryID or liveMax < 1 then return end
 
     if not _destroyDialog then _destroyDialog = buildDestroyDialog() end
     local f  = _destroyDialog
+    -- A run is going: bring its counter back rather than start a second one.
+    -- Paint first: a run started by Ctrl-Shift-click never painted this dialog,
+    -- and an old paint shows a live Destroy button whose click would Stop the run.
+    if HDG.DestroyQueue:IsRunning() then refreshDestroyDialog(); f:Show(); f:Raise(); return end
     local st = _destroyState
     st.max     = liveMax
     st.qty     = 1
     st.entryID = entryID
     st.name    = name
+    st.itemID  = sel.itemID
+    -- The dialog destroys the selected row's variant (decor.selectedItem ->
+    -- decor.destroyTarget), so the run remembers which row that was.
+    st.variantKey = HDG.Selectors:Call("decor.selectedVariantKey", HDG.Store:GetState(), {})  -- exception(false-positive): top-level controller read, not a row factory
 
-    f.minusBtn:SetScript("OnClick", function()
-        if _destroyState.qty > 1 then   -- re-check: disabled state should prevent this, but input race possible
-            _destroyState.qty = _destroyState.qty - 1
-            refreshDestroyDialog()
-        end
-    end)
-    f.plusBtn:SetScript("OnClick", function()
-        if _destroyState.qty < _destroyState.max then
-            _destroyState.qty = _destroyState.qty + 1
-            refreshDestroyDialog()
-        end
-    end)
+    f.minus100Btn:SetScript("OnClick", function() _stepDestroyQty(-100) end)
+    f.minus10Btn:SetScript("OnClick",  function() _stepDestroyQty(-10)  end)
+    f.minusBtn:SetScript("OnClick",    function() _stepDestroyQty(-1)   end)
+    f.plusBtn:SetScript("OnClick",     function() _stepDestroyQty(1)    end)
+    f.plus10Btn:SetScript("OnClick",   function() _stepDestroyQty(10)   end)
+    f.plus100Btn:SetScript("OnClick",  function() _stepDestroyQty(100)  end)
     f.destroyBtn:SetScript("OnClick", function()
-        -- Snapshot ALL params: HOUSING_STORAGE_ENTRY_UPDATED fires synchronously inside DestroyEntry.
-        local entryID_ = _destroyState.entryID
-        local name_    = _destroyState.name
-        local qRaw     = _destroyState.qty
-        local maxRaw   = _destroyState.max
-
-        local q = validateDestroyArgs(entryID_, qRaw, maxRaw)
+        local q = validateDestroyArgs(_destroyState.entryID, _destroyState.qty, _destroyState.max)
         if not q then f:Hide(); return end
-
-        -- q is already clamped to the per-variant numStored (maxRaw). We deliberately do NOT
+        -- q is already clamped to the per-variant numStored (max). We deliberately do NOT
         -- re-gate on GetCatalogEntryInfo(entryID).destroyableInstanceCount: on the base/undyed
         -- (vid=0) entry that field is an off-by-one AGGREGATE, which would leave the last undyed
         -- copy undestroyable. Any stale over-count is absorbed by DestroyEntry's graceful no-op.
-        local cat = _G.C_HousingCatalog
-        if not (cat and cat.DestroyEntry) then f:Hide(); return end
-
-        f.destroyBtn:SetEnabled(false)   -- guard 8: disable for loop; Hide() below is belt+braces
-        -- Hide first so user sees immediate response; 99-iteration loop can stutter a frame.
-        f:Hide()
-
-        local firstErr   -- collect first DestroyEntry failure; warn once, not N times
-        for _ = 1, q do
-            local ok, err = pcall(cat.DestroyEntry, entryID_, false)
-            if not ok and not firstErr then firstErr = err end
-        end
-        if firstErr then HDG.Log:Warn("decor", "DestroyEntry failed: " .. tostring(firstErr)) end
-
-        -- Clear selection: if all copies destroyed, the item falls out of filter;
-        -- the row at the same visual position shows a DIFFERENT item without this clear.
-        CH.Mechanics.SetUITransientView("decor", "selectedItemID", nil)
-        CH.Mechanics.SetUITransientView("decor", "selectedVariantKey", nil)
-
-        HDG.Log:Info("decor_action",
-            string.format("Destroyed %d %s of %s",
-                q, q == 1 and "copy" or "copies", name_ or "decor"))
+        f.destroyBtn:SetEnabled(false)   -- guard 8: double-click guard for the run
+        -- The run copies what it needs, so the synchronous storage events it fires
+        -- cannot read half-updated dialog state.
+        DecorController:_StartDestroy({ entryID = _destroyState.entryID, name = _destroyState.name,
+            itemID = _destroyState.itemID, variantKey = _destroyState.variantKey }, q)
     end)
     refreshDestroyDialog()
     f:Show(); f:Raise()
@@ -494,7 +621,7 @@ function DecorController:Wire(rootFrame)
 
     self:_wireNoteBox(rootFrame)
 
-    -- Destroy button: opens the 1-99 stepper dialog.
+    -- Destroy button: opens the stepper dialog.
     local destroyBtn = HDG.UI.W(rootFrame, "decorDetailPanel.destroyBtn")
     if destroyBtn and destroyBtn.SetScript then
         destroyBtn:SetScript("OnClick", function()

@@ -117,6 +117,71 @@ local function _removeClickOverrides()
     MO._origClicks = nil
 end
 
+-- ===== Purchase credit: every buy shrinks the shown shopping list ===========
+-- Any merchant purchase takes the item off the ACTIVE shopping list (owner,
+-- 2026-09-19). It used to be Buy All only, so a right-click at the vendor, a
+-- stack split or a confirm popup left the list claiming pieces already bought.
+--
+-- One hook on BuyMerchantItem sees every buy path: Blizzard's right-click, stack
+-- split and high-cost / token confirmations (MerchantFrame.lua, GameDialogDefs),
+-- and HDG's own Buy All and quantity picker, which call it too. The hook records
+-- INTENT only. A buy can still fail after the click -- short on gold, bags full
+-- -- so the list moves when the item LANDS: a count rise in bags or in decor
+-- storage, whichever it reaches. Payment does not decide destination (Dennia's
+-- gold-priced decor goes to bags, 2026-08-31).
+--
+-- Counts, not events: landed = rise in bags + rise in storage since the first
+-- click, capped at what was asked. Recomputed from scratch on every signal, so a
+-- coalesced or doubled signal costs nothing (the BuyQueue lesson, 2026-08-21),
+-- and an item moving from bags into storage nets out rather than counting twice.
+-- A claim that never lands lapses after MERCHANT_PURCHASE_CREDIT_SECS.
+MO._pending = MO._pending or {}   -- exception(false-positive): idempotent module-load init; itemID -> claim
+
+-- Decor-storage count, or nil when there is none to watch: not decor, or the
+-- catalog is still cold. A nil baseline switches the storage side off for that
+-- claim -- a cold catalog warming mid-claim would otherwise read as the whole
+-- stored count arriving at once.
+local function _stored(itemID)
+    local row = HDG.HousingCatalogObserver:GetRow(itemID)  -- exception(nullable): not decor, or catalog cold
+    return row and row.quantity
+end
+
+function MO:_OnBuy(index, quantity)
+    local itemID = GetMerchantItemID(index)
+    if not itemID then return end   -- exception(boundary): slot emptied between the click and the hook
+    -- No quantity = one of the vendor's stacks (MerchantFrame.lua's plain buy).
+    local asked = quantity or C_MerchantFrame.GetItemInfo(index).stackCount
+    local claim = self._pending[itemID]
+    if claim then
+        claim.asked, claim.at = claim.asked + asked, GetTime()
+        return
+    end
+    self._pending[itemID] = { asked = asked, credited = 0, at = GetTime(),
+        bagStart = HDG.BagObserver:GetBagCount(itemID), storeStart = _stored(itemID) }
+end
+
+local function _landed(itemID, claim)
+    local fromBags = math.max(0, HDG.BagObserver:GetBagCount(itemID) - claim.bagStart)
+    local store = claim.storeStart and _stored(itemID)
+    local fromStorage = store and math.max(0, store - claim.storeStart) or 0
+    return math.min(claim.asked, fromBags + fromStorage)
+end
+
+function MO:_CreditLanded()
+    local now = GetTime()
+    for itemID, claim in pairs(self._pending) do
+        local fresh = _landed(itemID, claim) - claim.credited
+        if fresh > 0 then
+            claim.credited = claim.credited + fresh
+            HDG.Store:Dispatch({ type = HDG.Constants.ACTIONS.SHOPPING_ITEM_PURCHASED,
+                payload = { itemID = itemID, qty = fresh } })
+        end
+        if claim.credited >= claim.asked or now - claim.at > HDG.Constants.MERCHANT_PURCHASE_CREDIT_SECS then
+            self._pending[itemID] = nil
+        end
+    end
+end
+
 function MO:OnMerchantShow()   MO:ScanNow(); _installClickOverrides() end
 function MO:OnMerchantUpdate() if HDG.Store:GetState().session.merchant.open then MO:ScanNow() end end
 function MO:OnMerchantClosed()
@@ -150,5 +215,25 @@ HDG.Modules:Declare({
     OnMerchantShow   = function(self) MO:OnMerchantShow() end,
     OnMerchantUpdate = function(self) MO:OnMerchantUpdate() end,
     OnMerchantClosed = function(self) MO:OnMerchantClosed() end,
-    OnBagUpdate      = function(self) HDG.BuyQueue:_OnBagLanded() end,
+    OnBagUpdate      = function(self) HDG.BuyQueue:_OnBagLanded(); MO:_CreditLanded() end,
+    onEnable = function(self)
+        -- A post-hook: it runs after the buy call and never touches its arguments,
+        -- so Blizzard's own buying stays untainted.
+        hooksecurefunc("BuyMerchantItem", function(index, quantity) MO:_OnBuy(index, quantity) end)
+        -- Decor landing in storage arrives as the catalog's counts dispatch. The
+        -- credit dispatches too, so it runs a frame later, never nested inside
+        -- another action's subscriber (same rule as the buy queue).
+        self._storeToken = HDG.Store:Subscribe(function(actionType)
+            if actionType == HDG.Constants.ACTIONS.COLLECTION_CATALOG_ROW_COUNTS_UPDATED
+               and next(MO._pending) then
+                C_Timer.After(0, function() MO:_CreditLanded() end)
+            end
+        end)
+    end,
+    onShutdown = function(self)
+        if self._storeToken then
+            HDG.Store:Unsubscribe(self._storeToken)
+            self._storeToken = nil
+        end
+    end,
 })

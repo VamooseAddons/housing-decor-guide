@@ -12,22 +12,22 @@
 
 ---
 
-## What's New in v3.33.2
+## What's New in v3.34.0
 
-- **Blueprint counts stay honest after a shopping trip.** A blueprint's have/need counts are the game's answer at the moment you inspected it. If you inspected several codes and then bought decor, the earlier ones kept reporting pieces you now owned. Any change to your decor storage now marks every inspected blueprint out of date. Selecting one fetches it again, and a Refresh button beside the share code lights up with "manifest out of date" while the one on screen needs it.
-- **The paste box empties once a code is accepted**, so the next code no longer lands on the end of the last one. A rejected code stays put so you can correct it.
-- **Link in chat** now sits at the bottom of the blueprint list, opposite Save a Blueprint.
-- A catalog that failed its first load now recovers on its own instead of sitting at "loading" for the session.
-- Moving decor you already own in the editor no longer records it as newly learned in Recent activity.
-- Labels show their current values when a view is revealed, including floating windows on first open.
-- Opening HDG for the first time while in combat waits for combat to end instead of failing with an interface error.
+- **Ctrl-Shift-click a decor row to destroy one stored copy.** With the Destroy Decor filter on, each click destroys one copy of that row, plain or dyed, with no dialog. Extra clicks while the game is still confirming queue more copies of the same row. Suggested by Soul.
+- **The destroy dialog steps by 10 and 100, and the old limit of 99 at a time is gone.** The count only moves when the game confirms each copy, and the dialog stays open with that live count and a Stop button. The game pauses after about 26 destroys in a row; the dialog says so and keeps trying every few seconds until the game takes them again.
+- **Shopping list items come off as you buy them, however you buy them.** Right-clicking at the vendor, splitting a stack or confirming an expensive item now takes the piece off the list you have showing, not only Buy All. An item on several lists only comes off the one you are shopping from, and a purchase that fails leaves the list alone. Reported by Soul.
+- **Blueprint dye counts now cover the whole build.** Each dye row shows how many you hold, across your bags and banks, out of what the build uses. Hovering a dye shows what the game's import window will say for it and why the two differ, and when the import window is short only because the dyes are in your bank, how many to move into your bags. Suggested by Windgrace90.
+- **A blueprint's dyes now reach its shopping list**, in the Auction House section.
+- The bulk-buy picker's text stays inside its window when a run stops early.
+- The Blueprints, Styles, Recipes, Warehouse, Mogul and Add Decor tabs pick up your collection once the game finishes loading it after a /reload, instead of waiting for a tab switch.
 
 ## The Decor Catalog
 
 - **Every piece from the in-game Housing Catalog** in one searchable list -- favorites, a collected check, a craftable-recipe star, and dye-variant color dots at a glance.
 - **Compose filters** across Crafted (by profession), Size (footprint tags plus placement-cost chips), Styles, Expansions, Sources (vendor / quest / achievement / reputation / crafted / ...), and more -- with a live "collected / shown" status readout and one-click Reset.
 - **"New in <patch>"** -- when a patch or hotfix adds decor to the catalog, a New chip appears in the filter row so you can browse exactly what was added (and what you're still missing, via the Uncollected toggle).
-- **Uncollected** toggle to focus on what you're missing; **Destroy Decor** toggle to manage stored duplicates (with a safe, confirmed destroy dialog).
+- **Uncollected** toggle to focus on what you're missing; **Destroy Decor** toggle to manage stored duplicates, with a confirmed destroy dialog that counts each copy as the game takes it, or Ctrl-Shift-click a row to destroy one copy.
 - **3D model preview** of any piece -- rotate, zoom, swap the backdrop, and preview specific dye variants.
 - **Rich detail card**: category breadcrumb, size, source, owned/stored/placed counts, first-acquisition House XP bonus, and style/faction tags.
 - **Private notes** per item and a one-click **+ Wishlist** that adds to your active shopping list.
@@ -73,7 +73,7 @@ Housing crafting runs on lumber, so there's a dedicated **Lumber Tracker** -- a 
 
 ## Blueprints -- inspect and plan builds (WoW 12.1)
 
-On a 12.1 client, a Blueprints tab appears under House. Paste any blueprint share code to inspect its full contents -- rooms, decor, dyes, fixtures -- and what you are missing, measured against whichever of your houses you pick, with room and decor budget meters and the game's own reason text when an import would be blocked. Pasted codes are kept in your own library with private names; your saved blueprint catalog shows alongside with rename and delete. Route missing items to a shopping list, import the contents as a Styles furnishing set, open House and Interior blueprints in the Architect, save a blueprint of your current house (full house, room, interior, or exterior), apply a code to your house through the game's import dialog, or link a blueprint in chat for others to import.
+On a 12.1 client, a Blueprints tab appears under House. Paste any blueprint share code to inspect its full contents -- rooms, decor, dyes, fixtures -- and what you are missing, measured against whichever of your houses you pick, with room and decor budget meters and the game's own reason text when an import would be blocked. Pasted codes are kept in your own library with private names; your saved blueprint catalog shows alongside with rename and delete. Route missing items, dyes included, to a shopping list, import the contents as a Styles furnishing set, open House and Interior blueprints in the Architect, save a blueprint of your current house (full house, room, interior, or exterior), apply a code to your house through the game's import dialog, or link a blueprint in chat for others to import.
 
 ## House -- your collection at a glance
 
@@ -85,7 +85,7 @@ A companion window injects into Blizzard's House Editor so you can **place decor
 
 ## Tools
 
-- **Shopping** -- a floating, multi-list shopping manager grouped by zone and vendor, with "Waypoint All" and share/import codes. At a vendor, "Buy All" purchases every gold-priced list item in one paced pass, and right-clicking a gold-priced decor item opens a quantity picker.
+- **Shopping** -- a floating, multi-list shopping manager grouped by zone and vendor, with "Waypoint All" and share/import codes. At a vendor, "Buy All" purchases every gold-priced list item in one paced pass, and right-clicking a gold-priced decor item opens a quantity picker. Items come off the list as you buy them.
 - **Zone alerts** -- entering a zone with a decor vendor (selling something you're missing or have listed) can pop a window, ping chat, and play a sound -- each toggle optional.
 - **Your Data** -- collection KPIs, achievement progress (decor, coupons, lumber milestones), and full crafting/farming history.
 - **Config** -- multiple color themes with a live preview, UI scaling, and account profiles.
@@ -111,7 +111,7 @@ A companion window injects into Blizzard's House Editor so you can **place decor
 ---
 
 **Author:** Vamoose
-**Version:** 3.33.2
+**Version:** 3.34.0
 **Game Version:** 12.1.0 (Midnight)
 **Source / Issues:** https://github.com/VamooseAddons/housing-decor-guide
 **Discord:** https://discord.gg/RWZaxJaHFP

@@ -93,15 +93,15 @@ function Q:Enqueue(rows)
     end
     -- Flatten to single (index) calls: stackCount==1 decor -> qty>maxStack is
     -- server-REJECTED (spec s2), so every unit is its own BuyMerchantItem(idx, 1).
-    -- Each unit carries its source (itemID/npcID) so a landed buy can decrement
-    -- the shopping-list entry it fulfils (Buy All). Picker rows omit itemID -> no-op.
+    -- The shopping list is credited elsewhere (MerchantObserver's purchase
+    -- credit), so a unit only needs what this queue watches for its own landing.
     local flat, n = {}, 0
     for _, r in ipairs(rows) do
         for _ = 1, r.qty do
             n = n + 1
-            flat[n] = { index = r.index, itemID = r.itemID, npcID = r.npcID,
-                        -- Separate from itemID on purpose: itemID drives the
-                        -- shopping-list decrement, bagItemID only counts bags.
+            flat[n] = { index = r.index,
+                        -- The item whose bag count confirms this unit: a coupon
+                        -- row names it, a Buy All row's own item stands in.
                         bagItemID = r.bagItemID or r.itemID,
                         -- toBags: the EXPECTED destination, used only to word a
                         -- stall message. It is not a gate -- see _bagItemID
@@ -237,12 +237,10 @@ end
 -- so it is recorded identically however it was noticed. `landed` is an absolute
 -- count when the caller has one; storage signals still step by one.
 function Q:_Confirm(landed)
-    local unit = self._flat[self._done]
     self._awaitingLand = false
     if self._timeout then self._timeout:Cancel(); self._timeout = nil end
     self._landed = landed or (self._landed + 1)
     C_Timer.After(0, function()
-        Q:_ReflectToList(unit)
         _dispatchProgress(self._total, self._landed)
         Q:_BuyNext()
     end)
@@ -256,18 +254,9 @@ function Q:_OnBagLanded()
     self:_Confirm(landed)
 end
 
--- Buy All is shopping-list-driven: as each purchased unit lands in decor storage,
--- decrement the shopping-list entry it fulfilled (ADJUST_QTY removes it at 0), so
--- the list tracks what's still needed. Quantity-picker buys carry no itemID, so
--- this is a no-op for them. Dispatched a frame later (from _OnLanded's deferral),
--- never nested inside the landed-signal subscriber.
-function Q:_ReflectToList(unit)
-    if not (unit and unit.itemID) then return end
-    HDG.Store:Dispatch({
-        type    = HDG.Constants.ACTIONS.SHOPPING_ITEM_ADJUST_QTY,
-        payload = { itemID = unit.itemID, npcID = unit.npcID, delta = -1 },
-    })
-end
+-- The shopping list is NOT touched here. Every buy -- this queue's and
+-- Blizzard's own -- is credited to the active list by MerchantObserver's
+-- purchase credit when it lands, so a queue-side decrement would count twice.
 
 function Q:_Finish()
     _stop(self)
@@ -285,7 +274,6 @@ function Q:_TimerTick()
     while k > 0 and self._done < self._total do
         self._done = self._done + 1; k = k - 1
         BuyMerchantItem(self._flat[self._done].index, 1)
-        Q:_ReflectToList(self._flat[self._done])
     end
     -- Legacy path gets no landed signal, so initiated is the only count it has.
     self._landed = self._done

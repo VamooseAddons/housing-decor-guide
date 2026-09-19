@@ -107,9 +107,12 @@ local LANDING_SECTIONS = {
 -- _vendorListRecord: shared by iterAllCollections AND StyleResolve.RecordFor so
 -- both resolve a "vsl:" id to the same shape.
 local function _vendorListRecord(list, listID)
+    -- Decor only: a blueprint's list also carries its Housing Dyes, which have no
+    -- icon in the catalog and can never count as collected, so a card built from
+    -- them showed blank tiles and a collected count stuck below 100%.
     local ids = {}
     for _, e in ipairs(list.items or {}) do
-        if e.itemID then ids[#ids + 1] = e.itemID end
+        if e.itemID and not HDG.Constants.HOUSING_DYE_ITEM_IDS[e.itemID] then ids[#ids + 1] = e.itemID end
     end
     local meta      = list.meta or {}
     local isWowhead = meta.source == "wowhead"
@@ -525,7 +528,9 @@ Selectors:Register("styles.export.sourceRows", {
 
         local items = { shopping = {}, style = {}, set = {} }
         for id, list in pairs(state.account.vendorShoppingLists) do
-            items.shopping[#items.shopping + 1] = { key = "vsl:" .. id, name = list.name or id, countHint = #list.items }  -- exception(nullable): list.name optional, mirror _vendorListRecord fallback
+            -- Count what the card shows: _vendorListRecord leaves a blueprint list's dyes out.
+            items.shopping[#items.shopping + 1] = { key = "vsl:" .. id, name = list.name or id,  -- exception(nullable): list.name optional, mirror _vendorListRecord fallback
+                countHint = #_vendorListRecord(list, id).items }
         end
         for id, def in pairs(state.account.collections) do
             if id:match("^style:") then
