@@ -1,3 +1,17 @@
+## [3.34.1] - 2026-09-22 (September 2026)
+
+### Fixed
+- **The shopping list keeps its vendor headings when you send a blueprint's missing decor over
+  twice.** The second send rebuilt the list while the window was open, and the items landed
+  before anyone had worked out who sells them, so they all fell into the Wishlist and the
+  vendor headings disappeared until you closed the window and opened it again. Sellers are
+  now worked out the moment a list arrives, however it arrives -- routed from a blueprint,
+  pasted in as a code, or sent by another addon. (Thanks Soul.)
+- **The Destroy decor list holds still while you destroy from it.** It sorts by how many copies
+  you have stored, so every destroy reshuffled it and could slide a different piece under your
+  cursor between clicks. From your first destroy the order stays put; it sorts afresh when you
+  leave the tab and come back, or turn the filter off and on.
+
 ## [3.34.0] - 2026-09-19 (September 2026)
 
 ### Added

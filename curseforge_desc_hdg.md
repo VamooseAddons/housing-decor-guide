@@ -12,15 +12,10 @@
 
 ---
 
-## What's New in v3.34.0
+## What's New in v3.34.1
 
-- **Ctrl-Shift-click a decor row to destroy one stored copy.** With the Destroy Decor filter on, each click destroys one copy of that row, plain or dyed, with no dialog. Extra clicks while the game is still confirming queue more copies of the same row. Suggested by Soul.
-- **The destroy dialog steps by 10 and 100, and the old limit of 99 at a time is gone.** The count only moves when the game confirms each copy, and the dialog stays open with that live count and a Stop button. The game pauses after about 26 destroys in a row; the dialog says so and keeps trying every few seconds until the game takes them again.
-- **Shopping list items come off as you buy them, however you buy them.** Right-clicking at the vendor, splitting a stack or confirming an expensive item now takes the piece off the list you have showing, not only Buy All. An item on several lists only comes off the one you are shopping from, and a purchase that fails leaves the list alone. Reported by Soul.
-- **Blueprint dye counts now cover the whole build.** Each dye row shows how many you hold, across your bags and banks, out of what the build uses. Hovering a dye shows what the game's import window will say for it and why the two differ, and when the import window is short only because the dyes are in your bank, how many to move into your bags. Suggested by Windgrace90.
-- **A blueprint's dyes now reach its shopping list**, in the Auction House section.
-- The bulk-buy picker's text stays inside its window when a run stops early.
-- The Blueprints, Styles, Recipes, Warehouse, Mogul and Add Decor tabs pick up your collection once the game finishes loading it after a /reload, instead of waiting for a tab switch.
+- **The shopping list keeps its vendor headings when you send a blueprint's missing decor over twice.** The second send rebuilt the list while the window was open, and the items arrived before anyone had worked out who sells them, so they all fell under Wishlist and the vendor headings disappeared until you closed the window and opened it again. Sellers are now worked out the moment a list arrives, whether you route it from a blueprint, paste it in as a code, or another addon sends it. Reported by Soul.
+- **The Destroy decor list holds still while you destroy from it.** It sorts by how many copies you have stored, so every destroy reshuffled the list and could slide a different piece under your cursor between clicks. From your first destroy the order stays put. It sorts again when you leave the tab and come back, or turn the filter off and on.
 
 ## The Decor Catalog
 
@@ -111,7 +106,7 @@ A companion window injects into Blizzard's House Editor so you can **place decor
 ---
 
 **Author:** Vamoose
-**Version:** 3.34.0
+**Version:** 3.34.1
 **Game Version:** 12.1.0 (Midnight)
 **Source / Issues:** https://github.com/VamooseAddons/housing-decor-guide
 **Discord:** https://discord.gg/RWZaxJaHFP

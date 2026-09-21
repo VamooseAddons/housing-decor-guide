@@ -132,6 +132,14 @@ local function _stampDecorRow(item, f)
     }, item)
 end
 
+-- A stored-mode row's sort count: the pinned one, else its live count (nothing
+-- pinned yet, or a row that joined the list after the pin -- a new search).
+local function _sortCount(row, pinned)
+    local c = pinned and pinned[row.variantKey]   -- exception(nullable): no pin, or a row the pin never saw
+    if c == nil then c = row.destroyableCount or 0 end   -- exception(boundary): sparse struct field
+    return c
+end
+
 -- Append base row then one row per owned dyed variant. Under "Dyed" tag the
 -- undyed base is suppressed. variantKey (itemID:variant) is pool + selection
 -- identity. Each variant carries its own dv.numStored (not the aggregate base count).
@@ -183,6 +191,7 @@ Selectors:Register("decor.items", {
         "decor.isStored",
         "decor.activeTag",
         "decor.destroyableCount",
+        "decor.pinnedSortCounts",
         -- isFavorite + craftableState called directly in fn -> declared here per
         -- accurate-calls invariant. Their paths also reach via matchesTag, but
         -- direct calls must still be declared.
@@ -215,15 +224,26 @@ Selectors:Register("decor.items", {
             end
         end
 
-        -- Stored mode: most-cluttering first (destroyable count desc, name asc).
+        -- Stored mode: most-cluttering first (destroyable count desc, name asc),
+        -- by the pinned counts once the player has destroyed from the list.
         if f.onlyStored then
+            local pinned = Selectors:Call("decor.pinnedSortCounts", state, ctx)
             table.sort(out, function(a, b)
-                local da, db = a.destroyableCount or 0, b.destroyableCount or 0  -- exception(boundary): sparse struct field
+                local da, db = _sortCount(a, pinned), _sortCount(b, pinned)
                 if da ~= db then return da > db end
                 return (a.name or "") < (b.name or "")
             end)
         end
         return out
+    end,
+})
+
+-- The Destroy decor list's sort order, pinned by the first destroy from it
+-- (DECOR_PIN_STORED_SORT) so rows stay put while the player works down it.
+Selectors:Register("decor.pinnedSortCounts", {
+    reads = {"session.ui.decor.pinnedSortCounts"},
+    fn = function(state, ctx)
+        return state.session.ui.decor.pinnedSortCounts   -- exception(nullable): nil = not pinned, sort by live counts
     end,
 })
 

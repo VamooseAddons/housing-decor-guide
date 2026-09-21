@@ -197,6 +197,9 @@ local function NewDecorSessionUI()
         -- top-filter mode of the decor view, not a view of its own (invariant 16).
         selectedSpeciesID = nil,
         filters         = NewDecorFilters(),
+        -- { [variantKey] = stored count } the Destroy decor list sorts by once the
+        -- player destroys from it (DECOR_PIN_STORED_SORT); nil = sort by live counts.
+        pinnedSortCounts = nil,
     }
 end
 
@@ -1795,9 +1798,18 @@ HDG.Actions:Register{ name = "PROFILE_DELETE",
 
 HDG.Actions:Register{ name = "UI_SET_PERSISTENT",
     persists = true,  combatUnsafe = false,
-            invalidates = function(action) return { HDG.Paths.Join("account.ui", action.payload and action.payload.key) } end,
+            invalidates = function(action)
+                local key = action.payload and action.payload.key
+                local paths = { HDG.Paths.Join("account.ui", key) }
+                -- A tab switch is the one moment every "leave this tab" passes through.
+                if key == "view" then paths[2] = "session.ui.decor.pinnedSortCounts" end
+                return paths
+            end,
     reduce = function(state, payload)
         if payload.key ~= nil then state.account.ui[payload.key] = payload.value end
+        -- Leaving the Decor tab lets the Destroy decor list re-sort when the
+        -- player comes back (the pin only holds it still while they are on it).
+        if payload.key == "view" then state.session.ui.decor.pinnedSortCounts = nil end
     end }
 
 HDG.Actions:Register{ name = "UI_SET_TRANSIENT",
@@ -2258,10 +2270,11 @@ HDG.Actions:Register{ name = "DECOR_TOGGLE_ONLY_UNCOLLECTED",
 
 HDG.Actions:Register{ name = "DECOR_TOGGLE_ONLY_STORED",
     persists = false, combatUnsafe = false, 
-    invalidates = { "session.ui.decor.filters.onlyStored" },
+    invalidates = { "session.ui.decor.filters.onlyStored", "session.ui.decor.pinnedSortCounts" },
     reduce = function(state, payload)
         local f = ensureDecorFilters(state)
         f.onlyStored = not f.onlyStored
+        state.session.ui.decor.pinnedSortCounts = nil   -- the list comes back freshly sorted
     end }
 
 HDG.Actions:Register{ name = "DECOR_SET_SEARCH",
@@ -4904,6 +4917,17 @@ HDG.Actions:Register{ name = "DECOR_DESTROY_PROGRESS",
         end
     end }
 
+-- The Destroy decor list sorts by stored count, so every destroy would shuffle
+-- it and slide another row under the cursor. The first destroy from the list
+-- pins the counts it was sorted by; it re-sorts when the player leaves the tab,
+-- toggles the filter or resets (those reducers clear the pin).
+HDG.Actions:Register{ name = "DECOR_PIN_STORED_SORT",
+    persists = false, combatUnsafe = false,
+    invalidates = { "session.ui.decor.pinnedSortCounts" },
+    reduce = function(state, payload)
+        state.session.ui.decor.pinnedSortCounts = payload.counts
+    end }
+
 HDG.Actions:Register{ name = "CATALOG_VARIANTS_LOADED",
     persists = false, combatUnsafe = false, 
     invalidates = { "session.catalog.variantsLoaded" },
@@ -5356,6 +5380,7 @@ HDG.Actions:Register{ name = "UI_FILTER_RESET",
         if tab == "decor" then
             state.session.ui.decor.searchQuery = ""
             state.session.ui.decor.filters     = NewDecorFilters()
+            state.session.ui.decor.pinnedSortCounts = nil
         elseif tab == "acquisition" then
             local acq = state.session.ui.acquisition
             acq.searchQuery     = ""

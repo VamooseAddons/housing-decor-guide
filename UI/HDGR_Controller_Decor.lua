@@ -457,9 +457,24 @@ local function _emptiedSelectedRow(target)
     return (left or 0) == 0  -- exception(nullable): no catalog row left = nothing left
 end
 
+-- Hold the Destroy decor list still from its first destroy on: it sorts by
+-- stored count, and a re-sort after each destroy slides a different row under
+-- the cursor. Pins the counts the list is sorted by right now, before this
+-- destroy moves them; leaving the tab lets it re-sort (DECOR_PIN_STORED_SORT).
+local function _pinStoredSort()
+    local state = HDG.Store:GetState()  -- exception(false-positive): top-level controller read, not a row factory
+    if HDG.Selectors:Call("decor.pinnedSortCounts", state, {}) then return end   -- pinned since the player came to the tab
+    local counts = {}
+    for _, row in ipairs(HDG.Selectors:Call("decor.items", state, {})) do
+        counts[row.variantKey] = row.destroyableCount
+    end
+    HDG.Store:Dispatch({ type = HDG.Constants.ACTIONS.DECOR_PIN_STORED_SORT, payload = { counts = counts } })
+end
+
 -- target = { entryID, name, itemID, variantKey }. Starts a run, or adds to the
 -- running one for the same row. False, with a message, while another row's runs.
 function DecorController:_StartDestroy(target, count)
+    _pinStoredSort()
     if not HDG.DestroyQueue:Start(target, count) then
         HDG.Log:Info("decor_action", "Another destroy is still running -- let it finish or Stop it")
         return false

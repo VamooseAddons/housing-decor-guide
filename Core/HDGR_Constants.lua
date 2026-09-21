@@ -1083,6 +1083,7 @@ HDG.Constants = {
         SHOPPING_ITEM_ADJUST_QTY   = "HDGR_SHOPPING_ITEM_ADJUST_QTY",   -- payload: { listID?, itemID, npcID?, delta }  (relative; +/- buttons, removes at <=0)
         SHOPPING_ITEM_PURCHASED    = "HDGR_SHOPPING_ITEM_PURCHASED",    -- payload: { itemID, qty }  (a merchant buy landed; ACTIVE list, any vendor row)
         DECOR_DESTROY_PROGRESS     = "HDGR_DECOR_DESTROY_PROGRESS",     -- payload: { total, done, name, waiting }  (empty = no run)
+        DECOR_PIN_STORED_SORT      = "HDGR_DECOR_PIN_STORED_SORT",      -- payload: { counts = { [variantKey] = stored count } }
         SHOPPING_RESOLVE_VENDORS   = "HDGR_SHOPPING_RESOLVE_VENDORS",   -- payload: { listID, resolutions = {[itemID]=npcID} }
         SHOPPING_SET_NEIGHBORHOOD  = "HDGR_SHOPPING_SET_NEIGHBORHOOD",  -- payload: { value = "alliance"|"horde" }
         SHOPPING_WIDGET_TOGGLE     = "HDGR_SHOPPING_WIDGET_TOGGLE",

@@ -580,6 +580,40 @@ function ShoppingController:_EnrichListVendors(listID)
     end
 end
 
+-- Every action that leaves the active list holding entries whose vendor is not
+-- resolved yet, or resolved under a preference that no longer applies:
+--   DECOR_CATALOG_READY     -- the sweep that makes resolution possible at all
+--   SHOPPING_ITEM_ADD       -- an item wishlisted from any surface while we're open
+--   SHOPPING_LIST_IMPORT    -- an import/re-import REPLACES the list record, so
+--                              entries arrive unresolved (npcID 0 decodes to nil)
+--   SHOPPING_SET_NEIGHBORHOOD -- re-resolve under the new preference
+--   SHOPPING_LIST_ACTIVATE  -- enrich only runs on the ACTIVE list
+-- Miss one and its entries sit in the Wishlist with no vendor header until the
+-- window is closed and reopened, which is the only other enrich trigger (OnShow).
+-- IMPORT was the miss Soul reported 2026-09-21: routing a blueprint's missing
+-- decor twice dropped every NPC header on the second press, because the first
+-- press opened the window (OnShow enriched) and the second had nothing to fire.
+local ENRICH_ON = {
+    DECOR_CATALOG_READY       = true,
+    SHOPPING_ITEM_ADD         = true,
+    SHOPPING_LIST_IMPORT      = true,
+    SHOPPING_SET_NEIGHBORHOOD = true,
+    SHOPPING_LIST_ACTIVATE    = true,
+}
+
+-- Subscribe once (Wire may run per window rebuild).
+function ShoppingController:_SubscribeEnrich()
+    if self._enrichSubscribed then return end
+    self._enrichSubscribed = true
+    local triggers = {}
+    for name in pairs(ENRICH_ON) do triggers[A[name]] = true end
+    HDG.Store:Subscribe(function(actionType)
+        if triggers[actionType] then
+            self:_EnrichListVendors(HDG.Store:GetState().account.activeShoppingListId)
+        end
+    end)
+end
+
 function ShoppingController:Wire(rootFrame)
     local A = HDG.Constants.ACTIONS
 
@@ -596,27 +630,7 @@ function ShoppingController:Wire(rootFrame)
         ShoppingController:_EnrichListVendors(HDG.Store:GetState().account.activeShoppingListId)
     end)
 
-    -- Resolve + persist vendor npcIDs for the active list once the catalog sweep
-    -- completes -- fixes already-imported lists (npcID=0 from the blob) on the
-    -- first sweep after open. ALSO on every SHOPPING_ITEM_ADD: items wishlisted
-    -- from any surface (decor browser, companion right-click, Find Decor) while
-    -- this window is OPEN used to sit in the Wishlist bucket until a close/
-    -- reopen re-ran the OnShow enrich -- resolve them the moment they land.
-    -- SHOPPING_SET_NEIGHBORHOOD re-resolves under the new preference, and
-    -- SHOPPING_LIST_ACTIVATE catches the lists that were not active when it
-    -- changed -- enrich only ever runs on the active list, so without this a
-    -- second list keeps the vendors it was resolved to under the old setting.
-    -- Subscribe once (Wire may run per window rebuild).
-    if not ShoppingController._enrichSubscribed then
-        ShoppingController._enrichSubscribed = true
-        HDG.Store:Subscribe(function(actionType)
-            if actionType == A.DECOR_CATALOG_READY or actionType == A.SHOPPING_ITEM_ADD
-               or actionType == A.SHOPPING_SET_NEIGHBORHOOD
-               or actionType == A.SHOPPING_LIST_ACTIVATE then
-                ShoppingController:_EnrichListVendors(HDG.Store:GetState().account.activeShoppingListId)
-            end
-        end)
-    end
+    ShoppingController:_SubscribeEnrich()
 
     -- Window chrome close [X]. Dismisses the shopping floating window by
     -- flipping account.ui.shoppingWidgetShown off. HDG.Window's reconciler
